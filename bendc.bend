@@ -4,6 +4,7 @@
 
 import Base
 import ./check.bend as Chk
+import ./rt/rtjs.bend as RtJs
 
 # Utilities
 # =========
@@ -59,6 +60,30 @@ def Doc.sep(xs: List<&2, Doc>, +sep: String) -> Doc:
 
 def Str.has(xs: List<&2, String>, +x: String) -> Bool:
   List.contains(~String, ~String.eq, xs, x)
+
+def Str.split_tab.cons(+c: U32, r: String & String) -> String & String:
+  (a, b) = r
+  (SCon{Chr{c}, a}, b)
+
+law Str.split_tab:
+  for s: String
+  String & String
+
+@unsafe
+def Str.split_tab.if(+c: U32, t: String, tab: Bool) -> String & String:
+  match tab:
+    case True{}:
+      ("", t)
+    case False{}:
+      Str.split_tab.cons(c, Str.split_tab(t))
+
+@unsafe
+def Str.split_tab(s):
+  match s:
+    case SNil{}:
+      ("", "")
+    case SCon{Chr{+c}, t}:
+      Str.split_tab.if(c, t, U32.is_eq(c, 9))
 
 # Lexer
 # =====
@@ -1469,7 +1494,7 @@ def P.primary.k(k: TK) -> Parser(Expr):
     case KChr{n}:
       do Parser<Expr>:
         P.skip()
-        return ENum{n}
+        return ECtor{"Chr", [ENum{n}]}
     case KStr{s}:
       do Parser<Expr>:
         P.skip()
@@ -1664,7 +1689,7 @@ def P.pstr(s: String) -> Pat:
     case SNil{}:
       PCtor{"SNil", Nil{}}
     case SCon{Chr{c}, t}:
-      PCtor{"SCon", [PNum{c}, P.pstr(t)]}
+      PCtor{"SCon", [PCtor{"Chr", [PNum{c}]}, P.pstr(t)]}
 
 @unsafe
 def P.pat1.k(k: TK) -> Parser(Pat):
@@ -1690,7 +1715,7 @@ def P.pat1.k(k: TK) -> Parser(Pat):
     case KChr{n}:
       do Parser<Pat>:
         P.skip()
-        return PNum{n}
+        return PCtor{"Chr", [PNum{n}]}
     case KStr{s}:
       do Parser<Pat>:
         P.skip()
@@ -4799,7 +4824,117 @@ def Main.emit(r: COut) -> IO(Unit):
         IO.print_err(String.join(List.reverse(&2, String, e <> t), "\n"))
         IO.die(Unit, 1, "bendc: compilation failed")
 
-def Main.compile(base: Result<&2, &2, String, List<&2, Decl>>,
+law Main.js.effs:
+  for es: List<&2, String>
+  for acc: String
+  IO(String)
+
+@unsafe
+def Main.emit.js.ok(head: String, effs: List<&2, String>, body: String) -> IO(Unit):
+  do IO<Unit>:
+    tab : String <- Main.js.effs(effs, "")
+    IO.write(head ++ "\nconst EFF = {\n" ++ tab ++ "};\n\n" ++ body)
+
+def Main.emit.js(r: COut) -> IO(Unit):
+  COut{head, effs, body, errs} = r
+  match errs:
+    case Nil{}:
+      Main.emit.js.ok(head, effs, body)
+    case e <> t:
+      do IO<Unit>:
+        IO.print_err(String.join(List.reverse(&2, String, e <> t), "\n"))
+        IO.die(Unit, 1, "bendc: compilation failed")
+
+#
+# bendc --js emits a JavaScript program (for Bun, or Node when it makes no
+# system calls) with values as the official JS target has them, so effect
+# files written for it (.js imports) run unchanged. See rt/bendrt.js.
+# A constructor's type, field names, and whether its type has only it.
+type JCI is Data:
+  JCI{ty: String, fields: List<&2, String>, single: Bool}
+
+type JG is Data:
+  JG{g: G, jm: Map<&2, JCI>}
+
+def Field.names(fs: List<&2, Field>) -> List<&2, String>:
+  match fs:
+    case Nil{}:
+      Nil{}
+    case Field{n, t} <> rest:
+      n <> Field.names(rest)
+
+def J.info.ctors(+ty: String, cs: List<&2, Ctor>, +single: Bool, m: Map<&2, JCI>) -> Map<&2, JCI>:
+  match cs:
+    case Nil{}:
+      m
+    case Ctor{name, fs} <> t:
+      J.info.ctors(ty, t, single, Map.set(&2, JCI, m, name, JCI{ty, Field.names(fs), single}))
+
+def J.info(ds: List<&2, Decl>, m: Map<&2, JCI>) -> Map<&2, JCI>:
+  match ds:
+    case Nil{}:
+      m
+    case DType{n, ps, +cs} <> t:
+      J.info(t, J.info.ctors(n, cs, Nat.is_eq(List.length(&2, Ctor, cs), 1n), m))
+    case d <> t:
+      J.info(t, m)
+
+def JG.g(+j: JG) -> G:
+  JG{+g, jm} = j
+  g
+
+law J.all:
+  for +j: JG
+  for queue: List<&2, String>
+  for done: Set()
+  Gen(Unit)
+
+law J.printer:
+  for +j: JG
+  for +ty: Expr
+  Gen(String)
+
+@unsafe
+def J.entry.ty(+j: JG, +ret: Expr, io: Bool) -> Gen(String):
+  match io:
+    case True{}:
+      Gen.pure(String, "bend_run(F_main);\n")
+    case False{}:
+      do Gen<String>:
+        p : String <- J.printer(j, ret)
+        return "bend_run_value(F_main, " ++ p ++ ");\n"
+
+def J.entry(+j: JG, d: Decl) -> Gen(String):
+  match d:
+    case DDef{n, ps, b, +ret}:
+      J.entry.ty(j, ret, Str.eq(Ty.head(ret), "IO"))
+    case other:
+      do Gen<String>:
+        Gen.error("no main definition")
+        return ""
+
+@unsafe
+def J.program.m(+j: JG) -> Gen(String):
+  do Gen<String>:
+    J.all(j, ["main"], Set.new())
+    J.entry(j, G.body(JG.g(j), "main"))
+
+def J.program.fin(r: String & St) -> COut:
+  (entry, st) = r
+  St{n, protos, code, refs, errs, memo, effs} = st
+  COut{RtJs.src(), Gen.dedup(List.reverse(&2, String, effs), Nil{}), Doc.flat(Doc.list([code, DStr{"\n" ++ entry}])), errs}
+
+def J.program(+ds: List<&2, Decl>) -> COut:
+  J.program.fin(J.program.m(JG{G.new(ds), J.info(ds, MTip{})})(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
+
+def Main.emit.to(js: Bool, +ds: List<&2, Decl>) -> IO(Unit):
+  match js:
+    case True{}:
+      Main.emit.js(J.program(ds))
+    case False{}:
+      Main.emit(Gen.program(ds))
+
+def Main.compile(js: Bool, base: Result<&2, &2, String, List<&2, Decl>>,
   user: Result<&2, &2, String, List<&2, Decl>>
 ) -> IO(Unit):
   match base user:
@@ -4808,7 +4943,7 @@ def Main.compile(base: Result<&2, &2, String, List<&2, Decl>>,
     case Done{b} Fail{e}:
       IO.die(Unit, 1, "bendc: parse error: " ++ e)
     case Done{b} Done{u}:
-      Main.emit(Gen.program(List.append(&2, Decl, b, u)))
+      Main.emit.to(js, List.append(&2, Decl, b, u))
 
 def Main.ast(r: Result<&2, &2, String, List<&2, Decl>>) -> IO(Unit):
   match r:
@@ -5099,40 +5234,66 @@ def Main.check_only.fin(r: Chk.Book & Nat) -> IO(Unit):
     IO.write(Chk.report_text(bad)))
 
 @unsafe
-def Main.build(+base_path: String, user_path: String) -> IO(Unit):
+def Main.build(js: Bool, +base_path: String, user_path: String) -> IO(Unit):
   do IO<Unit>:
     base : String <- IO.read_file(base_path)
     user : List<&2, Decl> <- Main.load(64n, user_path)
-    Main.compile(Main.resolve(Mod.dir(base_path), Main.parse(base)), Done{user})
+    Main.compile(js, Main.resolve(Mod.dir(base_path), Main.parse(base)), Done{user})
 
 # Whether main returns a value (not IO) that may hold a function.
 def Main.normalized(+b: Chk.Book) -> Bool:
   Bool.and(Bool.not(Chk.main_is_io(b)), Chk.main_has_fun(b))
 
-# A program that prints a value computed at compile time.
-def Main.emit_value(v: String) -> IO(Unit):
-  IO.write("#include <stdio.h>\n\nint main(void) {\n  fputs(\"" ++ Gen.lit(v) ++
-    "\\n\", stdout);\n  return 0;\n}\n")
+law J.hex.go:
+  for +n: U32
+  for acc: String
+  String
 
 @unsafe
-def Main.checked.go(+base_path: String, user_path: String, +bk: Chk.Book, norm: Bool) -> IO(Unit):
+def J.hex(+n: U32) -> String:
+  J.hex.go(n, "")
+
+# A JS string literal.
+def J.lit_chr(+x: U32) -> String:
+  Bool.pick(String, Bool.and(Bool.and(U32.is_ge(x, 32), U32.is_lt(x, 127)),
+    Bool.not(Str.has(["\"", "\\"], Str.chr(x)))), Str.chr(x),
+    "\\u{" ++ J.hex(x) ++ "}")
+
+def J.lit(s: String) -> String:
+  match s:
+    case SNil{}:
+      ""
+    case SCon{Chr{x}, t}:
+      J.lit_chr(x) ++ J.lit(t)
+
+# A program that prints a value computed at compile time.
+def Main.emit_value(js: Bool, v: String) -> IO(Unit):
+  match js:
+    case True{}:
+      IO.write("process.stdout.write(\"" ++ J.lit(v) ++ "\\n\");\n")
+    case False{}:
+      IO.write("#include <stdio.h>\n\nint main(void) {\n  fputs(\"" ++ Gen.lit(v) ++
+        "\\n\", stdout);\n  return 0;\n}\n")
+
+@unsafe
+def Main.checked.go(js: Bool, +base_path: String, user_path: String, +bk: Chk.Book, norm: Bool) -> IO(Unit):
   match norm:
     case True{}:
-      Main.emit_value(Chk.show_main(bk))
+      Main.emit_value(js, Chk.show_main(bk))
     case False{}:
-      Main.build(base_path, user_path)
+      Main.build(js, base_path, user_path)
 
 # After checking: report defs that rely on unsafe or foreign code (on
 # stderr), then compile. A value main that may hold a function is printed
 # as the checker normalizes it.
 @unsafe
-def Main.checked(+base_path: String, user_path: String, r: Chk.Book & Nat) -> IO(Unit):
+def Main.checked(js: Bool, +base_path: String, user_path: String, r: Chk.Book & Nat) -> IO(Unit):
   (b, n0) = r
   +bk = b
   +bad = Chk.report(bk, n0)
   do IO<Unit>:
     Bool.pick(IO(Unit), List.is_empty(&2, String, bad), IO.pure(Unit, Unit{}), IO.write_err(Chk.report_text(bad)))
-    Main.checked.go(base_path, user_path, bk, Main.normalized(bk))
+    Main.checked.go(js, base_path, user_path, bk, Main.normalized(bk))
 
 @unsafe
 def Main.run(args: List<&2, String>) -> IO(Unit):
@@ -5150,13 +5311,17 @@ def Main.run(args: List<&2, String>) -> IO(Unit):
         r : Chk.Book & Nat <- Main.check(base_path, user_path)
         Main.check_only.fin(r)
     case "--no-check" <> +base_path <> user_path <> Nil{}:
-      Main.build(base_path, user_path)
+      Main.build(False{}, base_path, user_path)
+    case "--js" <> +base_path <> +user_path <> Nil{}:
+      do IO<Unit>:
+        r : Chk.Book & Nat <- Main.check(base_path, user_path)
+        Main.checked(True{}, base_path, user_path, r)
     case +base_path <> +user_path <> Nil{}:
       do IO<Unit>:
         r : Chk.Book & Nat <- Main.check(base_path, user_path)
-        Main.checked(base_path, user_path, r)
+        Main.checked(False{}, base_path, user_path, r)
     case other:
-      IO.die(Unit, 1, "usage: bendc [--check-only | --no-check] <base.bend> <input.bend> | --tokens <file> | --ast <file>")
+      IO.die(Unit, 1, "usage: bendc [--check-only | --no-check | --js] <base.bend> <input.bend> | --tokens <file> | --ast <file>")
 
 def main() -> IO(Unit):
   do IO<Unit>:
@@ -5216,6 +5381,29 @@ def Main.load(fuel, path):
         src : String <- IO.read_file(path)
         Main.load.parsed(f, Mod.dir(path), path, Main.parse(src))
 
+def Main.js.wrap(src: String, +host: String) -> String:
+  "...(() => {\n" ++ src ++ "\nreturn { [\"" ++ host ++ "\"]: { run: typeof " ++ host ++ " === \"function\" ? " ++ host ++
+    " : undefined, need: typeof " ++ host ++ "_need === \"function\" ? " ++ host ++ "_need : undefined } };\n})(),\n"
+
+def Main.js.eff(r: String & String) -> IO(String):
+  (path, host) = r
+  +h = host
+  do IO<String>:
+    src : String <- IO.read_file(path)
+    return Main.js.wrap(src, h)
+
+# The effect table: each JS file an effect imports, wrapped as the official
+# target wraps it, answering its host function.
+@unsafe
+def Main.js.effs(es, acc):
+  match es:
+    case Nil{}:
+      IO.pure(String, acc)
+    case e <> t:
+      do IO<String>:
+        w : String <- Main.js.eff(Str.split_tab(e))
+        Main.js.effs(t, acc ++ w)
+
 # Misc
 # ====
 
@@ -5225,3 +5413,748 @@ def Path.base(+p: String) -> String:
 def CS.book(+st: CS) -> Chk.Book:
   CS{+book, seen, n0} = st
   book
+
+def J.opt(m: Map<&2, JCI>) -> Map<&2, Maybe<&2, JCI>>:
+  match m:
+    case MTip{}:
+      MTip{}
+    case MLeaf{k, v}:
+      MLeaf{k, Some{v}}
+    case MNode{p, lo, hi}:
+      MNode{p, J.opt(lo), J.opt(hi)}
+
+def J.ctor(+j: JG, +name: String) -> Maybe<&2, JCI>:
+  JG{g, +jm} = j
+  Pair.snd(Map<&2, Maybe<&2, JCI>>, Maybe<&2, JCI>,
+    Map.get(Maybe<&2, JCI>, None{}, J.opt(jm), name))
+
+# How a type's values are represented: 0 an object, 1 a boolean, 2 a
+# BigInt (Nat), 3 a string (String), 4 a one-code-point string (Char).
+def J.kind(+ty: String) -> Nat:
+  P.which(ty, ["", "Bool", "Nat", "String", "Char"])
+
+def J.nth(xs: List<&2, String>, n: Nat) -> String:
+  match xs n:
+    case x <> t 0n:
+      x
+    case x <> t 1n+m:
+      J.nth(t, m)
+    case Nil{} k:
+      "_"
+
+@unsafe
+def J.hex.more(+n: U32, acc: String, last: Bool) -> String:
+  match last:
+    case True{}:
+      acc
+    case False{}:
+      J.hex.go((n >> 4n : U32), acc)
+
+@unsafe
+def J.hex.go(n, acc):
+  +d = (n .&. 15 : U32)
+  +c = Str.chr(Bool.pick(U32, U32.is_lt(d, 10), (48 + d : U32), (87 + d : U32)))
+  J.hex.more(n, c ++ acc, U32.is_lt(n, 16))
+
+def J.str(s: String) -> Doc:
+  DStr{"\"" ++ J.lit(s) ++ "\""}
+
+law J.pat:
+  for +j: JG
+  for p: Pat
+  for +path: String
+  for r: PatR
+  PatR
+
+@unsafe
+def J.pat.fields(+j: JG, args: List<&2, Pat>, +paths: List<&2, String>, r: PatR) -> PatR:
+  match args paths:
+    case a <> at +p <> pt:
+      J.pat.fields(j, at, pt, J.pat(j, a, p, r))
+    case x y:
+      r
+
+def J.paths(+path: String, fs: List<&2, String>) -> List<&2, String>:
+  match fs:
+    case Nil{}:
+      Nil{}
+    case f <> t:
+      ("(" ++ path ++ ")." ++ f) <> J.paths(path, t)
+
+@unsafe
+def J.pat.kind(
+  +j: JG, kind: Nat, +name: String, args: List<&2, Pat>, +path: String, fs: List<&2, String>, single: Bool, +r: PatR
+) -> PatR:
+  match kind:
+    case 1n:
+      Gen.pat.cond("(" ++ path ++ ") === " ++ Bool.pick(String, Str.eq(name, "True"), "true", "false"), r)
+    case 2n:
+      Bool.pick(PatR, Str.eq(name, "Zero"), Gen.pat.cond("(" ++ path ++ ") === 0n", r),
+        J.pat.fields(j, args, ["((" ++ path ++ ") - 1n)"], Gen.pat.cond("(" ++ path ++ ") > 0n", r)))
+    case 3n:
+      Bool.pick(PatR, Str.eq(name, "SNil"), Gen.pat.cond("(" ++ path ++ ") === \"\"", r),
+        J.pat.fields(j, args, ["str_head(" ++ path ++ ")", "str_tail(" ++ path ++ ")"],
+          Gen.pat.cond("(" ++ path ++ ") !== \"\"", r)))
+    case 4n:
+      J.pat.fields(j, args, ["(" ++ path ++ ").codePointAt(0)"], r)
+    case other:
+      J.pat.fields(j, args, J.paths(path, fs), Gen.pat.tag(single, "(" ++ path ++ ").$ === \"" ++ name ++ "\"", r))
+
+@unsafe
+def J.pat.ctor(+j: JG, info: Maybe<&2, JCI>, +name: String, args: List<&2, Pat>, +path: String, r: PatR) -> PatR:
+  match info:
+    case None{}:
+      Gen.pat.cond("false /* unknown constructor " ++ name ++ " */", r)
+    case Some{JCI{+ty, fs, single}}:
+      J.pat.kind(j, J.kind(ty), name, args, path, fs, single, r)
+
+law J.expr:
+  for +j: JG
+  for +env: Env()
+  for e: Expr
+  Gen(Doc)
+
+@unsafe
+def J.exprs(+j: JG, +env: Env(), xs: List<&2, Expr>) -> Gen(List<&2, Doc>):
+  match xs:
+    case Nil{}:
+      Gen.pure(List<&2, Doc>, Nil{})
+    case h <> t:
+      do Gen<List<&2, Doc>>:
+        d : Doc <- J.expr(j, env, h)
+        ds : List<&2, Doc> <- J.exprs(j, env, t)
+        return d <> ds
+
+def J.obj.fields(fs: List<&2, String>, ds: List<&2, Doc>) -> List<&2, Doc>:
+  match fs ds:
+    case f <> ft d <> dt:
+      Doc.list([DStr{", " ++ f ++ ": "}, d]) <> J.obj.fields(ft, dt)
+    case a b:
+      Nil{}
+
+def J.ctor.kind(kind: Nat, +name: String, fs: List<&2, String>, ds: List<&2, Doc>) -> Doc:
+  match kind:
+    case 1n:
+      DStr{Bool.pick(String, Str.eq(name, "True"), "true", "false")}
+    case 2n:
+      Bool.pick(Doc, Str.eq(name, "Zero"), DStr{"0n"}, Doc.list([DStr{"("}, Doc.list(ds), DStr{" + 1n)"}]))
+    case 3n:
+      Bool.pick(Doc, Str.eq(name, "SNil"), DStr{"\"\""}, Doc.list([DStr{"str_cons("}, Gen.commas(ds), DStr{")"}]))
+    case 4n:
+      Doc.list([DStr{"char_new("}, Doc.list(ds), DStr{")"}])
+    case other:
+      Doc.list([DStr{"({$: \"" ++ name ++ "\""}, Doc.list(J.obj.fields(fs, ds)), DStr{"})"}])
+
+@unsafe
+def J.ctor.build(+j: JG, +env: Env(), +name: String, info: Maybe<&2, JCI>, args: List<&2, Expr>) -> Gen(Doc):
+  match info:
+    case None{}:
+      do Gen<Doc>:
+        Gen.error("unknown constructor: " ++ name)
+        return DStr{"null"}
+    case Some{JCI{+ty, fs, single}}:
+      do Gen<Doc>:
+        ds : List<&2, Doc> <- J.exprs(j, env, args)
+        return J.ctor.kind(J.kind(ty), name, fs, ds)
+
+@unsafe
+def J.pat(j, p, path, r):
+  match p:
+    case PVar{x}:
+      Gen.pat.var(x, path, r)
+    case PCtor{+name, args}:
+      J.pat.ctor(j, J.ctor(j, name), name, args, path, r)
+    case PNat{n}:
+      Gen.pat.cond("(" ++ path ++ ") === " ++ U32.show(n) ++ "n", r)
+    case PSucc{+k, q}:
+      J.pat(j, q, "((" ++ path ++ ") - " ++ U32.show(k) ++ "n)",
+        Gen.pat.cond("(" ++ path ++ ") >= " ++ U32.show(k) ++ "n", r))
+    case PNum{n}:
+      Gen.pat.cond("(" ++ path ++ ") === " ++ U32.show(n), r)
+
+@unsafe
+def J.pats(+j: JG, ps: List<&2, Pat>, paths: List<&2, String>, r: PatR) -> PatR:
+  match ps paths:
+    case p <> pt c <> ct:
+      J.pats(j, pt, ct, J.pat(j, p, c, r))
+    case pl cl:
+      r
+
+law J.stmt:
+  for +j: JG
+  for +env: Env()
+  for +self: Self
+  for +tgt: Tgt
+  for e: Expr
+  Gen(Doc)
+
+# Applies a curried function to arguments, one at a time.
+def J.apply(xs: List<&2, Doc>, f: Doc) -> Doc:
+  match xs:
+    case Nil{}:
+      f
+    case h <> t:
+      J.apply(t, Doc.list([f, DStr{"("}, h, DStr{")"}]))
+
+def J.var.kind(+name: String, kind: Nat, +total: U32) -> Gen(Doc):
+  match kind:
+    case 3n:
+      Gen.pure(Doc, DStr{"null"})
+    case 99n:
+      do Gen<Doc>:
+        Gen.error("unknown name: " ++ name)
+        return DStr{"null"}
+    case other:
+      do Gen<Doc>:
+        Gen.ref(name)
+        return Bool.pick(Doc, U32.is_zero(total), DStr{Gen.f(name) ++ "()"}, DStr{Gen.w(name)})
+
+def J.var.def(+name: String, info: DInfo) -> Gen(Doc):
+  DInfo{+kind, +mask} = info
+  J.var.kind(name, U32.to_nat(kind), U32.from_nat(List.length(&2, Bool, mask)))
+
+def J.var.found(+j: JG, +name: String, m: Maybe<&2, String>) -> Gen(Doc):
+  match m:
+    case Some{c}:
+      Gen.pure(Doc, DStr{c})
+    case None{}:
+      Bool.pick(Gen(Doc), Str.eq(name, "_"), Gen.pure(Doc, DStr{"null"}), J.var.def(name, G.def(JG.g(j), name)))
+
+def J.var(+j: JG, +env: Env(), +name: String) -> Gen(Doc):
+  J.var.found(j, name, Env.find(env, name))
+
+def J.nulls(all: List<&2, Expr>) -> List<&2, Expr>:
+  all
+
+@unsafe
+def J.call.full(
+  +j: JG, +env: Env(), +name: String, kept: List<&2, Expr>, all: List<&2, Expr>, extra: List<&2, Expr>, full: Bool
+) -> Gen(Doc):
+  match full:
+    case True{}:
+      do Gen<Doc>:
+        ks : List<&2, Doc> <- J.exprs(j, env, kept)
+        xs : List<&2, Doc> <- J.exprs(j, env, extra)
+        return J.apply(xs, Doc.list([DStr{Gen.f(name) ++ "("}, Gen.commas(ks), DStr{")"}]))
+    case False{}:
+      do Gen<Doc>:
+        as : List<&2, Doc> <- J.exprs(j, env, all)
+        return J.apply(as, DStr{Gen.w(name)})
+
+@unsafe
+def J.call.split(+j: JG, +env: Env(), +name: String, s: Split) -> Gen(Doc):
+  Split{kept, all, extra, full} = s
+  J.call.full(j, env, name, kept, all, extra, full)
+
+@unsafe
+def J.call.kind(+j: JG, +env: Env(), +name: String, kind: Nat, s: Split) -> Gen(Doc):
+  match kind:
+    case 3n:
+      Gen.pure(Doc, DStr{"null"})
+    case 99n:
+      do Gen<Doc>:
+        Gen.error("unknown function: " ++ name)
+        return DStr{"null"}
+    case other:
+      do Gen<Doc>:
+        Gen.ref(name)
+        J.call.split(j, env, name, s)
+
+@unsafe
+def J.call.def(+j: JG, +env: Env(), +name: String, info: DInfo, args: List<&2, Expr>) -> Gen(Doc):
+  DInfo{kind, +mask} = info
+  J.call.kind(j, env, name, U32.to_nat(kind), Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}))
+
+@unsafe
+def J.call.local(+j: JG, +env: Env(), f: Expr, args: List<&2, Expr>) -> Gen(Doc):
+  do Gen<Doc>:
+    fd : Doc <- J.expr(j, env, f)
+    xs : List<&2, Doc> <- J.exprs(j, env, args)
+    return J.apply(xs, Doc.list([DStr{"("}, fd, DStr{")"}]))
+
+@unsafe
+def J.call.var(+j: JG, +env: Env(), +name: String, args: List<&2, Expr>, local: Bool) -> Gen(Doc):
+  match local:
+    case True{}:
+      J.call.local(j, env, EVar{name}, args)
+    case False{}:
+      J.call.def(j, env, name, G.def(JG.g(j), name), args)
+
+@unsafe
+def J.call(+j: JG, +env: Env(), f: Expr, args: List<&2, Expr>) -> Gen(Doc):
+  match f:
+    case EVar{+name}:
+      J.call.var(j, env, name, args, Env.has(env, name))
+    case other:
+      J.call.local(j, env, other, args)
+
+law J.lam:
+  for +j: JG
+  for +env: Env()
+  for +p: Pat
+  for +body: Expr
+  Gen(Doc)
+
+# A statement-level expression used as a value: an immediately called
+# function.
+@unsafe
+def J.block(+j: JG, +env: Env(), e: Expr) -> Gen(Doc):
+  do Gen<Doc>:
+    b : Doc <- J.stmt(j, env, Self.none(), TRet{}, e)
+    return Doc.list([DStr{"(() => {\n"}, b, DStr{"})()"}])
+
+@unsafe
+def J.expr(j, env, e):
+  match e:
+    case EVar{name}:
+      J.var(j, env, name)
+    case ENum{n}:
+      Gen.pure(Doc, DStr{U32.show(n)})
+    case ENat{n}:
+      Gen.pure(Doc, DStr{U32.show(n) ++ "n"})
+    case EFlt{s}:
+      Gen.pure(Doc, DStr{"Math.fround(" ++ s ++ ")"})
+    case EStr{s}:
+      Gen.pure(Doc, J.str(s))
+    case ECall{f, args}:
+      J.call(j, env, f, args)
+    case ECtor{+name, args}:
+      J.ctor.build(j, env, name, J.ctor(j, name), args)
+    case ELam{p, body}:
+      J.lam(j, env, p, body)
+    case ELet{p, v, body}:
+      J.block(j, env, ELet{p, v, body})
+    case EMatch{scrs, cases}:
+      J.block(j, env, EMatch{scrs, cases})
+    case ESucc{k, x}:
+      do Gen<Doc>:
+        d : Doc <- J.expr(j, env, x)
+        return Doc.list([DStr{"(("}, d, DStr{") + " ++ U32.show(k) ++ "n)"}])
+    case ETy{n, targs}:
+      Gen.pure(Doc, DStr{"null"})
+    case EErr{m}:
+      do Gen<Doc>:
+        Gen.error("parse error: " ++ m)
+        return DStr{"null"}
+    case other:
+      do Gen<Doc>:
+        Gen.error("unexpected expression: " ++ Expr.show(other))
+        return DStr{"null"}
+
+@unsafe
+def J.lam(j, env, p, body):
+  do Gen<Doc>:
+    +k : U32 <- Gen.fresh()
+    +a : String <- Gen.pure(String, "a" ++ U32.show(k))
+    +binds : Env() <- Gen.pure(Env(), PatR.binds(J.pat(j, p, a, PatR{Nil{}, Nil{}})))
+    b : Doc <- J.stmt(j, List.append(&2, Bind, binds, env), Self.none(), TRet{}, body)
+    return Doc.list([DStr{"((" ++ a ++ ") => {\n"}, b, DStr{"})"}])
+
+def J.ret(t: Tgt, d: Doc) -> Doc:
+  match t:
+    case TRet{}:
+      Doc.list([DStr{"return "}, d, DStr{";\n"}])
+    case TSet{v}:
+      Doc.list([DStr{v}, DStr{" = "}, d, DStr{";\n"}])
+
+def J.tail.temps(ds: List<&2, Doc>, +i: U32) -> Doc:
+  match ds:
+    case Nil{}:
+      DNil{}
+    case d <> t:
+      Doc.list([DStr{"const t" ++ U32.show(i) ++ " = "}, d, DStr{"; "}, J.tail.temps(t, U32.inc(i))])
+
+@unsafe
+def J.tail(+j: JG, +env: Env(), cps: List<&2, String>, s: Split) -> Gen(Doc):
+  Split{kept, all, extra, full} = s
+  do Gen<Doc>:
+    ds : List<&2, Doc> <- J.exprs(j, env, kept)
+    return Doc.list([DStr{"{ "}, J.tail.temps(ds, 0), Gen.tail.assign(cps, 0), DStr{"continue top; }\n"}])
+
+@unsafe
+def J.tail.self(+j: JG, +env: Env(), self: Self, args: List<&2, Expr>) -> Gen(Doc):
+  Self{sn, +mask, cps} = self
+  J.tail(j, env, cps, Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}))
+
+@unsafe
+def J.stmt.call(
+  +j: JG, +env: Env(), +self: Self, +tgt: Tgt, +name: String, args: List<&2, Expr>, tail: Bool
+) -> Gen(Doc):
+  match tail:
+    case True{}:
+      J.tail.self(j, env, self, args)
+    case False{}:
+      do Gen<Doc>:
+        d : Doc <- J.call(j, env, EVar{name}, args)
+        return J.ret(tgt, d)
+
+@unsafe
+def J.let.var(
+  +j: JG, +env: Env(), +self: Self, +tgt: Tgt, +x: String, v: Expr, body: Expr, hole: Bool
+) -> Gen(Doc):
+  match hole:
+    case True{}:
+      do Gen<Doc>:
+        d : Doc <- J.expr(j, env, v)
+        b : Doc <- J.stmt(j, env, self, tgt, body)
+        return Doc.list([d, DStr{";\n"}, b])
+    case False{}:
+      do Gen<Doc>:
+        +k : U32 <- Gen.fresh()
+        +c : String <- Gen.pure(String, "v" ++ U32.show(k))
+        d : Doc <- J.expr(j, env, v)
+        b : Doc <- J.stmt(j, Bind{x, c} <> env, self, tgt, body)
+        return Doc.list([DStr{"const " ++ c ++ " = "}, d, DStr{";\n"}, b])
+
+@unsafe
+def J.let.pat(+j: JG, +env: Env(), +self: Self, +tgt: Tgt, +p: Pat, v: Expr, body: Expr) -> Gen(Doc):
+  do Gen<Doc>:
+    +k : U32 <- Gen.fresh()
+    +c : String <- Gen.pure(String, "v" ++ U32.show(k))
+    d : Doc <- J.expr(j, env, v)
+    +binds : Env() <- Gen.pure(Env(), PatR.binds(J.pat(j, p, c, PatR{Nil{}, Nil{}})))
+    b : Doc <- J.stmt(j, List.append(&2, Bind, binds, env), self, tgt, body)
+    return Doc.list([DStr{"const " ++ c ++ " = "}, d, DStr{";\n"}, b])
+
+# A parallel let runs its values one after another here.
+@unsafe
+def J.let.par(+j: JG, +env: Env(), +self: Self, +tgt: Tgt, ps: List<&2, Pat>, v: Expr, body: Expr) -> Gen(Doc):
+  match ps v:
+    case p <> pt ECtor{n, x <> xt}:
+      J.stmt(j, env, self, tgt, ELet{p, x, ELet{PCtor{"%par", pt}, ECtor{n, xt}, body}})
+    case pl other:
+      J.stmt(j, env, self, tgt, body)
+
+@unsafe
+def J.let.ctor(
+  +j: JG, +env: Env(), +self: Self, +tgt: Tgt, name: String, ps: List<&2, Pat>, v: Expr, body: Expr, par: Bool
+) -> Gen(Doc):
+  match par:
+    case True{}:
+      J.let.par(j, env, self, tgt, ps, v, body)
+    case False{}:
+      J.let.pat(j, env, self, tgt, PCtor{name, ps}, v, body)
+
+@unsafe
+def J.let(+j: JG, +env: Env(), +self: Self, +tgt: Tgt, p: Pat, v: Expr, body: Expr) -> Gen(Doc):
+  match p:
+    case PVar{+x}:
+      J.let.var(j, env, self, tgt, x, v, body, Str.eq(x, "_"))
+    case PCtor{+name, ps}:
+      J.let.ctor(j, env, self, tgt, name, ps, v, body, Str.eq(name, "%par"))
+    case other:
+      J.let.pat(j, env, self, tgt, other, v, body)
+
+law J.cases:
+  for +j: JG
+  for +env: Env()
+  for +self: Self
+  for +tgt: Tgt
+  for +cs: List<&2, String>
+  for cases: List<&2, Expr>
+  Gen(Doc)
+
+@unsafe
+def J.cases.next(
+  +j: JG, +env: Env(), +self: Self, +tgt: Tgt, +cs: List<&2, String>, rest: List<&2, Expr>, conds: List<&2, String>,
+  b: Doc
+) -> Gen(Doc):
+  match conds:
+    case Nil{}:
+      Gen.pure(Doc, Doc.list([DStr{"{\n"}, b, DStr{"}\n"}]))
+    case h <> t:
+      do Gen<Doc>:
+        more : Doc <- J.cases(j, env, self, tgt, cs, rest)
+        return Doc.list([DStr{"if (" ++ Gen.and(h <> t) ++ ") {\n"}, b, DStr{"} else "}, more])
+
+@unsafe
+def J.cases(j, env, self, tgt, cs, cases):
+  match cases:
+    case Nil{}:
+      Gen.pure(Doc, DStr{"{ bend_fail(\"incomplete match\"); }\n"})
+    case ECase{ps, body} <> t:
+      +pr = J.pats(j, ps, cs, PatR{Nil{}, Nil{}})
+      +conds = PatR.conds(pr)
+      +binds = PatR.binds(pr)
+      do Gen<Doc>:
+        b : Doc <- J.stmt(j, List.append(&2, Bind, binds, env), self, tgt, body)
+        J.cases.next(j, env, self, tgt, cs, t, List.reverse(&2, String, conds), b)
+    case other <> t:
+      J.cases(j, env, self, tgt, cs, t)
+
+def J.scrs.put(+c: String, d: Doc, r: List<&2, String> & Doc) -> List<&2, String> & Doc:
+  (cs, code) = r
+  (c <> cs, Doc.list([DStr{"const " ++ c ++ " = "}, d, DStr{";\n"}, code]))
+
+@unsafe
+def J.scrs(+j: JG, +env: Env(), xs: List<&2, Expr>) -> Gen(List<&2, String> & Doc):
+  match xs:
+    case Nil{}:
+      Gen.pure(List<&2, String> & Doc, (Nil{}, DNil{}))
+    case h <> t:
+      do Gen<List<&2, String> & Doc>:
+        +k : U32 <- Gen.fresh()
+        +c : String <- Gen.pure(String, "s" ++ U32.show(k))
+        d : Doc <- J.expr(j, env, h)
+        r : List<&2, String> & Doc <- J.scrs(j, env, t)
+        return J.scrs.put(c, d, r)
+
+@unsafe
+def J.match.go(+j: JG, +env: Env(), +self: Self, +tgt: Tgt, cases: List<&2, Expr>, r: List<&2, String> & Doc) ->
+  Gen(Doc):
+  (cs, decls) = r
+  do Gen<Doc>:
+    body : Doc <- J.cases(j, env, self, tgt, cs, cases)
+    return Doc.list([decls, body])
+
+@unsafe
+def J.match(+j: JG, +env: Env(), +self: Self, +tgt: Tgt, scrs: List<&2, Expr>, cases: List<&2, Expr>) -> Gen(Doc):
+  do Gen<Doc>:
+    r : List<&2, String> & Doc <- J.scrs(j, env, scrs)
+    J.match.go(j, env, self, tgt, cases, r)
+
+@unsafe
+def J.stmt(j, env, self, tgt, e):
+  match e:
+    case ELet{p, v, body}:
+      J.let(j, env, self, tgt, p, v, body)
+    case EMatch{scrs, cases}:
+      J.match(j, env, self, tgt, scrs, cases)
+    case ECall{EVar{+name}, +args}:
+      J.stmt.call(j, env, self, tgt, name, args, Gen.is_tail(env, self, tgt, name, args))
+    case other:
+      do Gen<Doc>:
+        d : Doc <- J.expr(j, env, other)
+        return J.ret(tgt, d)
+
+def J.params(ps: List<&2, String>) -> String:
+  String.join(ps, ", ")
+
+# W_f: f as a curried function of all its parameters (erased ones too).
+def J.wrapper.go(n: Nat, +i: U32, +kept: String, +name: String) -> String:
+  match n:
+    case 0n:
+      Gen.f(name) ++ "(" ++ kept ++ ")"
+    case 1n+m:
+      "(p" ++ U32.show(i) ++ ") => " ++ J.wrapper.go(m, U32.inc(i), kept, name)
+
+def J.wkept(mask: List<&2, Bool>, +i: U32) -> List<&2, String>:
+  match mask:
+    case Nil{}:
+      Nil{}
+    case True{} <> t:
+      ("p" ++ U32.show(i)) <> J.wkept(t, U32.inc(i))
+    case False{} <> t:
+      J.wkept(t, U32.inc(i))
+
+def J.wrapper(+name: String, +mask: List<&2, Bool>) -> Gen(Unit):
+  match mask:
+    case Nil{}:
+      Gen.pure(Unit, Unit{})
+    case +h <> t:
+      Gen.code(DStr{"const " ++ Gen.w(name) ++ " = " ++
+        J.wrapper.go(List.length(&2, Bool, h <> t), 0, String.join(J.wkept(h <> t, 0), ", "), name) ++ ";\n"})
+
+def J.def.body(+j: JG, +name: String, +mask: List<&2, Bool>, body: Expr, sig: Sig) -> Gen(Unit):
+  Sig{+params, env, wargs} = sig
+  do Gen<Unit>:
+    b : Doc <- J.stmt(j, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
+    Gen.code(Doc.list([DStr{"function " ++ Gen.f(name) ++ "(" ++ J.params(params) ++ ") {\ntop: for (;;) {\n"}, b,
+      DStr{"}\n}\n"}]))
+    J.wrapper(name, mask)
+
+def J.host.chr(+x: U32) -> String:
+  Bool.pick(String, U32.is_eq(x, 46), "_", Str.chr(x))
+
+def J.host(s: String) -> String:
+  match s:
+    case SNil{}:
+      ""
+    case SCon{Chr{x}, t}:
+      J.host.chr(x) ++ J.host(t)
+
+def J.effs.js.if(h: String, +host: String, rest: List<&2, String>, keep: Bool) -> List<&2, String>:
+  match keep:
+    case True{}:
+      (h ++ "\t" ++ host) <> rest
+    case False{}:
+      rest
+
+def J.effs.js(ims: List<&2, String>, +host: String) -> List<&2, String>:
+  match ims:
+    case Nil{}:
+      Nil{}
+    case +h <> t:
+      J.effs.js.if(h, host, J.effs.js(t, host), String.ends_with(h, ".js"))
+
+def J.effs.go(ims: List<&2, String>, +host: String, st: St) -> Unit & St:
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (Unit{}, St{n, protos, code, refs, errs, memo, List.append(&2, String, J.effs.js(ims, host), effs)})
+
+# Records the JS files a foreign def imports, with its host function.
+def J.effs(ims: List<&2, String>, +host: String) -> Gen(Unit):
+  st => J.effs.go(ims, host, st)
+
+# Effects: F builds R => k => a request the event loop answers.
+def J.def.eff(+name: String, +mask: List<&2, Bool>, sig: Sig, ims: List<&2, String>) -> Gen(Unit):
+  Sig{+params, env, wargs} = sig
+  +host = J.host(String.to_lower(name))
+  do Gen<Unit>:
+    J.effs(ims, host)
+    Gen.code(DStr{"function " ++ Gen.f(name) ++ "(" ++ J.params(params) ++ ") {\n  return (R) => (k) => io_req(EFF[\"" ++
+      host ++ "\"], \"" ++ host ++ "\", [" ++ J.params(params) ++ "], k);\n}\n"})
+    J.wrapper(name, mask)
+
+def J.def.native(+j: JG, +name: String, +mask: List<&2, Bool>, body: Expr, sig: Sig, native: Bool) -> Gen(Unit):
+  match native:
+    case True{}:
+      J.wrapper(name, mask)
+    case False{}:
+      J.def.body(j, name, mask, body, sig)
+
+def J.def.decl(+j: JG, +name: String, +info: DInfo, d: Decl) -> Gen(Unit):
+  DInfo{+kind, +mask} = info
+  match d:
+    case DDef{n, ps, body, ret}:
+      J.def.native(j, name, mask, body, Gen.sig(ps, mask, 0, Sig{Nil{}, Nil{}, Nil{}}), U32.is_eq(kind, 2))
+    case DEff{n, ps, ims}:
+      J.def.eff(name, mask, Gen.sig(ps, mask, 0, Sig{Nil{}, Nil{}, Nil{}}), ims)
+    case other:
+      Bool.pick(Gen(Unit), U32.is_eq(kind, 2), J.wrapper(name, mask), Gen.pure(Unit, Unit{}))
+
+def J.def(+j: JG, +name: String) -> Gen(Unit):
+  J.def.decl(j, name, G.def(JG.g(j), name), G.body(JG.g(j), name))
+
+@unsafe
+def J.all.go(+j: JG, +h: String, t: List<&2, String>, done: Set(), seen: Bool) -> Gen(Unit):
+  match seen:
+    case True{}:
+      J.all(j, t, done)
+    case False{}:
+      do Gen<Unit>:
+        J.def(j, h)
+        refs : List<&2, String> <- Gen.take_refs()
+        J.all(j, List.append(&2, String, refs, t), Set.add(done, h))
+
+@unsafe
+def J.all.seen(+j: JG, +h: String, t: List<&2, String>, r: Set() & Bool) -> Gen(Unit):
+  (done, seen) = r
+  J.all.go(j, h, t, done, seen)
+
+@unsafe
+def J.all(j, queue, done):
+  match queue:
+    case Nil{}:
+      Gen.pure(Unit, Unit{})
+    case +h <> t:
+      J.all.seen(j, h, t, Set.has(done, h))
+
+@unsafe
+def J.printer.tuple(+j: JG, xs: List<&2, Expr>, +path: String) -> Gen(Doc):
+  match xs:
+    case Nil{}:
+      Gen.pure(Doc, DNil{})
+    case h <> Nil{}:
+      do Gen<Doc>:
+        f : String <- J.printer(j, h)
+        return DStr{"s += " ++ f ++ "(" ++ path ++ ");\n"}
+    case h <> t:
+      do Gen<Doc>:
+        f : String <- J.printer(j, h)
+        rest : Doc <- J.printer.tuple(j, t, "(" ++ path ++ ").snd")
+        return Doc.list([DStr{"s += " ++ f ++ "((" ++ path ++ ").fst) + \", \";\n"}, rest])
+
+@unsafe
+def J.printer.fields(+j: JG, +sub: List<&2, TB>, fs: List<&2, Field>, +path: String, +i: U32) -> Gen(Doc):
+  match fs:
+    case Nil{}:
+      Gen.pure(Doc, DNil{})
+    case Field{+n, t} <> rest:
+      do Gen<Doc>:
+        f : String <- J.printer(j, Ty.subst(t, sub))
+        more : Doc <- J.printer.fields(j, sub, rest, path, U32.inc(i))
+        return Doc.list([DStr{Bool.pick(String, U32.is_zero(i), "", "s += \", \";\n") ++ "s += " ++ f ++ "((" ++ path ++
+          ")." ++ n ++ ");\n"}, more])
+
+@unsafe
+def J.printer.ctor(+j: JG, +sub: List<&2, TB>, +name: String, fields: List<&2, Field>, +single: Bool) -> Gen(Doc):
+  do Gen<Doc>:
+    fs : Doc <- J.printer.fields(j, sub, fields, "v", 0)
+    return Doc.list([DStr{Bool.pick(String, single, "if (true)", "if (v.$ === \"" ++ name ++ "\")") ++
+      " { let s = \"" ++ name ++ "{\";\n"}, fs, DStr{"return s + \"}\"; }\n"}])
+
+@unsafe
+def J.printer.ctors(+j: JG, +sub: List<&2, TB>, cs: List<&2, Ctor>, +single: Bool) -> Gen(Doc):
+  match cs:
+    case Nil{}:
+      Gen.pure(Doc, DNil{})
+    case Ctor{+name, fields} <> t:
+      do Gen<Doc>:
+        one : Doc <- J.printer.ctor(j, sub, name, fields, single)
+        rest : Doc <- J.printer.ctors(j, sub, t, single)
+        return Doc.list([one, rest])
+
+@unsafe
+def J.printer.adt(+j: JG, +ty: Expr, d: Decl) -> Gen(Doc):
+  match d:
+    case DType{name, ps, +cs}:
+      do Gen<Doc>:
+        b : Doc <- J.printer.ctors(j, Ty.bind(ps, Ty.args(ty)), cs, Nat.is_eq(List.length(&2, Ctor, cs), 1n))
+        return Doc.list([b, DStr{"return \"?\";\n"}])
+    case other:
+      Gen.pure(Doc, DStr{"return \"?\";\n"})
+
+@unsafe
+def J.printer.head(+j: JG, +ty: Expr, k: Nat) -> Gen(Doc):
+  match k:
+    case 0n:
+      Gen.pure(Doc, DStr{"return pr_u32(v);\n"})
+    case 1n:
+      Gen.pure(Doc, DStr{"return pr_nat(v);\n"})
+    case 2n:
+      Gen.pure(Doc, DStr{"return pr_f32(v);\n"})
+    case 3n:
+      Gen.pure(Doc, DStr{"return pr_char(v);\n"})
+    case 4n:
+      Gen.pure(Doc, DStr{"return pr_str(v);\n"})
+    case 5n:
+      do Gen<Doc>:
+        e : String <- J.printer(j, P.last(Ty.args(ty)))
+        return DStr{"const xs = [];\nfor (; v.$ === \"Con\"; v = v.tail) xs.push(" ++ e ++
+          "(v.head));\nreturn \"[\" + xs.join(\", \") + \"]\";\n"}
+    case 6n:
+      do Gen<Doc>:
+        parts : Doc <- J.printer.tuple(j, Ty.tuple(ty), "v")
+        return Doc.list([DStr{"let s = \"(\";\n"}, parts, DStr{"return s + \")\";\n"}])
+    case 7n:
+      Gen.pure(Doc, DStr{"return \"<function>\";\n"})
+    case 8n:
+      Gen.pure(Doc, DStr{"return v ? \"True{}\" : \"False{}\";\n"})
+    case 9n+p:
+      J.printer.adt(j, ty, G.body(JG.g(j), "%" ++ Ty.head(ty)))
+
+@unsafe
+def J.printer.body(+j: JG, +ty: Expr, +h: String) -> Gen(Doc):
+  J.printer.head(j, ty, P.which(h, ["U32", "Nat", "F32", "Char", "String", "List", "&", "->", "Bool"]))
+
+@unsafe
+def J.printer.memo(+j: JG, +ty: Expr, +key: String, m: Maybe<&2, String>) -> Gen(String):
+  match m:
+    case Some{f}:
+      Gen.pure(String, f)
+    case None{}:
+      do Gen<String>:
+        +k : U32 <- Gen.fresh()
+        +f : String <- Gen.pure(String, "P" ++ U32.show(k))
+        Gen.memo.add(Bind{key, f})
+        b : Doc <- J.printer.body(j, ty, Ty.head(ty))
+        Gen.code(Doc.list([DStr{"function " ++ f ++ "(v) {\n"}, b, DStr{"}\n"}]))
+        return f
+
+# The name of a JS function that prints values of a type.
+@unsafe
+def J.printer(j, ty):
+  +key = Expr.show(ty)
+  do Gen<String>:
+    m : Maybe<&2, String> <- Gen.memo.find(key)
+    J.printer.memo(j, ty, key, m)

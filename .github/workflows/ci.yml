@@ -20,6 +20,11 @@ jobs:
           curl -fsSL https://bend-lang.com/install.sh | BEND_NO_TELEMETRY=1 sh
           echo "$HOME/.bend/bin" >> "$GITHUB_PATH"
 
+      - name: Install Bun (runs the JavaScript target's tests)
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+
       - name: Build bendc from the C seed
         run: make
 

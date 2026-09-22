@@ -63,7 +63,8 @@ Compile a program:
 clang -O2 -I rt hello.c -o hello -lm && ./hello
 ```
 
-`bendc --check-only <base.bend> file.bend` only type-checks, printing what `bend --check-only` prints.
+`bendc --js <base.bend> file.bend > file.js` emits JavaScript instead (run it with `bun file.js`; see
+[The JavaScript target](#the-javascript-target)). `bendc --check-only <base.bend> file.bend` only type-checks, printing what `bend --check-only` prints.
 `bendc --no-check ...` compiles without checking. Debugging aids: `bendc --tokens file.bend` prints the
 token stream after layout, and `bendc --ast file.bend` prints the parsed declarations.
 
@@ -174,7 +175,7 @@ CI runs the whole chain on Linux and macOS: seed build, tests, selfcheck, and fu
 | Operators | `(a + b : T)` typed arithmetic, bitwise and comparison operators, `&&` `\|\|` `++` `<>` |
 | Data | `U32`, `Nat`, `F32`, `Char`, `String`, lists, tuples, `Map`, `Set`, arrays (`[v : T*n]`, `a[i]`, `a[i] <- v`) |
 | Effects | every Base effect but windows and audio: printing, `IO.args`, `IO.get_env`, files, TCP, UDP, `IO.now`/`sleep`/`random_u32`, concurrent `IO.fork`/`IO.join`/`IO.spawn` and channels, `IO.die` exit codes |
-| Foreign code | `def f(..) -> IO(R): import "./f.c"` effects written against the official effect ABI (Base's own `effs/*.c` are compiled this way) |
+| Foreign code | `def f(..) -> IO(R): import "./f.c"` and `import "./f.js"` effects, written against the official C and JS effect ABIs (Base's own `effs/*.c` and `effs/*.js` are compiled this way) |
 | Modules | `import ./file.bend as M`, and hub packages by content hash: `import 0x<hash>/main.bend as P` |
 | Parallelism | parallel lets `a b = f(x) g(y)` and `f!(x)` calls run on a work-stealing thread pool |
 | Checking | the official type checker, ported: quantities, termination, templates, laws and proofs, dependent types |
@@ -240,6 +241,17 @@ loop answers, as in the official runtime: computations run their pure code up to
 official ABI (`Term`, `Env`, `IoWork`, `io_eff`, `CID_*`), so the `.c` files that effect defs import,
 Base's own `effs/*.c` included, are spliced into the output unchanged.
 
+## The JavaScript target
+
+`bendc --js` emits one JavaScript file: the runtime (`rt/bendrt.js`, embedded in bendc through
+`rt/rtjs.bend`), the `.js` files the program's effects import, and the program. Values are what the
+official JS target uses, so JS effects written for it run unchanged: a `U32` or `F32` is a number, a
+`Nat` a `BigInt`, a `Bool` a boolean, a `Char` a one-code-point string, a `String` a string, and any
+other constructor an object `{$: "Name", field: value}`. Functions are curried JS functions, and self
+tail calls become loops. Effects are requests answered by an event loop with the official helpers
+(`io_done`, `io_fail`, `io_tup`, `io_park_on`, `io_sys`, ...); the ones that make system calls use
+`bun:ffi`, so run the output with Bun. Parallel lets run one value after the other.
+
 ## Writing a compiler under Bend's rules
 
 Bend 2 is a proof language, and its checker is strict about code that runs. It shaped this compiler:
@@ -281,8 +293,7 @@ make test                      # with build/bendc
 
 - **No GPU.** `f!(x)` and parallel lets run on the CPU threads, as the official runtime does with
   `--gpu off`.
-- No windowing or audio effects (Base's `Window` and `Audio`), and no JS target, so an effect's `.js`
-  file is not used.
+- No windowing or audio effects (Base's `Window` and `Audio`).
 
 ## Repository layout
 
