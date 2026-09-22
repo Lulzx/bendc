@@ -49,7 +49,10 @@ def info(b):
         for l in b[1:]:
             m = re.match(r'\s+([A-Za-z_][A-Za-z0-9_.]*)\{', l)
             if m: defs.add(m.group(1))
-    uses = set(ID.findall(strip('\n'.join(b)))) 
+    uses = set(ID.findall(strip('\n'.join(b))))
+    # a do block over M uses M.bind and M.pure
+    for m in re.findall(r'\bdo ([A-Za-z_][A-Za-z0-9_.]*)<', '\n'.join(b)):
+        uses |= {m + '.bind', m + '.pure'}
     return kind, name, defs, uses
 
 def split_top(s, sep=','):
