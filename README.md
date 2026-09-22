@@ -30,7 +30,8 @@ pass `bend --check-only`. bendc type-checks a program the way the official check
 it, with the same error reports), then lexes, parses, erases, and code-generates it, including the
 parts of Bend's standard library (`Base`) that the program uses. The result is a single C file that
 clang builds against the runtime (`rt/bendrt.h`): a garbage collector, unbounded `Nat`, a
-work-stealing pool for parallel calls, and an event loop that speaks the official effect ABI.
+work-stealing pool for parallel calls, an event loop that speaks the official effect ABI, and a GPU
+backend that runs `f!(x)` calls on Metal.
 
 ## Contents
 
@@ -39,6 +40,7 @@ work-stealing pool for parallel calls, and an event loop that speaks the officia
 - [Bootstrapping](#bootstrapping)
 - [Language support](#language-support)
 - [How it works](#how-it-works)
+- [The GPU backend](#the-gpu-backend)
 - [Writing a compiler under Bend's rules](#writing-a-compiler-under-bends-rules)
 - [Testing](#testing)
 - [Limitations](#limitations)
@@ -69,7 +71,7 @@ clang -O2 -I rt hello.c -o hello -lm && ./hello
 token stream after layout, and `bendc --ast file.bend` prints the parsed declarations.
 
 A compiled program takes the official runtime's options: `--threads N` (default: the CPU count),
-`--gpu on|off|SIZE` (accepted; parallel calls run on the CPU threads), `--help`, and `--` before
+`--gpu on|off|SIZE` (`off` runs `f!(x)` calls on the CPU threads), `--help`, and `--` before
 the program's own arguments.
 
 ## What it looks like
@@ -177,7 +179,7 @@ CI runs the whole chain on Linux and macOS: seed build, tests, selfcheck, and fu
 | Effects | every Base effect but windows and audio: printing, `IO.args`, `IO.get_env`, files, TCP, UDP, `IO.now`/`sleep`/`random_u32`, concurrent `IO.fork`/`IO.join`/`IO.spawn` and channels, `IO.die` exit codes |
 | Foreign code | `def f(..) -> IO(R): import "./f.c"` and `import "./f.js"` effects, written against the official C and JS effect ABIs (Base's own `effs/*.c` and `effs/*.js` are compiled this way) |
 | Modules | `import ./file.bend as M`, and hub packages by content hash: `import 0x<hash>/main.bend as P` |
-| Parallelism | parallel lets `a b = f(x) g(y)` and `f!(x)` calls run on a work-stealing thread pool |
+| Parallelism | parallel lets `a b = f(x) g(y)` run on a work-stealing thread pool; `f!(x)` calls run on the GPU (Metal), parallel lets inside them as GPU tasks |
 | Checking | the official type checker, ported: quantities, termination, templates, laws and proofs, dependent types |
 | Output | an `IO` main runs its effects; any other main prints its value in Bend syntax |
 
@@ -241,6 +243,31 @@ loop answers, as in the official runtime: computations run their pure code up to
 official ABI (`Term`, `Env`, `IoWork`, `io_eff`, `CID_*`), so the `.c` files that effect defs import,
 Base's own `effs/*.c` included, are spliced into the output unchanged.
 
+## The GPU backend
+
+A `f!(x)` call hands the call, and every parallel let inside it, to the GPU. `bendc` compiles every
+function the call can reach into one kernel, a flat state machine: each function is a set of blocks
+(a call ends a block, and the callee returns to the next one), locals live in frame slots, and `pc`
+names the block to run. A parallel let pushes its values as tasks to a lock-free queue and continues
+through a join record, so no lane ever waits: the lane that brings a join its last value runs the
+rest of the function. Past a fork depth that fills the lanes, parallel lets run in order.
+
+The kernel's text (`rt/gpu.h` plus the generated blocks) compiles both as Metal Shading Language and
+as C. The host (`rt/gpuhost.h`) reaches Metal through the Objective-C runtime, so programs need no
+extra link flags. Memory is unified: the device reads the arguments where they are in the CPU heap,
+builds new objects in an arena, and the host copies the result back into the heap. Anything the
+device cannot do (an effect, a `Nat` past 2^63, a full arena, a closure made by a CPU lambda) stops
+the device, and the call runs on the CPU instead, so a `!` never changes what a program prints.
+
+```sh
+BEND_GPU_LOG=1 ./prog       # say where each !-call ran
+BEND_GPU=sim ./prog         # run the kernel in its C form, lanes interleaved (any OS)
+./prog --gpu off            # !-calls on the CPU threads
+```
+
+`BEND_GPU_LANES`, `BEND_GPU_MB` (arena size) and `BEND_GPU_FORK` (fork depth) tune the device.
+Without Metal (Linux), `!` runs on the CPU threads, as the official runtime does without a GPU.
+
 ## The JavaScript target
 
 `bendc --js` emits one JavaScript file: the runtime (`rt/bendrt.js`, embedded in bendc through
@@ -281,7 +308,9 @@ UTF-8, file IO, concurrent fork/join, TCP, user-defined C effects, modules, stri
 proofs, value printing, exit codes, deep recursion, parallel lets, the collector, and bignum `Nat`.
 Each `.out` file is the stdout and exit code of the **official** `bend` running the same program
 (for bignums, which the official runtime cannot reach, the expected values come from Python).
-`run_tests.sh` compiles each program with a given `bendc`, runs it, and diffs the result;
+`run_tests.sh` compiles each program with a given `bendc`, runs it, and diffs the result; programs
+with `!`-calls run again on the GPU simulator and, on a Mac, on Metal, and must not fall back to the
+CPU;
 `tests/hub/run.sh` serves a package from a local hub and imports it by hash.
 
 ```sh
@@ -291,8 +320,8 @@ make test                      # with build/bendc
 
 ## Limitations
 
-- **No GPU.** `f!(x)` and parallel lets run on the CPU threads, as the official runtime does with
-  `--gpu off`.
+- The GPU backend targets Metal only; elsewhere `f!(x)` runs on the CPU threads (or on the
+  simulator, with `BEND_GPU=sim`).
 - No windowing or audio effects (Base's `Window` and `Audio`).
 
 ## Repository layout
@@ -302,11 +331,13 @@ make test                      # with build/bendc
 | [`check.bend`](check.bend) | the type checker, a port of the official one: parser, normalizer, conversion, quantities, termination, templates, error reports |
 | [`bendc.bend`](bendc.bend) | the compiler, organized by section: lexer, layout, parser monad, expressions, patterns, statements, declarations, operator resolution, free variables, global tables, code generation, value printers, modules, driver |
 | [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, bignum `Nat`, native `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
+| [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the simulator, copying results back |
 | [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
 | [`seed/bendc.c`](seed/bendc.c) | the fixpoint C output of `bendc.bend`, for building without Bend |
 | [`tests/`](tests) | test programs and the official `bend`'s output for each |
 | [`bootstrap.sh`](bootstrap.sh), [`run_tests.sh`](run_tests.sh), [`Makefile`](Makefile) | bootstrap and fixpoint check, test runner, build entry points |
 | [`tools/order.py`](tools/order.py) | dev tool: section-aware dependency sort, with automatic `law` forward declarations for cycles |
+| [`tools/embed.py`](tools/embed.py) | dev tool: embeds `rt/bendrt.js` and `rt/gpu.h` in bendc (`rt/rtjs.bend`, `rt/gpuh.bend`) |
 
 ## License
 
