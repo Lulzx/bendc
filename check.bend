@@ -4406,12 +4406,12 @@ def lowers(book, xs, d):
     case h <> t:
       term_lower(book, h, d) <> lowers(book, t, d)
 
-def let_vars(ks: List<&2, String>, +d: U32) -> List<&2, Tm>:
+def let_vars.fresh(ks: List<&2, String>, +d: U32) -> List<&2, Tm>:
   match ks:
     case Nil{}:
       Nil{}
     case k <> t:
-      Var{k, d, NoSp{}} <> let_vars(t, U32.inc(d))
+      Var{k, d, NoSp{}} <> let_vars.fresh(t, U32.inc(d))
 
 def let_ids(ks: List<&2, String>, +d: U32) -> List<&2, U32>:
   match ks:
@@ -4430,7 +4430,7 @@ def term_lower.go(+book: Book, term: Tm, +d: U32) -> Tm:
     case Let{+ks, ids, vs, f, s, qs}:
       +n = U32.from_nat(List.length(&2, String, ks))
       Let{ks, let_ids(ks, d), lowers(book, vs, d), CLet{Nil{}, Nil{},
-        term_lower(book, clo_apply(book, f, let_vars(ks, d)), (d + n : U32))}, s, qs}
+        term_lower(book, clo_apply(book, f, let_vars.fresh(ks, d)), (d + n : U32))}, s, qs}
     case Typ{g, s}:
       Typ{term_lower(book, g, d), s}
     case Min{a, b, s}:
@@ -4620,7 +4620,7 @@ def wnf.mnb(tm: Tm, +a: Tm, s: Sp) -> Tm:
     case other:
       Min{a, other, s}
 
-def lit_ctr(t: Tm) -> Tm:
+def lit.to_ctr(t: Tm) -> Tm:
   match t:
     case Lit{v, s}:
       lit_step(Lit{v, s})
@@ -4668,7 +4668,7 @@ def wnf.back(book, tm, frs):
     case FMnb{a, s} <> rest:
       wnf.back(book, wnf.mnb(tm, a, s), rest)
     case FMat{t, e, lhs, s} <> rest:
-      wnf.matd(book, lit_ctr(tm), t, e, lhs, s, rest)
+      wnf.matd(book, lit.to_ctr(tm), t, e, lhs, s, rest)
 
 @unsafe
 def wnf.mna(book, tm, b, s, rest):
@@ -5237,7 +5237,7 @@ def show.ctr.u32(+t: Tm, m: Maybe<&2, U32>, +p: U32, +bnd: List<&2, String>, +n:
 def show.ctr(t, p, bnd, n):
   show.ctr.u32(t, u32_from_term(t, "U32"), p, bnd, n)
 
-def err(+book: Book, ctx: List<&2, Tm>, exp: Msg, obs: Msg, spn: Sp, dn: String) -> Err:
+def err.make(+book: Book, ctx: List<&2, Tm>, exp: Msg, obs: Msg, spn: Sp, dn: String) -> Err:
   Err{book, ctx, exp, obs, spn, dn, ""}
 
 def ctx_bind(ctx: List<&2, Tm>, i: U32, q: Q, k: String, ty: Tm) -> List<&2, Tm>:
@@ -5736,7 +5736,7 @@ def K.if(-A: Type, c: Bool, t: K(A), e: K(A)) -> K(A):
 
 # An error raised with the current book.
 def K.err(-A: Type, ctx: List<&2, Tm>, exp: Msg, obs: Msg, s: Sp, +dn: String) -> K(A):
-  +b => Fail{err(b, ctx, exp, obs, s, dn)}
+  +b => Fail{err.make(b, ctx, exp, obs, s, dn)}
 
 # The lhs of the def being checked: the call it is (for termination), how
 # many parameters remain, its name, its parameters' quantities, whether it
@@ -6184,7 +6184,7 @@ def infer.var(+t: Tm, +i: U32, +qt: Q, +ctx: List<&2, Tm>, +s: Sp, +l: CL) -> K(
 def infer.fail(+l: CL, +tm: Tm, +ctx: List<&2, Tm>) -> K(IR):
   do K<IR>:
     book : Book <- K.book()
-    +t : Tm <- K.pure(Tm, lit_ctr(tm))
+    +t : Tm <- K.pure(Tm, lit.to_ctr(tm))
     +undeclared : Bool <- K.pure(Bool, Bool.and(Tm.is_ctr(t),
       Bool.not(Maybe.is_some(&2, CtrD, book_ctr(book, Tm.name(t))))))
     K.err(IR, ctx, MStr{Bool.pick(String, undeclared, "a declared constructor", "an annotated term (cannot infer)")},
@@ -6977,7 +6977,7 @@ def Book.add_tmp(book: Book, +k: String, key: String, o: String) -> Book:
 def inst.closed.err.go(e: Err, obs: Msg, +bok: Book, +l: CL, +tm: Tm, +ctx: List<&2, Tm>, +d: U32) -> Err:
   match obs:
     case MTm{Var{k, +i, s}}:
-      Bool.pick(Err, U32.is_lt(i, d), err(bok, ctx, MStr{"a template applied to closed ~ arguments (" ++ k ++
+      Bool.pick(Err, U32.is_lt(i, d), err.make(bok, ctx, MStr{"a template applied to closed ~ arguments (" ++ k ++
         " is a variable here, not comptime: pass it at run time)"}, MTm{tm}, Tm.span(tm), CL.dn(l)), e)
     case other:
       e
