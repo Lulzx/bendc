@@ -689,7 +689,7 @@ type Ctor is Data:
 
 type Decl is Data:
   DDef{name: String, params: List<&2, Param>, body: Expr, ret: Expr}
-  DEff{name: String, params: List<&2, Param>}
+  DEff{name: String, params: List<&2, Param>, imports: List<&2, String>}
   DLaw{name: String, params: List<&2, Param>}
   DType{name: String, params: List<&2, String>, ctors: List<&2, Ctor>}
   DImport{path: String, alias: String}
@@ -1882,13 +1882,19 @@ def P.body() -> Parser(Expr):
     ss : List<&2, Stmt> <- P.stmts()
     return Fold.plain(ss)
 
+# A parallel let (two names or more) keeps its values together, as one let
+# of a %par pattern: its values may run in parallel.
+def P.lets.par(+ps: List<&2, Pat>, +vs: List<&2, Expr>) -> List<&2, Stmt>:
+  Bool.pick(List<&2, Stmt>, Nat.is_gt(List.length(&2, Pat, ps), 1n),
+    [SLet{PCtor{"%par", ps}, ECtor{"%par", vs}}], P.lets(ps, vs))
+
 def P.let_stmt() -> Parser(List<&2, Stmt>):
   do Parser<List<&2, Stmt>>:
     +ps : List<&2, Pat> <- P.pat_seq(["=", ":"])
     P.skip_ann()
     P.expect("=")
-    vs : List<&2, Expr> <- P.exprs_n(List.length(&2, Pat, ps))
-    return P.lets(ps, vs)
+    +vs : List<&2, Expr> <- P.exprs_n(List.length(&2, Pat, ps))
+    return P.lets.par(ps, vs)
 
 def P.stmt.scan.go(k: Nat) -> Parser(List<&2, Stmt>):
   match k:
@@ -2235,15 +2241,32 @@ def P.file.fin(r: List<&2, Decl> & Toks()) -> List<&2, Decl> & String:
 def P.skip_rest() -> Parser(Unit):
   ts => (Unit{}, P.skip_block.go(ts, 1))
 
+def P.eff.go(ts: Toks(), acc: List<&2, String>) -> List<&2, String> & Toks():
+  match ts:
+    case Nil{}:
+      (acc, Nil{})
+    case Tok{KStr{x}, sp, ln} <> t:
+      P.eff.go(t, List.append(&2, String, acc, [x]))
+    case Tok{KDe{}, sp, ln} <> t:
+      (acc, t)
+    case Tok{KEof{}, sp, ln} <> t:
+      (acc, Tok{KEof{}, sp, ln} <> t)
+    case Tok{KErr{e}, sp, ln} <> t:
+      (acc, Tok{KErr{e}, sp, ln} <> t)
+    case h <> t:
+      P.eff.go(t, acc)
+
+# The files a foreign def imports, up to (and including) its dedent.
+def P.eff.imports() -> Parser(List<&2, String>):
+  ts => P.eff.go(ts, Nil{})
+
 @unsafe
 def P.def.body(name: String, params: List<&2, Param>, ret: Expr, eff: Bool) -> Parser(Decl):
   match eff:
     case True{}:
       do Parser<Decl>:
-        P.skip_line()
-        P.nls()
-        P.skip_rest()
-        return DEff{name, params}
+        imps : List<&2, String> <- P.eff.imports()
+        return DEff{name, params, imps}
     case False{}:
       do Parser<Decl>:
         ss : List<&2, Stmt> <- P.stmts()
@@ -2720,7 +2743,7 @@ def Decl.show(d: Decl) -> String:
   match d:
     case DDef{n, ps, b, r}:
       "def " ++ n ++ "(" ++ Params.show(ps) ++ ") = " ++ Expr.show(b)
-    case DEff{n, ps}:
+    case DEff{n, ps, ims}:
       "eff " ++ n ++ "(" ++ Params.show(ps) ++ ")"
     case DLaw{n, ps}:
       "law " ++ n ++ "(" ++ Params.show(ps) ++ ")"
@@ -2939,7 +2962,7 @@ def Natives() -> List<&2, String>:
    "U32.min", "U32.max", "U32.pow", "U32.log2", "U32.to_f32",
    "Nat.double", "Nat.add", "Nat.sub", "Nat.mul", "Nat.divmod", "Nat.div",
    "Nat.mod", "Nat.cmp", "Nat.is_eq", "Nat.is_ne", "Nat.is_lt", "Nat.is_le",
-   "Nat.is_gt", "Nat.is_ge", "Nat.min", "Nat.max", "Nat.pow",
+   "Nat.is_gt", "Nat.is_ge", "Nat.min", "Nat.max", "Nat.pow", "Nat.show",
    "F32.add", "F32.sub", "F32.mul", "F32.div", "F32.mod", "F32.pow", "F32.atan2",
    "F32.is_eq", "F32.is_ne", "F32.is_lt", "F32.is_le", "F32.is_gt", "F32.is_ge",
    "F32.neg", "F32.abs", "F32.sqrt", "F32.exp", "F32.log", "F32.log2",
@@ -3024,10 +3047,10 @@ def G.add.def(
       G.mask(G.params(laws, name, ps))}),
     Map.set(&2, Decl, bodies, name, DDef{name, ps, body, ret})}
 
-def G.add.eff(+name: String, +ps: List<&2, Param>, g: G) -> G:
+def G.add.eff(+name: String, +ps: List<&2, Param>, ims: List<&2, String>, g: G) -> G:
   G{ctors, defs, bodies} = g
   G{ctors, Map.set(&2, DInfo, defs, name, DInfo{1, G.mask(ps)}),
-    Map.set(&2, Decl, bodies, name, DEff{name, ps})}
+    Map.set(&2, Decl, bodies, name, DEff{name, ps, ims})}
 
 def G.add(d: Decl, +laws: Map<&2, List<&2, Param>>, g: G) -> G:
   match d:
@@ -3037,8 +3060,8 @@ def G.add(d: Decl, +laws: Map<&2, List<&2, Param>>, g: G) -> G:
       G.add.law(name, ps, g)
     case DDef{name, ps, body, ret}:
       G.add.def(name, ps, body, ret, laws, g)
-    case DEff{name, ps}:
-      G.add.eff(name, ps, g)
+    case DEff{name, ps, ims}:
+      G.add.eff(name, ps, ims, g)
     case DImport{p, a}:
       g
 
@@ -3123,7 +3146,7 @@ type Bind is Data:
 
 type St is Data:
   St{n: U32, protos: Doc, code: Doc, refs: List<&2, String>, errs: List<&2, String>,
-    memo: List<&2, Bind>}
+    memo: List<&2, Bind>, effs: List<&2, String>}
 
 def Gen(-A: Type) -> Type:
   St -> A & St
@@ -3139,47 +3162,47 @@ def Gen.pure(-A: Type, x: A) -> Gen(A):
   st => (x, st)
 
 def Gen.fresh.go(st: St) -> U32 & St:
-  St{+n, protos, code, refs, errs, memo} = st
-  (n, St{U32.inc(n), protos, code, refs, errs, memo})
+  St{+n, protos, code, refs, errs, memo, effs} = st
+  (n, St{U32.inc(n), protos, code, refs, errs, memo, effs})
 
 # A fresh number.
 def Gen.fresh() -> Gen(U32):
   st => Gen.fresh.go(st)
 
 def Gen.code.go(d: Doc, st: St) -> Unit & St:
-  St{n, protos, code, refs, errs, memo} = st
-  (Unit{}, St{n, protos, DCat{code, d}, refs, errs, memo})
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (Unit{}, St{n, protos, DCat{code, d}, refs, errs, memo, effs})
 
 # Appends a top-level C definition.
 def Gen.code(d: Doc) -> Gen(Unit):
   st => Gen.code.go(d, st)
 
 def Gen.proto.go(d: Doc, st: St) -> Unit & St:
-  St{n, protos, code, refs, errs, memo} = st
-  (Unit{}, St{n, DCat{protos, d}, code, refs, errs, memo})
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (Unit{}, St{n, DCat{protos, d}, code, refs, errs, memo, effs})
 
 # Appends a prototype.
 def Gen.proto(d: Doc) -> Gen(Unit):
   st => Gen.proto.go(d, st)
 
 def Gen.ref.go(name: String, st: St) -> Unit & St:
-  St{n, protos, code, refs, errs, memo} = st
-  (Unit{}, St{n, protos, code, name <> refs, errs, memo})
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (Unit{}, St{n, protos, code, name <> refs, errs, memo, effs})
 
 # Records a reference to a global def.
 def Gen.ref(name: String) -> Gen(Unit):
   st => Gen.ref.go(name, st)
 
 def Gen.take_refs.go(st: St) -> List<&2, String> & St:
-  St{n, protos, code, refs, errs, memo} = st
-  (refs, St{n, protos, code, Nil{}, errs, memo})
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (refs, St{n, protos, code, Nil{}, errs, memo, effs})
 
 def Gen.take_refs() -> Gen(List<&2, String>):
   st => Gen.take_refs.go(st)
 
 def Gen.error.go(msg: String, st: St) -> Unit & St:
-  St{n, protos, code, refs, errs, memo} = st
-  (Unit{}, St{n, protos, code, refs, msg <> errs, memo})
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (Unit{}, St{n, protos, code, refs, msg <> errs, memo, effs})
 
 def Gen.error(msg: String) -> Gen(Unit):
   st => Gen.error.go(msg, st)
@@ -3315,7 +3338,7 @@ def Gen.pat.kind(
     case 3n:
       Gen.pat.cond("(" ++ path ++ ") == 0", r)
     case 4n+p:
-      Gen.pat.fields(g, args, "(" ++ path ++ " - 1)", 99,
+      Gen.pat.fields(g, args, "nat_subk(" ++ path ++ ", 1)", 99,
         Gen.pat.cond("(" ++ path ++ ") != 0", r))
 
 @unsafe
@@ -3339,8 +3362,8 @@ def Gen.pat(g, p, path, r):
     case PNat{n}:
       Gen.pat.cond("(" ++ path ++ ") == " ++ U32.show(n), r)
     case PSucc{+k, q}:
-      Gen.pat(g, q, "(" ++ path ++ " - " ++ U32.show(k) ++ ")",
-        Gen.pat.cond("(" ++ path ++ ") >= " ++ U32.show(k), r))
+      Gen.pat(g, q, "nat_subk(" ++ path ++ ", " ++ U32.show(k) ++ ")",
+        Gen.pat.cond("nat_ge(" ++ path ++ ", " ++ U32.show(k) ++ ")", r))
     case PNum{n}:
       Gen.pat.cond("(" ++ path ++ ") == " ++ U32.show(n), r)
 
@@ -3357,8 +3380,8 @@ def Gen.str(s: String) -> Gen(Doc):
     +k : U32 <- Gen.fresh()
     +name : String <- Gen.pure(String, "S" ++ U32.show(k))
     Gen.proto(DStr{"static V " ++ name ++ "(void);\n"})
-    Gen.code(DStr{"static V " ++ name ++ "(void) { static V c; if (!c) c = MKS(\"" ++
-      Gen.lit(s) ++ "\"); return c; }\n"})
+    Gen.code(DStr{"static V " ++ name ++ "(void) { static V c; return STRC(c, \"" ++
+      Gen.lit(s) ++ "\"); }\n"})
     return DStr{name ++ "()"}
 
 def Gen.var.kind(+name: String, kind: Nat, +total: U32) -> Gen(Doc):
@@ -3435,7 +3458,7 @@ def Gen.ctor.kind(+tag: U32, kind: Nat, ds: List<&2, Doc>) -> Doc:
     case 3n:
       DStr{"0"}
     case 4n+p:
-      Doc.list([DStr{"("}, Doc.list(ds), DStr{" + 1)"}])
+      Doc.list([DStr{"nat_addk("}, Doc.list(ds), DStr{", 1)"}])
 
 def Gen.caps.put(x: String, m: Maybe<&2, String>, rest: Env()) -> Env():
   match m:
@@ -3721,7 +3744,7 @@ def Gen.expr(g, env, e):
     case ESucc{k, x}:
       do Gen<Doc>:
         d : Doc <- Gen.expr(g, env, x)
-        return Doc.list([DStr{"("}, d, DStr{" + " ++ U32.show(k) ++ ")"}])
+        return Doc.list([DStr{"nat_addk("}, d, DStr{", " ++ U32.show(k) ++ ")"}])
     case ETy{n, targs}:
       Gen.pure(Doc, DStr{"0"})
     case EErr{m}:
@@ -3828,18 +3851,96 @@ def Gen.lam(g, env, p, body):
       U32.show(n) ++ ", "}, Gen.arr(Gen.caps.outer(caps)), DStr{")"}])
 
 @unsafe
+def Gen.let.pat(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +p: Pat, v: Expr, body: Expr) ->
+  Gen(Doc):
+  do Gen<Doc>:
+    +k : U32 <- Gen.fresh()
+    +c : String <- Gen.pure(String, "v" ++ U32.show(k))
+    d : Doc <- Gen.expr(g, env, v)
+    +binds : Env() <- Gen.pure(Env(), PatR.binds(Gen.pat(g, p, c, PatR{Nil{}, Nil{}})))
+    b : Doc <- Gen.stmt(g, List.append(&2, Bind, binds, env), self, tgt, body)
+    return Doc.list([DStr{"V " ++ c ++ " = "}, d, DStr{";\n"}, b])
+
+def Gen.par.name(+k: U32, +i: U32) -> String:
+  "p" ++ U32.show(k) ++ "_" ++ U32.show(i)
+
+# Binds each name of a parallel let to its value's C variable.
+def Gen.par.env(ps: List<&2, Pat>, +k: U32, +i: U32, +env: Env()) -> Env():
+  match ps:
+    case Nil{}:
+      env
+    case PVar{+x} <> t:
+      Gen.par.env(t, k, U32.inc(i), Bool.pick(Env(), Str.eq(x, "_"), env,
+        Bind{x, Gen.par.name(k, i)} <> env))
+    case other <> t:
+      Gen.par.env(t, k, U32.inc(i), env)
+
+law Gen.par.vals:
+  for +g: G
+  for +env: Env()
+  for +k: U32
+  for +i: U32
+  for vs: List<&2, Expr>
+  Gen(Doc)
+
+# Forks every value but the last, evaluates the last, then joins the forks
+# in reverse.
+@unsafe
+def Gen.par.vals(g, env, k, i, vs):
+  match vs:
+    case Nil{}:
+      Gen.pure(Doc, DNil{})
+    case v <> Nil{}:
+      do Gen<Doc>:
+        d : Doc <- Gen.expr(g, env, v)
+        return Doc.list([DStr{"V " ++ Gen.par.name(k, i) ++ " = "}, d, DStr{";\n"}])
+    case v <> t:
+      do Gen<Doc>:
+        c : Doc <- Gen.lam(g, env, PVar{"_"}, v)
+        rest : Doc <- Gen.par.vals(g, env, k, U32.inc(i), t)
+        return Doc.list([DStr{"V " ++ Gen.par.name(k, i) ++ "t = par_fork("}, c, DStr{");\n"},
+          rest, DStr{"V " ++ Gen.par.name(k, i) ++ " = par_join(" ++ Gen.par.name(k, i) ++
+          "t);\n"}])
+
+@unsafe
+def Gen.par(+g: G, +env: Env(), +self: Self, +tgt: Tgt, ps: List<&2, Pat>, vs: List<&2, Expr>,
+  body: Expr
+) -> Gen(Doc):
+  do Gen<Doc>:
+    +k : U32 <- Gen.fresh()
+    pre : Doc <- Gen.par.vals(g, env, k, 0, vs)
+    b : Doc <- Gen.stmt(g, Gen.par.env(ps, k, 0, env), self, tgt, body)
+    return Doc.list([pre, b])
+
+@unsafe
+def Gen.let.par(+g: G, +env: Env(), +self: Self, +tgt: Tgt, ps: List<&2, Pat>, v: Expr,
+  body: Expr
+) -> Gen(Doc):
+  match v:
+    case ECtor{n, vs}:
+      Gen.par(g, env, self, tgt, ps, vs, body)
+    case other:
+      Gen.par(g, env, self, tgt, ps, [other], body)
+
+@unsafe
+def Gen.let.ctor(+g: G, +env: Env(), +self: Self, +tgt: Tgt, name: String, ps: List<&2, Pat>,
+  v: Expr, body: Expr, par: Bool
+) -> Gen(Doc):
+  match par:
+    case True{}:
+      Gen.let.par(g, env, self, tgt, ps, v, body)
+    case False{}:
+      Gen.let.pat(g, env, self, tgt, PCtor{name, ps}, v, body)
+
+@unsafe
 def Gen.let(g, env, self, tgt, p, v, body):
   match p:
     case PVar{+x}:
       Gen.let.var(g, env, self, tgt, x, v, body, Str.eq(x, "_"))
+    case PCtor{+name, ps}:
+      Gen.let.ctor(g, env, self, tgt, name, ps, v, body, Str.eq(name, "%par"))
     case other:
-      do Gen<Doc>:
-        +k : U32 <- Gen.fresh()
-        +c : String <- Gen.pure(String, "v" ++ U32.show(k))
-        d : Doc <- Gen.expr(g, env, v)
-        +binds : Env() <- Gen.pure(Env(), PatR.binds(Gen.pat(g, other, c, PatR{Nil{}, Nil{}})))
-        b : Doc <- Gen.stmt(g, List.append(&2, Bind, binds, env), self, tgt, body)
-        return Doc.list([DStr{"V " ++ c ++ " = "}, d, DStr{";\n"}, b])
+      Gen.let.pat(g, env, self, tgt, other, v, body)
 
 def PatR.conds(r: PatR) -> List<&2, String>:
   PatR{conds, binds} = r
@@ -3915,17 +4016,45 @@ def Gen.eff.args(n: Nat, +i: U32) -> List<&2, String>:
     case 1n+p:
       ("a[" ++ U32.show(i) ++ "]") <> Gen.eff.args(p, U32.inc(i))
 
-# Effects: F builds a closure R => k => k(host(args)).
-def Gen.def.eff(+name: String, sig: Sig) -> Gen(Unit):
+def Gen.cid(name: String) -> String:
+  "CID_" ++ Gen.host(String.to_upper(name))
+
+def Gen.effs.c.if(h: String, rest: List<&2, String>, keep: Bool) -> List<&2, String>:
+  match keep:
+    case True{}:
+      h <> rest
+    case False{}:
+      rest
+
+def Gen.effs.c(ims: List<&2, String>) -> List<&2, String>:
+  match ims:
+    case Nil{}:
+      Nil{}
+    case +h <> t:
+      Gen.effs.c.if(h, Gen.effs.c(t), String.ends_with(h, ".c"))
+
+def Gen.effs.go(ims: List<&2, String>, st: St) -> Unit & St:
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (Unit{}, St{n, protos, code, refs, errs, memo, List.append(&2, String, Gen.effs.c(ims), effs)})
+
+# Records the C files a foreign def imports.
+def Gen.effs(ims: List<&2, String>) -> Gen(Unit):
+  st => Gen.effs.go(ims, st)
+
+# Effects: F builds a closure R => k => {args..., k}, a request node the
+# event loop answers (see io_step in bendrt.h).
+def Gen.def.eff(+name: String, sig: Sig, ims: List<&2, String>) -> Gen(Unit):
   Sig{+params, env, +wargs} = sig
   +n = U32.from_nat(List.length(&2, String, params))
   +e = "E_" ++ Gen.mangle(name)
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
   do Gen<Unit>:
+    Gen.effs(ims)
     Gen.proto(DStr{head ++ ";\nstatic V " ++ e ++ "(V *a);\n"})
-    Gen.code(DStr{"static V " ++ e ++ "(V *a) { return apply(a[" ++
-      U32.show(U32.inc(n)) ++ "], H_" ++ Gen.host(String.to_lower(name)) ++ "(" ++
-      String.join(Gen.eff.args(U32.to_nat(n), 0), ", ") ++ ")); }\n"})
+    Gen.code(DStr{"static V " ++ e ++ "(V *a) { return io_req(" ++ Gen.cid(name) ++ ", " ++
+      U32.show(U32.inc(n)) ++ ", (V[]){" ++ String.join(List.append(&2, String,
+        Gen.eff.args(U32.to_nat(n), 0), ["a[" ++ U32.show(U32.inc(n)) ++ "]"]), ", ") ++
+      "}); }\n"})
     Gen.code(DStr{head ++ " { return mk_clo(" ++ e ++ ", " ++ U32.show((n + 2 : U32)) ++
       ", " ++ U32.show(n) ++ ", " ++ Bool.pick(String, U32.is_zero(n), "0",
         "(V[]){" ++ String.join(params, ", ") ++ "}") ++ "); }\n"})
@@ -3966,19 +4095,31 @@ def Gen.def.decl(+g: G, +name: String, +info: DInfo, d: Decl) -> Gen(Unit):
     case DDef{n, ps, body, ret}:
       Gen.def.native(g, name, mask, body, Gen.sig(ps, mask, 0, Sig{Nil{}, Nil{}, Nil{}}),
         U32.is_eq(kind, 2))
-    case DEff{n, ps}:
-      Gen.def.eff(name, Gen.sig(ps, mask, 0, Sig{Nil{}, Nil{}, Nil{}}))
+    case DEff{n, ps, ims}:
+      Gen.def.eff(name, Gen.sig(ps, mask, 0, Sig{Nil{}, Nil{}, Nil{}}), ims)
     case other:
       Gen.def.law(name, mask, U32.is_eq(kind, 2))
 
 def Gen.def(+g: G, +name: String) -> Gen(Unit):
   Gen.def.decl(g, name, G.def(g, name), G.body(g, name))
 
-def Gen.program.fin(r: String & St) -> String & List<&2, String>:
+def Gen.dedup(xs: List<&2, String>, +acc: List<&2, String>) -> List<&2, String>:
+  match xs:
+    case Nil{}:
+      List.reverse(&2, String, acc)
+    case +h <> t:
+      Gen.dedup(t, Bool.pick(List<&2, String>, Str.has(acc, h), acc, h <> acc))
+
+# The C output: head (constructor ids and the runtime), the C files the
+# program's effects import (spliced in by the driver), then the body.
+type COut is Data:
+  COut{head: String, effs: List<&2, String>, body: String, errs: List<&2, String>}
+
+def Gen.program.fin(cids: String, r: String & St) -> COut:
   (entry, st) = r
-  St{n, protos, code, refs, errs, memo} = st
-  (Doc.flat(Doc.list([DStr{"#include \"bendrt.h\"\n\n"}, protos, DStr{"\n"}, code,
-    DStr{"\n" ++ entry}])), errs)
+  St{n, protos, code, refs, errs, memo, effs} = st
+  COut{cids ++ "#include \"bendrt.h\"\n\n", Gen.dedup(List.reverse(&2, String, effs), Nil{}),
+    Doc.flat(Doc.list([protos, DStr{"\n"}, code, DStr{"\n" ++ entry}])), errs}
 
 law Gen.all:
   for +g: G
@@ -4056,9 +4197,48 @@ def Gen.program.m(+g: G) -> Gen(String):
     Gen.all(g, ["main"], Set.new())
     Gen.entry(g, G.body(g, "main"))
 
-def Gen.program(ds: List<&2, Decl>) -> String & List<&2, String>:
+def Gen.cids.line(+name: String, kind: Nat, +tag: U32) -> String:
+  match kind:
+    case 0n:
+      "#define " ++ Gen.cid(name) ++ " " ++ U32.show(tag) ++ "u\n"
+    case 1n:
+      "#define " ++ Gen.cid(name) ++ " ((1u << 16) | " ++ U32.show(tag) ++ "u)\n"
+    case 2n:
+      "#define " ++ Gen.cid(name) ++ " ((2u << 16) | " ++ U32.show(tag) ++ "u)\n"
+    case other:
+      ""
+
+def Gen.cids.kind(+name: String, info: Maybe<&2, CInfo>) -> String:
+  match info:
+    case None{}:
+      ""
+    case Some{CInfo{tag, ar, kind, single}}:
+      Gen.cids.line(name, U32.to_nat(kind), tag)
+
+def Gen.cids.ctors(+g: G, cs: List<&2, Ctor>) -> String:
+  match cs:
+    case Nil{}:
+      ""
+    case Ctor{+name, fs} <> t:
+      Gen.cids.kind(name, G.ctor(g, name)) ++ Gen.cids.ctors(g, t)
+
+# Constructor and effect ids, as the effect ABI names them (CID_NAME).
+def Gen.cids(+g: G, ds: List<&2, Decl>, +i: U32) -> String:
+  match ds:
+    case Nil{}:
+      ""
+    case DType{n, ps, cs} <> t:
+      Gen.cids.ctors(g, cs) ++ Gen.cids(g, t, i)
+    case DEff{+n, ps, ims} <> t:
+      "#define " ++ Gen.cid(n) ++ " ((3u << 16) | " ++ U32.show(i) ++ "u)\n" ++
+        Gen.cids(g, t, U32.inc(i))
+    case d <> t:
+      Gen.cids(g, t, i)
+
+def Gen.program(+ds: List<&2, Decl>) -> COut:
   +g = G.new(ds)
-  Gen.program.fin(Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}}))
+  Gen.program.fin(Gen.cids(g, ds, 0),
+    Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
 
 # Value printers
 # ==============
@@ -4088,15 +4268,15 @@ def Ty.bind(ps: List<&2, String>, xs: List<&2, Expr>) -> List<&2, TB>:
   Ty.bind.go(List.reverse(&2, String, ps), List.reverse(&2, Expr, xs))
 
 def Gen.memo.find.go(st: St, +k: String) -> Maybe<&2, String> & St:
-  St{n, protos, code, refs, errs, +memo} = st
-  (Env.find(memo, k), St{n, protos, code, refs, errs, memo})
+  St{n, protos, code, refs, errs, +memo, effs} = st
+  (Env.find(memo, k), St{n, protos, code, refs, errs, memo, effs})
 
 def Gen.memo.find(+k: String) -> Gen(Maybe<&2, String>):
   st => Gen.memo.find.go(st, k)
 
 def Gen.memo.add.go(st: St, b: Bind) -> Unit & St:
-  St{n, protos, code, refs, errs, memo} = st
-  (Unit{}, St{n, protos, code, refs, errs, b <> memo})
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (Unit{}, St{n, protos, code, refs, errs, b <> memo, effs})
 
 def Gen.memo.add(b: Bind) -> Gen(Unit):
   st => Gen.memo.add.go(st, b)
@@ -4319,7 +4499,7 @@ def Mod.names(ds: List<&2, Decl>, acc: List<&2, String>) -> List<&2, String>:
       acc
     case DDef{n, ps, b, r} <> t:
       Mod.names(t, n <> acc)
-    case DEff{n, ps} <> t:
+    case DEff{n, ps, ims} <> t:
       Mod.names(t, n <> acc)
     case DLaw{n, ps} <> t:
       Mod.names(t, n <> acc)
@@ -4394,8 +4574,8 @@ def Mod.decl(+q: Qual, d: Decl) -> Decl:
   match d:
     case DDef{n, +ps, b, r}:
       DDef{Mod.q(q, n), ps, Mod.expr(q, Mod.param_names(ps), b), Mod.expr(q, Nil{}, r)}
-    case DEff{n, ps}:
-      DEff{Mod.q(q, n), ps}
+    case DEff{n, ps, ims}:
+      DEff{Mod.q(q, n), ps, ims}
     case DLaw{n, ps}:
       DLaw{Mod.q(q, n), ps}
     case DType{n, ps, cs}:
@@ -4477,6 +4657,39 @@ def Mod.dir(path: String) -> String:
 # Driver
 # ======
 
+def Eff.path(+dir: String, +p: String) -> String:
+  Bool.pick(String, String.starts_with(p, "/"), p, dir ++ p)
+
+def Eff.paths(+dir: String, ps: List<&2, String>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case h <> t:
+      Eff.path(dir, h) <> Eff.paths(dir, t)
+
+def Eff.decl(+dir: String, d: Decl) -> Decl:
+  match d:
+    case DEff{n, ps, ims}:
+      DEff{n, ps, Eff.paths(dir, ims)}
+    case other:
+      other
+
+# Resolves the files foreign defs import against their file's directory.
+def Eff.decls(+dir: String, ds: List<&2, Decl>) -> List<&2, Decl>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case h <> t:
+      Eff.decl(dir, h) <> Eff.decls(dir, t)
+
+def Main.resolve(+dir: String, r: Result<&2, &2, String, List<&2, Decl>>) ->
+  Result<&2, &2, String, List<&2, Decl>>:
+  match r:
+    case Fail{e}:
+      Fail{e}
+    case Done{ds}:
+      Done{Eff.decls(dir, ds)}
+
 def Main.parse.fin(r: List<&2, Decl> & String) -> Result<&2, &2, String, List<&2, Decl>>:
   (ds, +err) = r
   Bool.pick(Result<&2, &2, String, List<&2, Decl>>, String.is_empty(err), Done{ds},
@@ -4485,11 +4698,32 @@ def Main.parse.fin(r: List<&2, Decl> & String) -> Result<&2, &2, String, List<&2
 def Main.parse(src: String) -> Result<&2, &2, String, List<&2, Decl>>:
   Main.parse.fin(P.file(src))
 
-def Main.emit(r: String & List<&2, String>) -> IO(Unit):
-  (c, errs) = r
+law Main.effs:
+  for ps: List<&2, String>
+  for acc: String
+  IO(String)
+
+# Reads the effect sources to splice into the output.
+@unsafe
+def Main.effs(ps, acc):
+  match ps:
+    case Nil{}:
+      IO.pure(String, acc)
+    case p <> t:
+      do IO<String>:
+        src : String <- IO.read_file(p)
+        Main.effs(t, acc ++ src ++ "\n")
+
+def Main.emit.ok(head: String, effs: List<&2, String>, body: String) -> IO(Unit):
+  do IO<Unit>:
+    srcs : String <- Main.effs(effs, "")
+    IO.write(head ++ srcs ++ body)
+
+def Main.emit(r: COut) -> IO(Unit):
+  COut{head, effs, body, errs} = r
   match errs:
     case Nil{}:
-      IO.write(c)
+      Main.emit.ok(head, effs, body)
     case e <> t:
       do IO<Unit>:
         IO.print_err(String.join(List.reverse(&2, String, e <> t), "\n"))
@@ -4529,11 +4763,11 @@ def Main.run(args: List<&2, String>) -> IO(Unit):
       do IO<Unit>:
         src : String <- IO.read_file(path)
         Main.ast(Main.parse(src))
-    case base_path <> user_path <> Nil{}:
+    case +base_path <> user_path <> Nil{}:
       do IO<Unit>:
         base : String <- IO.read_file(base_path)
         user : List<&2, Decl> <- Main.load(64n, user_path)
-        Main.compile(Main.parse(base), Done{user})
+        Main.compile(Main.resolve(Mod.dir(base_path), Main.parse(base)), Done{user})
     case other:
       IO.die(Unit, 1, "usage: bendc <base.bend> <input.bend> | --tokens <file> | --ast <file>")
 
@@ -4558,7 +4792,7 @@ def Main.load.parsed(
     case Done{+ds}:
       do IO<List<&2, Decl>>:
         imported : List<&2, Decl> <- Main.imports(f, dir, ds)
-        return List.append(&2, Decl, imported, ds)
+        return List.append(&2, Decl, imported, Eff.decls(dir, ds))
 
 @unsafe
 def Main.imports.one(
