@@ -24,6 +24,26 @@ for src in tests/*.bend; do
     echo "FAIL $name (output)"; diff "$out.txt" "tests/$name.out" | head -10 | sed 's/^/  /'; fail=$((fail+1))
   fi
 done
+# !-calls on the device: the simulator everywhere, Metal on a Mac with a GPU.
+# A run passes when every !-call finished on the device (none fell back).
+gpu_modes=sim
+[ "$(uname)" = Darwin ] && gpu_modes="sim metal"
+for src in $(grep -l '[a-z0-9_]!(' tests/*.bend); do
+  name=$(basename "$src" .bend)
+  out=build/tests/$name
+  for mode in $gpu_modes; do
+    BEND_GPU=$mode BEND_GPU_LOG=1 "./$out" > "$out.$mode.txt" 2> "$out.$mode.log"
+    echo "exit $?" >> "$out.$mode.txt"
+    if [ "$mode" = metal ] && grep -q "no GPU\|no Metal" "$out.$mode.log"; then continue; fi
+    if cmp -s "$out.$mode.txt" "tests/$name.out" && ! grep -qv "^bend gpu: done" "$out.$mode.log"; then
+      echo "ok   $mode/$name"; pass=$((pass+1))
+    else
+      echo "FAIL $mode/$name"; diff "$out.$mode.txt" "tests/$name.out" | head -10 | sed 's/^/  /'
+      grep -v "^bend gpu: done" "$out.$mode.log" | head -5 | sed 's/^/  /'; fail=$((fail+1))
+    fi
+  done
+done
+
 # The JavaScript target, run with Bun (when it is installed).
 if command -v bun >/dev/null 2>&1; then
   mkdir -p build/js

@@ -5,6 +5,7 @@
 import Base
 import ./check.bend as Chk
 import ./rt/rtjs.bend as RtJs
+import ./rt/gpuh.bend as GpuH
 
 # Utilities
 # =========
@@ -84,6 +85,13 @@ def Str.split_tab(s):
       ("", "")
     case SCon{Chr{+c}, t}:
       Str.split_tab.if(c, t, U32.is_eq(c, 9))
+
+def Str.codes32(s: String) -> List<&2, U32>:
+  match s:
+    case SNil{}:
+      Nil{}
+    case SCon{Chr{x}, t}:
+      x <> Str.codes32(t)
 
 # Lexer
 # =====
@@ -3124,6 +3132,10 @@ def G.build(
 def G.new(+ds: List<&2, Decl>) -> G:
   G.build(ds, G.laws(ds, MTip{}), G{MTip{}, MTip{}, MTip{}})
 
+def DInfo.mask(i: DInfo) -> List<&2, Bool>:
+  DInfo{kind, mask} = i
+  mask
+
 # Code generation
 # ===============
 
@@ -3682,11 +3694,81 @@ def Gen.call.var(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, local:
     case False{}:
       Gen.call.def(g, env, name, G.def(g, name), args)
 
-# f!(args): a call the device may run (see the GPU backend); the CPU runs it
-# as a call.
+def Gen.gpu.go(+name: String, st: St) -> Unit & St:
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (Unit{}, St{n, protos, code, refs, errs, memo, ("%gpu\t" ++ name) <> effs})
+
+# Records a !-call target (with the effects' files, told apart by "%gpu\t").
+def Gen.gpu(+name: String) -> Gen(Unit):
+  st => Gen.gpu.go(name, st)
+
+def Gen.gpu.params(n: Nat, +i: U32) -> List<&2, String>:
+  match n:
+    case 0n:
+      Nil{}
+    case 1n+m:
+      ("a" ++ U32.show(i)) <> Gen.gpu.params(m, U32.inc(i))
+
+def Gen.cparams.go(ps: List<&2, String>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case h <> t:
+      ("V " ++ h) <> Gen.cparams.go(t)
+
+def Gen.cparams(ps: List<&2, String>) -> String:
+  match ps:
+    case Nil{}:
+      "void"
+    case h <> t:
+      String.join(Gen.cparams.go(h <> t), ", ")
+
+# f!(args) with every argument of a def: G_f tries the device, then the CPU.
+@unsafe
+def Gen.call.gpu(+g: G, +env: Env(), +name: String, kept: List<&2, Expr>) -> Gen(Doc):
+  do Gen<Doc>:
+    Gen.ref(name)
+    Gen.gpu(name)
+    +ks : List<&2, Doc> <- Gen.exprs(g, env, kept)
+    Gen.proto(DStr{"static V G_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams(Gen.gpu.params(U32.to_nat(Gen.len(ks)), 0)) ++ ");\n"})
+    return Doc.list([DStr{"G_" ++ Gen.mangle(name) ++ "("}, Gen.commas(ks), DStr{")"}])
+
+@unsafe
+def Gen.call.bang.pick(
+  kind: Nat, extra: List<&2, Expr>, full: Bool, +g: G, +env: Env(), +name: String, kept: List<&2, Expr>,
+  args: List<&2, Expr>
+) -> Gen(Doc):
+  match kind extra full:
+    case 0n Nil{} True{}:
+      Gen.call.gpu(g, env, name, kept)
+    case k e f:
+      Gen.call(g, env, EVar{name}, args)
+
+@unsafe
+def Gen.call.bang.split(+g: G, +env: Env(), +name: String, kind: Nat, s: Split, args: List<&2, Expr>) -> Gen(Doc):
+  Split{kept, all, extra, full} = s
+  Gen.call.bang.pick(kind, extra, full, g, env, name, kept, args)
+
+@unsafe
+def Gen.call.bang.def(+g: G, +env: Env(), +name: String, info: DInfo, +args: List<&2, Expr>) -> Gen(Doc):
+  DInfo{kind, +mask} = info
+  Gen.call.bang.split(g, env, name, U32.to_nat(kind), Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}),
+    args)
+
+@unsafe
+def Gen.call.bang.var(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, local: Bool) -> Gen(Doc):
+  match local:
+    case True{}:
+      Gen.call.local(g, env, EVar{name}, args)
+    case False{}:
+      Gen.call.bang.def(g, env, name, G.def(g, name), args)
+
+# f!(args): a call the device may run (see the GPU backend below).
 @unsafe
 def Gen.call.bang(+g: G, +env: Env(), args: List<&2, Expr>) -> Gen(Doc):
   match args:
+    case EVar{+name} <> xs:
+      Gen.call.bang.var(g, env, name, xs, Env.has(env, name))
     case f <> xs:
       Gen.call(g, env, f, xs)
     case Nil{}:
@@ -4043,20 +4125,6 @@ def Gen.sig(ps: List<&2, Param>, mask: List<&2, Bool>, +i: U32, r: Sig) -> Sig:
     case pl ml:
       r
 
-def Gen.cparams.go(ps: List<&2, String>) -> List<&2, String>:
-  match ps:
-    case Nil{}:
-      Nil{}
-    case h <> t:
-      ("V " ++ h) <> Gen.cparams.go(t)
-
-def Gen.cparams(ps: List<&2, String>) -> String:
-  match ps:
-    case Nil{}:
-      "void"
-    case h <> t:
-      String.join(Gen.cparams.go(h <> t), ", ")
-
 def Gen.wrapper(+name: String, wargs: List<&2, String>) -> Gen(Unit):
   +w = Gen.w(name)
   do Gen<Unit>:
@@ -4175,16 +4243,248 @@ def Gen.dedup(xs: List<&2, String>, +acc: List<&2, String>) -> List<&2, String>:
     case +h <> t:
       Gen.dedup(t, Bool.pick(List<&2, String>, Str.has(acc, h), acc, h <> acc))
 
+def Gen.gpu.split.if(+h: String, rest: List<&2, String>, gpu: Bool, hit: Bool) -> List<&2, String>:
+  match gpu hit:
+    case True{} True{}:
+      String.drop(h, 5n) <> rest
+    case False{} False{}:
+      h <> rest
+    case a b:
+      rest
+
+# The !-call targets (gpu) or the effects' files (not gpu) among effs.
+def Gen.gpu.split(effs: List<&2, String>, +gpu: Bool) -> List<&2, String>:
+  match effs:
+    case Nil{}:
+      Nil{}
+    case +h <> t:
+      Gen.gpu.split.if(h, Gen.gpu.split(t, gpu), gpu, String.starts_with(h, "%gpu\t"))
+
+def Gen.gpu.args(+n: Nat) -> String:
+  String.join(Gen.gpu.params(n, 0), ", ")
+
+def K.label.name(+name: String) -> String:
+  Bool.pick(String, String.starts_with(name, "%wrap "), "KLW_" ++ Gen.mangle(String.drop(name, 6n)),
+    "KL_" ++ Gen.mangle(name))
+
+def Gen.gpu.stub.pick(kernel: Bool, head: String, cpu: String, +name: String, +n: Nat) -> String:
+  match kernel:
+    case True{}:
+      head ++ "V ga[] = {" ++ String.join(List.append(&2, String, Gen.gpu.params(n, 0), ["0"]), ", ") ++ "}, r;\nif (gpu_call(&K_PROG, " ++ K.label.name(name) ++ ", ga, " ++
+        U32.show(U32.from_nat(n)) ++ ", &r)) return r;\n" ++ cpu
+    case False{}:
+      head ++ cpu
+
+def Gen.gpu.stub.go(+name: String, kernel: Bool, +n: Nat) -> String:
+  Gen.gpu.stub.pick(kernel, "static V G_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams(Gen.gpu.params(n, 0)) ++ ") {\n",
+    "return " ++ Gen.f(name) ++ "(" ++ Gen.gpu.args(n) ++ ");\n}\n", name, n)
+
+def K.kept(mask: List<&2, Bool>) -> U32:
+  match mask:
+    case Nil{}:
+      0
+    case True{} <> t:
+      U32.inc(K.kept(t))
+    case False{} <> t:
+      K.kept(t)
+
+# G_f for a target f: on the device when it compiled, else on the CPU.
+def Gen.gpu.stub(+g: G, +name: String, kernel: Bool) -> String:
+  Gen.gpu.stub.go(name, kernel, U32.to_nat(K.kept(DInfo.mask(G.def(g, name)))))
+
+def Gen.gpu.stubs(+g: G, ts: List<&2, String>, +kernel: Bool) -> String:
+  match ts:
+    case Nil{}:
+      ""
+    case +t <> rest:
+      Gen.gpu.stub(g, t, kernel) ++ Gen.gpu.stubs(g, rest, kernel)
+
+def Gen.gpu.fns(ws: List<&2, String>) -> String:
+  match ws:
+    case Nil{}:
+      ""
+    case +w <> t:
+      "{" ++ Gen.w(w) ++ ", " ++ K.label.name("%wrap " ++ w) ++ "}, " ++ Gen.gpu.fns(t)
+
+def Gen.gpu.errs(es: List<&2, String>) -> String:
+  match es:
+    case Nil{}:
+      ""
+    case e <> t:
+      "// - " ++ e ++ "\n" ++ Gen.gpu.errs(t)
+
+def K.lit.go(s: String) -> String:
+  match s:
+    case SNil{}:
+      "\"\n"
+    case SCon{Chr{10}, t}:
+      "\\n\"\n\"" ++ K.lit.go(t)
+    case SCon{Chr{34}, t}:
+      "\\\"" ++ K.lit.go(t)
+    case SCon{Chr{92}, t}:
+      "\\\\" ++ K.lit.go(t)
+    case SCon{c, t}:
+      SCon{c, K.lit.go(t)}
+
+# A C string literal of s, a line each.
+def K.lit(s: String) -> String:
+  "\"" ++ K.lit.go(s)
+
+def Gen.gpu.emit.errs(+g: G, +ts: List<&2, String>, errs: List<&2, String>, +tables: String, +cases: String,
+  wraps: List<&2, String>) -> String:
+  match errs:
+    case Nil{}:
+      "\n// The device code of the !-calls (rt/gpu.h)\n" ++ GpuH.head() ++ tables ++ GpuH.mid() ++ cases ++
+        GpuH.tail() ++ "#include \"gpuhost.h\"\n\nstatic const char K_SRC[] =\n" ++ GpuH.head_lit() ++ K.lit(tables) ++
+        GpuH.mid_lit() ++ K.lit(cases) ++ GpuH.tail_lit() ++ ";\n\nstatic const GpuFn K_FNS[] = {" ++ Gen.gpu.fns(wraps) ++
+        "{0, 0}};\nstatic GpuProg K_PROG = {K_SRC, bend_kernel, K_FNS, K_FRAME, K_NLABELS};\n\n" ++
+        Gen.gpu.stubs(g, ts, True{})
+    case e <> t:
+      "\n// The !-calls run on the CPU:\n" ++ Gen.gpu.errs(e <> t) ++ Gen.gpu.stubs(g, ts, False{})
+
+# The device code: tables (label defines and frame sizes), the cases of the
+# kernel's switch, the defs it has wrappers for, and errors.
+type KOut is Data:
+  KOut{tables: String, cases: String, wraps: List<&2, String>, errs: List<&2, String>}
+
+def Gen.gpu.emit(+g: G, +ts: List<&2, String>, out: KOut) -> String:
+  KOut{tables, cases, wraps, errs} = out
+  Gen.gpu.emit.errs(g, ts, errs, tables, cases, wraps)
+
+#
+# The functions a !-call can reach compile into one flat state machine (see
+# rt/gpu.h): a function is an entry block, a call ends a block (the callee
+# returns to a fresh one), every local lives in a frame slot, S(k), and a
+# parallel let forks thunks and joins. The text compiles as MSL (the Metal
+# kernel) and as C (the CPU simulator).
+type KSt is Data:
+  KSt{n: U32, sl: U32, curl: U32, cur: Doc, out: Doc, fns: List<&2, Bind>, todo: List<&2, String>,
+    frames: List<&2, Bind>, errs: List<&2, String>}
+
+def K.defines(fns: List<&2, Bind>) -> String:
+  match fns:
+    case Nil{}:
+      ""
+    case Bind{+name, l} <> t:
+      "#define " ++ K.label.name(name) ++ " " ++ l ++ "\n" ++ K.defines(t)
+
+def K.wraps.if(name: String, rest: List<&2, String>, wrap: Bool) -> List<&2, String>:
+  match wrap:
+    case True{}:
+      String.drop(name, 6n) <> rest
+    case False{}:
+      rest
+
+# The defs whose wrappers the device has code for.
+def K.wraps(fns: List<&2, Bind>) -> List<&2, String>:
+  match fns:
+    case Nil{}:
+      Nil{}
+    case Bind{+name, l} <> t:
+      K.wraps.if(name, K.wraps(t), String.starts_with(name, "%wrap "))
+
+law K.frame_table:
+  for +frames: List<&2, Bind>
+  for +l: U32
+  for +n: U32
+  String
+
+def K.block_doc.if(none: Bool, +l: U32, d: Doc) -> Doc:
+  match none:
+    case True{}:
+      DNil{}
+    case False{}:
+      Doc.list([DStr{"case " ++ U32.show(l) ++ ": {\n"}, d, DStr{"break;\n}\n"}])
+
+# A finished block as a case (label 0: none, while a lambda compiles).
+def K.block_doc(+l: U32, d: Doc) -> Doc:
+  K.block_doc.if(U32.is_zero(l), l, d)
+
+@unsafe
+def K.fin(r: Unit & KSt) -> KOut:
+  (u, st) = r
+  KSt{+n, sl, +curl, cur, out, +fns, todo, +frames, errs} = st
+  KOut{"#define K_NLABELS " ++ U32.show(n) ++ "\n" ++ K.defines(fns) ++ "KCONST KW K_FRAME[] = {" ++
+    K.frame_table(frames, 0, n) ++ "0};\n", Doc.flat(DCat{out, K.block_doc(curl, cur)}), K.wraps(fns), errs}
+
+def KM(-A: Type) -> Type:
+  KSt -> A & KSt
+
+def KM.go(-A: Type, -B: Type, r: A & KSt, f: A -> KM(B)) -> B & KSt:
+  (a, st) = r
+  f(a, st)
+
+def KM.bind(-A: Type, -B: Type, m: KM(A), f: A -> KM(B)) -> KM(B):
+  st => KM.go(A, B, m(st), f)
+
+def KM.pure(-A: Type, x: A) -> KM(A):
+  st => (x, st)
+
+law K.all:
+  for +g: G
+  for fuel: Nat
+  KM(Unit)
+
+def K.fn.new(+name: String, st: KSt) -> U32 & KSt:
+  KSt{+n, sl, curl, cur, out, fns, todo, frames, errs} = st
+  (n, KSt{U32.inc(n), sl, curl, cur, out, Bind{name, U32.show(n)} <> fns, name <> todo, frames, errs})
+
+def K.fn.found(+name: String, m: Maybe<&2, String>, st: KSt) -> U32 & KSt:
+  match m:
+    case Some{l}:
+      (Maybe.default(&2, U32, U32.read(l), 0), st)
+    case None{}:
+      K.fn.new(name, st)
+
+# The entry label of a function, made (and queued to compile) on first use.
+def K.fn.go(+name: String, st: KSt) -> U32 & KSt:
+  KSt{+n, sl, curl, cur, out, +fns, todo, frames, errs} = st
+  K.fn.found(name, Env.find(fns, name), KSt{n, sl, curl, cur, out, fns, todo, frames, errs})
+
+def K.fn(+name: String) -> KM(U32):
+  st => K.fn.go(name, st)
+
+def K.wrap.name(+name: String) -> String:
+  "%wrap " ++ name
+
+def K.targets(ts: List<&2, String>) -> KM(Unit):
+  match ts:
+    case Nil{}:
+      KM.pure(Unit, Unit{})
+    case +t <> rest:
+      do KM<Unit>:
+        +l : U32 <- K.fn(t)
+        +w : U32 <- K.fn(K.wrap.name(t))
+        K.targets(rest)
+
+@unsafe
+def K.program.m(+g: G, ts: List<&2, String>) -> KM(Unit):
+  do KM<Unit>:
+    K.targets(ts)
+    K.all(g, 100000n)
+
+# The device code for the !-call targets ts.
+def K.program(+g: G, ts: List<&2, String>) -> KOut:
+  K.fin(K.program.m(g, ts)(KSt{8, 0, 0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
+
+def Gen.gpu.tail(+g: G, ts: List<&2, String>) -> String:
+  match ts:
+    case Nil{}:
+      ""
+    case +t <> +rest:
+      Gen.gpu.emit(g, t <> rest, K.program(g, t <> rest))
+
 # The C output: head (constructor ids and the runtime), the C files the
 # program's effects import (spliced in by the driver), then the body.
 type COut is Data:
   COut{head: String, effs: List<&2, String>, body: String, errs: List<&2, String>}
 
-def Gen.program.fin(cids: String, r: String & St) -> COut:
+def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
-  St{n, protos, code, refs, errs, memo, effs} = st
-  COut{cids ++ "#include \"bendrt.h\"\n\n", Gen.dedup(List.reverse(&2, String, effs), Nil{}),
-    Doc.flat(Doc.list([protos, DStr{"\n"}, code, DStr{"\n" ++ entry}])), errs}
+  St{n, protos, code, refs, errs, memo, +effs} = st
+  COut{cids ++ "#include \"bendrt.h\"\n\n", Gen.dedup(List.reverse(&2, String, Gen.gpu.split(effs, False{})), Nil{}),
+    Doc.flat(Doc.list([protos, DStr{"\n"}, code, DStr{Gen.gpu.tail(g, Gen.dedup(Gen.gpu.split(effs, True{}), Nil{}))},
+    DStr{"\n" ++ entry}])), errs}
 
 law Gen.all:
   for +g: G
@@ -4302,7 +4602,7 @@ def Gen.cids(+g: G, ds: List<&2, Decl>, +i: U32) -> String:
 
 def Gen.program(+ds: List<&2, Decl>) -> COut:
   +g = G.new(ds)
-  Gen.program.fin(Gen.cids(g, ds, 0),
+  Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
 
 # Value printers
@@ -5426,6 +5726,938 @@ def Main.js.effs(es, acc):
 
 # Misc
 # ====
+
+def KM.if(-A: Type, c: Bool, t: KM(A), e: KM(A)) -> KM(A):
+  match c:
+    case True{}:
+      t
+    case False{}:
+      e
+
+def K.fresh.go(st: KSt) -> U32 & KSt:
+  KSt{+n, sl, curl, cur, out, fns, todo, frames, errs} = st
+  (n, KSt{U32.inc(n), sl, curl, cur, out, fns, todo, frames, errs})
+
+# A fresh block label.
+def K.fresh() -> KM(U32):
+  st => K.fresh.go(st)
+
+def K.slot.go(st: KSt) -> U32 & KSt:
+  KSt{n, +sl, curl, cur, out, fns, todo, frames, errs} = st
+  (sl, KSt{n, U32.inc(sl), curl, cur, out, fns, todo, frames, errs})
+
+# A fresh frame slot of the function being compiled.
+def K.slot() -> KM(U32):
+  st => K.slot.go(st)
+
+def K.put.go(d: Doc, st: KSt) -> Unit & KSt:
+  KSt{n, sl, curl, cur, out, fns, todo, frames, errs} = st
+  (Unit{}, KSt{n, sl, curl, DCat{cur, d}, out, fns, todo, frames, errs})
+
+# Appends a statement to the current block.
+def K.put(d: Doc) -> KM(Unit):
+  st => K.put.go(d, st)
+
+def K.putS(s: String) -> KM(Unit):
+  K.put(DStr{s})
+
+def K.start.go(+l: U32, st: KSt) -> Unit & KSt:
+  KSt{n, sl, +curl, cur, out, fns, todo, frames, errs} = st
+  (Unit{}, KSt{n, sl, l, DNil{}, DCat{out, K.block_doc(curl, cur)}, fns, todo, frames, errs})
+
+# Ends the current block and starts block l.
+def K.start(+l: U32) -> KM(Unit):
+  st => K.start.go(l, st)
+
+def K.error.go(msg: String, st: KSt) -> Unit & KSt:
+  KSt{n, sl, curl, cur, out, fns, todo, frames, errs} = st
+  (Unit{}, KSt{n, sl, curl, cur, out, fns, todo, frames, msg <> errs})
+
+def K.error(msg: String) -> KM(Unit):
+  st => K.error.go(msg, st)
+
+def S(+k: U32) -> String:
+  "KS(" ++ U32.show(k) ++ ")"
+
+def K.frame.go(+l: U32, +size: U32, st: KSt) -> Unit & KSt:
+  KSt{n, sl, curl, cur, out, fns, todo, frames, errs} = st
+  (Unit{}, KSt{n, sl, curl, cur, out, fns, todo, Bind{U32.show(l), U32.show((size + 4 : U32))} <> frames, errs})
+
+# Records a function's frame size (header and slots).
+def K.frame(+l: U32, +size: U32) -> KM(Unit):
+  st => K.frame.go(l, size, st)
+
+def K.take_todo.go(st: KSt) -> List<&2, String> & KSt:
+  KSt{n, sl, curl, cur, out, fns, todo, frames, errs} = st
+  (todo, KSt{n, sl, curl, cur, out, fns, Nil{}, frames, errs})
+
+def K.take_todo() -> KM(List<&2, String>):
+  st => K.take_todo.go(st)
+
+def K.enter.go(+l: U32, st: KSt) -> U32 & KSt:
+  KSt{n, +sl, curl, cur, out, fns, todo, frames, errs} = st
+  (sl, KSt{n, 0, curl, cur, out, fns, todo, frames, errs})
+
+# Starts compiling a function at label l; answers the outer slot count.
+def K.enter(+l: U32) -> KM(U32):
+  do KM<U32>:
+    +old : U32 <- st => K.enter.go(l, st)
+    return old
+
+def K.leave.go(+old: U32, st: KSt) -> U32 & KSt:
+  KSt{n, +sl, curl, cur, out, fns, todo, frames, errs} = st
+  (sl, KSt{n, old, curl, cur, out, fns, todo, frames, errs})
+
+# Ends a function: restores the outer slot count, answers this one's.
+def K.leave(+old: U32) -> KM(U32):
+  st => K.leave.go(old, st)
+
+# The current block, set aside while a nested function compiles.
+def K.save.go(st: KSt) -> (U32 & Doc) & KSt:
+  KSt{n, sl, curl, cur, out, fns, todo, frames, errs} = st
+  ((curl, cur), KSt{n, sl, 0, DNil{}, out, fns, todo, frames, errs})
+
+def K.save() -> KM(U32 & Doc):
+  st => K.save.go(st)
+
+def K.restore.go(r: U32 & Doc, st: KSt) -> Unit & KSt:
+  (l, d) = r
+  KSt{n, sl, curl, cur, out, fns, todo, frames, errs} = st
+  (Unit{}, KSt{n, sl, l, d, DCat{out, K.block_doc(curl, cur)}, fns, todo, frames, errs})
+
+def K.restore(r: U32 & Doc) -> KM(Unit):
+  st => K.restore.go(r, st)
+
+law K.expr:
+  for +g: G
+  for +env: Env()
+  for e: Expr
+  KM(Doc)
+
+type KSelf is Data:
+  KSelf{name: String, entry: U32, mask: List<&2, Bool>}
+
+type KTgt is Data:
+  KRet{}
+  KSet{slot: U32, merge: U32}
+
+law K.stmt:
+  for +g: G
+  for +env: Env()
+  for +self: KSelf
+  for +tgt: KTgt
+  for e: Expr
+  KM(Unit)
+
+def KSelf.none() -> KSelf:
+  KSelf{"", 0, Nil{}}
+
+@unsafe
+def K.exprs(+g: G, +env: Env(), xs: List<&2, Expr>) -> KM(List<&2, Doc>):
+  match xs:
+    case Nil{}:
+      KM.pure(List<&2, Doc>, Nil{})
+    case h <> t:
+      do KM<List<&2, Doc>>:
+        d : Doc <- K.expr(g, env, h)
+        +k : U32 <- K.slot()
+        K.put(Doc.list([DStr{S(k) ++ " = "}, d, DStr{";\n"}]))
+        ds : List<&2, Doc> <- K.exprs(g, env, t)
+        return DStr{S(k)} <> ds
+
+def K.args.put(ds: List<&2, Doc>, +i: U32) -> Doc:
+  match ds:
+    case Nil{}:
+      DNil{}
+    case d <> t:
+      Doc.list([DStr{"c->H[nf + " ++ U32.show((i + 4 : U32)) ++ "] = "}, d, DStr{";\n"}, K.args.put(t, U32.inc(i))])
+
+# Calls the function at entry with args; the value is in a fresh slot.
+def K.invoke(+entry: U32, ds: List<&2, Doc>) -> KM(Doc):
+  do KM<Doc>:
+    +ret : U32 <- K.fresh()
+    K.put(Doc.list([DStr{"{ KW nf = k_push(c, " ++ U32.show(ret) ++ ", K_FRAME[" ++ U32.show(entry) ++ "]);\n"},
+      K.args.put(ds, 0), DStr{"c->fp = nf; c->pc = " ++ U32.show(entry) ++ "; }\n"}]))
+    K.start(ret)
+    +k : U32 <- K.slot()
+    K.putS(S(k) ++ " = c->rv;\n")
+    return DStr{S(k)}
+
+# Applies a closure to one argument.
+def K.apply1(f: Doc, x: Doc) -> KM(Doc):
+  do KM<Doc>:
+    +ret : U32 <- K.fresh()
+    K.put(Doc.list([DStr{"k_call_clo(c, "}, f, DStr{", "}, x, DStr{", " ++ U32.show(ret) ++ ");\n"}]))
+    K.start(ret)
+    +k : U32 <- K.slot()
+    K.putS(S(k) ++ " = c->rv;\n")
+    return DStr{S(k)}
+
+def K.apply(xs: List<&2, Doc>, f: Doc) -> KM(Doc):
+  match xs:
+    case Nil{}:
+      KM.pure(Doc, f)
+    case h <> t:
+      do KM<Doc>:
+        r : Doc <- K.apply1(f, h)
+        K.apply(t, r)
+
+def K.clo.args(ds: List<&2, Doc>, +i: U32) -> Doc:
+  match ds:
+    case Nil{}:
+      DNil{}
+    case d <> t:
+      Doc.list([DStr{"c->H[w + " ++ U32.show((i + 3 : U32)) ++ "] = "}, d, DStr{";\n"}, K.clo.args(t, U32.inc(i))])
+
+# A closure of the function at label l over the words ds.
+def K.clo(+l: U32, +arity: U32, +ds: List<&2, Doc>) -> KM(Doc):
+  +n = Gen.len(ds)
+  do KM<Doc>:
+    +k : U32 <- K.slot()
+    K.put(Doc.list([DStr{"{ KW p = k_alloc(c, " ++ U32.show((n + 3 : U32)) ++ "); KW w = KIX(c, p);\n" ++
+      "c->H[w] = KCLO | " ++ U32.show(l) ++ "; c->H[w + 1] = " ++ U32.show(arity) ++ "; c->H[w + 2] = " ++
+      U32.show(n) ++ ";\n"}, K.clo.args(ds, 0), DStr{S(k) ++ " = p; }\n"}]))
+    return DStr{S(k)}
+
+# A def as a value: a closure of its wrapper, which takes every parameter.
+def K.def_value(+name: String, +total: U32) -> KM(Doc):
+  do KM<Doc>:
+    +w : U32 <- K.fn(K.wrap.name(name))
+    K.clo(w, total, Nil{})
+
+def K.call.zero(+name: String) -> KM(Doc):
+  do KM<Doc>:
+    +e : U32 <- K.fn(name)
+    K.invoke(e, Nil{})
+
+# An effect cannot run on the device.
+def K.effect() -> KM(Doc):
+  do KM<Doc>:
+    K.putS("k_fail(c, KE_FX);\n")
+    return DStr{"0"}
+
+def K.var.kind(+name: String, kind: Nat, +total: U32) -> KM(Doc):
+  match kind:
+    case 3n:
+      KM.pure(Doc, DStr{"0"})
+    case 99n:
+      do KM<Doc>:
+        K.error("unknown name: " ++ name)
+        return DStr{"0"}
+    case 1n:
+      KM.if(Doc, U32.is_zero(total), K.effect(), K.def_value(name, total))
+    case other:
+      KM.if(Doc, U32.is_zero(total), K.call.zero(name), K.def_value(name, total))
+
+def K.var.def(+name: String, info: DInfo) -> KM(Doc):
+  DInfo{+kind, +mask} = info
+  K.var.kind(name, U32.to_nat(kind), U32.from_nat(List.length(&2, Bool, mask)))
+
+def K.var.found(+g: G, +name: String, m: Maybe<&2, String>) -> KM(Doc):
+  match m:
+    case Some{c}:
+      KM.pure(Doc, DStr{c})
+    case None{}:
+      KM.if(Doc, Str.eq(name, "_"), KM.pure(Doc, DStr{"0"}), K.var.def(name, G.def(g, name)))
+
+def K.var(+g: G, +env: Env(), +name: String) -> KM(Doc):
+  K.var.found(g, name, Env.find(env, name))
+
+def K.commas_pre(ds: List<&2, Doc>) -> List<&2, Doc>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> t:
+      Doc.list([DStr{", "}, d]) <> K.commas_pre(t)
+
+# A full call: natives are expressions, effects fail, defs are called.
+def K.call.kind(+name: String, kind: Nat, ks: List<&2, Doc>) -> KM(Doc):
+  match kind:
+    case 3n:
+      KM.pure(Doc, DStr{"0"})
+    case 2n:
+      KM.pure(Doc, Doc.list([DStr{"K" ++ Gen.f(name) ++ "(c"}, Doc.list(K.commas_pre(ks)), DStr{")"}]))
+    case 1n:
+      K.effect()
+    case other:
+      do KM<Doc>:
+        +e : U32 <- K.fn(name)
+        K.invoke(e, ks)
+
+@unsafe
+def K.call.full(
+  +g: G, +env: Env(), +name: String, +mask: List<&2, Bool>, kind: Nat, kept: List<&2, Expr>, all: List<&2, Expr>,
+  extra: List<&2, Expr>, full: Bool
+) -> KM(Doc):
+  match full:
+    case True{}:
+      do KM<Doc>:
+        ks : List<&2, Doc> <- K.exprs(g, env, kept)
+        r : Doc <- K.call.kind(name, kind, ks)
+        xs : List<&2, Doc> <- K.exprs(g, env, extra)
+        K.apply(xs, r)
+    case False{}:
+      do KM<Doc>:
+        as : List<&2, Doc> <- K.exprs(g, env, all)
+        +w : U32 <- K.fn(K.wrap.name(name))
+        K.clo(w, U32.from_nat(List.length(&2, Bool, mask)), as)
+
+@unsafe
+def K.call.def.kind(
+  kind: Nat, +g: G, +env: Env(), +name: String, +mask: List<&2, Bool>, kept: List<&2, Expr>, all: List<&2, Expr>,
+  extra: List<&2, Expr>, full: Bool
+) -> KM(Doc):
+  match kind:
+    case 3n:
+      KM.pure(Doc, DStr{"0"})
+    case 99n:
+      do KM<Doc>:
+        K.error("unknown function: " ++ name)
+        return DStr{"0"}
+    case other:
+      K.call.full(g, env, name, mask, other, kept, all, extra, full)
+
+@unsafe
+def K.call.def.go(+g: G, +env: Env(), +name: String, +mask: List<&2, Bool>, kind: Nat, s: Split) -> KM(Doc):
+  Split{kept, all, extra, full} = s
+  K.call.def.kind(kind, g, env, name, mask, kept, all, extra, full)
+
+@unsafe
+def K.call.def(+g: G, +env: Env(), +name: String, info: DInfo, args: List<&2, Expr>) -> KM(Doc):
+  DInfo{kind, +mask} = info
+  K.call.def.go(g, env, name, mask, U32.to_nat(kind), Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}))
+
+@unsafe
+def K.call.local(+g: G, +env: Env(), f: Expr, args: List<&2, Expr>) -> KM(Doc):
+  do KM<Doc>:
+    fd : Doc <- K.expr(g, env, f)
+    +k : U32 <- K.slot()
+    K.put(Doc.list([DStr{S(k) ++ " = "}, fd, DStr{";\n"}]))
+    xs : List<&2, Doc> <- K.exprs(g, env, args)
+    K.apply(xs, DStr{S(k)})
+
+@unsafe
+def K.call.var(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, local: Bool) -> KM(Doc):
+  match local:
+    case True{}:
+      K.call.local(g, env, EVar{name}, args)
+    case False{}:
+      K.call.def(g, env, name, G.def(g, name), args)
+
+law K.call:
+  for +g: G
+  for +env: Env()
+  for f: Expr
+  for args: List<&2, Expr>
+  KM(Doc)
+
+# A !-call on the device is a call.
+@unsafe
+def K.call.bang(+g: G, +env: Env(), args: List<&2, Expr>) -> KM(Doc):
+  match args:
+    case f <> xs:
+      K.call(g, env, f, xs)
+    case Nil{}:
+      KM.pure(Doc, DStr{"0"})
+
+@unsafe
+def K.call(g, env, f, args):
+  match f:
+    case EVar{"%gpu"}:
+      K.call.bang(g, env, args)
+    case EVar{+name}:
+      K.call.var(g, env, name, args, Env.has(env, name))
+    case other:
+      K.call.local(g, env, other, args)
+
+def K.ctor.fields(ds: List<&2, Doc>, +i: U32) -> Doc:
+  match ds:
+    case Nil{}:
+      DNil{}
+    case d <> t:
+      Doc.list([DStr{"c->H[w + " ++ U32.show(U32.inc(i)) ++ "] = "}, d, DStr{";\n"}, K.ctor.fields(t, U32.inc(i))])
+
+def K.ctor.kind(+tag: U32, kind: Nat, +ds: List<&2, Doc>) -> KM(Doc):
+  match kind:
+    case 0n:
+      do KM<Doc>:
+        +k : U32 <- K.slot()
+        K.put(Doc.list([DStr{"{ KW p = k_node(c, " ++ U32.show(tag) ++ ", " ++ U32.show(Gen.len(ds)) ++
+          "); KW w = KIX(c, p);\n"}, K.ctor.fields(ds, 0), DStr{S(k) ++ " = p; }\n"}]))
+        return DStr{S(k)}
+    case 1n:
+      KM.pure(Doc, DStr{"KIMM(" ++ U32.show(tag) ++ ")"})
+    case 2n:
+      KM.pure(Doc, Doc.list(ds))
+    case 3n:
+      KM.pure(Doc, DStr{"0"})
+    case 4n+p:
+      KM.pure(Doc, Doc.list([DStr{"k_nat_add(c, "}, Doc.list(ds), DStr{", 1)"}]))
+
+@unsafe
+def K.ctor(+g: G, +env: Env(), name: String, info: Maybe<&2, CInfo>, args: List<&2, Expr>) -> KM(Doc):
+  match info:
+    case None{}:
+      do KM<Doc>:
+        K.error("unknown constructor: " ++ name)
+        return DStr{"0"}
+    case Some{CInfo{tag, ar, kind, single}}:
+      do KM<Doc>:
+        ds : List<&2, Doc> <- K.exprs(g, env, args)
+        K.ctor.kind(tag, U32.to_nat(kind), ds)
+
+# A string literal, built cell by cell from its end.
+def K.str.cells(cs: List<&2, U32>) -> Doc:
+  match cs:
+    case Nil{}:
+      DNil{}
+    case x <> t:
+      Doc.list([K.str.cells(t), DStr{"{ KW p = k_node(c, 1, 2); c->H[KIX(c, p) + 1] = " ++ U32.show(x) ++
+        "; c->H[KIX(c, p) + 2] = r; r = p; }\n"}])
+
+def K.str(s: String) -> KM(Doc):
+  do KM<Doc>:
+    +k : U32 <- K.slot()
+    K.put(Doc.list([DStr{"{ KW r = KIMM(0);\n"}, K.str.cells(Str.codes32(s)), DStr{S(k) ++ " = r; }\n"}]))
+    return DStr{S(k)}
+
+law K.lam:
+  for +g: G
+  for +env: Env()
+  for +p: Pat
+  for +body: Expr
+  KM(Doc)
+
+@unsafe
+def K.block(+g: G, +env: Env(), e: Expr) -> KM(Doc):
+  do KM<Doc>:
+    +k : U32 <- K.slot()
+    +m : U32 <- K.fresh()
+    K.stmt(g, env, KSelf.none(), KSet{k, m}, e)
+    K.start(m)
+    return DStr{S(k)}
+
+@unsafe
+def K.expr(g, env, e):
+  match e:
+    case EVar{name}:
+      K.var(g, env, name)
+    case ENum{n}:
+      KM.pure(Doc, DStr{U32.show(n) ++ "u"})
+    case ENat{n}:
+      KM.pure(Doc, DStr{U32.show(n) ++ "u"})
+    case EFlt{s}:
+      KM.pure(Doc, DStr{"KUF(" ++ s ++ "f)"})
+    case EStr{s}:
+      K.str(s)
+    case ECall{f, args}:
+      K.call(g, env, f, args)
+    case ECtor{+name, args}:
+      K.ctor(g, env, name, G.ctor(g, name), args)
+    case ELam{p, body}:
+      K.lam(g, env, p, body)
+    case ELet{p, v, body}:
+      K.block(g, env, ELet{p, v, body})
+    case EMatch{scrs, cases}:
+      K.block(g, env, EMatch{scrs, cases})
+    case ESucc{k, x}:
+      do KM<Doc>:
+        d : Doc <- K.expr(g, env, x)
+        return Doc.list([DStr{"k_nat_add(c, "}, d, DStr{", " ++ U32.show(k) ++ ")"}])
+    case ETy{n, targs}:
+      KM.pure(Doc, DStr{"0"})
+    case EErr{m}:
+      do KM<Doc>:
+        K.error("parse error: " ++ m)
+        return DStr{"0"}
+    case other:
+      do KM<Doc>:
+        K.error("unexpected expression: " ++ Expr.show(other))
+        return DStr{"0"}
+
+def K.caps.inner(caps: Env(), +i: U32) -> Env():
+  match caps:
+    case Nil{}:
+      Nil{}
+    case Bind{x, c} <> t:
+      Bind{x, S(i)} <> K.caps.inner(t, U32.inc(i))
+
+def K.caps.outer(caps: Env()) -> List<&2, Doc>:
+  match caps:
+    case Nil{}:
+      Nil{}
+    case Bind{x, c} <> t:
+      DStr{c} <> K.caps.outer(t)
+
+def K.slots.go(+n: U32, st: KSt) -> U32 & KSt:
+  KSt{m, sl, curl, cur, out, fns, todo, frames, errs} = st
+  (n, KSt{m, (sl + n : U32), curl, cur, out, fns, todo, frames, errs})
+
+# Takes n slots (a function's parameters); answers n.
+def K.slots(+n: U32) -> KM(U32):
+  st => K.slots.go(n, st)
+
+law K.pat:
+  for +g: G
+  for p: Pat
+  for +path: String
+  for r: PatR
+  PatR
+
+# A lambda: a function over its captures and its argument (slots 0..n).
+@unsafe
+def K.lam(g, env, p, body):
+  +caps = Gen.caps(FV.expr(body, Pat.vars(p, Nil{}), Nil{}), env)
+  +n = U32.from_nat(List.length(&2, Bind, caps))
+  do KM<Doc>:
+    +l : U32 <- K.fresh()
+    saved : U32 & Doc <- K.save()
+    +old : U32 <- K.enter(l)
+    +arg : U32 <- K.slots(U32.inc(n))
+    +binds : Env() <- KM.pure(Env(), PatR.binds(K.pat(g, p, S(n), PatR{Nil{}, Nil{}})))
+    K.start(l)
+    K.stmt(g, List.append(&2, Bind, binds, K.caps.inner(caps, 0)), KSelf.none(), KRet{}, body)
+    +size : U32 <- K.leave(old)
+    K.frame(l, size)
+    K.restore(saved)
+    K.clo(l, U32.inc(n), K.caps.outer(caps))
+
+@unsafe
+def K.pat.fields(+g: G, args: List<&2, Pat>, +path: String, +i: U32, r: PatR) -> PatR:
+  match args:
+    case Nil{}:
+      r
+    case h <> t:
+      K.pat.fields(g, t, path, U32.inc(i), K.pat(g, h,
+        Bool.pick(String, U32.is_eq(i, 99), path, "KFLD(" ++ path ++ ", " ++ U32.show(i) ++ ")"), r))
+
+@unsafe
+def K.pat.kind(+g: G, kind: Nat, +tag: U32, +single: Bool, args: List<&2, Pat>, +path: String, r: PatR) -> PatR:
+  match kind:
+    case 0n:
+      K.pat.fields(g, args, path, 0, Gen.pat.tag(single, "KTAG(" ++ path ++ ") == " ++ U32.show(tag), r))
+    case 1n:
+      Gen.pat.tag(single, "(" ++ path ++ ") == KIMM(" ++ U32.show(tag) ++ ")", r)
+    case 2n:
+      K.pat.fields(g, args, path, 99, r)
+    case 3n:
+      Gen.pat.cond("(" ++ path ++ ") == 0", r)
+    case 4n+p:
+      K.pat.fields(g, args, "((" ++ path ++ ") - 1)", 99, Gen.pat.cond("k_nz(c, " ++ path ++ ")", r))
+
+@unsafe
+def K.pat.ctor(+g: G, info: Maybe<&2, CInfo>, name: String, args: List<&2, Pat>, +path: String, r: PatR) -> PatR:
+  match info:
+    case None{}:
+      Gen.pat.cond("0", r)
+    case Some{CInfo{+tag, ar, +kind, +single}}:
+      K.pat.kind(g, U32.to_nat(kind), tag, single, args, path, r)
+
+@unsafe
+def K.pat(g, p, path, r):
+  match p:
+    case PVar{x}:
+      Gen.pat.var(x, path, r)
+    case PCtor{+name, args}:
+      K.pat.ctor(g, G.ctor(g, name), name, args, path, r)
+    case PNat{n}:
+      Gen.pat.cond("(" ++ path ++ ") == " ++ U32.show(n), r)
+    case PSucc{+k, q}:
+      K.pat(g, q, "((" ++ path ++ ") - " ++ U32.show(k) ++ ")", Gen.pat.cond("k_nge(c, " ++ path ++ ", " ++ U32.show(k) ++ ")", r))
+    case PNum{n}:
+      Gen.pat.cond("(" ++ path ++ ") == " ++ U32.show(n), r)
+
+@unsafe
+def K.pats(+g: G, ps: List<&2, Pat>, paths: List<&2, String>, r: PatR) -> PatR:
+  match ps paths:
+    case p <> pt c <> ct:
+      K.pats(g, pt, ct, K.pat(g, p, c, r))
+    case pl cl:
+      r
+
+def K.ret(t: KTgt, d: Doc) -> KM(Unit):
+  match t:
+    case KRet{}:
+      K.put(Doc.list([DStr{"k_ret(c, "}, d, DStr{");\n"}]))
+    case KSet{k, m}:
+      K.put(Doc.list([DStr{S(k) ++ " = "}, d, DStr{";\nc->pc = " ++ U32.show(m) ++ ";\n"}]))
+
+def K.tail.set(ds: List<&2, Doc>, +i: U32) -> Doc:
+  match ds:
+    case Nil{}:
+      DNil{}
+    case d <> t:
+      Doc.list([DStr{S(i) ++ " = "}, d, DStr{"; "}, K.tail.set(t, U32.inc(i))])
+
+# A self tail call: the arguments (already in slots) become the parameters.
+@unsafe
+def K.tail(+g: G, +env: Env(), +entry: U32, s: Split) -> KM(Unit):
+  Split{kept, all, extra, full} = s
+  do KM<Unit>:
+    ds : List<&2, Doc> <- K.exprs(g, env, kept)
+    K.put(Doc.list([DStr{"{ "}, K.tail.set(ds, 0), DStr{"c->pc = " ++ U32.show(entry) ++ "; }\n"}]))
+
+def K.is_ret(t: KTgt) -> Bool:
+  match t:
+    case KRet{}:
+      True{}
+    case KSet{k, m}:
+      False{}
+
+def KSelf.is_tail(+env: Env(), +self: KSelf, +tgt: KTgt, +name: String, +args: List<&2, Expr>) -> Bool:
+  KSelf{+sn, e, +mask} = self
+  Bool.and(Bool.and(K.is_ret(tgt), Str.eq(sn, name)), Bool.and(Bool.not(Env.has(env, name)),
+    Nat.is_eq(List.length(&2, Bool, mask), List.length(&2, Expr, args))))
+
+@unsafe
+def K.tail.self(+g: G, +env: Env(), self: KSelf, args: List<&2, Expr>) -> KM(Unit):
+  KSelf{sn, +entry, +mask} = self
+  K.tail(g, env, entry, Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}))
+
+@unsafe
+def K.stmt.call(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, +name: String, args: List<&2, Expr>, tail: Bool) ->
+  KM(Unit):
+  match tail:
+    case True{}:
+      K.tail.self(g, env, self, args)
+    case False{}:
+      do KM<Unit>:
+        d : Doc <- K.call(g, env, EVar{name}, args)
+        K.ret(tgt, d)
+
+@unsafe
+def K.let.var(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, +x: String, v: Expr, body: Expr) -> KM(Unit):
+  do KM<Unit>:
+    d : Doc <- K.expr(g, env, v)
+    +k : U32 <- K.slot()
+    K.put(Doc.list([DStr{S(k) ++ " = "}, d, DStr{";\n"}]))
+    K.stmt(g, Bool.pick(Env(), Str.eq(x, "_"), env, Bind{x, S(k)} <> env), self, tgt, body)
+
+@unsafe
+def K.let.pat(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, +p: Pat, v: Expr, body: Expr) -> KM(Unit):
+  do KM<Unit>:
+    d : Doc <- K.expr(g, env, v)
+    +k : U32 <- K.slot()
+    K.put(Doc.list([DStr{S(k) ++ " = "}, d, DStr{";\n"}]))
+    +binds : Env() <- KM.pure(Env(), PatR.binds(K.pat(g, p, S(k), PatR{Nil{}, Nil{}})))
+    K.stmt(g, List.append(&2, Bind, binds, env), self, tgt, body)
+
+#
+# Each value becomes a thunk (a closure). Below the fork limit the thunks
+# but the last go to the queue, the last runs here, and a join record
+# collects the values; the lane that brings the last value continues. Past
+# the limit they run one after the other.
+@unsafe
+def K.par.thunks(+g: G, +env: Env(), vs: List<&2, Expr>) -> KM(List<&2, U32>):
+  match vs:
+    case Nil{}:
+      KM.pure(List<&2, U32>, Nil{})
+    case v <> t:
+      do KM<List<&2, U32>>:
+        d : Doc <- K.lam(g, env, PVar{"_"}, v)
+        +k : U32 <- K.slot()
+        K.put(Doc.list([DStr{S(k) ++ " = "}, d, DStr{";\n"}]))
+        ks : List<&2, U32> <- K.par.thunks(g, env, t)
+        return k <> ks
+
+# Past the fork limit the values are evaluated one after the other.
+@unsafe
+def K.par.seq(+g: G, +env: Env(), vs: List<&2, Expr>, rs: List<&2, U32>) -> KM(Unit):
+  match vs rs:
+    case v <> vt +r <> rt:
+      do KM<Unit>:
+        x : Doc <- K.expr(g, env, v)
+        K.put(Doc.list([DStr{S(r) ++ " = "}, x, DStr{";\n"}]))
+        K.par.seq(g, env, vt, rt)
+    case a b:
+      KM.pure(Unit, Unit{})
+
+def K.par.push(thunks: List<&2, U32>, +j: U32, +i: U32) -> Doc:
+  match thunks:
+    case Nil{}:
+      DNil{}
+    case t <> Nil{}:
+      DNil{}
+    case t <> rest:
+      Doc.list([DStr{"if (!k_push_task(c, PC_TASK, " ++ S(j) ++ ", " ++ S(t) ++ ", (c->dep + 1) | ((KW)" ++ U32.show(i) ++
+        " << 32))) k_fail(c, KE_QUEUE);\n"}, K.par.push(rest, j, U32.inc(i))])
+
+def K.par.collect(rs: List<&2, U32>, +j: U32, +i: U32) -> Doc:
+  match rs:
+    case Nil{}:
+      DNil{}
+    case r <> t:
+      Doc.list([DStr{S(r) ++ " = c->H[" ++ S(j) ++ " + " ++ U32.show((i + 4 : U32)) ++ "];\n"}, K.par.collect(t, j, U32.inc(i))])
+
+@unsafe
+def K.par.env(+g: G, ps: List<&2, Pat>, rs: List<&2, U32>, +env: Env()) -> Env():
+  match ps rs:
+    case p <> pt +r <> rt:
+      K.par.env(g, pt, rt, List.append(&2, Bind, PatR.binds(K.pat(g, p, S(r), PatR{Nil{}, Nil{}})), env))
+    case a b:
+      env
+
+def K.newslots(n: Nat) -> KM(List<&2, U32>):
+  match n:
+    case 0n:
+      KM.pure(List<&2, U32>, Nil{})
+    case 1n+m:
+      do KM<List<&2, U32>>:
+        +k : U32 <- K.slot()
+        ks : List<&2, U32> <- K.newslots(m)
+        return k <> ks
+
+def List.last_u32(xs: List<&2, U32>) -> U32:
+  match xs:
+    case Nil{}:
+      0
+    case x <> Nil{}:
+      x
+    case x <> t:
+      List.last_u32(t)
+
+@unsafe
+def K.par(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, +ps: List<&2, Pat>, +vs: List<&2, Expr>, body: Expr) -> KM(Unit):
+  +n = List.length(&2, Expr, vs)
+  do KM<Unit>:
+    +rs : List<&2, U32> <- K.newslots(n)
+    +j : U32 <- K.slot()
+    +lpar : U32 <- K.fresh()
+    +lseq : U32 <- K.fresh()
+    +lcont : U32 <- K.fresh()
+    +lbody : U32 <- K.fresh()
+    K.putS("c->pc = c->dep < c->P->fork_limit ? " ++ U32.show(lpar) ++ " : " ++ U32.show(lseq) ++ ";\n")
+    K.start(lseq)
+    K.par.seq(g, env, vs, rs)
+    K.putS("c->pc = " ++ U32.show(lbody) ++ ";\n")
+    K.start(lpar)
+    +thunks : List<&2, U32> <- K.par.thunks(g, env, vs)
+    K.putS(S(j) ++ " = k_join_new(c, " ++ U32.show(U32.from_nat(n)) ++ ", " ++ U32.show(lcont) ++ ");\n")
+    K.put(K.par.push(thunks, j, 0))
+    K.putS("c->dep += 1;\n")
+    x : Doc <- K.apply1(DStr{S(List.last_u32(thunks))}, DStr{"0"})
+    K.put(Doc.list([DStr{"k_arrive(c, " ++ S(j) ++ ", " ++ U32.show(U32.from_nat(Nat.sub(n, 1n))) ++ ", "}, x,
+      DStr{");\n"}]))
+    K.start(lcont)
+    K.put(K.par.collect(rs, j, 0))
+    K.putS("c->pc = " ++ U32.show(lbody) ++ ";\n")
+    K.start(lbody)
+    K.stmt(g, K.par.env(g, ps, rs, env), self, tgt, body)
+
+@unsafe
+def K.let.par(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, ps: List<&2, Pat>, v: Expr, body: Expr) -> KM(Unit):
+  match v:
+    case ECtor{n, vs}:
+      K.par(g, env, self, tgt, ps, vs, body)
+    case other:
+      K.par(g, env, self, tgt, ps, [other], body)
+
+@unsafe
+def K.let.ctor(
+  +g: G, +env: Env(), +self: KSelf, +tgt: KTgt, name: String, ps: List<&2, Pat>, v: Expr, body: Expr, par: Bool
+) -> KM(Unit):
+  match par:
+    case True{}:
+      K.let.par(g, env, self, tgt, ps, v, body)
+    case False{}:
+      K.let.pat(g, env, self, tgt, PCtor{name, ps}, v, body)
+
+@unsafe
+def K.let(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, p: Pat, v: Expr, body: Expr) -> KM(Unit):
+  match p:
+    case PVar{+x}:
+      K.let.var(g, env, self, tgt, x, v, body)
+    case PCtor{+name, ps}:
+      K.let.ctor(g, env, self, tgt, name, ps, v, body, Str.eq(name, "%par"))
+    case other:
+      K.let.pat(g, env, self, tgt, other, v, body)
+
+type KCase is Data:
+  KCase{label: U32, conds: List<&2, String>, env: Env(), body: Expr}
+
+law K.cases:
+  for +g: G
+  for +env: Env()
+  for +cs: List<&2, String>
+  for cases: List<&2, Expr>
+  KM(List<&2, KCase>)
+
+@unsafe
+def K.cases(g, env, cs, cases):
+  match cases:
+    case Nil{}:
+      KM.pure(List<&2, KCase>, Nil{})
+    case ECase{ps, body} <> t:
+      +pr = K.pats(g, ps, cs, PatR{Nil{}, Nil{}})
+      do KM<List<&2, KCase>>:
+        +l : U32 <- K.fresh()
+        rest : List<&2, KCase> <- K.cases(g, env, cs, t)
+        return KCase{l, List.reverse(&2, String, PatR.conds(pr)), List.append(&2, Bind, PatR.binds(pr), env), body} <> rest
+    case other <> t:
+      K.cases(g, env, cs, t)
+
+def K.dispatch(cases: List<&2, KCase>) -> Doc:
+  match cases:
+    case Nil{}:
+      DStr{"{ k_fail(c, KE_MATCH); }\n"}
+    case KCase{l, conds, env, b} <> t:
+      Doc.list([DStr{"if (" ++ Gen.and(conds) ++ ") { c->pc = " ++ U32.show(l) ++ "; } else "}, K.dispatch(t)])
+
+@unsafe
+def K.bodies(+g: G, +self: KSelf, +tgt: KTgt, cases: List<&2, KCase>) -> KM(Unit):
+  match cases:
+    case Nil{}:
+      KM.pure(Unit, Unit{})
+    case KCase{+l, conds, +env, body} <> t:
+      do KM<Unit>:
+        K.start(l)
+        K.stmt(g, env, self, tgt, body)
+        K.bodies(g, self, tgt, t)
+
+def K.doc_strs(ds: List<&2, Doc>) -> List<&2, String>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> t:
+      Doc.flat(d) <> K.doc_strs(t)
+
+@unsafe
+def K.match(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, scrs: List<&2, Expr>, cases: List<&2, Expr>) -> KM(Unit):
+  do KM<Unit>:
+    ds : List<&2, Doc> <- K.exprs(g, env, scrs)
+    +cs : List<&2, KCase> <- K.cases(g, env, K.doc_strs(ds), cases)
+    K.put(K.dispatch(cs))
+    K.bodies(g, self, tgt, cs)
+
+@unsafe
+def K.stmt(g, env, self, tgt, e):
+  match e:
+    case ELet{p, v, body}:
+      K.let(g, env, self, tgt, p, v, body)
+    case EMatch{scrs, cases}:
+      K.match(g, env, self, tgt, scrs, cases)
+    case ECall{EVar{+name}, +args}:
+      K.stmt.call(g, env, self, tgt, name, args, KSelf.is_tail(env, self, tgt, name, args))
+    case other:
+      do KM<Unit>:
+        d : Doc <- K.expr(g, env, other)
+        K.ret(tgt, d)
+
+def K.sig.env(ps: List<&2, Param>, mask: List<&2, Bool>, +i: U32) -> Env():
+  match ps mask:
+    case Param{x, m, t} <> pt True{} <> mt:
+      Bind{x, S(i)} <> K.sig.env(pt, mt, U32.inc(i))
+    case Param{x, m, t} <> pt False{} <> mt:
+      Bind{x, "0"} <> K.sig.env(pt, mt, i)
+    case pl ml:
+      Nil{}
+
+def K.def.body(+g: G, +name: String, +l: U32, +mask: List<&2, Bool>, ps: List<&2, Param>, body: Expr) -> KM(Unit):
+  do KM<Unit>:
+    +old : U32 <- K.enter(l)
+    +np : U32 <- K.slots(K.kept(mask))
+    K.start(l)
+    K.stmt(g, K.sig.env(ps, mask, 0), KSelf{name, l, mask}, KRet{}, R.ops(body, "Nat"))
+    +size : U32 <- K.leave(old)
+    K.frame(l, size)
+
+# A def's wrapper: every parameter a slot, calling the def with the kept ones.
+def K.wrap.args(mask: List<&2, Bool>, +i: U32) -> List<&2, Doc>:
+  match mask:
+    case Nil{}:
+      Nil{}
+    case True{} <> t:
+      DStr{S(i)} <> K.wrap.args(t, U32.inc(i))
+    case False{} <> t:
+      K.wrap.args(t, U32.inc(i))
+
+def K.wrapper(+name: String, +l: U32, +mask: List<&2, Bool>, kind: Nat) -> KM(Unit):
+  do KM<Unit>:
+    +old : U32 <- K.enter(l)
+    +np : U32 <- K.slots(U32.from_nat(List.length(&2, Bool, mask)))
+    K.start(l)
+    r : Doc <- K.call.kind(name, kind, K.wrap.args(mask, 0))
+    K.put(Doc.list([DStr{"k_ret(c, "}, r, DStr{");\n"}]))
+    +size : U32 <- K.leave(old)
+    K.frame(l, size)
+
+def K.def.decl.def(kind: Nat, +g: G, +name: String, +l: U32, +mask: List<&2, Bool>, ps: List<&2, Param>, body: Expr) ->
+  KM(Unit):
+  match kind:
+    case 0n:
+      K.def.body(g, name, l, mask, ps, body)
+    case other:
+      K.wrapper(name, l, mask, other)
+
+def K.def.decl.go(d: Decl, +g: G, +name: String, +l: U32, kind: Nat, +mask: List<&2, Bool>) -> KM(Unit):
+  match d:
+    case DDef{n, ps, body, ret}:
+      K.def.decl.def(kind, g, name, l, mask, ps, body)
+    case other:
+      K.wrapper(name, l, mask, kind)
+
+def K.def.decl(+g: G, +name: String, +l: U32, info: DInfo, d: Decl) -> KM(Unit):
+  DInfo{kind, mask} = info
+  K.def.decl.go(d, g, name, l, U32.to_nat(kind), mask)
+
+def K.one.wrap.go(+name: String, +l: U32, info: DInfo) -> KM(Unit):
+  DInfo{kind, +mask} = info
+  K.wrapper(name, l, mask, U32.to_nat(kind))
+
+def K.one.wrap(+g: G, +name: String, +l: U32) -> KM(Unit):
+  K.one.wrap.go(name, l, G.def(g, name))
+
+# Compiles one queued function (a def, or "%wrap name").
+def K.one(+g: G, +key: String, +l: U32) -> KM(Unit):
+  KM.if(Unit, String.starts_with(key, "%wrap "), K.one.wrap(g, String.drop(key, 6n), l), K.def.decl(g, key, l,
+    G.def(g, key), G.body(g, key)))
+
+def K.label.go(+name: String, st: KSt) -> U32 & KSt:
+  KSt{n, sl, curl, cur, out, +fns, todo, frames, errs} = st
+  (Maybe.default(&2, U32, U32.read(Maybe.default(&2, String, Env.find(fns, name), "0")), 0),
+    KSt{n, sl, curl, cur, out, fns, todo, frames, errs})
+
+def K.label(+name: String) -> KM(U32):
+  st => K.label.go(name, st)
+
+@unsafe
+def K.all.list(+g: G, fuel: Nat, todo: List<&2, String>) -> KM(Unit):
+  match todo:
+    case Nil{}:
+      KM.pure(Unit, Unit{})
+    case +h <> t:
+      do KM<Unit>:
+        +l : U32 <- K.label(h)
+        K.one(g, h, l)
+        more : List<&2, String> <- K.take_todo()
+        K.all.list(g, fuel, List.append(&2, String, t, more))
+
+# Compiles queued functions until none is left.
+@unsafe
+def K.all(g, fuel):
+  match fuel:
+    case 0n:
+      KM.pure(Unit, Unit{})
+    case 1n+f:
+      do KM<Unit>:
+        todo : List<&2, String> <- K.take_todo()
+        K.all.list(g, f, todo)
+
+# The frame table and the entry labels the host needs.
+def K.frame_of(frames: List<&2, Bind>, +l: U32) -> String:
+  Maybe.default(&2, String, Env.find(frames, U32.show(l)), "0")
+
+@unsafe
+def K.frame_table.go(+frames: List<&2, Bind>, +l: U32, +n: U32, done: Bool) -> String:
+  match done:
+    case True{}:
+      ""
+    case False{}:
+      K.frame_of(frames, l) ++ "u, " ++ K.frame_table(frames, U32.inc(l), n)
+
+@unsafe
+def K.frame_table(frames, l, n):
+  K.frame_table.go(frames, l, n, U32.is_ge(l, n))
 
 def Path.base(+p: String) -> String:
   String.drop(p, String.length(Mod.dir(p)))
