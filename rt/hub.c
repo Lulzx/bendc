@@ -7,6 +7,13 @@
 // ~/.bend/lib) the first time: <hub>/<pkg>/manifest lists "sha256 path"
 // lines and must hash to the package name; each file must hash to its line.
 
+#include <ctype.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 
 static const uint32_t hub_k[64] = {

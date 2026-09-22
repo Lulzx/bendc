@@ -8,7 +8,7 @@ BENDC=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 BASE=${BEND_BASE:-$HOME/.bend/bend2/base.bend}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 W=$(mktemp -d)
-trap 'kill $SRV 2>/dev/null; rm -rf "$W"' EXIT
+trap '{ kill $SRV; wait $SRV; } 2>/dev/null; rm -rf "$W"' EXIT
 cd "$ROOT/tests/hub/pkg"
 H=$(python3 - "$W/www" <<'PY'
 import hashlib, os, sys
