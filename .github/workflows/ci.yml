@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  bootstrap:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the official Bend (for base.bend, reference outputs and stage0)
+        run: |
+          curl -fsSL https://bend-lang.com/install.sh | BEND_NO_TELEMETRY=1 sh
+          echo "$HOME/.bend/bin" >> "$GITHUB_PATH"
+
+      - name: Build bendc from the C seed
+        run: make
+
+      - name: Test suite
+        run: make test
+
+      - name: Seed is up to date (bendc.bend compiles to the seed)
+        run: make selfcheck
+
+      - name: Full bootstrap (official bend -> stage1 -> stage2 fixpoint)
+        run: BEND_NO_TELEMETRY=1 ./bootstrap.sh
