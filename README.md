@@ -250,7 +250,11 @@ function the call can reach into one kernel, a flat state machine: each function
 (a call ends a block, and the callee returns to the next one), locals live in frame slots, and `pc`
 names the block to run. A parallel let pushes its values as tasks to a lock-free queue and continues
 through a join record, so no lane ever waits: the lane that brings a join its last value runs the
-rest of the function. Past a fork depth that fills the lanes, parallel lets run in order.
+rest of the function. Past a fork depth that fills the lanes, parallel lets run in order. A def that
+only matches, binds, builds constructors, calls natives and other such defs, and calls itself in tail
+position is *flat*: it becomes a plain device function with its locals in registers and a loop for its
+tail calls. On an M4 Pro, 16384 leaves of a 200,000-step `F32` loop take 0.32s on the GPU against
+1.1s on the 12 CPU threads.
 
 The kernel's text (`rt/gpu.h` plus the generated blocks) compiles both as Metal Shading Language and
 as C. The host (`rt/gpuhost.h`) reaches Metal through the Objective-C runtime, so programs need no
