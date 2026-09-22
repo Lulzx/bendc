@@ -1822,10 +1822,12 @@ static void *bend_thread(void *arg) {
   return NULL;
 }
 
+static int bend_gpu = 1;
+
 static const char *CLI_HELP =
   "usage: %s [options] [arguments]\n"
   "  --threads N       worker threads, 1 to 128 (default: the CPU count)\n"
-  "  --gpu on|off|4GB  accepted for compatibility: ! calls run on the CPU threads\n"
+  "  --gpu on|off|4GB  where ! calls run: the GPU (the default) or the CPU threads\n"
   "  --help            show this text\n"
   "  --                the rest are the program's arguments (IO.args)\n";
 
@@ -1853,6 +1855,7 @@ static int bend_start(int argc, char **argv, V (*m)(void), int value) {
       i++;
     } else if (strcmp(a, "--gpu") == 0) {
       if (v == NULL) cli_fail("expected on, off or a size like 4GB after --gpu");
+      bend_gpu = strcmp(v, "off") != 0;
       i++;
     } else {
       io_argv[io_argc++] = argv[i];
