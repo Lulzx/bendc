@@ -1,0 +1,7 @@
+Error:
+- message  : no such file: nope.bend
+Location:
+1 | import Base
+2>| import ./nope.bend as N
+3 | 
+exit 1

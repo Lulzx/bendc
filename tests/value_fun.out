@@ -1,0 +1,2 @@
+(f(3n), x => f(x, 2n), B{x => Nat.mul(x, x)}, U32.add, x => U32.add(x, 2))
+exit 0

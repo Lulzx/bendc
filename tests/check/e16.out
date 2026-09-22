@@ -1,0 +1,10 @@
+Error:
+- expected : a decreasing self-call (arguments are read left to right: each passed unchanged until one shrinks)
+- observed : f
+Context:
+- p : Nat
+Location: f
+7 |     case 1n+p:
+8>|       f(1n+p)
+9 | 
+exit 1

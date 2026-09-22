@@ -1,0 +1,8 @@
+Error:
+- expected : x
+- observed : x (consumed more than once)
+Location: f
+2 | 
+3>| def f(x: U32) -> U32:
+4 |   (x + x : U32)
+exit 1

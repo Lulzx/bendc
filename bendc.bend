@@ -4996,6 +4996,11 @@ def Main.chk.parsed(
       IO.pure(CS, CS{Bool.pick(Chk.Book, String.eq(Path.norm(file), Path.norm(base)), Chk.mark_base(b, n1), b),
         Chk.SB2{Path.norm(file), ns} <> seen, n1})
 
+# Spans index the text as parsed (its import lines blanked).
+def Main.chk.parse_text(book: Chk.Book, +text: String, ns: String, dir: String, al: List<&2, Chk.SB2>) ->
+  Result<&1, &1, Chk.Err, Chk.Book>:
+  Chk.parse_file(book, text, text, ns, dir, al)
+
 # After a file's imports: its declarations join the book.
 @unsafe
 def Main.chk.parse(
@@ -5004,7 +5009,7 @@ def Main.chk.parse(
   (st, al) = r
   CS{+book, seen, n0} = st
   +n1 = Chk.book_len(book)
-  Main.chk.parsed(base, file, ns, seen, n1, Chk.parse_file(book, src, String.join(lines, "\n"), ns, Mod.dir(file), al))
+  Main.chk.parsed(base, file, ns, seen, n1, Main.chk.parse_text(book, String.join(lines, "\n"), ns, Mod.dir(file), al))
 
 def CS.mark(st: CS, +real: String) -> CS:
   CS{book, seen, n0} = st

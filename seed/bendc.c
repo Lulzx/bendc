@@ -4591,6 +4591,8 @@ static V W_Main_dchk_dhdr(V *a);
 static V F_Main_dchk_dparse(V a0, V a1, V a2, V a3, V a4, V a5);
 static V S2627(void);
 static V W_Main_dchk_dparse(V *a);
+static V F_Main_dchk_dparse__text(V a0, V a1, V a2, V a3, V a4);
+static V W_Main_dchk_dparse__text(V *a);
 static V F_Chk_dparse__file(V a0, V a1, V a2, V a3, V a4, V a5);
 static V W_Chk_dparse__file(V *a);
 static V F_Chk_dP_ddecls(void);
@@ -19335,9 +19337,14 @@ top:;
 V v2624 = a5;
 V v2625 = FLD(v2624, 0);
 V v2626 = F_Chk_dbook__len(FLD(v2625, 0));
-return F_Main_dchk_dparsed(a0, a1, a2, FLD(v2625, 1), v2626, F_Chk_dparse__file(FLD(v2625, 0), a3, F_String_djoin(a4, S2627()), a2, F_Mod_ddir(a1), FLD(v2624, 1)));
+return F_Main_dchk_dparsed(a0, a1, a2, FLD(v2625, 1), v2626, F_Main_dchk_dparse__text(FLD(v2625, 0), F_String_djoin(a4, S2627()), a2, F_Mod_ddir(a1), FLD(v2624, 1)));
 }
 static V W_Main_dchk_dparse(V *a) { (void)a; return F_Main_dchk_dparse(a[0], a[1], a[2], a[3], a[4], a[5]); }
+static V F_Main_dchk_dparse__text(V a0, V a1, V a2, V a3, V a4) {
+top:;
+return F_Chk_dparse__file(a0, a1, a1, a2, a3, a4);
+}
+static V W_Main_dchk_dparse__text(V *a) { (void)a; return F_Main_dchk_dparse__text(a[0], a[1], a[2], a[3], a[4]); }
 static V F_Chk_dparse__file(V a0, V a1, V a2, V a3, V a4, V a5) {
 top:;
 return F_Chk_dparse__file_dfin(apply(F_Chk_dP_ddecls(), CN(0, 9, (V[]){CN(0, 5, (V[]){a2, 0u, 1u, IMM(1), 0u}), IMM(0), 0u, 0u, a0, a1, a3, a4, a5})));

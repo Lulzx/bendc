@@ -1,0 +1,8 @@
+Error:
+- expected : U32
+- observed : String
+Location: main
+3 | def main() -> List<U32>:
+4>|   [1, 2, "three"]
+5 | 
+exit 1

@@ -1,0 +1,8 @@
+Error:
+- expected : a defined name
+- observed : g
+Location: main
+3 | def main() -> U32:
+4>|   g(1)
+5 | 
+exit 1

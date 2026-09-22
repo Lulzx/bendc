@@ -1,0 +1,11 @@
+Error:
+- expected : a template applied to closed ~ arguments (k is a variable here, not comptime: pass it at run time)
+- observed : twice
+Context:
+- k : U32
+- y : U32
+Location: g
+6 | def g(k: U32, y: U32) -> U32:
+7>|   twice(~(x => (x + k : U32)), y)
+8 | 
+exit 1

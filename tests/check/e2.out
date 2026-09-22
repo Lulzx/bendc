@@ -1,0 +1,10 @@
+Error:
+- expected : Nat
+- observed : U32
+Context:
+- x : U32
+Location: f
+3 | def f(x: U32) -> Nat:
+4>|   x
+5 | 
+exit 1

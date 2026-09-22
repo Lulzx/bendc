@@ -1,0 +1,8 @@
+Error:
+- expected : Data
+- observed : Type
+Location: dup
+5 | 
+6>| def dup(+b: Box) -> Box & Box:
+7 |   (b, b)
+exit 1

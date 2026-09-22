@@ -1,0 +1,10 @@
+Error:
+- expected : 1n+Nat.add(p, 0n)
+- observed : 1n+p
+Context:
+- p : Nat
+Location: add_zero
+11 |     case 1n+p:
+12>|       {==}
+13 | 
+exit 1

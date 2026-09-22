@@ -1,0 +1,8 @@
+Error:
+- expected : cases for False
+- observed : \{}
+Location: f
+3 | def f(b: Bool) -> U32:
+4>|   match b:
+5 |     case True{}:
+exit 1
