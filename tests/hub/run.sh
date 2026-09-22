@@ -8,7 +8,7 @@ BENDC=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 BASE=${BEND_BASE:-$HOME/.bend/bend2/base.bend}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 W=$(mktemp -d)
-trap '{ kill $SRV; wait $SRV; } 2>/dev/null; rm -rf "$W"' EXIT
+trap 'rc=$?; kill $SRV 2>/dev/null; rm -rf "$W"; exit $rc' EXIT
 cd "$ROOT/tests/hub/pkg"
 H=$(python3 - "$W/www" <<'PY'
 import hashlib, os, sys
@@ -28,8 +28,9 @@ print(h)
 PY
 )
 PORT=$((20000 + $$ % 20000))
-python3 -m http.server $PORT --directory "$W/www" >/dev/null 2>&1 &
-SRV=$!
+# Started from a subshell, the server is no job of ours (no job notices).
+(python3 -m http.server $PORT --directory "$W/www" >/dev/null 2>&1 & echo $! > "$W/pid")
+SRV=$(cat "$W/pid")
 printf 'import Base\nimport %s/geo.bend as Geo\n\ndef main() -> IO(Unit):\n  IO.print(U32.show(Geo.area(3, 7)))\n' "$H" > "$W/main.bend"
 for i in 1 2 3 4 5 6 7 8 9 10; do curl -fs "http://127.0.0.1:$PORT/$H/manifest" >/dev/null && break; sleep 0.3; done
 export BEND_HUB=http://127.0.0.1:$PORT BEND_LIB=$W/lib
