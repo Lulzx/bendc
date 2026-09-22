@@ -234,7 +234,6 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
     uint64_t bit = 1ull << (i & 63);
     if (b->alloc[i >> 6] & bit) continue;
     V *p = objs + (size_t)i * sw;
-    memset(p, 0, sw * sizeof(V));
     p[0] = (V)head;
     head = p;
     b->alloc[i >> 6] |= bit;
@@ -242,7 +241,6 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
   }
   atomic_fetch_add_explicit(&gc_since, n * sw * sizeof(V), memory_order_relaxed);
   k->free = (V *)head[0];
-  head[0] = 0;
   return head;
 }
 
@@ -268,14 +266,17 @@ __attribute__((noinline)) static V *gc_alloc_large(size_t w, int atomic) {
   return p;
 }
 
+// A slot is not cleared when freed: the words of a class slot past the
+// object's own are cleared here, so stale words never look like pointers.
 static inline V *gc_alloc(size_t w, int atomic) {
   if (UNLIKELY(w > GC_SMALL)) return gc_alloc_large(w, atomic);
   unsigned c = gc_cls_of[w];
   GcCache *k = &thr_self->cache[atomic][c];
   V *p = k->free;
-  if (UNLIKELY(p == NULL)) return gc_refill(k, atomic, c);
-  k->free = (V *)p[0];
+  if (UNLIKELY(p == NULL)) p = gc_refill(k, atomic, c);
+  else k->free = (V *)p[0];
   p[0] = 0;
+  for (size_t j = w; j < gc_cls_w[c]; j++) p[j] = 0;
   return p;
 }
 
@@ -399,8 +400,10 @@ static void gc_sweep(void) {
     uintptr_t at = bi;
     while (bi < gc_top && gc_kind[bi] == 0) bi++;
     gc_runs[gc_nruns++] = (GcRun){(uint32_t)at, (uint32_t)(bi - at)};
-    // Hand the pages of long runs back to the system.
-    if (bi - at >= 16) madvise(gc_base + (at << GC_BLK_SHIFT), (bi - at) << GC_BLK_SHIFT, MADV_DONTNEED);
+    // Hand the pages of long runs back to the system when the heap is far
+    // larger than what lives in it.
+    if (bi - at >= 256 && ((gc_top - bi + at) << GC_BLK_SHIFT) > 4 * live + ((size_t)1 << 30))
+      madvise(gc_base + (at << GC_BLK_SHIFT), (bi - at) << GC_BLK_SHIFT, MADV_DONTNEED);
   }
   gc_live_bytes = live;
 }

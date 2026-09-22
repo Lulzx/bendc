@@ -25,10 +25,12 @@ tests with stage1: 16 passed, 0 failed
 tests with stage2: 16 passed, 0 failed
 ```
 
-`bendc.bend` is one file of Bend (about 4,600 lines, 470 definitions). Its source passes
-`bend --check-only`, so the official checker accepts it. It lexes, parses, erases, and code-generates
-Bend programs, including the parts of Bend's standard library (`Base`) that a program uses. The result
-is a single C file that clang builds against a small runtime (`rt/bendrt.h`).
+`bendc.bend` (the compiler) and `check.bend` (the type checker) are Bend: about 12,000 lines that
+pass `bend --check-only`. bendc type-checks a program the way the official checker does (a port of
+it, with the same error reports), then lexes, parses, erases, and code-generates it, including the
+parts of Bend's standard library (`Base`) that the program uses. The result is a single C file that
+clang builds against the runtime (`rt/bendrt.h`): a garbage collector, unbounded `Nat`, a
+work-stealing pool for parallel calls, and an event loop that speaks the official effect ABI.
 
 ## Contents
 
@@ -61,8 +63,13 @@ Compile a program:
 clang -O2 -I rt hello.c -o hello -lm && ./hello
 ```
 
-Debugging aids: `bendc --tokens file.bend` prints the token stream after layout, and
-`bendc --ast file.bend` prints the parsed declarations.
+`bendc --check-only <base.bend> file.bend` only type-checks, printing what `bend --check-only` prints.
+`bendc --no-check ...` compiles without checking. Debugging aids: `bendc --tokens file.bend` prints the
+token stream after layout, and `bendc --ast file.bend` prints the parsed declarations.
+
+A compiled program takes the official runtime's options: `--threads N` (default: the CPU count),
+`--gpu on|off|SIZE` (accepted; parallel calls run on the CPU threads), `--help`, and `--` before
+the program's own arguments.
 
 ## What it looks like
 
@@ -166,7 +173,11 @@ CI runs the whole chain on Linux and macOS: seed build, tests, selfcheck, and fu
 | Monads | `do M<..>:` for any monad (`IO`, `Maybe`, `Result`, your own), `x : T <- m`, `return` |
 | Operators | `(a + b : T)` typed arithmetic, bitwise and comparison operators, `&&` `\|\|` `++` `<>` |
 | Data | `U32`, `Nat`, `F32`, `Char`, `String`, lists, tuples, `Map`, `Set`, arrays (`[v : T*n]`, `a[i]`, `a[i] <- v`) |
-| Effects | `IO.print`/`write`/`print_err`, `IO.args`, `IO.get_env`, files, `IO.now`/`sleep`/`random_u32`, `IO.fork`/`IO.join` and channels, `IO.die` exit codes |
+| Effects | every Base effect but windows and audio: printing, `IO.args`, `IO.get_env`, files, TCP, UDP, `IO.now`/`sleep`/`random_u32`, concurrent `IO.fork`/`IO.join`/`IO.spawn` and channels, `IO.die` exit codes |
+| Foreign code | `def f(..) -> IO(R): import "./f.c"` effects written against the official effect ABI (Base's own `effs/*.c` are compiled this way) |
+| Modules | `import ./file.bend as M`, and hub packages by content hash: `import 0x<hash>/main.bend as P` |
+| Parallelism | parallel lets `a b = f(x) g(y)` and `f!(x)` calls run on a work-stealing thread pool |
+| Checking | the official type checker, ported: quantities, termination, templates, laws and proofs, dependent types |
 | Output | an `IO` main runs its effects; any other main prints its value in Bend syntax |
 
 ## How it works
@@ -205,17 +216,29 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables &
 
 | Value | Representation |
 |---|---|
-| `U32`, `Char`, `F32`, `Nat` | the raw number (`F32` as IEEE bits, `Nat` as u64) |
+| `U32`, `Char`, `F32` | the raw number (`F32` as IEEE bits) |
+| `Nat` | the raw number below 2^63, else a tagged pointer to a bignum |
 | nullary constructor (`Nil{}`, `True{}`) | `(tag << 3) \| 1` |
 | constructor with fields | pointer to `{tag, fields...}` |
 | one constructor with one field (`Chr{code}`) | the field itself |
 | closure | pointer to `{fn, arity, nargs, args...}` |
 
 Base implements `U32` as a 32-bit vector of `Bool`s, which proofs can reason about. `bendc` replaces
-those defs, and the `Nat`/`F32` primitives, with native C. Memory is a bump arena. The program runs
-on a thread with a 4 GB stack, so deep non-tail recursion is fine: a million-deep recursive list
-builds and folds in about 0.1s, where the official runtime overflows its stack at 100,000. IO
-follows Base's continuation-passing `IO` type, with effects as native C functions.
+those defs, and the `Nat`/`F32` primitives, with native C; `Nat` arithmetic is unbounded (the official
+runtime stops at 2^48). Memory is managed by a conservative mark-sweep collector: the threads that run
+Bend code are stopped with a signal while it marks their stacks. The program runs on a thread with a
+4 GB stack, so deep non-tail recursion is fine: a million-deep recursive list builds and folds in about
+0.1s, where the official runtime overflows its stack at 100,000.
+
+A parallel let forks every value but the last onto a Chase-Lev work-stealing deque and joins them in
+reverse; a fork nobody stole runs inline, so fine-grained recursion stays cheap (`pow2!(26n)` from the
+guide takes 0.70s on one thread, 0.15s on eight).
+
+IO follows Base's continuation-passing `IO` type. An effect call becomes a request node that an event
+loop answers, as in the official runtime: computations run their pure code up to their next effect,
+`IO.fork` computations run concurrently, blocking work parks, and a deadlock is reported. Effects use the
+official ABI (`Term`, `Env`, `IoWork`, `io_eff`, `CID_*`), so the `.c` files that effect defs import,
+Base's own `effs/*.c` included, are spliced into the output unchanged.
 
 ## Writing a compiler under Bend's rules
 
@@ -241,11 +264,13 @@ fixpoint meaningful.
 
 ## Testing
 
-`tests/` holds 16 programs covering the features above: closures, trees, maps, sorting, strings and
-UTF-8, file IO, fork/join, modules, string patterns, arrays, proofs, value printing, exit codes, and
-deep recursion. Each `.out` file is the stdout and exit code of the **official** `bend` running the
-same program. `run_tests.sh` compiles each program with a given `bendc`, runs it, and diffs the
-result.
+`tests/` holds programs covering the features above: closures, trees, maps, sorting, strings and
+UTF-8, file IO, concurrent fork/join, TCP, user-defined C effects, modules, string patterns, arrays,
+proofs, value printing, exit codes, deep recursion, parallel lets, the collector, and bignum `Nat`.
+Each `.out` file is the stdout and exit code of the **official** `bend` running the same program
+(for bignums, which the official runtime cannot reach, the expected values come from Python).
+`run_tests.sh` compiles each program with a given `bendc`, runs it, and diffs the result;
+`tests/hub/run.sh` serves a package from a local hub and imports it by hash.
 
 ```sh
 make test                      # with build/bendc
@@ -254,21 +279,19 @@ make test                      # with build/bendc
 
 ## Limitations
 
-- **No type checking.** `bendc` erases types and trusts its input, so run `bend --check-only` for
-  diagnostics. Errors `bendc` does report: parse errors with line numbers, unknown names, and
-  unknown constructors.
-- **No GPU.** `f!(x)` runs sequentially; `IO.fork` runs the forked computation to completion
-  immediately.
-- `Nat` is a 64-bit integer. Memory is never freed.
-- No hub imports (`import 0x…`), no user-defined foreign effects, and no windowing or audio effects.
-- A function value inside a printed non-`IO` result shows as `<function>`.
+- **No GPU.** `f!(x)` and parallel lets run on the CPU threads, as the official runtime does with
+  `--gpu off`.
+- No windowing or audio effects (Base's `Window` and `Audio`), and no JS target, so an effect's `.js`
+  file is not used.
 
 ## Repository layout
 
 | Path | |
 |---|---|
+| [`check.bend`](check.bend) | the type checker, a port of the official one: parser, normalizer, conversion, quantities, termination, templates, error reports |
 | [`bendc.bend`](bendc.bend) | the compiler, organized by section: lexer, layout, parser monad, expressions, patterns, statements, declarations, operator resolution, free variables, global tables, code generation, value printers, modules, driver |
-| [`rt/bendrt.h`](rt/bendrt.h) | C runtime: heap, closures, strings, native `U32`/`Nat`/`F32`, IO effects, entry points |
+| [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, bignum `Nat`, native `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
+| [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
 | [`seed/bendc.c`](seed/bendc.c) | the fixpoint C output of `bendc.bend`, for building without Bend |
 | [`tests/`](tests) | test programs and the official `bend`'s output for each |
 | [`bootstrap.sh`](bootstrap.sh), [`run_tests.sh`](run_tests.sh), [`Makefile`](Makefile) | bootstrap and fixpoint check, test runner, build entry points |

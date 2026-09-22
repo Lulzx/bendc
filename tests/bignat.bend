@@ -2,7 +2,7 @@ import Base
 
 # Nat is unbounded (the expected output comes from Python: the official
 # runtime stops at 2^48).
-def fact(n: Nat) -> Nat:
+def fact(+n: Nat) -> Nat:
   match n:
     case 0n:
       1n

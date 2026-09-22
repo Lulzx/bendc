@@ -412,6 +412,9 @@ def P.eat.if(+s: String, ok: Bool) -> P(Unit):
     case False{}:
       P.fail(Unit, "'" ++ s ++ "'")
 
+def P.bind(-A: Type, -B: Type, m: P(A), f: A -> P(B)) -> P(B):
+  ps => P.go(A, B, m(ps), f)
+
 def Cur.rest(+c: Cur) -> String:
   Cur{+rest, pos, col, nl, prev} = c
   rest
@@ -448,9 +451,6 @@ def P.take.if(+s: String, ok: Bool) -> P(Bool):
       +ps => Done{(True{}, PS.set_cur(ps, Cur.steps(PS.cur(ps), String.length(s))))}
     case False{}:
       P.pure(Bool, False{})
-
-def P.bind(-A: Type, -B: Type, m: P(A), f: A -> P(B)) -> P(B):
-  ps => P.go(A, B, m(ps), f)
 
 def P.take(+s: String) -> P(Bool):
   do P<Bool>:
@@ -7716,6 +7716,16 @@ def show_main.go(+b: Book, t: Maybe<&2, Tld>) -> String:
       term_show(term_lower(b, term_snf(b, v), 0), 0, Nil{})
     case other:
       ""
+
+def main_is_io.go(+b: Book, t: Maybe<&2, Tld>) -> Bool:
+  match t:
+    case Some{TDef{n, x, ty, v, u, bb, imps}}:
+      valid.io(b, term_head(term_strip(ty)))
+    case other:
+      False{}
+
+def main_is_io(+b: Book) -> Bool:
+  main_is_io.go(b, main_tld(b))
 
 # main's value, normalized and printed as the official bend prints it.
 def show_main(+b: Book) -> String:

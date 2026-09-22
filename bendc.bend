@@ -3,6 +3,7 @@
 # Usage: bendc <base.bend> <input.bend>  (C goes to stdout)
 
 import Base
+import ./check.bend as Chk
 
 # Utilities
 # =========
@@ -629,10 +630,24 @@ def IO.read_fin(r: File & Result<&1, &1, U32 & String, String>) -> IO(String):
     File.close(f2)
     IO.pass(String, res)
 
+def IO.read_sized(r: File & Result<&1, &1, U32 & String, U32>) -> IO(File & Result<&1, &1, U32 & String, String>):
+  (f, res) = r
+  match res:
+    case Done{n}:
+      File.read(f, U32.inc(n))
+    case Fail{e}:
+      File.read(f, 2000000000)
+
+# Reads with the file's size (the read effect allocates as much as asked).
+def IO.read_all(f: File) -> IO(File & Result<&1, &1, U32 & String, String>):
+  do IO<File & Result<&1, &1, U32 & String, String>>:
+    sz : File & Result<&1, &1, U32 & String, U32> <- File.size(f)
+    IO.read_sized(sz)
+
 def IO.read_file(path: String) -> IO(String):
   do IO<String>:
     f : File <- IO.try(File, File.open(path, "r"))
-    r : File & Result<&1, &1, U32 & String, String> <- File.read(f, 2000000000)
+    r : File & Result<&1, &1, U32 & String, String> <- IO.read_all(f)
     IO.read_fin(r)
 
 def IO.list2(xs: List<String>) -> List<&2, String>:
@@ -641,6 +656,9 @@ def IO.list2(xs: List<String>) -> List<&2, String>:
       Nil{}
     case h <> t:
       h <> IO.list2(t)
+
+def IO.write_err(+s: String) -> IO(Unit):
+  IO.print_err(String.take(s, Nat.sub(String.length(s), 1n)))
 
 # AST
 # ===
@@ -4799,6 +4817,318 @@ def Main.ast(r: Result<&2, &2, String, List<&2, Decl>>) -> IO(Unit):
     case Done{ds}:
       IO.write(Decls.show(ds))
 
+def Main.chk.fail(-A: Type, e: Chk.Err) -> IO(A):
+  IO.die(A, 1, Chk.show_err(e))
+
+def Main.read_opt.res(r: Result<&1, &1, U32 & String, String>) -> Maybe<&2, String>:
+  match r:
+    case Done{v}:
+      Some{v}
+    case Fail{e}:
+      None{}
+
+def Main.read_opt.fin(r: File & Result<&1, &1, U32 & String, String>) -> IO(Maybe<&2, String>):
+  (f2, res) = r
+  do IO<Maybe<&2, String>>:
+    File.close(f2)
+    return Main.read_opt.res(res)
+
+def Main.read_opt.open(r: Result<&1, &1, U32 & String, File>) -> IO(Maybe<&2, String>):
+  match r:
+    case Done{f}:
+      do IO<Maybe<&2, String>>:
+        got : File & Result<&1, &1, U32 & String, String> <- IO.read_all(f)
+        Main.read_opt.fin(got)
+    case Fail{e}:
+      IO.pure(Maybe<&2, String>, None{})
+
+# A file's text, if it can be read.
+def Main.read_opt(path: String) -> IO(Maybe<&2, String>):
+  do IO<Maybe<&2, String>>:
+    r : Result<&1, &1, U32 & String, File> <- File.open(path, "r")
+    Main.read_opt.open(r)
+
+def Main.chk.loading() -> String:
+  "\u{0}"
+
+type CS is Data:
+  CS{book: Chk.Book, seen: List<&2, Chk.SB2>, n0: Nat}
+
+law Main.chk.load:
+  for fuel: Nat
+  for +base: String
+  for +file: String
+  for +ns: String
+  for +sp: Chk.Sp
+  for +st: CS
+  IO(CS)
+
+def Main.chk.hub(+rel: String) -> IO(String):
+  do IO<String>:
+    +lib : String <- Main.lib()
+    hr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_HUB")
+    u : Unit <- IO.try(Unit, Hub.ensure(lib, Main.hub.url(hr), rel))
+    return lib ++ "/" ++ rel
+
+def Main.chk.is_hub.hex(s: String) -> Bool:
+  match s:
+    case SCon{Chr{+c}, t}:
+      Bool.or(U32.is_eq(c, 47), Bool.and(Bool.or(Char.is_digit(Chr{c}), Bool.and(U32.is_ge(c, 97), U32.is_le(c, 102))),
+        Main.chk.is_hub.hex(t)))
+    case SNil{}:
+      False{}
+
+def Main.chk.is_hub(+rel: String) -> Bool:
+  Bool.and(String.starts_with(rel, "0x"), Main.chk.is_hub.hex(String.drop(rel, 2n)))
+
+def Path.dirname(+p: String) -> String:
+  +d = Mod.dir(p)
+  Bool.pick(String, String.is_empty(d), ".", Bool.pick(String, String.eq(d, "/"), "/",
+    String.take(d, Nat.sub(String.length(d), 1n))))
+
+#
+# Files are loaded into the checker's book as the official bend loads them:
+# imports first (each file once, in its own namespace), then the file's
+# declarations. The whole book is then checked.
+def Path.push(+seg: String, st: List<&2, String>, abs: Bool) -> List<&2, String>:
+  match st:
+    case Nil{}:
+      Bool.pick(List<&2, String>, String.eq(seg, ".."), Bool.pick(List<&2, String>, abs, Nil{}, [".."]), [seg])
+    case +h <> +t:
+      Bool.pick(List<&2, String>, String.eq(seg, ".."),
+        Bool.pick(List<&2, String>, String.eq(h, ".."), ".." <> h <> t, t), seg <> h <> t)
+
+def Path.fold(segs: List<&2, String>, +st: List<&2, String>, +abs: Bool) -> List<&2, String>:
+  match segs:
+    case Nil{}:
+      st
+    case +g <> t:
+      Path.fold(t, Bool.pick(List<&2, String>, Bool.or(String.is_empty(g), String.eq(g, ".")), st,
+        Path.push(g, st, abs)), abs)
+
+# A path without "." or ".." segments (as path.posix.normalize makes it).
+def Path.norm(+p: String) -> String:
+  +abs = String.starts_with(p, "/")
+  +body = String.join(List.reverse(&2, String, Path.fold(String.split(p, '/'), Nil{}, abs)), "/")
+  Bool.pick(String, abs, "/" ++ body, Bool.pick(String, String.is_empty(body), ".", body))
+
+def Path.join(+a: String, +b: String) -> String:
+  Path.norm(a ++ "/" ++ b)
+
+@unsafe
+def Main.chk.imp.rel(
+  f: Nat, +base: String, +dir: String, +ns: String, +sp: Chk.Sp, +rel: String, +alias: String, +path: String, st: CS,
+  al: List<&2, Chk.SB2>, bend: Bool
+) -> IO(CS & List<&2, Chk.SB2>):
+  match bend:
+    case False{}:
+      Main.chk.fail(CS & List<&2, Chk.SB2>, Chk.err0("an import of a .bend file", Chk.MStr{"'" ++ path ++ "'"}, sp))
+    case True{}:
+      +abs = String.starts_with(rel, "/")
+      +hub = Main.chk.is_hub(rel)
+      +sub = Bool.pick(String, Bool.or(abs, hub), rel, Path.join(Path.dirname(ns), rel))
+      +ns2 = String.take(sub, Nat.sub(String.length(sub), 5n))
+      do IO<CS & List<&2, Chk.SB2>>:
+        +at : String <- Bool.pick(IO(String), hub, Main.chk.hub(rel),
+          IO.pure(String, Bool.pick(String, abs, rel, dir ++ rel)))
+        st2 : CS <- Main.chk.load(f, base, at, ns2, sp, st)
+        return (st2, List.append(&2, Chk.SB2, al, [Chk.SB2{alias, ns2}]))
+
+@unsafe
+def Main.chk.imp.go(
+  f: Nat, +base: String, +dir: String, +ns: String, +sp: Chk.Sp, +rel: String, +alias: String, +path: String, st: CS,
+  al: List<&2, Chk.SB2>, base_imp: Bool
+) -> IO(CS & List<&2, Chk.SB2>):
+  match base_imp:
+    case True{}:
+      do IO<CS & List<&2, Chk.SB2>>:
+        st2 : CS <- Main.chk.load(f, base, base, "", sp, st)
+        return (st2, al)
+    case False{}:
+      Main.chk.imp.rel(f, base, dir, ns, sp, rel, alias, path, st, al, String.ends_with(rel, ".bend"))
+
+# An import of a file as alias: where it is and its namespace.
+@unsafe
+def Main.chk.imp(
+  f: Nat, +base: String, +dir: String, +ns: String, +src: String, imp: Chk.Imp, st: CS, al: List<&2, Chk.SB2>
+) -> IO(CS & List<&2, Chk.SB2>):
+  Chk.Imp{+path, +alias, +beg} = imp
+  +sp = {Chk.Sp{src, beg, beg} : Chk.Sp}
+  +rel = Path.norm(path)
+  Main.chk.imp.go(f, base, dir, ns, sp, rel, alias, path, st, al, String.is_empty(alias))
+
+law Main.chk.imps:
+  for +f: Nat
+  for +base: String
+  for +dir: String
+  for +ns: String
+  for +src: String
+  for imps: List<&2, Chk.Imp>
+  for st: CS
+  for al: List<&2, Chk.SB2>
+  IO(CS & List<&2, Chk.SB2>)
+
+@unsafe
+def Main.chk.imps.next(
+  f: Nat, +base: String, +dir: String, +ns: String, +src: String, imps: List<&2, Chk.Imp>,
+  r: CS & List<&2, Chk.SB2>
+) -> IO(CS & List<&2, Chk.SB2>):
+  (st, al) = r
+  Main.chk.imps(f, base, dir, ns, src, imps, st, al)
+
+@unsafe
+def Main.chk.imps(f, base, dir, ns, src, imps, st, al):
+  match imps:
+    case Nil{}:
+      IO.pure(CS & List<&2, Chk.SB2>, (st, al))
+    case i <> t:
+      do IO<CS & List<&2, Chk.SB2>>:
+        r : CS & List<&2, Chk.SB2> <- Main.chk.imp(f, base, dir, ns, src, i, st, al)
+        Main.chk.imps.next(f, base, dir, ns, src, t, r)
+
+def Main.chk.parsed(
+  +base: String, +file: String, +ns: String, seen: List<&2, Chk.SB2>, +n1: Nat, r: Result<&1, &1, Chk.Err, Chk.Book>
+) -> IO(CS):
+  match r:
+    case Fail{e}:
+      Main.chk.fail(CS, e)
+    case Done{+b}:
+      IO.pure(CS, CS{Bool.pick(Chk.Book, String.eq(Path.norm(file), Path.norm(base)), Chk.mark_base(b, n1), b),
+        Chk.SB2{Path.norm(file), ns} <> seen, n1})
+
+# After a file's imports: its declarations join the book.
+@unsafe
+def Main.chk.parse(
+  +base: String, +file: String, +ns: String, +src: String, lines: List<&2, String>, r: CS & List<&2, Chk.SB2>
+) -> IO(CS):
+  (st, al) = r
+  CS{+book, seen, n0} = st
+  +n1 = Chk.book_len(book)
+  Main.chk.parsed(base, file, ns, seen, n1, Chk.parse_file(book, src, String.join(lines, "\n"), ns, Mod.dir(file), al))
+
+def CS.mark(st: CS, +real: String) -> CS:
+  CS{book, seen, n0} = st
+  CS{book, Chk.SB2{real, Main.chk.loading()} <> seen, n0}
+
+@unsafe
+def Main.chk.hdr(f: Nat, +base: String, +file: String, +ns: String, +src: String, st: CS, h: Chk.Hdr) -> IO(CS):
+  Chk.Hdr{lines, imps, err} = h
+  match err:
+    case Some{e}:
+      Main.chk.fail(CS, e)
+    case None{}:
+      do IO<CS>:
+        r : CS & List<&2, Chk.SB2> <- Main.chk.imps(f, base, Mod.dir(file), ns, src, imps,
+          CS.mark(st, Path.norm(file)), Nil{})
+        Main.chk.parse(base, file, ns, src, lines, r)
+
+@unsafe
+def Main.chk.src(f: Nat, +base: String, +file: String, +ns: String, +src: String, st: CS) -> IO(CS):
+  Main.chk.hdr(f, base, file, ns, src, st, Chk.header(src))
+
+@unsafe
+def Main.chk.read(
+  f: Nat, +base: String, +file: String, +ns: String, +sp: Chk.Sp, st: CS, m: Maybe<&2, String>
+) -> IO(CS):
+  match m:
+    case None{}:
+      Main.chk.fail(CS, Chk.err0("no such file: " ++ file, Chk.MNone{}, sp))
+    case Some{src}:
+      Main.chk.src(f, base, file, ns, src, st)
+
+def CS.at_end(st: CS) -> CS:
+  CS{+book, seen, n0} = st
+  CS{book, seen, Chk.book_len(book)}
+
+@unsafe
+def Main.chk.seen(
+  f: Nat, +base: String, +file: String, +ns: String, +sp: Chk.Sp, st: CS, done: Maybe<&2, String>
+) -> IO(CS):
+  match done:
+    case Some{+v}:
+      Bool.pick(IO(CS), String.eq(v, Main.chk.loading()),
+        Main.chk.fail(CS, Chk.err0("an import cycle through " ++ file, Chk.MNone{}, sp)),
+        Bool.pick(IO(CS), String.eq(v, ns), IO.pure(CS, CS.at_end(st)),
+          Main.chk.fail(CS, Chk.err0("one namespace per file (" ++ file ++ " is both '" ++ v ++ "' and '" ++ ns ++ "')",
+            Chk.MNone{}, sp))))
+    case None{}:
+      do IO<CS>:
+        m : Maybe<&2, String> <- Main.read_opt(file)
+        Main.chk.read(f, base, file, ns, sp, st, m)
+
+def CS.seen(+st: CS) -> List<&2, Chk.SB2>:
+  CS{book, +seen, n0} = st
+  seen
+
+@unsafe
+def Main.chk.load(fuel, base, file, ns, sp, st):
+  match fuel:
+    case 0n:
+      IO.die(CS, 1, "bendc: imports nested too deeply at " ++ file)
+    case 1n+f:
+      Main.chk.seen(f, base, file, ns, sp, st, Chk.SB2.find(CS.seen(st), Path.norm(file)))
+
+def Main.check.res(+n0: Nat, r: Result<&1, &1, Chk.Err, Chk.Book>) -> IO(Chk.Book & Nat):
+  match r:
+    case Fail{e}:
+      Main.chk.fail(Chk.Book & Nat, e)
+    case Done{b}:
+      IO.pure(Chk.Book & Nat, (b, n0))
+
+def Main.check.fin(st: CS) -> IO(Chk.Book & Nat):
+  CS{book, seen, +n0} = st
+  Main.check.res(n0, Chk.check_book(book))
+
+# Loads and checks a program; answers the checked book and where the
+# file's own declarations start.
+@unsafe
+def Main.check(+base: String, +file: String) -> IO(Chk.Book & Nat):
+  do IO<Chk.Book & Nat>:
+    st : CS <- Main.chk.load(64n, base, file, "", Chk.NoSp{}, CS{Chk.book_nil(), Nil{}, 0n})
+    Main.check.fin(st)
+
+def Main.check_only.fin(r: Chk.Book & Nat) -> IO(Unit):
+  (b, n0) = r
+  +bad = Chk.report(b, n0)
+  Bool.pick(IO(Unit), List.is_empty(&2, String, bad), IO.write("All terms check.\n"),
+    IO.write(Chk.report_text(bad)))
+
+@unsafe
+def Main.build(+base_path: String, user_path: String) -> IO(Unit):
+  do IO<Unit>:
+    base : String <- IO.read_file(base_path)
+    user : List<&2, Decl> <- Main.load(64n, user_path)
+    Main.compile(Main.resolve(Mod.dir(base_path), Main.parse(base)), Done{user})
+
+# Whether main returns a value (not IO) that may hold a function.
+def Main.normalized(+b: Chk.Book) -> Bool:
+  Bool.and(Bool.not(Chk.main_is_io(b)), Chk.main_has_fun(b))
+
+# A program that prints a value computed at compile time.
+def Main.emit_value(v: String) -> IO(Unit):
+  IO.write("#include <stdio.h>\n\nint main(void) {\n  fputs(\"" ++ Gen.lit(v) ++
+    "\\n\", stdout);\n  return 0;\n}\n")
+
+@unsafe
+def Main.checked.go(+base_path: String, user_path: String, +bk: Chk.Book, norm: Bool) -> IO(Unit):
+  match norm:
+    case True{}:
+      Main.emit_value(Chk.show_main(bk))
+    case False{}:
+      Main.build(base_path, user_path)
+
+# After checking: report defs that rely on unsafe or foreign code (on
+# stderr), then compile. A value main that may hold a function is printed
+# as the checker normalizes it.
+@unsafe
+def Main.checked(+base_path: String, user_path: String, r: Chk.Book & Nat) -> IO(Unit):
+  (b, n0) = r
+  +bk = b
+  +bad = Chk.report(bk, n0)
+  do IO<Unit>:
+    Bool.pick(IO(Unit), List.is_empty(&2, String, bad), IO.pure(Unit, Unit{}), IO.write_err(Chk.report_text(bad)))
+    Main.checked.go(base_path, user_path, bk, Main.normalized(bk))
+
 @unsafe
 def Main.run(args: List<&2, String>) -> IO(Unit):
   match args:
@@ -4810,13 +5140,18 @@ def Main.run(args: List<&2, String>) -> IO(Unit):
       do IO<Unit>:
         src : String <- IO.read_file(path)
         Main.ast(Main.parse(src))
-    case +base_path <> user_path <> Nil{}:
+    case "--check-only" <> base_path <> user_path <> Nil{}:
       do IO<Unit>:
-        base : String <- IO.read_file(base_path)
-        user : List<&2, Decl> <- Main.load(64n, user_path)
-        Main.compile(Main.resolve(Mod.dir(base_path), Main.parse(base)), Done{user})
+        r : Chk.Book & Nat <- Main.check(base_path, user_path)
+        Main.check_only.fin(r)
+    case "--no-check" <> +base_path <> user_path <> Nil{}:
+      Main.build(base_path, user_path)
+    case +base_path <> +user_path <> Nil{}:
+      do IO<Unit>:
+        r : Chk.Book & Nat <- Main.check(base_path, user_path)
+        Main.checked(base_path, user_path, r)
     case other:
-      IO.die(Unit, 1, "usage: bendc <base.bend> <input.bend> | --tokens <file> | --ast <file>")
+      IO.die(Unit, 1, "usage: bendc [--check-only | --no-check] <base.bend> <input.bend> | --tokens <file> | --ast <file>")
 
 def main() -> IO(Unit):
   do IO<Unit>:
@@ -4875,3 +5210,13 @@ def Main.load(fuel, path):
       do IO<List<&2, Decl>>:
         src : String <- IO.read_file(path)
         Main.load.parsed(f, Mod.dir(path), path, Main.parse(src))
+
+# Misc
+# ====
+
+def Path.base(+p: String) -> String:
+  String.drop(p, String.length(Mod.dir(p)))
+
+def CS.book(+st: CS) -> Chk.Book:
+  CS{+book, seen, n0} = st
+  book
