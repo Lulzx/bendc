@@ -1527,7 +1527,9 @@ def P.postfix.k(e: Expr, k: Nat) -> Parser(Expr):
     case 1n:
       do Parser<Expr>:
         P.skip()
-        P.postfix(e)
+        P.expect("(")
+        args : List<&2, Expr> <- P.list(")")
+        P.postfix(ECall{EVar{"%gpu"}, e <> args})
     case 2n:
       do Parser<Expr>:
         P.skip()
@@ -3680,11 +3682,29 @@ def Gen.call.var(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, local:
     case False{}:
       Gen.call.def(g, env, name, G.def(g, name), args)
 
+# f!(args): a call the device may run (see the GPU backend); the CPU runs it
+# as a call.
+@unsafe
+def Gen.call.bang(+g: G, +env: Env(), args: List<&2, Expr>) -> Gen(Doc):
+  match args:
+    case f <> xs:
+      Gen.call(g, env, f, xs)
+    case Nil{}:
+      Gen.pure(Doc, DStr{"0"})
+
+@unsafe
+def Gen.call.name(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, bang: Bool) -> Gen(Doc):
+  match bang:
+    case True{}:
+      Gen.call.bang(g, env, args)
+    case False{}:
+      Gen.call.var(g, env, name, args, Env.has(env, name))
+
 @unsafe
 def Gen.call(g, env, f, args):
   match f:
     case EVar{+name}:
-      Gen.call.var(g, env, name, args, Env.has(env, name))
+      Gen.call.name(g, env, name, args, Str.eq(name, "%gpu"))
     case other:
       Gen.call.local(g, env, other, args)
 
@@ -5680,11 +5700,35 @@ def J.call.var(+j: JG, +env: Env(), +name: String, args: List<&2, Expr>, local: 
     case False{}:
       J.call.def(j, env, name, G.def(JG.g(j), name), args)
 
+law J.call:
+  for +j: JG
+  for +env: Env()
+  for f: Expr
+  for args: List<&2, Expr>
+  Gen(Doc)
+
+# f!(args) runs as a call in JavaScript.
 @unsafe
-def J.call(+j: JG, +env: Env(), f: Expr, args: List<&2, Expr>) -> Gen(Doc):
+def J.call.bang(+j: JG, +env: Env(), args: List<&2, Expr>) -> Gen(Doc):
+  match args:
+    case f <> xs:
+      J.call(j, env, f, xs)
+    case Nil{}:
+      Gen.pure(Doc, DStr{"0"})
+
+@unsafe
+def J.call.name(+j: JG, +env: Env(), +name: String, args: List<&2, Expr>, bang: Bool) -> Gen(Doc):
+  match bang:
+    case True{}:
+      J.call.bang(j, env, args)
+    case False{}:
+      J.call.var(j, env, name, args, Env.has(env, name))
+
+@unsafe
+def J.call(j, env, f, args):
   match f:
     case EVar{+name}:
-      J.call.var(j, env, name, args, Env.has(env, name))
+      J.call.name(j, env, name, args, Str.eq(name, "%gpu"))
     case other:
       J.call.local(j, env, other, args)
 
