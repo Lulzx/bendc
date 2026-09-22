@@ -108,7 +108,7 @@ typedef struct GcBlk {
   uint64_t mark[64];
 } GcBlk;
 
-typedef struct GcCache { V *free; GcBlk *blk; } GcCache;
+typedef struct GcCache { V *free; V *bump; V *end; GcBlk *blk; uint32_t idx; } GcCache;
 
 struct PDeque;
 
@@ -140,7 +140,12 @@ static pthread_mutex_t gc_lock = PTHREAD_MUTEX_INITIALIZER;
 static GcBlk *gc_partial[2][GC_NCLS];
 static _Atomic size_t gc_since;         // bytes handed out since the last collection
 static size_t gc_limit = (size_t)256 << 20;
+static size_t gc_limit_min = (size_t)256 << 20;
 static size_t gc_live_bytes;
+static size_t gc_major_live;
+static int gc_minor;       // this collection keeps the marks of old objects
+static int gc_rooting;     // marking from roots (not from objects)
+static int gc_all_major;   // BEND_GC_MAJOR: every collection is a major one
 static size_t gc_count;
 static int gc_stats;
 static Thr *gc_thrs[GC_MAXTHR];
@@ -176,8 +181,9 @@ static void gc_init(void) {
   }
   const char *s = getenv("BEND_GC_STATS");
   gc_stats = s && *s;
+  gc_all_major = getenv("BEND_GC_MAJOR") != NULL;
   const char *m = getenv("BEND_GC_MIN_MB");
-  if (m && atol(m) > 0) gc_limit = (size_t)atol(m) << 20;
+  if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20;
 }
 
 static inline GcBlk *gc_blk(uintptr_t i) { return (GcBlk *)(gc_base + (i << GC_BLK_SHIFT)); }
@@ -220,27 +226,47 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
   if (k->blk) { k->blk->owned = 0; k->blk = NULL; }
   if (gc_since >= gc_limit) gc_collect_locked();
   GcBlk *b = gc_partial[atomic][c];
+  int fresh = b == NULL;
   if (b) gc_partial[atomic][c] = b->next;
   else b = gc_new_small(atomic, c);
   b->owned = 1;
   k->blk = b;
   pthread_mutex_unlock(&gc_lock);
-  // The block is ours: build its free list from the unallocated slots.
+  // A slot's allocation bit is set when the slot is handed out, never
+  // before: a stale pointer must not mark a slot that is still free.
   V *objs = gc_objs(b);
   size_t sw = b->words;
+  if (fresh) {
+    // A fresh block is handed out by bumping a pointer.
+    atomic_fetch_add_explicit(&gc_since, (size_t)b->nobj * sw * sizeof(V), memory_order_relaxed);
+    k->free = NULL;
+    k->bump = objs + sw;
+    k->end = objs + (size_t)b->nobj * sw;
+    k->idx = 1;
+    b->alloc[0] |= 1;
+    return objs;
+  }
+  // Otherwise: a free list of the unallocated slots, each holding its index.
   V *head = NULL;
   size_t n = 0;
-  for (int i = (int)b->nobj - 1; i >= 0; i--) {
-    uint64_t bit = 1ull << (i & 63);
-    if (b->alloc[i >> 6] & bit) continue;
-    V *p = objs + (size_t)i * sw;
-    p[0] = (V)head;
-    head = p;
-    b->alloc[i >> 6] |= bit;
-    n++;
+  for (int j = (int)((b->nobj + 63) >> 6) - 1; j >= 0; j--) {
+    uint64_t freebits = ~b->alloc[j];
+    if (j == (int)(b->nobj >> 6)) freebits &= (1ull << (b->nobj & 63)) - 1;
+    while (freebits) {
+      int t = 63 - __builtin_clzll(freebits);
+      freebits &= ~(1ull << t);
+      V *p = objs + (size_t)(j * 64 + t) * sw;
+      p[0] = (V)head;
+      p[1] = (V)(j * 64 + t);
+      head = p;
+      n++;
+    }
   }
   atomic_fetch_add_explicit(&gc_since, n * sw * sizeof(V), memory_order_relaxed);
+  k->bump = k->end = NULL;
   k->free = (V *)head[0];
+  uint32_t i = (uint32_t)head[1];
+  b->alloc[i >> 6] |= 1ull << (i & 63);
   return head;
 }
 
@@ -273,9 +299,20 @@ static inline V *gc_alloc(size_t w, int atomic) {
   unsigned c = gc_cls_of[w];
   GcCache *k = &thr_self->cache[atomic][c];
   V *p = k->free;
-  if (UNLIKELY(p == NULL)) p = gc_refill(k, atomic, c);
-  else k->free = (V *)p[0];
+  if (p != NULL) {
+    k->free = (V *)p[0];
+    uint32_t i = (uint32_t)p[1];
+    k->blk->alloc[i >> 6] |= 1ull << (i & 63);
+  } else if (k->bump < k->end) {
+    p = k->bump;
+    k->bump += gc_cls_w[c];
+    uint32_t i = k->idx++;
+    k->blk->alloc[i >> 6] |= 1ull << (i & 63);
+  } else {
+    p = gc_refill(k, atomic, c);
+  }
   p[0] = 0;
+  p[1] = 0;
   for (size_t j = w; j < gc_cls_w[c]; j++) p[j] = 0;
   return p;
 }
@@ -318,7 +355,10 @@ static inline void gc_mark(V w) {
     if (i >= b->nobj) return;
   }
   uint64_t bit = 1ull << (i & 63);
-  if (!(b->alloc[i >> 6] & bit) || (b->mark[i >> 6] & bit)) return;
+  if (!(b->alloc[i >> 6] & bit)) return;
+  // A minor collection scans an old object met from a root once more: its
+  // fields may have been written after it got old.
+  if ((b->mark[i >> 6] & bit) && !(gc_minor && gc_rooting)) return;
   b->mark[i >> 6] |= bit;
   if (b->atomic) return;
   if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
@@ -361,15 +401,14 @@ static void gc_sweep(void) {
     if (kd == 1) {
       GcBlk *b = gc_blk(bi);
       if (b->owned) {
-        memset(b->mark, 0, sizeof b->mark);
         live += GC_BLK;
         continue;
       }
+      // What survives stays marked: it is old for the next minor collection.
       size_t used = 0;
       int words = (int)((b->nobj + 63) >> 6);
       for (int j = 0; j < words; j++) {
         b->alloc[j] &= b->mark[j];
-        b->mark[j] = 0;
         used += (size_t)__builtin_popcountll(b->alloc[j]);
       }
       if (used == 0) {
@@ -384,7 +423,6 @@ static void gc_sweep(void) {
     } else if (kd == 2) {
       GcBlk *b = gc_blk(bi);
       if (b->mark[0] & 1) {
-        b->mark[0] = 0;
         live += (size_t)b->nblk * GC_BLK;
       } else {
         for (uint32_t j = 0; j < b->nblk; j++) gc_kind[bi + j] = 0;
@@ -425,24 +463,35 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
   jmp_buf jb;
   setjmp(jb);
   me->sp = (uintptr_t)&jb;
+  // A major collection forgets every mark; a minor one keeps the old
+  // objects' (the heap is written only while an object is built, and the
+  // exceptions are reached from roots).
+  gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < 2 * gc_major_live + ((size_t)64 << 20);
+  if (!gc_minor) {
+    for (uintptr_t bi = 0; bi < gc_top; bi++) {
+      if (gc_kind[bi] == 1 || gc_kind[bi] == 2) memset(gc_blk(bi)->mark, 0, sizeof(gc_blk(bi)->mark));
+    }
+  }
+  gc_rooting = 1;
   for (int i = 0; i < gc_nthr; i++) {
     Thr *t = gc_thrs[i];
     if (t->live) gc_scan((const void *)t->sp, (const void *)t->top);
   }
   for (size_t i = 0; i < gc_nroots; i++) gc_scan(gc_roots[i].p, gc_roots[i].p + gc_roots[i].n);
   for (int i = 0; i < gc_nhooks; i++) gc_hooks[i]();
+  gc_rooting = 0;
   gc_drain();
   gc_sweep();
   atomic_store(&gc_stopping, 0);
   while (atomic_load(&gc_inside) > 0) sched_yield();
-  size_t lim = gc_live_bytes;
-  gc_limit = lim > gc_limit ? lim : gc_limit;
+  if (!gc_minor) gc_major_live = gc_live_bytes ? gc_live_bytes : 1;
+  gc_limit = gc_limit_min;
   gc_since = 0;
   gc_count++;
   if (gc_stats) {
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    fprintf(stderr, "[gc %zu] live %zu MB, heap %zu MB, next at +%zu MB, %.1f ms\n", gc_count,
-      gc_live_bytes >> 20, (size_t)(gc_top << GC_BLK_SHIFT) >> 20, gc_limit >> 20,
+    fprintf(stderr, "[gc %zu %s] live %zu MB, heap %zu MB, next at +%zu MB, %.1f ms\n", gc_count,
+      gc_minor ? "minor" : "major", gc_live_bytes >> 20, (size_t)(gc_top << GC_BLK_SHIFT) >> 20, gc_limit >> 20,
       (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6);
   }
 }
@@ -518,10 +567,12 @@ static V apply(V f, V x) {
 #define NIL IMM(0)
 #define CONS(h, t) C2(1, (h), (t))
 
-// Builds a String from UTF-8 bytes.
+// Builds a String from UTF-8 bytes. Strings are built from the end, so no
+// cell is written after it is made (minor collections rely on that).
 static V mk_str(const char *s, size_t n) {
-  V r = SNIL;
-  V *tail = &r;
+  uint32_t small[256];
+  uint32_t *cps = n <= 256 ? small : malloc(n * sizeof(uint32_t));
+  size_t k = 0;
   for (size_t i = 0; i < n;) {
     unsigned char c = (unsigned char)s[i];
     uint32_t cp; int len;
@@ -531,11 +582,12 @@ static V mk_str(const char *s, size_t n) {
     else if ((c >> 3) == 30 && i + 3 < n) { cp = c & 0x07; len = 4; }
     else { cp = c; len = 1; }
     for (int j = 1; j < len; j++) cp = (cp << 6) | ((unsigned char)s[i + j] & 0x3f);
-    V cell = SCONS(cp, SNIL);
-    *tail = cell;
-    tail = &FLD(cell, 1);
+    cps[k++] = cp;
     i += len;
   }
+  V r = SNIL;
+  while (k > 0) { k--; r = SCONS(cps[k], r); }
+  if (cps != small) free(cps);
   return r;
 }
 
@@ -1389,8 +1441,8 @@ static Term io_node(Env e, u64 cid, Term a, Term b) {
 // U+FFFD and is read again as a lead.
 static Term io_str(Env e, const char *p, u64 n) {
   (void)e;
-  Term s = SNIL;
-  Term *hole = &s;
+  u32 *cps = io_mem(malloc((n + 1) * sizeof(u32)));
+  u64 k = 0;
   u64 c = 0, need = 0, lo = 0x80, hi = 0xBF;
   for (u64 i = 0; i < n || need > 0; i += 1) {
     u64 b = i < n ? (uint8_t)p[i] : 0x100;
@@ -1414,10 +1466,11 @@ static Term io_str(Env e, const char *p, u64 n) {
       c = b & (0x3F >> need);
       continue;
     }
-    Term t = SCONS(c, SNIL);
-    *hole = t;
-    hole = &FLD(t, 1);
+    cps[k++] = (u32)c;
   }
+  Term s = SNIL;
+  while (k > 0) { k--; s = SCONS(cps[k], s); }
+  free(cps);
   return s;
 }
 

@@ -29,5 +29,11 @@ jobs:
       - name: Seed is up to date (bendc.bend compiles to the seed)
         run: make selfcheck
 
+      - name: bendc's checker accepts bendc itself, as the official one does
+        run: |
+          ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" bendc.bend > build/ours.txt
+          BEND_NO_TELEMETRY=1 bend bendc.bend --check-only > build/official.txt
+          cmp build/ours.txt build/official.txt
+
       - name: Full bootstrap (official bend -> stage1 -> stage2 fixpoint)
         run: BEND_NO_TELEMETRY=1 ./bootstrap.sh

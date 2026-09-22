@@ -9,12 +9,26 @@ def Str.eq(+a: String, +b: String) -> Bool:
 def Str.chr(c: U32) -> String:
   SCon{Chr{c}, SNil{}}
 
-def Str.has(xs: List<&2, String>, +x: String) -> Bool:
+law Str.has:
+  for xs: List<&2, String>
+  for +x: String
+  Bool
+
+@unsafe
+def Str.has.if(t: List<&2, String>, +x: String, hit: Bool) -> Bool:
+  match hit:
+    case True{}:
+      True{}
+    case False{}:
+      Str.has(t, x)
+
+@unsafe
+def Str.has(xs, x):
   match xs:
     case Nil{}:
       False{}
     case +h <> t:
-      Bool.or(String.eq(h, x), Str.has(t, x))
+      Str.has.if(t, x, String.eq(h, x))
 
 def Str.pad(+s: String, n: Nat) -> String:
   +m = String.length(s)
@@ -56,12 +70,20 @@ def Str.codes(s: String) -> List<&2, U32>:
     case SCon{Chr{c}, t}:
       c <> Str.codes(t)
 
+# Short-circuit and/or: the second operand runs only when needed.
+def Lazy.and(a: Bool, f: Unit -> Bool) -> Bool:
+  match a:
+    case True{}:
+      f(Unit{})
+    case False{}:
+      False{}
+
 def Str.subset(xs: List<&2, String>, +ys: List<&2, String>) -> Bool:
   match xs:
     case Nil{}:
       True{}
     case +h <> t:
-      Bool.and(Str.has(ys, h), Str.subset(t, ys))
+      Lazy.and(Str.has(ys, h), u => Str.subset(t, ys))
 
 law Str.index:
   for xs: List<&2, String>
@@ -192,12 +214,27 @@ def Str.until_hash(ws: List<&2, String>) -> List<&2, String>:
 def Str.trim(s: String) -> String:
   String.trim(s)
 
-def Str.index_of(s: String, +p: String, +i: Nat) -> Nat:
+law Str.index_of:
+  for s: String
+  for +p: String
+  for +i: Nat
+  Nat
+
+@unsafe
+def Str.index_of.if(t: String, +p: String, +i: Nat, hit: Bool) -> Nat:
+  match hit:
+    case True{}:
+      i
+    case False{}:
+      Str.index_of(t, p, 1n+i)
+
+@unsafe
+def Str.index_of(s, p, i):
   match s:
     case SNil{}:
       0n
     case SCon{h, +t}:
-      Bool.pick(Nat, String.starts_with(SCon{h, t}, p), i, Str.index_of(t, p, 1n+i))
+      Str.index_of.if(t, p, i, String.starts_with(SCon{h, t}, p))
 
 law Str.unique:
   for xs: List<&2, String>
@@ -3085,14 +3122,10 @@ def Tm.strip_subs(t: Tm) -> Tm:
     case other:
       other
 
-def vars.find(vars: List<&2, Pt>, +i: U32) -> Maybe<&2, Pt>:
-  match vars:
-    case Nil{}:
-      None{}
-    case PVar{+k, +j, +q, +s} <> t:
-      Bool.pick(Maybe<&2, Pt>, U32.is_eq(i, j), Some{PVar{k, j, q, s}}, vars.find(t, i))
-    case p <> t:
-      vars.find(t, i)
+law vars.find:
+  for vars: List<&2, Pt>
+  for +i: U32
+  Maybe<&2, Pt>
 
 @unsafe
 def P.mf.vars(+e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, +s: Sp, vars: List<&2, Pt>) -> P(Tm):
@@ -3843,6 +3876,24 @@ def P.decl():
 # Misc
 # ====
 
+@unsafe
+def vars.find.if(v: Pt, t: List<&2, Pt>, +i: U32, hit: Bool) -> Maybe<&2, Pt>:
+  match hit:
+    case True{}:
+      Some{v}
+    case False{}:
+      vars.find(t, i)
+
+@unsafe
+def vars.find(vars, i):
+  match vars:
+    case Nil{}:
+      None{}
+    case PVar{+k, +j, +q, +s} <> t:
+      vars.find.if(PVar{k, j, q, s}, t, i, U32.is_eq(i, j))
+    case p <> t:
+      vars.find(t, i)
+
 type Us is Data:
   Us{i: U32, q: Q}
 
@@ -3885,13 +3936,27 @@ def quant_add(a: Q, b: Q) -> Q:
     case x y:
       QMany{}
 
+law uses_get:
+  for u: List<&2, Us>
+  for +i: U32
+  Q
+
+@unsafe
+def uses_get.if(q: Q, t: List<&2, Us>, +i: U32, hit: Bool) -> Q:
+  match hit:
+    case True{}:
+      q
+    case False{}:
+      uses_get(t, i)
+
 # Uses: how many times each variable (by depth) was consumed.
-def uses_get(u: List<&2, Us>, +i: U32) -> Q:
+@unsafe
+def uses_get(u, i):
   match u:
     case Nil{}:
       QNone{}
     case Us{+j, q} <> t:
-      Bool.pick(Q, U32.is_eq(i, j), q, uses_get(t, i))
+      uses_get.if(q, t, i, U32.is_eq(i, j))
 
 def uses_one(+i: U32, q: Q) -> List<&2, Us>:
   [Us{i, q}]
@@ -3957,12 +4022,26 @@ def uses_del(u: List<&2, Us>, +i: U32) -> List<&2, Us>:
     case Us{+j, q} <> t:
       uses_del.if(Us{j, q}, uses_del(t, i), U32.is_eq(i, j))
 
-def env_get(env: List<&2, Tm>, +i: U32) -> Maybe<&2, Tm>:
+law env_get:
+  for env: List<&2, Tm>
+  for +i: U32
+  Maybe<&2, Tm>
+
+@unsafe
+def env_get.if(v: Tm, t: List<&2, Tm>, +i: U32, hit: Bool) -> Maybe<&2, Tm>:
+  match hit:
+    case True{}:
+      Some{v}
+    case False{}:
+      env_get(t, i)
+
+@unsafe
+def env_get(env, i):
   match env:
     case Nil{}:
       None{}
     case EB{+j, v} <> t:
-      Bool.pick(Maybe<&2, Tm>, U32.is_eq(i, j), Some{v}, env_get(t, i))
+      env_get.if(v, t, i, U32.is_eq(i, j))
     case x <> t:
       env_get(t, i)
 
@@ -4760,7 +4839,7 @@ law cmps:
 def cmps(xs, ys, book, dep):
   match xs ys:
     case x <> xt y <> yt:
-      Bool.and(term_compare(False{}, book, x, y, dep), cmps(xt, yt, book, dep))
+      Lazy.and(term_compare(False{}, book, x, y, dep), u => cmps(xt, yt, book, dep))
     case Nil{} Nil{}:
       True{}
     case p q:
@@ -4782,12 +4861,18 @@ def Tm.is_qua_not_many(t: Tm) -> Bool:
     case other:
       False{}
 
+def Lazy.or(a: Bool, f: Unit -> Bool) -> Bool:
+  match a:
+    case True{}:
+      True{}
+    case False{}:
+      f(Unit{})
+
 @unsafe
 def cmp.kind.rmin(+book: Book, +g: Tm, h: Tm, +dep: U32) -> Bool:
   match h:
     case Min{a, b, s}:
-      Bool.or(term_compare(True{}, book, Typ{g, NoSp{}}, Typ{a, NoSp{}}, dep),
-        term_compare(True{}, book, Typ{g, NoSp{}}, Typ{b, NoSp{}}, dep))
+      Lazy.or(term_compare(True{}, book, Typ{g, NoSp{}}, Typ{a, NoSp{}}, dep), u => term_compare(True{}, book, Typ{g, NoSp{}}, Typ{b, NoSp{}}, dep))
     case other:
       term_compare(True{}, book, g, other, dep)
 
@@ -4795,8 +4880,7 @@ def cmp.kind.rmin(+book: Book, +g: Tm, h: Tm, +dep: U32) -> Bool:
 def cmp.kind.min(+book: Book, g: Tm, +h: Tm, +dep: U32) -> Bool:
   match g:
     case Min{a, b, s}:
-      Bool.and(term_compare(True{}, book, Typ{a, NoSp{}}, Typ{h, NoSp{}}, dep),
-        term_compare(True{}, book, Typ{b, NoSp{}}, Typ{h, NoSp{}}, dep))
+      Lazy.and(term_compare(True{}, book, Typ{a, NoSp{}}, Typ{h, NoSp{}}, dep), u => term_compare(True{}, book, Typ{b, NoSp{}}, Typ{h, NoSp{}}, dep))
     case other:
       cmp.kind.rmin(book, other, h, dep)
 
@@ -4834,39 +4918,32 @@ def cmp.go(le, book, a, b, dep):
     case TQua{q, s} TQua{q2, s2}:
       Q.eq(q, q2)
     case Min{a1, b1, s} Min{a2, b2, s2}:
-      Bool.and(term_compare(False{}, book, a1, a2, dep), term_compare(False{}, book, b1, b2, dep))
+      Lazy.and(term_compare(False{}, book, a1, a2, dep), u => term_compare(False{}, book, b1, b2, dep))
     case All{+q, +k, i, a1, b1, s} All{q2, k2, j, a2, b2, s2}:
       +x = {Var{k, dep, NoSp{}} : Tm}
-      Bool.and(Q.eq(q, q2), Bool.and(term_compare(le, book, a2, a1, dep),
-        term_compare(le, book, clo_apply(book, b1, [x]), clo_apply(book, b2, [x]), U32.inc(dep))))
+      Lazy.and(Q.eq(q, q2), u => Lazy.and(term_compare(le, book, a2, a1, dep), u => term_compare(le, book, clo_apply(book, b1, [x]), clo_apply(book, b2, [x]), U32.inc(dep))))
     case TApp{f1, x1, s} TApp{f2, x2, s2}:
-      Bool.and(term_compare(False{}, book, f1, f2, dep), term_compare(False{}, book, x1, x2, dep))
+      Lazy.and(term_compare(False{}, book, f1, f2, dep), u => term_compare(False{}, book, x1, x2, dep))
     case ADT{+k, +xs, s, +r} ADT{+k2, +ys, s2, +r2}:
-      Bool.and(Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), List.length(&2, Tm, ys))),
-        Bool.and(Bool.or(le, Nat.is_eq(List.length(&2, String, r), List.length(&2, String, r2))),
-          Bool.and(Str.subset(r2, r), cmps(xs, ys, book, dep))))
+      Lazy.and(Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), List.length(&2, Tm, ys))), u => Lazy.and(Bool.or(le, Nat.is_eq(List.length(&2, String, r), List.length(&2, String, r2))), u => Lazy.and(Str.subset(r2, r), u => cmps(xs, ys, book, dep))))
     case Ctr{+k, +xs, s} Ctr{+k2, +ys, s2}:
-      Bool.and(Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), List.length(&2, Tm, ys))),
-        cmps(xs, ys, book, dep))
+      Lazy.and(Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), List.length(&2, Tm, ys))), u => cmps(xs, ys, book, dep))
     case Lit{LNat{n}, s} Lit{LNat{m}, s2}:
       Nat.is_eq(n, m)
     case Lit{LStr{x}, s} Lit{LStr{y}, s2}:
       String.eq(x, y)
     case Mat{k, h1, m1, s} Mat{k2, h2, m2, s2}:
-      Bool.and(String.eq(k, k2), Bool.and(term_compare(False{}, book, h1, h2, dep),
-        term_compare(False{}, book, m1, m2, dep)))
+      Lazy.and(String.eq(k, k2), u => Lazy.and(term_compare(False{}, book, h1, h2, dep), u => term_compare(False{}, book, m1, m2, dep)))
     case Efq{s} Efq{s2}:
       True{}
     case Eql{a1, b1, t1, s} Eql{a2, b2, t2, s2}:
-      Bool.and(term_compare(False{}, book, a1, a2, dep), Bool.and(term_compare(False{}, book, b1, b2, dep),
-        term_compare(False{}, book, t1, t2, dep)))
+      Lazy.and(term_compare(False{}, book, a1, a2, dep), u => Lazy.and(term_compare(False{}, book, b1, b2, dep), u => term_compare(False{}, book, t1, t2, dep)))
     case Rfl{s} Rfl{s2}:
       True{}
     case Hol{k, s} Hol{k2, s2}:
       String.eq(k, k2)
     case Rwt{e1, p1, f1, s} Rwt{e2, p2, f2, s2}:
-      Bool.and(term_compare(False{}, book, e1, e2, dep), Bool.and(term_compare(False{}, book, p1, p2, dep),
-        term_compare(False{}, book, f1, f2, dep)))
+      Lazy.and(term_compare(False{}, book, e1, e2, dep), u => Lazy.and(term_compare(False{}, book, p1, p2, dep), u => term_compare(False{}, book, f1, f2, dep)))
     case x y:
       False{}
 
@@ -5175,12 +5252,26 @@ def ctx_len(ctx: List<&2, Tm>) -> U32:
     case x <> t:
       ctx_len(t)
 
-def ctx_name(ctx: List<&2, Tm>, +i: U32) -> String:
+law ctx_name:
+  for ctx: List<&2, Tm>
+  for +i: U32
+  String
+
+@unsafe
+def ctx_name.if(k: String, t: List<&2, Tm>, +i: U32, hit: Bool) -> String:
+  match hit:
+    case True{}:
+      k
+    case False{}:
+      ctx_name(t, i)
+
+@unsafe
+def ctx_name(ctx, i):
   match ctx:
     case Nil{}:
       "_"
     case CB{+j, q, +k, ty} <> t:
-      Bool.pick(String, U32.is_eq(i, j), k, ctx_name(t, i))
+      ctx_name.if(k, t, i, U32.is_eq(i, j))
     case x <> t:
       ctx_name(t, i)
 
@@ -5667,12 +5758,26 @@ type IR is Data:
 def lhs_kind(+l: CL, +q: Q) -> Q:
   Bool.pick(Q, Bool.and(CL.u(l), Q.is_many(q)), QLone{}, q)
 
-def ctx_get(ctx: List<&2, Tm>, +i: U32) -> Maybe<&2, Tm>:
+law ctx_get:
+  for ctx: List<&2, Tm>
+  for +i: U32
+  Maybe<&2, Tm>
+
+@unsafe
+def ctx_get.if(ty: Tm, t: List<&2, Tm>, +i: U32, hit: Bool) -> Maybe<&2, Tm>:
+  match hit:
+    case True{}:
+      Some{ty}
+    case False{}:
+      ctx_get(t, i)
+
+@unsafe
+def ctx_get(ctx, i):
   match ctx:
     case Nil{}:
       None{}
     case CB{+j, q, k, ty} <> t:
-      Bool.pick(Maybe<&2, Tm>, U32.is_eq(i, j), Some{ty}, ctx_get(t, i))
+      ctx_get.if(ty, t, i, U32.is_eq(i, j))
     case x <> t:
       ctx_get(t, i)
 
@@ -5906,7 +6011,7 @@ def ctx_dead(+book: Book, ctx: List<&2, Tm>) -> Bool:
     case Nil{}:
       False{}
     case CB{i, +q, k, ty} <> t:
-      Bool.or(Bool.and(Bool.not(Q.is_none(q)), ctx_dead.ty(book, term_wnf(book, ty))), ctx_dead(book, t))
+      Lazy.or(Lazy.and(Bool.not(Q.is_none(q)), u => ctx_dead.ty(book, term_wnf(book, ty))), u => ctx_dead(book, t))
     case x <> t:
       ctx_dead(book, t)
 
@@ -5951,14 +6056,28 @@ def Ctr.xs(t: Tm) -> List<&2, Tm>:
     case other:
       Nil{}
 
+law descend.sub:
+  for +book: Book
+  for +a: Tm
+  for ps: List<&2, Tm>
+  U32
+
+@unsafe
+def descend.sub.if(+book: Book, +a: Tm, ps: List<&2, Tm>, gt: Bool) -> U32:
+  match gt:
+    case True{}:
+      descend.sub(book, a, ps)
+    case False{}:
+      1
+
 # Whether a is (within) one of the fields ps: then it is smaller.
 @unsafe
-def descend.sub(+book: Book, +a: Tm, ps: List<&2, Tm>) -> U32:
+def descend.sub(book, a, ps):
   match ps:
     case Nil{}:
       2
     case p <> t:
-      Bool.pick(U32, U32.is_eq(term_descend(book, QLone{}, a, p), 2), descend.sub(book, a, t), 1)
+      descend.sub.if(book, a, t, U32.is_eq(term_descend(book, QLone{}, a, p), 2))
 
 @unsafe
 def descend.ctr.fields(+book: Book, +a: Tm, +xs: List<&2, Tm>, +ord: U32) -> U32:
@@ -6021,8 +6140,16 @@ law descend.args:
   U32
 
 @unsafe
+def descend.args.if(+book: Book, qs: List<&2, Q>, sp: List<&2, Tm>, cols: List<&2, Tm>, +ord: U32, +o: U32, eq: Bool) -> U32:
+  match eq:
+    case True{}:
+      descend.args(book, qs, sp, cols, ord)
+    case False{}:
+      o
+
+@unsafe
 def descend.args.step(+book: Book, qs: List<&2, Q>, sp: List<&2, Tm>, cols: List<&2, Tm>, +ord: U32, +o: U32) -> U32:
-  Bool.pick(U32, U32.is_eq(o, 0), descend.args(book, qs, sp, cols, ord), o)
+  descend.args.if(book, qs, sp, cols, ord, o, U32.is_eq(o, 0))
 
 @unsafe
 def descend.args(book, qs, sp, cols, ord):
@@ -6101,13 +6228,22 @@ def infer.ref.fin(+l: CL, +k: String, +s: Sp, b: Bool, +tld: Tld, +ctx: List<&2,
     case TDef{n, dx, ty, v, u, bb, imps}:
       K.pure(IR, IR{ty, Nil{}, x})
 
+# Whether this is a self-call (of a def that is not @unsafe) that shrinks
+# no argument.
+def infer.ref.bad_self(+book: Book, l: CL, sp: List<&2, Tm>, self: Bool) -> Bool:
+  match self:
+    case True{}:
+      Bool.not(CL.decreases(book, l, sp))
+    case False{}:
+      False{}
+
 # A self-call of a def that is not @unsafe must shrink an argument.
 def infer.ref.self(
   +l: CL, +k: String, +s: Sp, +b: Bool, +tld: Tld, +ctx: List<&2, Tm>, sp: List<&2, Tm>, +x: Nat
 ) -> K(IR):
   do K<IR>:
     book : Book <- K.book()
-    K.if(Unit, Bool.and(Bool.and(String.eq(k, CL.dn(l)), Bool.not(CL.u(l))), Bool.not(CL.decreases(book, l, sp))),
+    K.if(Unit, infer.ref.bad_self(book, l, sp, Bool.and(String.eq(k, CL.dn(l)), Bool.not(CL.u(l)))),
       K.err(Unit, ctx, MStr{"a decreasing self-call (arguments are read left to right: each passed unchanged until one shrinks)"},
         MTm{Ref{k, s, b}}, s, CL.dn(l)), K.pure(Unit, Unit{}))
     infer.ref.fin(l, k, s, b, tld, ctx, x)
@@ -6455,7 +6591,7 @@ def check.elim.go(
     case Efq{es}:
       do K<List<&2, Us>>:
         book : Book <- K.book()
-        K.if(List<&2, Us>, Bool.and(Bool.not(Lst.empty(&2, CtrD, rem)), Bool.not(ctx_dead(book, ctx))),
+        K.if(List<&2, Us>, Lazy.and(Bool.not(Lst.empty(&2, CtrD, rem)), u => Bool.not(ctx_dead(book, ctx))),
           K.err(List<&2, Us>, ctx, MStr{"cases for " ++ String.join(CtrD.names(rem), ", ")}, MTm{Efq{es}}, s, CL.dn(l)),
           K.pure(List<&2, Us>, Nil{}))
     case Mat{+k, h, m, ms}:
@@ -7061,13 +7197,12 @@ def valid.tip.params(+book: Book, xs: List<&2, Tm>, +d: U32) -> Bool:
     case Nil{}:
       True{}
     case x <> t:
-      Bool.and(valid.tip.var(term_wnf(book, x), d), valid.tip.params(book, t, U32.inc(d)))
+      Lazy.and(valid.tip.var(term_wnf(book, x), d), u => valid.tip.params(book, t, U32.inc(d)))
 
 def valid.tip.ok(+book: Book, +k: String, +n: Nat, tip: Tm) -> Bool:
   match tip:
     case ADT{+k2, +xs, s, r}:
-      Bool.and(Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), n)),
-        Bool.and(Lst.empty(&2, String, r), valid.tip.params(book, xs, 0)))
+      Lazy.and(Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), n)), u => Lazy.and(Lst.empty(&2, String, r), u => valid.tip.params(book, xs, 0)))
     case other:
       False{}
 
@@ -7233,16 +7368,19 @@ def header(+src: String) -> Hdr:
 def header.go.rest(t: List<&2, String>, done: List<&2, String>, imps: List<&2, Imp>) -> Hdr:
   Hdr{List.append(&2, String, List.reverse(&2, String, done), t), imps, None{}}
 
-def header.rest(l: String, t: List<&2, String>, done: List<&2, String>, imps: List<&2, Imp>, blank: Bool) -> Hdr:
-  match blank:
-    case True{}:
-      header.go.rest(t, l <> done, imps)
-    case False{}:
-      Hdr{List.append(&2, String, List.reverse(&2, String, l <> done), t), imps, None{}}
-
 @unsafe
 def header.go.next(+src: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>) -> Hdr:
   header.go(src, t, off, done, imps)
+
+@unsafe
+def header.rest(
+  +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>, blank: Bool
+) -> Hdr:
+  match blank:
+    case True{}:
+      header.go.next(src, t, Nat.add(off, 1n+String.length(l)), l <> done, imps)
+    case False{}:
+      Hdr{List.append(&2, String, List.reverse(&2, String, l <> done), t), imps, None{}}
 
 @unsafe
 def header.imp.go(
@@ -7276,7 +7414,7 @@ def header.line.go(
     case True{}:
       header.imp(src, l, t, off, done, imps, tl, import.parse(Str.until_hash(Str.words(String.drop(tl, 6n)))))
     case False{}:
-      header.rest(l, t, done, imps, blank)
+      header.rest(src, l, t, off, done, imps, blank)
 
 @unsafe
 def header.line(
@@ -7652,7 +7790,7 @@ def has_fun.ctrs(+b: Book, +xs: List<&2, Tm>, cs: List<&2, CtrD>, +seen: List<&2
     case Nil{}:
       False{}
     case CtrD{k, +n, t} <> rest:
-      Bool.or(has_fun.fields(b, has_fun.fill(b, t, xs), n, 0, seen), has_fun.ctrs(b, xs, rest, seen))
+      Lazy.or(has_fun.fields(b, has_fun.fill(b, t, xs), n, 0, seen), u => has_fun.ctrs(b, xs, rest, seen))
 
 @unsafe
 def has_fun.adt.c(+b: Book, +k: String, +xs: List<&2, Tm>, +key: String, +seen: List<&2, String>, c: Bool) -> Bool:
@@ -7692,7 +7830,7 @@ def has_fun(b, t, seen):
 def has_fun.field(b, t, m, d, seen):
   match t:
     case All{q, +k, i, a, c, s}:
-      Bool.or(has_fun(b, a, seen), has_fun.fields(b, clo_apply(b, c, [Var{k, d, NoSp{}}]), m, U32.inc(d), seen))
+      Lazy.or(has_fun(b, a, seen), u => has_fun.fields(b, clo_apply(b, c, [Var{k, d, NoSp{}}]), m, U32.inc(d), seen))
     case other:
       False{}
 
