@@ -2577,6 +2577,8 @@ def P.import.path.go(ts):
       P.import.path.id(s, sp, ln, t, Str.eq(s, "as"))
     case Tok{KSym{s}, sp, ln} <> t:
       P.import.path.cat(s, P.import.path.go(t))
+    case Tok{KNum{n}, sp, ln} <> t:
+      P.import.path.cat(U32.show(n), P.import.path.go(t))
     case other:
       ("", other)
 
@@ -4657,8 +4659,58 @@ def Mod.dir(path: String) -> String:
 # Driver
 # ======
 
+def Main.lib.or(r: Result<&1, &1, U32 & String, String>) -> IO(String):
+  match r:
+    case Done{v}:
+      IO.pure(String, v)
+    case Fail{e}:
+      do IO<String>:
+        home : String <- IO.try(String, IO.get_env("HOME"))
+        return home ++ "/.bend/lib"
+
+# Where hub packages live: $BEND_LIB, or ~/.bend/lib.
+def Main.lib() -> IO(String):
+  do IO<String>:
+    r : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_LIB")
+    Main.lib.or(r)
+
+def Main.hub.url(r: Result<&1, &1, U32 & String, String>) -> String:
+  match r:
+    case Done{v}:
+      v
+    case Fail{e}:
+      "https://hub.bend-lang.com"
+
+law Main.load:
+  for fuel: Nat
+  for +path: String
+  IO(List<&2, Decl>)
+
+# Fetches a hub package into lib, unless it is there (see rt/hub.c).
+def Hub.ensure(lib: String, hub: String, rel: String) ->
+  IO(Result<&1, &1, U32 & String, Unit>):
+  import "./rt/hub.c"
+  import "./rt/hub.js"
+
+# An import by content hash (0x<hash>/path.bend) is fetched from the hub.
+@unsafe
+def Main.load.hub(f: Nat, +p: String) -> IO(List<&2, Decl>):
+  do IO<List<&2, Decl>>:
+    +lib : String <- Main.lib()
+    hr : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_HUB")
+    u : Unit <- IO.try(Unit, Hub.ensure(lib, Main.hub.url(hr), p))
+    Main.load(f, lib ++ "/" ++ p)
+
 def Eff.path(+dir: String, +p: String) -> String:
   Bool.pick(String, String.starts_with(p, "/"), p, dir ++ p)
+
+@unsafe
+def Main.load.import(f: Nat, +dir: String, +p: String, hub: Bool) -> IO(List<&2, Decl>):
+  match hub:
+    case True{}:
+      Main.load.hub(f, p)
+    case False{}:
+      Main.load(f, Eff.path(dir, p))
 
 def Eff.paths(+dir: String, ps: List<&2, String>) -> List<&2, String>:
   match ps:
@@ -4740,11 +4792,6 @@ def Main.compile(base: Result<&2, &2, String, List<&2, Decl>>,
     case Done{b} Done{u}:
       Main.emit(Gen.program(List.append(&2, Decl, b, u)))
 
-law Main.load:
-  for fuel: Nat
-  for +path: String
-  IO(List<&2, Decl>)
-
 def Main.ast(r: Result<&2, &2, String, List<&2, Decl>>) -> IO(Unit):
   match r:
     case Fail{e}:
@@ -4796,14 +4843,14 @@ def Main.load.parsed(
 
 @unsafe
 def Main.imports.one(
-  +f: Nat, +dir: String, p: String, a: String, t: List<&2, Decl>, base: Bool
+  +f: Nat, +dir: String, +p: String, a: String, t: List<&2, Decl>, base: Bool
 ) -> IO(List<&2, Decl>):
   match base:
     case True{}:
       Main.imports(f, dir, t)
     case False{}:
       do IO<List<&2, Decl>>:
-        sub : List<&2, Decl> <- Main.load(f, dir ++ p)
+        sub : List<&2, Decl> <- Main.load.import(f, dir, p, String.starts_with(p, "0x"))
         rest : List<&2, Decl> <- Main.imports(f, dir, t)
         return List.append(&2, Decl, Mod.qualify(a, sub), rest)
 

@@ -23,5 +23,6 @@ for src in tests/*.bend; do
     echo "FAIL $name (output)"; diff "$out.txt" "tests/$name.out" | head -10 | sed 's/^/  /'; fail=$((fail+1))
   fi
 done
+if tests/hub/run.sh "$BENDC"; then pass=$((pass+1)); else fail=$((fail+1)); fi
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

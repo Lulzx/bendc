@@ -142,6 +142,7 @@
 #define CID_COUT 0u
 #define CID_TB 0u
 #define CID_QUAL 0u
+#define CID_HUB_ENSURE ((3u << 16) | 40u)
 #include "bendrt.h"
 
 // IO
@@ -317,6 +318,232 @@ Term file_open_run(Env e, Term* f, IoWork* w) {
 
 static void __attribute__((constructor)) file_open_use(void) {
   io_eff(CID_FILE_OPEN, file_open_run, 0);
+}
+
+// Hub imports
+// ===========
+//
+// `import 0x<hash>/path.bend as P` names a package by content hash. As the
+// official bend does, the package's files are fetched from the hub (by
+// default https://hub.bend-lang.com, or $BEND_HUB) into $BEND_LIB (default
+// ~/.bend/lib) the first time: <hub>/<pkg>/manifest lists "sha256 path"
+// lines and must hash to the package name; each file must hash to its line.
+
+#include <sys/wait.h>
+
+static const uint32_t hub_k[64] = {
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
+
+#define HUB_ROR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))
+
+static void hub_block(uint32_t h[8], const unsigned char *p) {
+  uint32_t w[64];
+  for (int i = 0; i < 16; i++) w[i] = (uint32_t)p[4 * i] << 24 | (uint32_t)p[4 * i + 1] << 16 | (uint32_t)p[4 * i + 2] << 8 | p[4 * i + 3];
+  for (int i = 16; i < 64; i++) {
+    uint32_t s0 = HUB_ROR(w[i - 15], 7) ^ HUB_ROR(w[i - 15], 18) ^ (w[i - 15] >> 3);
+    uint32_t s1 = HUB_ROR(w[i - 2], 17) ^ HUB_ROR(w[i - 2], 19) ^ (w[i - 2] >> 10);
+    w[i] = w[i - 16] + s0 + w[i - 7] + s1;
+  }
+  uint32_t a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], k = h[7];
+  for (int i = 0; i < 64; i++) {
+    uint32_t t1 = k + (HUB_ROR(e, 6) ^ HUB_ROR(e, 11) ^ HUB_ROR(e, 25)) + ((e & f) ^ (~e & g)) + hub_k[i] + w[i];
+    uint32_t t2 = (HUB_ROR(a, 2) ^ HUB_ROR(a, 13) ^ HUB_ROR(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
+    k = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
+  }
+  h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += k;
+}
+
+// The SHA-256 of n bytes, as 64 hex digits.
+static void hub_sha256(const char *data, size_t n, char out[65]) {
+  uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
+  const unsigned char *p = (const unsigned char *)data;
+  size_t i = 0;
+  for (; i + 64 <= n; i += 64) hub_block(h, p + i);
+  unsigned char tail[128] = {0};
+  size_t r = n - i;
+  memcpy(tail, p + i, r);
+  tail[r] = 0x80;
+  size_t len = r + 1 + 8 <= 64 ? 64 : 128;
+  uint64_t bits = (uint64_t)n * 8;
+  for (int j = 0; j < 8; j++) tail[len - 1 - j] = (unsigned char)(bits >> (8 * j));
+  hub_block(h, tail);
+  if (len == 128) hub_block(h, tail + 64);
+  for (int j = 0; j < 8; j++) snprintf(out + 8 * j, 9, "%08x", h[j]);
+}
+
+// Only plain path characters reach the shell or the file system.
+static int hub_safe(const char *s) {
+  if (*s == 0) return 0;
+  for (const char *c = s; *c; c++) {
+    if (!(isalnum((unsigned char)*c) || strchr("._-/:", *c))) return 0;
+  }
+  return strstr(s, "..") == NULL;
+}
+
+// GETs url with curl; returns a malloc'd body (NULL on failure).
+static char *hub_fetch(const char *url, size_t *n) {
+  if (!hub_safe(url)) return NULL;
+  size_t cl = strlen(url) + 64;
+  char *cmd = malloc(cl);
+  snprintf(cmd, cl, "curl -fsSL --max-time 60 '%s'", url);
+  FILE *p = popen(cmd, "r");
+  free(cmd);
+  if (p == NULL) return NULL;
+  size_t cap = 4096, len = 0;
+  char *buf = malloc(cap);
+  size_t k;
+  while ((k = fread(buf + len, 1, cap - len, p)) > 0) {
+    len += k;
+    if (len == cap) buf = realloc(buf, cap *= 2);
+  }
+  int st = pclose(p);
+  if (st != 0) { free(buf); return NULL; }
+  buf[len] = 0;
+  *n = len;
+  return buf;
+}
+
+static int hub_mkdirs(char *path) {
+  for (char *c = path + 1; *c; c++) {
+    if (*c == '/') {
+      *c = 0;
+      if (mkdir(path, 0755) != 0 && errno != EEXIST) { *c = '/'; return -1; }
+      *c = '/';
+    }
+  }
+  return 0;
+}
+
+static Term hub_err(Env e, const char *hub, const char *sub, const char *hash) {
+  size_t n = strlen(hub) + strlen(sub) + strlen(hash) + 64;
+  char *m = malloc(n);
+  snprintf(m, n, "expected a file at %s/%s hashing to %s", hub, sub, hash);
+  Term t = io_fail(e, 1, m);
+  free(m);
+  return t;
+}
+
+// Fetches the hub file sub, checking that its SHA-256 starts with hash.
+static char *hub_get(const char *hub, const char *sub, const char *hash, size_t *n) {
+  size_t ul = strlen(hub) + strlen(sub) + 2;
+  char *url = malloc(ul);
+  snprintf(url, ul, "%s/%s", hub, sub);
+  char *src = hub_fetch(url, n);
+  free(url);
+  if (src == NULL) return NULL;
+  char sum[65];
+  hub_sha256(src, *n, sum);
+  if (strlen(hash) < 32 || strncmp(sum, hash, strlen(hash)) != 0) { free(src); return NULL; }
+  return src;
+}
+
+static Term hub_ensure(Env e, const char *lib, const char *hub, const char *rel) {
+  size_t pl = strlen(lib) + strlen(rel) + 2;
+  char *at = malloc(pl);
+  snprintf(at, pl, "%s/%s", lib, rel);
+  struct stat st;
+  int have = stat(at, &st) == 0;
+  free(at);
+  if (have) return io_done(e, term_pak(CID_UNIT, 0));
+  const char *slash = strchr(rel, '/');
+  if (slash == NULL || rel[0] != '0' || rel[1] != 'x') return io_fail(e, 1, "a hub import (0x<hash>/<path>.bend)");
+  char *pkg = strndup(rel, (size_t)(slash - rel));
+  char *msub = malloc(strlen(pkg) + 16);
+  sprintf(msub, "%s/manifest", pkg);
+  size_t mn = 0;
+  char *man = hub_get(hub, msub, pkg + 2, &mn);
+  if (man == NULL) {
+    Term t = hub_err(e, hub, msub, pkg + 2);
+    free(msub); free(pkg);
+    return t;
+  }
+  free(msub);
+  Term out = io_done(e, term_pak(CID_UNIT, 0));
+  for (char *line = strtok(man, "\n"); line != NULL; line = strtok(NULL, "\n")) {
+    char *sp = strchr(line, ' ');
+    if (sp == NULL) continue;
+    *sp = 0;
+    const char *h = line, *p = sp + 1;
+    size_t sl = strlen(pkg) + strlen(p) + 2;
+    char *sub = malloc(sl);
+    snprintf(sub, sl, "%s/%s", pkg, p);
+    size_t fn = 0;
+    char *src = hub_safe(p) && p[0] != '/' ? hub_get(hub, sub, h, &fn) : NULL;
+    if (src == NULL) {
+      out = hub_err(e, hub, sub, h);
+      free(sub);
+      break;
+    }
+    size_t fl = strlen(lib) + strlen(sub) + 2;
+    char *file = malloc(fl);
+    snprintf(file, fl, "%s/%s", lib, sub);
+    FILE *fp = NULL;
+    if (hub_mkdirs(file) == 0) fp = fopen(file, "wb");
+    int ok = fp != NULL && fwrite(src, 1, fn, fp) == fn;
+    if (fp) fclose(fp);
+    free(file);
+    free(src);
+    free(sub);
+    if (!ok) { out = io_fail(e, errno ? (u32)errno : 1, NULL); break; }
+  }
+  free(man);
+  free(pkg);
+  return out;
+}
+
+Term hub_ensure_run(Env e, Term *f, IoWork *w) {
+  (void)w;
+  u64 n;
+  char *lib = io_cstr(e, f[0], &n), *hub = io_cstr(e, f[1], &n), *rel = io_cstr(e, f[2], &n);
+  Term r = hub_ensure(e, lib, hub, rel);
+  free(lib);
+  free(hub);
+  free(rel);
+  return r;
+}
+
+static void __attribute__((constructor)) hub_ensure_use(void) {
+  io_eff(CID_HUB_ENSURE, hub_ensure_run, 0);
+}
+
+// IO
+// ==
+
+uint32_t io_get_env(const char* name, const char** out) {
+  const char* value = getenv(name);
+  if (value == NULL) {
+    return ENOENT;
+  }
+  *out = value;
+  return 0;
+}
+
+Term io_get_env_run(Env e, Term* f, IoWork* w) {
+  uint64_t n = 0;
+  char* name = io_cstr(e, f[0], &n);
+  const char* got = NULL;
+  uint32_t q;
+  if (io_nul(name, n)) {
+    q = ENOENT;
+  } else {
+    q = io_get_env(name, &got);
+  }
+  free(name);
+  if (q != 0) {
+    return io_fail(e, q, NULL);
+  }
+  return io_done(e, io_str(e, got, strlen(got)));
+}
+
+static void __attribute__((constructor)) io_get_env_use(void) {
+  io_eff(CID_IO_GET_ENV, io_get_env_run, 0);
 }
 
 // IO
@@ -2701,8 +2928,9 @@ static V F_Main_dimports(V a0, V a1, V a2);
 static V S1633(void);
 static V W_Main_dimports(V *a);
 static V F_Main_dimports_done(V a0, V a1, V a2, V a3, V a4, V a5);
-static V L1635(V *a);
+static V S1635(void);
 static V L1636(V *a);
+static V L1637(V *a);
 static V W_Main_dimports_done(V *a);
 static V F_Mod_dqualify(V a0, V a1);
 static V W_Mod_dqualify(V *a);
@@ -2725,7 +2953,7 @@ static V W_Mod_dexprs(V *a);
 static V F_Mod_dvar(V a0, V a1, V a2);
 static V W_Mod_dvar(V *a);
 static V F_Mod_dq(V a0, V a1);
-static V S1646(void);
+static V S1647(void);
 static V W_Mod_dq(V *a);
 static V F_Mod_dpats(V a0, V a1);
 static V W_Mod_dpats(V *a);
@@ -2733,56 +2961,83 @@ static V F_Mod_dpat(V a0, V a1);
 static V W_Mod_dpat(V *a);
 static V F_Mod_dparam__names(V a0);
 static V W_Mod_dparam__names(V *a);
+static V F_Main_dload_dimport(V a0, V a1, V a2, V a3);
+static V W_Main_dload_dimport(V *a);
+static V F_Main_dload_dhub(V a0, V a1);
+static V L1652(V *a);
+static V S1653(void);
+static V L1654(V *a);
+static V L1655(V *a);
+static V S1656(void);
+static V W_Main_dload_dhub(V *a);
+static V F_Main_dhub_durl(V a0);
+static V S1658(void);
+static V W_Main_dhub_durl(V *a);
+static V F_Hub_densure(V a0, V a1, V a2);
+static V E_Hub_densure(V *a);
+static V W_Hub_densure(V *a);
+static V F_IO_dget__env(V a0);
+static V E_IO_dget__env(V *a);
+static V W_IO_dget__env(V *a);
+static V F_Main_dlib(void);
+static V S1659(void);
+static V L1660(V *a);
+static V W_Main_dlib(V *a);
+static V F_Main_dlib_dor(V a0);
+static V S1662(void);
+static V L1663(V *a);
+static V S1664(void);
+static V W_Main_dlib_dor(V *a);
 static V F_Main_dast(V a0);
-static V S1651(void);
+static V S1666(void);
 static V W_Main_dast(V *a);
 static V F_Decls_dshow(V a0);
 static V W_Decls_dshow(V *a);
 static V F_Decls_dshow_dgo(V a0);
-static V S1653(void);
-static V S1654(void);
+static V S1668(void);
+static V S1669(void);
 static V W_Decls_dshow_dgo(V *a);
 static V F_Decl_dshow(V a0);
-static V S1656(void);
-static V S1657(void);
-static V S1658(void);
-static V S1659(void);
-static V S1660(void);
-static V S1661(void);
-static V S1662(void);
-static V S1663(void);
-static V S1664(void);
-static V S1665(void);
-static V S1666(void);
-static V S1667(void);
-static V S1668(void);
-static V W_Decl_dshow(V *a);
-static V F_Ctors_dshow(V a0);
-static V S1670(void);
 static V S1671(void);
-static V W_Ctors_dshow(V *a);
-static V F_Ctor_dshow(V a0);
+static V S1672(void);
 static V S1673(void);
 static V S1674(void);
-static V W_Ctor_dshow(V *a);
-static V F_Fields_dshow(V a0);
+static V S1675(void);
 static V S1676(void);
 static V S1677(void);
 static V S1678(void);
-static V W_Fields_dshow(V *a);
-static V F_Params_dshow(V a0);
+static V S1679(void);
 static V S1680(void);
 static V S1681(void);
+static V S1682(void);
+static V S1683(void);
+static V W_Decl_dshow(V *a);
+static V F_Ctors_dshow(V a0);
+static V S1685(void);
+static V S1686(void);
+static V W_Ctors_dshow(V *a);
+static V F_Ctor_dshow(V a0);
+static V S1688(void);
+static V S1689(void);
+static V W_Ctor_dshow(V *a);
+static V F_Fields_dshow(V a0);
+static V S1691(void);
+static V S1692(void);
+static V S1693(void);
+static V W_Fields_dshow(V *a);
+static V F_Params_dshow(V a0);
+static V S1695(void);
+static V S1696(void);
 static V W_Params_dshow(V *a);
 static V F_Param_dshow(V a0);
-static V S1683(void);
+static V S1698(void);
 static V W_Param_dshow(V *a);
 static V F_Toks_dshow(V a0);
-static V S1685(void);
+static V S1700(void);
 static V W_Toks_dshow(V *a);
 static V F_Tok_dshow(V a0);
-static V S1687(void);
-static V S1688(void);
+static V S1702(void);
+static V S1703(void);
 static V W_Tok_dshow(V *a);
 static V F_IO_dprint(V a0);
 static V E_IO_dprint(V *a);
@@ -4181,6 +4436,8 @@ if (TAG(s215) == 1 && TAG(FLD(FLD(s215, 0), 0)) == 0) {
 return F_P_dimport_dpath_did(FLD(FLD(FLD(s215, 0), 0), 0), FLD(FLD(s215, 0), 1), FLD(FLD(s215, 0), 2), FLD(s215, 1), F_Str_deq(FLD(FLD(FLD(s215, 0), 0), 0), S216()));
 } else if (TAG(s215) == 1 && TAG(FLD(FLD(s215, 0), 0)) == 7) {
 return F_P_dimport_dpath_dcat(FLD(FLD(FLD(s215, 0), 0), 0), F_P_dimport_dpath_dgo(FLD(s215, 1)));
+} else if (TAG(s215) == 1 && TAG(FLD(FLD(s215, 0), 0)) == 3) {
+return F_P_dimport_dpath_dcat(F_U32_dshow(FLD(FLD(FLD(s215, 0), 0), 0)), F_P_dimport_dpath_dgo(FLD(s215, 1)));
 } else {
 return C2(0, S217(), s215);
 }
@@ -9883,11 +10140,12 @@ return F_Main_dimports_done(a0, a1, FLD(FLD(s1632, 0), 0), FLD(FLD(s1632, 0), 1)
 } else { bend_fail("incomplete match"); }
 }
 static V W_Main_dimports(V *a) { (void)a; return F_Main_dimports(a[0], a[1], a[2]); }
-static V L1636(V *a) {
+static V S1635(void) { static V c; return STRC(c, "0x"); }
+static V L1637(V *a) {
 return F_IO_dpure(F_List_dappend(F_Mod_dqualify(a[1], a[0]), a[2]));
 }
-static V L1635(V *a) {
-return F_IO_dbind(F_Main_dimports(a[3], a[2], a[1]), mk_clo(L1636, 3, 2, (V[]){a[4], a[0]}));
+static V L1636(V *a) {
+return F_IO_dbind(F_Main_dimports(a[3], a[2], a[1]), mk_clo(L1637, 3, 2, (V[]){a[4], a[0]}));
 }
 static V F_Main_dimports_done(V a0, V a1, V a2, V a3, V a4, V a5) {
 top:;
@@ -9895,7 +10153,7 @@ V s1634 = a5;
 if ((s1634) == IMM(1)) {
 return F_Main_dimports(a0, a1, a4);
 } else if ((s1634) == IMM(0)) {
-return F_IO_dbind(F_Main_dload(a0, F_String_dappend(a1, a2)), mk_clo(L1635, 5, 4, (V[]){a3, a4, a1, a0}));
+return F_IO_dbind(F_Main_dload_dimport(a0, a1, a2, F_String_dstarts__with(a2, S1635())), mk_clo(L1636, 5, 4, (V[]){a3, a4, a1, a0}));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Main_dimports_done(V *a) { (void)a; return F_Main_dimports_done(a[0], a[1], a[2], a[3], a[4], a[5]); }
@@ -9906,115 +10164,115 @@ return F_Mod_ddecls(C2(0, a0, F_Mod_dnames(a1, IMM(0))), a1);
 static V W_Mod_dqualify(V *a) { (void)a; return F_Mod_dqualify(a[0], a[1]); }
 static V F_Mod_dnames(V a0, V a1) {
 top:;
-V s1637 = a0;
-if ((s1637) == IMM(0)) {
+V s1638 = a0;
+if ((s1638) == IMM(0)) {
 return a1;
-} else if (TAG(s1637) == 1 && TAG(FLD(s1637, 0)) == 0) {
-{ V t0 = FLD(s1637, 1); V t1 = C2(1, FLD(FLD(s1637, 0), 0), a1); a0 = t0; a1 = t1; goto top; }
-} else if (TAG(s1637) == 1 && TAG(FLD(s1637, 0)) == 1) {
-{ V t0 = FLD(s1637, 1); V t1 = C2(1, FLD(FLD(s1637, 0), 0), a1); a0 = t0; a1 = t1; goto top; }
-} else if (TAG(s1637) == 1 && TAG(FLD(s1637, 0)) == 2) {
-{ V t0 = FLD(s1637, 1); V t1 = C2(1, FLD(FLD(s1637, 0), 0), a1); a0 = t0; a1 = t1; goto top; }
-} else if (TAG(s1637) == 1 && TAG(FLD(s1637, 0)) == 3) {
-{ V t0 = FLD(s1637, 1); V t1 = C2(1, FLD(FLD(s1637, 0), 0), F_Mod_dctor__names(FLD(FLD(s1637, 0), 2), a1)); a0 = t0; a1 = t1; goto top; }
-} else if (TAG(s1637) == 1 && TAG(FLD(s1637, 0)) == 4) {
-{ V t0 = FLD(s1637, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (TAG(s1638) == 1 && TAG(FLD(s1638, 0)) == 0) {
+{ V t0 = FLD(s1638, 1); V t1 = C2(1, FLD(FLD(s1638, 0), 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (TAG(s1638) == 1 && TAG(FLD(s1638, 0)) == 1) {
+{ V t0 = FLD(s1638, 1); V t1 = C2(1, FLD(FLD(s1638, 0), 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (TAG(s1638) == 1 && TAG(FLD(s1638, 0)) == 2) {
+{ V t0 = FLD(s1638, 1); V t1 = C2(1, FLD(FLD(s1638, 0), 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (TAG(s1638) == 1 && TAG(FLD(s1638, 0)) == 3) {
+{ V t0 = FLD(s1638, 1); V t1 = C2(1, FLD(FLD(s1638, 0), 0), F_Mod_dctor__names(FLD(FLD(s1638, 0), 2), a1)); a0 = t0; a1 = t1; goto top; }
+} else if (TAG(s1638) == 1 && TAG(FLD(s1638, 0)) == 4) {
+{ V t0 = FLD(s1638, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("incomplete match"); }
 }
 static V W_Mod_dnames(V *a) { (void)a; return F_Mod_dnames(a[0], a[1]); }
 static V F_Mod_dctor__names(V a0, V a1) {
 top:;
-V s1638 = a0;
-if ((s1638) == IMM(0)) {
+V s1639 = a0;
+if ((s1639) == IMM(0)) {
 return a1;
-} else if (TAG(s1638) == 1) {
-{ V t0 = FLD(s1638, 1); V t1 = C2(1, FLD(FLD(s1638, 0), 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (TAG(s1639) == 1) {
+{ V t0 = FLD(s1639, 1); V t1 = C2(1, FLD(FLD(s1639, 0), 0), a1); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("incomplete match"); }
 }
 static V W_Mod_dctor__names(V *a) { (void)a; return F_Mod_dctor__names(a[0], a[1]); }
 static V F_Mod_ddecls(V a0, V a1) {
 top:;
-V s1639 = a1;
-if ((s1639) == IMM(0)) {
+V s1640 = a1;
+if ((s1640) == IMM(0)) {
 return IMM(0);
-} else if (TAG(s1639) == 1) {
-return C2(1, F_Mod_ddecl(a0, FLD(s1639, 0)), F_Mod_ddecls(a0, FLD(s1639, 1)));
+} else if (TAG(s1640) == 1) {
+return C2(1, F_Mod_ddecl(a0, FLD(s1640, 0)), F_Mod_ddecls(a0, FLD(s1640, 1)));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Mod_ddecls(V *a) { (void)a; return F_Mod_ddecls(a[0], a[1]); }
 static V F_Mod_ddecl(V a0, V a1) {
 top:;
-V s1640 = a1;
-if (TAG(s1640) == 0) {
-return C4(0, F_Mod_dq(a0, FLD(s1640, 0)), FLD(s1640, 1), F_Mod_dexpr(a0, F_Mod_dparam__names(FLD(s1640, 1)), FLD(s1640, 2)), F_Mod_dexpr(a0, IMM(0), FLD(s1640, 3)));
-} else if (TAG(s1640) == 1) {
-return C3(1, F_Mod_dq(a0, FLD(s1640, 0)), FLD(s1640, 1), FLD(s1640, 2));
-} else if (TAG(s1640) == 2) {
-return C2(2, F_Mod_dq(a0, FLD(s1640, 0)), FLD(s1640, 1));
-} else if (TAG(s1640) == 3) {
-return C3(3, F_Mod_dq(a0, FLD(s1640, 0)), FLD(s1640, 1), F_Mod_dctors(a0, FLD(s1640, 2)));
-} else if (TAG(s1640) == 4) {
-return C2(4, FLD(s1640, 0), FLD(s1640, 1));
+V s1641 = a1;
+if (TAG(s1641) == 0) {
+return C4(0, F_Mod_dq(a0, FLD(s1641, 0)), FLD(s1641, 1), F_Mod_dexpr(a0, F_Mod_dparam__names(FLD(s1641, 1)), FLD(s1641, 2)), F_Mod_dexpr(a0, IMM(0), FLD(s1641, 3)));
+} else if (TAG(s1641) == 1) {
+return C3(1, F_Mod_dq(a0, FLD(s1641, 0)), FLD(s1641, 1), FLD(s1641, 2));
+} else if (TAG(s1641) == 2) {
+return C2(2, F_Mod_dq(a0, FLD(s1641, 0)), FLD(s1641, 1));
+} else if (TAG(s1641) == 3) {
+return C3(3, F_Mod_dq(a0, FLD(s1641, 0)), FLD(s1641, 1), F_Mod_dctors(a0, FLD(s1641, 2)));
+} else if (TAG(s1641) == 4) {
+return C2(4, FLD(s1641, 0), FLD(s1641, 1));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Mod_ddecl(V *a) { (void)a; return F_Mod_ddecl(a[0], a[1]); }
 static V F_Mod_dctors(V a0, V a1) {
 top:;
-V s1641 = a1;
-if ((s1641) == IMM(0)) {
+V s1642 = a1;
+if ((s1642) == IMM(0)) {
 return IMM(0);
-} else if (TAG(s1641) == 1) {
-return C2(1, C2(0, F_Mod_dq(a0, FLD(FLD(s1641, 0), 0)), F_Mod_dfields(a0, FLD(FLD(s1641, 0), 1))), F_Mod_dctors(a0, FLD(s1641, 1)));
+} else if (TAG(s1642) == 1) {
+return C2(1, C2(0, F_Mod_dq(a0, FLD(FLD(s1642, 0), 0)), F_Mod_dfields(a0, FLD(FLD(s1642, 0), 1))), F_Mod_dctors(a0, FLD(s1642, 1)));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Mod_dctors(V *a) { (void)a; return F_Mod_dctors(a[0], a[1]); }
 static V F_Mod_dfields(V a0, V a1) {
 top:;
-V s1642 = a1;
-if ((s1642) == IMM(0)) {
+V s1643 = a1;
+if ((s1643) == IMM(0)) {
 return IMM(0);
-} else if (TAG(s1642) == 1) {
-return C2(1, C2(0, FLD(FLD(s1642, 0), 0), F_Mod_dexpr(a0, IMM(0), FLD(FLD(s1642, 0), 1))), F_Mod_dfields(a0, FLD(s1642, 1)));
+} else if (TAG(s1643) == 1) {
+return C2(1, C2(0, FLD(FLD(s1643, 0), 0), F_Mod_dexpr(a0, IMM(0), FLD(FLD(s1643, 0), 1))), F_Mod_dfields(a0, FLD(s1643, 1)));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Mod_dfields(V *a) { (void)a; return F_Mod_dfields(a[0], a[1]); }
 static V F_Mod_dexpr(V a0, V a1, V a2) {
 top:;
-V s1643 = a2;
-if (TAG(s1643) == 0) {
-return C1(0, F_Mod_dvar(a0, a1, FLD(s1643, 0)));
-} else if (TAG(s1643) == 5) {
-return C2(5, F_Mod_dexpr(a0, a1, FLD(s1643, 0)), F_Mod_dexprs(a0, a1, FLD(s1643, 1)));
-} else if (TAG(s1643) == 6) {
-return C2(6, F_Mod_dq(a0, FLD(s1643, 0)), F_Mod_dexprs(a0, a1, FLD(s1643, 1)));
-} else if (TAG(s1643) == 7) {
-return C2(7, F_Mod_dpat(a0, FLD(s1643, 0)), F_Mod_dexpr(a0, F_Pat_dvars(FLD(s1643, 0), a1), FLD(s1643, 1)));
-} else if (TAG(s1643) == 8) {
-return C3(8, F_Mod_dpat(a0, FLD(s1643, 0)), F_Mod_dexpr(a0, a1, FLD(s1643, 1)), F_Mod_dexpr(a0, F_Pat_dvars(FLD(s1643, 0), a1), FLD(s1643, 2)));
-} else if (TAG(s1643) == 9) {
-return C2(9, F_Mod_dexprs(a0, a1, FLD(s1643, 0)), F_Mod_dexprs(a0, a1, FLD(s1643, 1)));
-} else if (TAG(s1643) == 10) {
-return C2(10, F_Mod_dpats(a0, FLD(s1643, 0)), F_Mod_dexpr(a0, F_Pats_dvars(FLD(s1643, 0), a1), FLD(s1643, 1)));
-} else if (TAG(s1643) == 11) {
-return C2(11, FLD(s1643, 0), F_Mod_dexpr(a0, a1, FLD(s1643, 1)));
-} else if (TAG(s1643) == 12) {
-return C3(12, FLD(s1643, 0), F_Mod_dexpr(a0, a1, FLD(s1643, 1)), F_Mod_dexpr(a0, a1, FLD(s1643, 2)));
-} else if (TAG(s1643) == 13) {
-return C2(13, F_Mod_dexpr(a0, a1, FLD(s1643, 0)), F_Mod_dvar(a0, a1, FLD(s1643, 1)));
-} else if (TAG(s1643) == 14) {
-return C2(14, F_Mod_dvar(a0, a1, FLD(s1643, 0)), F_Mod_dexprs(a0, a1, FLD(s1643, 1)));
+V s1644 = a2;
+if (TAG(s1644) == 0) {
+return C1(0, F_Mod_dvar(a0, a1, FLD(s1644, 0)));
+} else if (TAG(s1644) == 5) {
+return C2(5, F_Mod_dexpr(a0, a1, FLD(s1644, 0)), F_Mod_dexprs(a0, a1, FLD(s1644, 1)));
+} else if (TAG(s1644) == 6) {
+return C2(6, F_Mod_dq(a0, FLD(s1644, 0)), F_Mod_dexprs(a0, a1, FLD(s1644, 1)));
+} else if (TAG(s1644) == 7) {
+return C2(7, F_Mod_dpat(a0, FLD(s1644, 0)), F_Mod_dexpr(a0, F_Pat_dvars(FLD(s1644, 0), a1), FLD(s1644, 1)));
+} else if (TAG(s1644) == 8) {
+return C3(8, F_Mod_dpat(a0, FLD(s1644, 0)), F_Mod_dexpr(a0, a1, FLD(s1644, 1)), F_Mod_dexpr(a0, F_Pat_dvars(FLD(s1644, 0), a1), FLD(s1644, 2)));
+} else if (TAG(s1644) == 9) {
+return C2(9, F_Mod_dexprs(a0, a1, FLD(s1644, 0)), F_Mod_dexprs(a0, a1, FLD(s1644, 1)));
+} else if (TAG(s1644) == 10) {
+return C2(10, F_Mod_dpats(a0, FLD(s1644, 0)), F_Mod_dexpr(a0, F_Pats_dvars(FLD(s1644, 0), a1), FLD(s1644, 1)));
+} else if (TAG(s1644) == 11) {
+return C2(11, FLD(s1644, 0), F_Mod_dexpr(a0, a1, FLD(s1644, 1)));
+} else if (TAG(s1644) == 12) {
+return C3(12, FLD(s1644, 0), F_Mod_dexpr(a0, a1, FLD(s1644, 1)), F_Mod_dexpr(a0, a1, FLD(s1644, 2)));
+} else if (TAG(s1644) == 13) {
+return C2(13, F_Mod_dexpr(a0, a1, FLD(s1644, 0)), F_Mod_dvar(a0, a1, FLD(s1644, 1)));
+} else if (TAG(s1644) == 14) {
+return C2(14, F_Mod_dvar(a0, a1, FLD(s1644, 0)), F_Mod_dexprs(a0, a1, FLD(s1644, 1)));
 } else {
-return s1643;
+return s1644;
 }
 }
 static V W_Mod_dexpr(V *a) { (void)a; return F_Mod_dexpr(a[0], a[1], a[2]); }
 static V F_Mod_dexprs(V a0, V a1, V a2) {
 top:;
-V s1644 = a2;
-if ((s1644) == IMM(0)) {
+V s1645 = a2;
+if ((s1645) == IMM(0)) {
 return IMM(0);
-} else if (TAG(s1644) == 1) {
-return C2(1, F_Mod_dexpr(a0, a1, FLD(s1644, 0)), F_Mod_dexprs(a0, a1, FLD(s1644, 1)));
+} else if (TAG(s1645) == 1) {
+return C2(1, F_Mod_dexpr(a0, a1, FLD(s1645, 0)), F_Mod_dexprs(a0, a1, FLD(s1645, 1)));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Mod_dexprs(V *a) { (void)a; return F_Mod_dexprs(a[0], a[1], a[2]); }
@@ -10023,53 +10281,120 @@ top:;
 return F_Bool_dpick(F_Str_dhas(a1, a2), a2, F_Mod_dq(a0, a2));
 }
 static V W_Mod_dvar(V *a) { (void)a; return F_Mod_dvar(a[0], a[1], a[2]); }
-static V S1646(void) { static V c; return STRC(c, "."); }
+static V S1647(void) { static V c; return STRC(c, "."); }
 static V F_Mod_dq(V a0, V a1) {
 top:;
-V v1645 = a0;
-return F_Bool_dpick(F_Str_dhas(FLD(v1645, 1), a1), F_String_dappend(FLD(v1645, 0), F_String_dappend(S1646(), a1)), a1);
+V v1646 = a0;
+return F_Bool_dpick(F_Str_dhas(FLD(v1646, 1), a1), F_String_dappend(FLD(v1646, 0), F_String_dappend(S1647(), a1)), a1);
 }
 static V W_Mod_dq(V *a) { (void)a; return F_Mod_dq(a[0], a[1]); }
 static V F_Mod_dpats(V a0, V a1) {
 top:;
-V s1647 = a1;
-if ((s1647) == IMM(0)) {
+V s1648 = a1;
+if ((s1648) == IMM(0)) {
 return IMM(0);
-} else if (TAG(s1647) == 1) {
-return C2(1, F_Mod_dpat(a0, FLD(s1647, 0)), F_Mod_dpats(a0, FLD(s1647, 1)));
+} else if (TAG(s1648) == 1) {
+return C2(1, F_Mod_dpat(a0, FLD(s1648, 0)), F_Mod_dpats(a0, FLD(s1648, 1)));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Mod_dpats(V *a) { (void)a; return F_Mod_dpats(a[0], a[1]); }
 static V F_Mod_dpat(V a0, V a1) {
 top:;
-V s1648 = a1;
-if (TAG(s1648) == 1) {
-return C2(1, F_Mod_dq(a0, FLD(s1648, 0)), F_Mod_dpats(a0, FLD(s1648, 1)));
-} else if (TAG(s1648) == 3) {
-return C2(3, FLD(s1648, 0), F_Mod_dpat(a0, FLD(s1648, 1)));
+V s1649 = a1;
+if (TAG(s1649) == 1) {
+return C2(1, F_Mod_dq(a0, FLD(s1649, 0)), F_Mod_dpats(a0, FLD(s1649, 1)));
+} else if (TAG(s1649) == 3) {
+return C2(3, FLD(s1649, 0), F_Mod_dpat(a0, FLD(s1649, 1)));
 } else {
-return s1648;
+return s1649;
 }
 }
 static V W_Mod_dpat(V *a) { (void)a; return F_Mod_dpat(a[0], a[1]); }
 static V F_Mod_dparam__names(V a0) {
 top:;
-V s1649 = a0;
-if ((s1649) == IMM(0)) {
+V s1650 = a0;
+if ((s1650) == IMM(0)) {
 return IMM(0);
-} else if (TAG(s1649) == 1) {
-return C2(1, FLD(FLD(s1649, 0), 0), F_Mod_dparam__names(FLD(s1649, 1)));
+} else if (TAG(s1650) == 1) {
+return C2(1, FLD(FLD(s1650, 0), 0), F_Mod_dparam__names(FLD(s1650, 1)));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Mod_dparam__names(V *a) { (void)a; return F_Mod_dparam__names(a[0]); }
-static V S1651(void) { static V c; return STRC(c, "bendc: parse error: "); }
+static V F_Main_dload_dimport(V a0, V a1, V a2, V a3) {
+top:;
+V s1651 = a3;
+if ((s1651) == IMM(1)) {
+return F_Main_dload_dhub(a0, a2);
+} else if ((s1651) == IMM(0)) {
+return F_Main_dload(a0, F_Eff_dpath(a1, a2));
+} else { bend_fail("incomplete match"); }
+}
+static V W_Main_dload_dimport(V *a) { (void)a; return F_Main_dload_dimport(a[0], a[1], a[2], a[3]); }
+static V S1653(void) { static V c; return STRC(c, "BEND_HUB"); }
+static V S1656(void) { static V c; return STRC(c, "/"); }
+static V L1655(V *a) {
+return F_Main_dload(a[2], F_String_dappend(a[1], F_String_dappend(S1656(), a[0])));
+}
+static V L1654(V *a) {
+return F_IO_dbind(F_IO_dtry(F_Hub_densure(a[2], F_Main_dhub_durl(a[3]), a[1])), mk_clo(L1655, 4, 3, (V[]){a[1], a[2], a[0]}));
+}
+static V L1652(V *a) {
+return F_IO_dbind(F_IO_dget__env(S1653()), mk_clo(L1654, 4, 3, (V[]){a[0], a[1], a[2]}));
+}
+static V F_Main_dload_dhub(V a0, V a1) {
+top:;
+return F_IO_dbind(F_Main_dlib(), mk_clo(L1652, 3, 2, (V[]){a0, a1}));
+}
+static V W_Main_dload_dhub(V *a) { (void)a; return F_Main_dload_dhub(a[0], a[1]); }
+static V S1658(void) { static V c; return STRC(c, "https://hub.bend-lang.com"); }
+static V F_Main_dhub_durl(V a0) {
+top:;
+V s1657 = a0;
+if (TAG(s1657) == 1) {
+return FLD(s1657, 0);
+} else if (TAG(s1657) == 0) {
+return S1658();
+} else { bend_fail("incomplete match"); }
+}
+static V W_Main_dhub_durl(V *a) { (void)a; return F_Main_dhub_durl(a[0]); }
+static V E_Hub_densure(V *a) { return io_req(CID_HUB_ENSURE, 4, (V[]){a[0], a[1], a[2], a[4]}); }
+static V F_Hub_densure(V a0, V a1, V a2) { return mk_clo(E_Hub_densure, 5, 3, (V[]){a0, a1, a2}); }
+static V W_Hub_densure(V *a) { (void)a; return F_Hub_densure(a[0], a[1], a[2]); }
+static V E_IO_dget__env(V *a) { return io_req(CID_IO_GET_ENV, 2, (V[]){a[0], a[2]}); }
+static V F_IO_dget__env(V a0) { return mk_clo(E_IO_dget__env, 3, 1, (V[]){a0}); }
+static V W_IO_dget__env(V *a) { (void)a; return F_IO_dget__env(a[0]); }
+static V S1659(void) { static V c; return STRC(c, "BEND_LIB"); }
+static V L1660(V *a) {
+return F_Main_dlib_dor(a[0]);
+}
+static V F_Main_dlib(void) {
+top:;
+return F_IO_dbind(F_IO_dget__env(S1659()), mk_clo(L1660, 1, 0, 0));
+}
+static V W_Main_dlib(V *a) { (void)a; return F_Main_dlib(); }
+static V S1662(void) { static V c; return STRC(c, "HOME"); }
+static V S1664(void) { static V c; return STRC(c, "/.bend/lib"); }
+static V L1663(V *a) {
+return F_IO_dpure(F_String_dappend(a[0], S1664()));
+}
+static V F_Main_dlib_dor(V a0) {
+top:;
+V s1661 = a0;
+if (TAG(s1661) == 1) {
+return F_IO_dpure(FLD(s1661, 0));
+} else if (TAG(s1661) == 0) {
+return F_IO_dbind(F_IO_dtry(F_IO_dget__env(S1662())), mk_clo(L1663, 1, 0, 0));
+} else { bend_fail("incomplete match"); }
+}
+static V W_Main_dlib_dor(V *a) { (void)a; return F_Main_dlib_dor(a[0]); }
+static V S1666(void) { static V c; return STRC(c, "bendc: parse error: "); }
 static V F_Main_dast(V a0) {
 top:;
-V s1650 = a0;
-if (TAG(s1650) == 0) {
-return F_IO_ddie(1u, F_String_dappend(S1651(), FLD(s1650, 0)));
-} else if (TAG(s1650) == 1) {
-return F_IO_dwrite(F_Decls_dshow(FLD(s1650, 0)));
+V s1665 = a0;
+if (TAG(s1665) == 0) {
+return F_IO_ddie(1u, F_String_dappend(S1666(), FLD(s1665, 0)));
+} else if (TAG(s1665) == 1) {
+return F_IO_dwrite(F_Decls_dshow(FLD(s1665, 0)));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Main_dast(V *a) { (void)a; return F_Main_dast(a[0]); }
@@ -10078,116 +10403,116 @@ top:;
 return F_Decls_dshow_dgo(a0);
 }
 static V W_Decls_dshow(V *a) { (void)a; return F_Decls_dshow(a[0]); }
-static V S1653(void) { static V c; return STRC(c, ""); }
-static V S1654(void) { static V c; return STRC(c, "\012"); }
+static V S1668(void) { static V c; return STRC(c, ""); }
+static V S1669(void) { static V c; return STRC(c, "\012"); }
 static V F_Decls_dshow_dgo(V a0) {
 top:;
-V s1652 = a0;
-if ((s1652) == IMM(0)) {
-return S1653();
-} else if (TAG(s1652) == 1) {
-return F_String_dappend(F_Decl_dshow(FLD(s1652, 0)), F_String_dappend(S1654(), F_Decls_dshow_dgo(FLD(s1652, 1))));
+V s1667 = a0;
+if ((s1667) == IMM(0)) {
+return S1668();
+} else if (TAG(s1667) == 1) {
+return F_String_dappend(F_Decl_dshow(FLD(s1667, 0)), F_String_dappend(S1669(), F_Decls_dshow_dgo(FLD(s1667, 1))));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Decls_dshow_dgo(V *a) { (void)a; return F_Decls_dshow_dgo(a[0]); }
-static V S1656(void) { static V c; return STRC(c, "def "); }
-static V S1657(void) { static V c; return STRC(c, "("); }
-static V S1658(void) { static V c; return STRC(c, ") = "); }
-static V S1659(void) { static V c; return STRC(c, "eff "); }
-static V S1660(void) { static V c; return STRC(c, "("); }
-static V S1661(void) { static V c; return STRC(c, ")"); }
-static V S1662(void) { static V c; return STRC(c, "law "); }
-static V S1663(void) { static V c; return STRC(c, "("); }
-static V S1664(void) { static V c; return STRC(c, ")"); }
-static V S1665(void) { static V c; return STRC(c, "type "); }
-static V S1666(void) { static V c; return STRC(c, " "); }
-static V S1667(void) { static V c; return STRC(c, "import "); }
-static V S1668(void) { static V c; return STRC(c, " as "); }
+static V S1671(void) { static V c; return STRC(c, "def "); }
+static V S1672(void) { static V c; return STRC(c, "("); }
+static V S1673(void) { static V c; return STRC(c, ") = "); }
+static V S1674(void) { static V c; return STRC(c, "eff "); }
+static V S1675(void) { static V c; return STRC(c, "("); }
+static V S1676(void) { static V c; return STRC(c, ")"); }
+static V S1677(void) { static V c; return STRC(c, "law "); }
+static V S1678(void) { static V c; return STRC(c, "("); }
+static V S1679(void) { static V c; return STRC(c, ")"); }
+static V S1680(void) { static V c; return STRC(c, "type "); }
+static V S1681(void) { static V c; return STRC(c, " "); }
+static V S1682(void) { static V c; return STRC(c, "import "); }
+static V S1683(void) { static V c; return STRC(c, " as "); }
 static V F_Decl_dshow(V a0) {
 top:;
-V s1655 = a0;
-if (TAG(s1655) == 0) {
-return F_String_dappend(S1656(), F_String_dappend(FLD(s1655, 0), F_String_dappend(S1657(), F_String_dappend(F_Params_dshow(FLD(s1655, 1)), F_String_dappend(S1658(), F_Expr_dshow(FLD(s1655, 2)))))));
-} else if (TAG(s1655) == 1) {
-return F_String_dappend(S1659(), F_String_dappend(FLD(s1655, 0), F_String_dappend(S1660(), F_String_dappend(F_Params_dshow(FLD(s1655, 1)), S1661()))));
-} else if (TAG(s1655) == 2) {
-return F_String_dappend(S1662(), F_String_dappend(FLD(s1655, 0), F_String_dappend(S1663(), F_String_dappend(F_Params_dshow(FLD(s1655, 1)), S1664()))));
-} else if (TAG(s1655) == 3) {
-return F_String_dappend(S1665(), F_String_dappend(FLD(s1655, 0), F_String_dappend(S1666(), F_Ctors_dshow(FLD(s1655, 2)))));
-} else if (TAG(s1655) == 4) {
-return F_String_dappend(S1667(), F_String_dappend(FLD(s1655, 0), F_String_dappend(S1668(), FLD(s1655, 1))));
+V s1670 = a0;
+if (TAG(s1670) == 0) {
+return F_String_dappend(S1671(), F_String_dappend(FLD(s1670, 0), F_String_dappend(S1672(), F_String_dappend(F_Params_dshow(FLD(s1670, 1)), F_String_dappend(S1673(), F_Expr_dshow(FLD(s1670, 2)))))));
+} else if (TAG(s1670) == 1) {
+return F_String_dappend(S1674(), F_String_dappend(FLD(s1670, 0), F_String_dappend(S1675(), F_String_dappend(F_Params_dshow(FLD(s1670, 1)), S1676()))));
+} else if (TAG(s1670) == 2) {
+return F_String_dappend(S1677(), F_String_dappend(FLD(s1670, 0), F_String_dappend(S1678(), F_String_dappend(F_Params_dshow(FLD(s1670, 1)), S1679()))));
+} else if (TAG(s1670) == 3) {
+return F_String_dappend(S1680(), F_String_dappend(FLD(s1670, 0), F_String_dappend(S1681(), F_Ctors_dshow(FLD(s1670, 2)))));
+} else if (TAG(s1670) == 4) {
+return F_String_dappend(S1682(), F_String_dappend(FLD(s1670, 0), F_String_dappend(S1683(), FLD(s1670, 1))));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Decl_dshow(V *a) { (void)a; return F_Decl_dshow(a[0]); }
-static V S1670(void) { static V c; return STRC(c, ""); }
-static V S1671(void) { static V c; return STRC(c, " "); }
-static V F_Ctors_dshow(V a0) {
-top:;
-V s1669 = a0;
-if ((s1669) == IMM(0)) {
-return S1670();
-} else if (TAG(s1669) == 1) {
-return F_String_dappend(F_Ctor_dshow(FLD(s1669, 0)), F_String_dappend(S1671(), F_Ctors_dshow(FLD(s1669, 1))));
-} else { bend_fail("incomplete match"); }
-}
-static V W_Ctors_dshow(V *a) { (void)a; return F_Ctors_dshow(a[0]); }
-static V S1673(void) { static V c; return STRC(c, "{"); }
-static V S1674(void) { static V c; return STRC(c, "}"); }
-static V F_Ctor_dshow(V a0) {
-top:;
-V v1672 = a0;
-return F_String_dappend(FLD(v1672, 0), F_String_dappend(S1673(), F_String_dappend(F_Fields_dshow(FLD(v1672, 1)), S1674())));
-}
-static V W_Ctor_dshow(V *a) { (void)a; return F_Ctor_dshow(a[0]); }
-static V S1676(void) { static V c; return STRC(c, ""); }
-static V S1677(void) { static V c; return STRC(c, ":"); }
-static V S1678(void) { static V c; return STRC(c, " "); }
-static V F_Fields_dshow(V a0) {
-top:;
-V s1675 = a0;
-if ((s1675) == IMM(0)) {
-return S1676();
-} else if (TAG(s1675) == 1) {
-return F_String_dappend(FLD(FLD(s1675, 0), 0), F_String_dappend(S1677(), F_String_dappend(F_Expr_dshow(FLD(FLD(s1675, 0), 1)), F_String_dappend(S1678(), F_Fields_dshow(FLD(s1675, 1))))));
-} else { bend_fail("incomplete match"); }
-}
-static V W_Fields_dshow(V *a) { (void)a; return F_Fields_dshow(a[0]); }
-static V S1680(void) { static V c; return STRC(c, ""); }
-static V S1681(void) { static V c; return STRC(c, " "); }
-static V F_Params_dshow(V a0) {
-top:;
-V s1679 = a0;
-if ((s1679) == IMM(0)) {
-return S1680();
-} else if (TAG(s1679) == 1) {
-return F_String_dappend(F_Param_dshow(FLD(s1679, 0)), F_String_dappend(S1681(), F_Params_dshow(FLD(s1679, 1))));
-} else { bend_fail("incomplete match"); }
-}
-static V W_Params_dshow(V *a) { (void)a; return F_Params_dshow(a[0]); }
-static V S1683(void) { static V c; return STRC(c, ":"); }
-static V F_Param_dshow(V a0) {
-top:;
-V v1682 = a0;
-return F_String_dappend(F_U32_dshow(FLD(v1682, 1)), F_String_dappend(FLD(v1682, 0), F_String_dappend(S1683(), FLD(v1682, 2))));
-}
-static V W_Param_dshow(V *a) { (void)a; return F_Param_dshow(a[0]); }
 static V S1685(void) { static V c; return STRC(c, ""); }
-static V F_Toks_dshow(V a0) {
+static V S1686(void) { static V c; return STRC(c, " "); }
+static V F_Ctors_dshow(V a0) {
 top:;
 V s1684 = a0;
 if ((s1684) == IMM(0)) {
 return S1685();
 } else if (TAG(s1684) == 1) {
-return F_String_dappend(F_Tok_dshow(FLD(s1684, 0)), F_Toks_dshow(FLD(s1684, 1)));
+return F_String_dappend(F_Ctor_dshow(FLD(s1684, 0)), F_String_dappend(S1686(), F_Ctors_dshow(FLD(s1684, 1))));
+} else { bend_fail("incomplete match"); }
+}
+static V W_Ctors_dshow(V *a) { (void)a; return F_Ctors_dshow(a[0]); }
+static V S1688(void) { static V c; return STRC(c, "{"); }
+static V S1689(void) { static V c; return STRC(c, "}"); }
+static V F_Ctor_dshow(V a0) {
+top:;
+V v1687 = a0;
+return F_String_dappend(FLD(v1687, 0), F_String_dappend(S1688(), F_String_dappend(F_Fields_dshow(FLD(v1687, 1)), S1689())));
+}
+static V W_Ctor_dshow(V *a) { (void)a; return F_Ctor_dshow(a[0]); }
+static V S1691(void) { static V c; return STRC(c, ""); }
+static V S1692(void) { static V c; return STRC(c, ":"); }
+static V S1693(void) { static V c; return STRC(c, " "); }
+static V F_Fields_dshow(V a0) {
+top:;
+V s1690 = a0;
+if ((s1690) == IMM(0)) {
+return S1691();
+} else if (TAG(s1690) == 1) {
+return F_String_dappend(FLD(FLD(s1690, 0), 0), F_String_dappend(S1692(), F_String_dappend(F_Expr_dshow(FLD(FLD(s1690, 0), 1)), F_String_dappend(S1693(), F_Fields_dshow(FLD(s1690, 1))))));
+} else { bend_fail("incomplete match"); }
+}
+static V W_Fields_dshow(V *a) { (void)a; return F_Fields_dshow(a[0]); }
+static V S1695(void) { static V c; return STRC(c, ""); }
+static V S1696(void) { static V c; return STRC(c, " "); }
+static V F_Params_dshow(V a0) {
+top:;
+V s1694 = a0;
+if ((s1694) == IMM(0)) {
+return S1695();
+} else if (TAG(s1694) == 1) {
+return F_String_dappend(F_Param_dshow(FLD(s1694, 0)), F_String_dappend(S1696(), F_Params_dshow(FLD(s1694, 1))));
+} else { bend_fail("incomplete match"); }
+}
+static V W_Params_dshow(V *a) { (void)a; return F_Params_dshow(a[0]); }
+static V S1698(void) { static V c; return STRC(c, ":"); }
+static V F_Param_dshow(V a0) {
+top:;
+V v1697 = a0;
+return F_String_dappend(F_U32_dshow(FLD(v1697, 1)), F_String_dappend(FLD(v1697, 0), F_String_dappend(S1698(), FLD(v1697, 2))));
+}
+static V W_Param_dshow(V *a) { (void)a; return F_Param_dshow(a[0]); }
+static V S1700(void) { static V c; return STRC(c, ""); }
+static V F_Toks_dshow(V a0) {
+top:;
+V s1699 = a0;
+if ((s1699) == IMM(0)) {
+return S1700();
+} else if (TAG(s1699) == 1) {
+return F_String_dappend(F_Tok_dshow(FLD(s1699, 0)), F_Toks_dshow(FLD(s1699, 1)));
 } else { bend_fail("incomplete match"); }
 }
 static V W_Toks_dshow(V *a) { (void)a; return F_Toks_dshow(a[0]); }
-static V S1687(void) { static V c; return STRC(c, " "); }
-static V S1688(void) { static V c; return STRC(c, ""); }
+static V S1702(void) { static V c; return STRC(c, " "); }
+static V S1703(void) { static V c; return STRC(c, ""); }
 static V F_Tok_dshow(V a0) {
 top:;
-V v1686 = a0;
-return F_String_dappend(F_Bool_dpick(FLD(v1686, 1), S1687(), S1688()), F_TK_dshow(FLD(v1686, 0)));
+V v1701 = a0;
+return F_String_dappend(F_Bool_dpick(FLD(v1701, 1), S1702(), S1703()), F_TK_dshow(FLD(v1701, 0)));
 }
 static V W_Tok_dshow(V *a) { (void)a; return F_Tok_dshow(a[0]); }
 static V E_IO_dprint(V *a) { return io_req(CID_IO_PRINT, 2, (V[]){a[0], a[2]}); }
