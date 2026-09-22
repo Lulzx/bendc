@@ -3443,6 +3443,14 @@ def Gen.str(s: String) -> Gen(Doc):
       Gen.lit(s) ++ "\"); }\n"})
     return DStr{name ++ "()"}
 
+def Gen.clo.go(+name: String, st: St) -> Unit & St:
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (Unit{}, St{n, protos, code, refs, errs, memo, ("%clo\t" ++ name) <> effs})
+
+# Records a def the CPU makes a closure of (the device gets code for it).
+def Gen.clo(+name: String) -> Gen(Unit):
+  st => Gen.clo.go(name, st)
+
 def Gen.var.kind(+name: String, kind: Nat, +total: U32) -> Gen(Doc):
   match kind:
     case 3n:
@@ -3454,6 +3462,7 @@ def Gen.var.kind(+name: String, kind: Nat, +total: U32) -> Gen(Doc):
     case other:
       do Gen<Doc>:
         Gen.ref(name)
+        Gen.clo(name)
         return Bool.pick(Doc, U32.is_zero(total), DStr{Gen.f(name) ++ "()"},
           DStr{"mk_clo(" ++ Gen.w(name) ++ ", " ++ U32.show(total) ++ ", 0, 0)"})
 
@@ -3644,6 +3653,7 @@ def Gen.call.full(
         return Gen.apply(xs, Doc.list([DStr{Gen.f(name) ++ "("}, Gen.commas(ks), DStr{")"}]))
     case False{}:
       do Gen<Doc>:
+        Gen.clo(name)
         +as : List<&2, Doc> <- Gen.exprs(g, env, all)
         return Doc.list([DStr{"mk_clo(" ++ Gen.w(name) ++ ", " ++
           U32.show(U32.from_nat(List.length(&2, Bool, mask))) ++ ", " ++
@@ -4243,22 +4253,36 @@ def Gen.dedup(xs: List<&2, String>, +acc: List<&2, String>) -> List<&2, String>:
     case +h <> t:
       Gen.dedup(t, Bool.pick(List<&2, String>, Str.has(acc, h), acc, h <> acc))
 
-def Gen.gpu.split.if(+h: String, rest: List<&2, String>, gpu: Bool, hit: Bool) -> List<&2, String>:
-  match gpu hit:
-    case True{} True{}:
+def Gen.effs.tagged.if(+h: String, rest: List<&2, String>, hit: Bool) -> List<&2, String>:
+  match hit:
+    case True{}:
       String.drop(h, 5n) <> rest
-    case False{} False{}:
-      h <> rest
-    case a b:
+    case False{}:
       rest
 
-# The !-call targets (gpu) or the effects' files (not gpu) among effs.
-def Gen.gpu.split(effs: List<&2, String>, +gpu: Bool) -> List<&2, String>:
+# The entries of effs tagged tag ("%gpu\t": the !-call targets; "%clo\t":
+# defs the CPU makes closures of), untagged.
+def Gen.effs.tagged(effs: List<&2, String>, +tag: String) -> List<&2, String>:
   match effs:
     case Nil{}:
       Nil{}
     case +h <> t:
-      Gen.gpu.split.if(h, Gen.gpu.split(t, gpu), gpu, String.starts_with(h, "%gpu\t"))
+      Gen.effs.tagged.if(h, Gen.effs.tagged(t, tag), String.starts_with(h, tag))
+
+def Gen.effs.files.if(h: String, rest: List<&2, String>, tagged: Bool) -> List<&2, String>:
+  match tagged:
+    case True{}:
+      rest
+    case False{}:
+      h <> rest
+
+# The C files effects import, among effs.
+def Gen.effs.files(effs: List<&2, String>) -> List<&2, String>:
+  match effs:
+    case Nil{}:
+      Nil{}
+    case +h <> t:
+      Gen.effs.files.if(h, Gen.effs.files(t), String.starts_with(h, "%"))
 
 def Gen.gpu.args(+n: Nat) -> String:
   String.join(Gen.gpu.params(n, 0), ", ")
@@ -4447,6 +4471,15 @@ def K.fn(+name: String) -> KM(U32):
 def K.wrap.name(+name: String) -> String:
   "%wrap " ++ name
 
+def K.clos(cs: List<&2, String>) -> KM(Unit):
+  match cs:
+    case Nil{}:
+      KM.pure(Unit, Unit{})
+    case +c <> rest:
+      do KM<Unit>:
+        +w : U32 <- K.fn(K.wrap.name(c))
+        K.clos(rest)
+
 def K.targets(ts: List<&2, String>) -> KM(Unit):
   match ts:
     case Nil{}:
@@ -4458,21 +4491,23 @@ def K.targets(ts: List<&2, String>) -> KM(Unit):
         K.targets(rest)
 
 @unsafe
-def K.program.m(+g: G, ts: List<&2, String>) -> KM(Unit):
+def K.program.m(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> KM(Unit):
   do KM<Unit>:
     K.targets(ts)
+    K.clos(clos)
     K.all(g, 100000n)
 
-# The device code for the !-call targets ts.
-def K.program(+g: G, ts: List<&2, String>) -> KOut:
-  K.fin(K.program.m(g, ts)(KSt{8, 0, 0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
+# The device code for the !-call targets ts, with wrappers for the defs the
+# CPU makes closures of (clos), which the targets may be handed.
+def K.program(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> KOut:
+  K.fin(K.program.m(g, ts, clos)(KSt{8, 0, 0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
 
-def Gen.gpu.tail(+g: G, ts: List<&2, String>) -> String:
+def Gen.gpu.tail(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> String:
   match ts:
     case Nil{}:
       ""
     case +t <> +rest:
-      Gen.gpu.emit(g, t <> rest, K.program(g, t <> rest))
+      Gen.gpu.emit(g, t <> rest, K.program(g, t <> rest, clos))
 
 # The C output: head (constructor ids and the runtime), the C files the
 # program's effects import (spliced in by the driver), then the body.
@@ -4482,8 +4517,9 @@ type COut is Data:
 def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
-  COut{cids ++ "#include \"bendrt.h\"\n\n", Gen.dedup(List.reverse(&2, String, Gen.gpu.split(effs, False{})), Nil{}),
-    Doc.flat(Doc.list([protos, DStr{"\n"}, code, DStr{Gen.gpu.tail(g, Gen.dedup(Gen.gpu.split(effs, True{}), Nil{}))},
+  COut{cids ++ "#include \"bendrt.h\"\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
+    Doc.flat(Doc.list([protos, DStr{"\n"}, code, DStr{Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
+    Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
     DStr{"\n" ++ entry}])), errs}
 
 law Gen.all:
@@ -5242,7 +5278,7 @@ def J.program.m(+j: JG) -> Gen(String):
 def J.program.fin(r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, effs} = st
-  COut{RtJs.src(), Gen.dedup(List.reverse(&2, String, effs), Nil{}), Doc.flat(Doc.list([code, DStr{"\n" ++ entry}])), errs}
+  COut{RtJs.src(), Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}), Doc.flat(Doc.list([code, DStr{"\n" ++ entry}])), errs}
 
 def J.program(+ds: List<&2, Decl>) -> COut:
   J.program.fin(J.program.m(JG{G.new(ds), J.info(ds, MTip{})})(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
@@ -6859,6 +6895,7 @@ def J.var.kind(+name: String, kind: Nat, +total: U32) -> Gen(Doc):
     case other:
       do Gen<Doc>:
         Gen.ref(name)
+        Gen.clo(name)
         return Bool.pick(Doc, U32.is_zero(total), DStr{Gen.f(name) ++ "()"}, DStr{Gen.w(name)})
 
 def J.var.def(+name: String, info: DInfo) -> Gen(Doc):
