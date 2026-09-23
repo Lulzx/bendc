@@ -145,6 +145,9 @@ extern GcBlk *gc_partial[2][GC_NCLS];
 extern _Atomic size_t gc_since;
 extern size_t gc_limit;
 extern size_t gc_limit_min;
+// (Read at start: libc's number parsing takes a lock a stopped thread may hold.)
+extern double gc_minor_k;
+extern size_t gc_slack;
 extern size_t gc_live_bytes;
 extern size_t gc_major_live;
 extern int gc_minor;

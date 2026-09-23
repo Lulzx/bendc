@@ -300,33 +300,50 @@ tail calls become loops. Effects are requests answered by an event loop with the
 
 ## Benchmarks
 
-`bench/run.sh` builds each program in [`bench/`](bench) with bendc and with the official `bend`
-(2.0.25), checks that both print the same thing, and reports the best of three runs. Sizes come from
-the command line, so neither compiler can compute the answer at compile time. On an Apple M4 Pro
-(12 cores, 24 GB, macOS 27):
+`bench/run.sh` builds each program in [`bench/`](bench) with bendc (`bendc -o`) and with the official
+`bend` (2.0.25, `bend -o`), checks that both print the same thing, and reports the best of three runs
+with its peak memory. Sizes come from the command line, so neither compiler can compute the answer at
+compile time. On an Apple M4 Pro (12 cores, 24 GB, macOS 27):
 
-| program | what it does | bendc | official bend |
-|---|---|---|---|
-| `forks 28` | a parallel let at every level of a 2^28-leaf tree, CPU threads | 0.38s | 0.10s |
-| `forks_gpu 28` | the same as a `!`-call, on the GPU | **0.07s** | 0.09s |
-| `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | **0.77s** | 0.98s |
-| `leaves_gpu 14` | the same as a `!`-call, on the GPU | 0.08s | 0.07s |
-| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | **0.36s** | 0.63s |
+| program | what it does | bendc | official bend | bendc memory | official memory |
+|---|---|---|---|---|---|
+| `forks 28` | a parallel let at every level of a 2^28-leaf tree, CPU threads | **0.04s** | 0.10s | 3 MB | 3 MB |
+| `forks_gpu 28` | the same as a `!`-call, on the GPU | **0.05s** | 0.09s | 20 MB | 14 MB |
+| `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | **0.74s** | 0.98s | 3 MB | 3 MB |
+| `leaves_gpu 14` | the same as a `!`-call, on the GPU | **0.06s** | 0.07s | 20 MB | 14 MB |
+| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | **0.35s** | 0.53s | 481 MB | 32 MB |
 
 | task | bendc | official bend |
 |---|---|---|
-| type-check `bendc.bend` (15,000 lines with `check.bend`) | 4.3s | 0.9s |
-| build `bendc.bend` into a binary | 8.1s (1.1s to C, 7.0s in clang) | 70s, 9.9 GB |
-| build the bootstrap's stage0 (`boot.bend`) | n/a | 16s, 3.8 GB |
+| build `forks.bend` (source to binary) | **0.17s** | 0.27s |
+| build `forks_gpu.bend` | **0.27s** | 0.48s |
+| build `leaves.bend` | **0.16s** | 0.27s |
+| build `leaves_gpu.bend` | **0.26s** | 0.48s |
+| build `sort.bend` | **0.18s** | 0.28s |
+| type-check `bendc.bend` (16,000 lines with `check.bend`) | **0.78s**, 501 MB | 0.96s, 996 MB |
+| build `bendc.bend` into a binary | **8.1s** | 70s, 9.9 GB |
 
-bendc is faster on sequential, allocation-heavy code (its collector and native `Nat`/`U32`), on
-numeric loops on the CPU, and on fork-heavy code on the GPU (at 2^30 leaves: 0.145s against
-0.178s). Its fixed GPU cost (starting Metal, loading the cached kernel) is 0.04s, against 0.06s.
-The official runtime is well ahead on fork-heavy code on the CPU: it turns the levels below its fork
-frontier into native loops, where bendc still pays for a closure, a deque push and a join per fork.
-The official checker is about 4x faster than bendc's port of it. The official compiler's build
-numbers are for a whole compiler; bendc keeps them down by avoiding the patterns it expands (see
-[Bootstrapping](#bootstrapping)).
+Where the time goes:
+
+- **Forks on the CPU.** A def that is flat but for its parallel lets and calls to itself gets a
+  sequential clone, `S_name`. Each thread tracks its fork depth; past log2(threads) + 6 levels a
+  parallel let runs its values in order through the clone: no closures, deque pushes or joins.
+- **Forks and loops on the GPU.** See [The GPU backend](#the-gpu-backend): seq defs and looping flat
+  defs run in their own small kernel (`bend_kq`), a whole SIMD group at a time.
+- **Builds.** The runtime is compiled once (`build/bendrt.o`, from `rt/bendrt_impl.c`), so a program
+  compiles only its own code; bendc's own front end takes about 0.1s for these programs.
+- **Checking.** Declarations are checked in parallel on the CPU threads, against the book as it stands
+  before each; the allocator hands out partly free blocks by their bitmaps; `Map.bit` is native.
+
+Where bendc loses is **peak memory** in two cases. On the GPU, Metal itself costs about 16 MB before a
+program does anything (the official runtime's 14 MB is less than a bare Metal program here). On
+allocation-heavy code such as `sort`, the official runtime counts references: it frees a list cell
+the moment it dies and reuses it in place, so sorting a million-element list stays near one list's
+size. bendc's collector is a tracing one: garbage waits for the next collection (every 256 MB of
+allocation), and a million-deep recursion (`merge` builds its result as `x <> merge(..)`) keeps a
+deep stack. Collecting more often (`BEND_GC_MIN_MB`, `BEND_GC_FACTOR`, `BEND_GC_MINOR`) trades speed
+for memory: 341 MB at 0.45s for `sort`. Closing the rest needs reference counting, or destination-
+passing for recursions like `merge`, which bendc does not do yet.
 
 ## Writing a compiler under Bend's rules
 

@@ -39,6 +39,8 @@ GcBlk *gc_partial[2][GC_NCLS];
 _Atomic size_t gc_since;         // bytes handed out since the last collection
 size_t gc_limit = (size_t)256 << 20;
 size_t gc_limit_min = (size_t)256 << 20;
+double gc_minor_k = 2.0, gc_factor = 0.0;
+size_t gc_slack = (size_t)64 << 20;
 size_t gc_live_bytes;
 size_t gc_major_live;
 int gc_minor;       // this collection keeps the marks of old objects
@@ -76,6 +78,9 @@ void gc_init(void) {
   const char *s = getenv("BEND_GC_STATS");
   gc_stats = s && *s;
   gc_all_major = getenv("BEND_GC_MAJOR") != NULL;
+  if (getenv("BEND_GC_MINOR")) gc_minor_k = atof(getenv("BEND_GC_MINOR"));
+  if (getenv("BEND_GC_FACTOR")) gc_factor = atof(getenv("BEND_GC_FACTOR"));
+  if (getenv("BEND_GC_SLACK_MB")) gc_slack = (size_t)atol(getenv("BEND_GC_SLACK_MB")) << 20;
   const char *m = getenv("BEND_GC_MIN_MB");
   if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20;
 }
@@ -279,7 +284,7 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   // A major collection forgets every mark; a minor one keeps the old
   // objects' (the heap is written only while an object is built, and the
   // exceptions are reached from roots).
-  gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < 2 * gc_major_live + ((size_t)64 << 20);
+  gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack;
   if (!gc_minor) {
     for (uintptr_t bi = 0; bi < gc_top; bi++) {
       if (gc_kind[bi] == 1 || gc_kind[bi] == 2) memset(gc_blk(bi)->mark, 0, sizeof(gc_blk(bi)->mark));
@@ -298,7 +303,10 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   atomic_store(&gc_stopping, 0);
   while (atomic_load(&gc_inside) > 0) sched_yield();
   if (!gc_minor) gc_major_live = gc_live_bytes ? gc_live_bytes : 1;
-  gc_limit = gc_limit_min;
+  {
+    size_t want = (size_t)(gc_factor * (double)gc_live_bytes);
+    gc_limit = want > gc_limit_min ? want : gc_limit_min;
+  }
   gc_since = 0;
   gc_count++;
   if (gc_stats) {
