@@ -40,5 +40,12 @@ jobs:
           BEND_NO_TELEMETRY=1 bend bendc.bend --check-only > build/official.txt
           cmp build/ours.txt build/official.txt
 
+      # The official bend peaks near 16 GB building bendc, the runner's RAM.
+      - name: Add swap (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo fallocate -l 16G /swap2 && sudo chmod 600 /swap2 && sudo mkswap /swap2 && sudo swapon /swap2
+          free -g
+
       - name: Full bootstrap (official bend -> stage1 -> stage2 fixpoint)
         run: BEND_NO_TELEMETRY=1 ./bootstrap.sh
