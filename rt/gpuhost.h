@@ -158,16 +158,15 @@ static GId g_desc(GId lib, const char *name) {
   return d;
 }
 
-// The pipeline of d, from archive ar when it is not NULL.
-static GId g_pipe(GId d, GId ar) {
-  GId err = NULL;
+// The pipeline of d, from archive ar when it is not NULL (else err says why).
+static GId g_pipe(GId d, GId ar, GId *err) {
   if (ar) {
     GId arr = G_SEND(GId (*)(GId, GSel, GId))(g_class("NSArray"), g_sel("arrayWithObject:"), ar);
     G_SEND(void (*)(GId, GSel, GId))(d, g_sel("setBinaryArchives:"), arr);
   }
   GId pso = G_SEND(GId (*)(GId, GSel, GId, unsigned long, void *, GId *))(g_dev,
-    g_sel("newComputePipelineStateWithDescriptor:options:reflection:error:"), d, ar ? 4ul : 0ul, NULL, &err);
-  if (!pso && !ar) gpu_note("no pipeline: %s", g_err_text(err));
+    g_sel("newComputePipelineStateWithDescriptor:options:reflection:error:"), d, ar ? 4ul : 0ul, NULL, err);
+  if (!pso && !ar) gpu_note("no pipeline: %s", g_err_text(*err));
   return pso;
 }
 
@@ -186,9 +185,9 @@ static int g_load(unsigned long long h) {
   G_SEND(void (*)(GId, GSel, GId))(ad, g_sel("setUrl:"), url);
   GId ar = d && d_kq ? G_SEND(GId (*)(GId, GSel, GId, GId *))(g_dev, g_sel("newBinaryArchiveWithDescriptor:error:"),
     ad, &err) : NULL;
-  g_pso = ar ? g_pipe(d, ar) : NULL;
-  g_pso_kq = ar ? g_pipe(d_kq, ar) : NULL;
-  if (!g_pso || !g_pso_kq) gpu_note("%s", "the cached GPU code does not load: compiling");
+  g_pso = ar ? g_pipe(d, ar, &err) : NULL;
+  g_pso_kq = g_pso ? g_pipe(d_kq, ar, &err) : NULL;
+  if (!g_pso || !g_pso_kq) gpu_note("the cached GPU code does not load (%s): compiling", g_err_text(err));
   return g_pso && g_pso_kq;
 }
 
@@ -233,8 +232,9 @@ static int g_init(const GpuProg *prog) {
     GId lib = g_compile(prog);
     GId d = lib ? g_desc(lib, "bend_kernel") : NULL;
     GId d_kq = lib ? g_desc(lib, "bend_kq") : NULL;
-    g_pso = d ? g_pipe(d, NULL) : NULL;
-    g_pso_kq = d_kq ? g_pipe(d_kq, NULL) : NULL;
+    GId err = NULL;
+    g_pso = d ? g_pipe(d, NULL, &err) : NULL;
+    g_pso_kq = d_kq ? g_pipe(d_kq, NULL, &err) : NULL;
     if (!g_pso || !g_pso_kq) { g_pool_pop(pool); return 0; }
     g_save(h, d, d_kq);
   }

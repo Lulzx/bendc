@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Writes rt/rtjs.bend (rt/bendrt.js as a Bend string, which bendc --js
-emits) and rt/gpu_src.h (rt/gpu.h as a C string, which the host hands
+emits), rt/rtchan.bend (rt/chan.c, which bendc splices for Base's
+effs/chan.c) and rt/gpu_src.h (rt/gpu.h as a C string, which the host hands
 Metal). Run after editing either."""
 import os
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,6 +42,9 @@ def write(name, source, defs):
 
 js = open(os.path.join(root, 'rt', 'bendrt.js')).read()
 write('rtjs.bend', 'bendrt.js', [('src', js)])
+
+chan = open(os.path.join(root, 'rt', 'chan.c')).read()
+write('rtchan.bend', 'chan.c', [('src', chan)])
 
 gpu = open(os.path.join(root, 'rt', 'gpu.h')).read()
 open(os.path.join(root, 'rt', 'gpu_src.h'), 'w').write(

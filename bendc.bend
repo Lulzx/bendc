@@ -5,6 +5,7 @@
 import Base
 import ./check.bend as Chk
 import ./rt/rtjs.bend as RtJs
+import ./rt/rtchan.bend as RtChan
 
 # Utilities
 # =========
@@ -6147,6 +6148,18 @@ law Main.effs:
   for acc: String
   IO(String)
 
+def Main.eff.pick(p: String, rt: Bool) -> IO(String):
+  match rt:
+    case True{}:
+      IO.pure(String, RtChan.src())
+    case False{}:
+      IO.read_file(p)
+
+# An effect's C source. Base's effs/chan.c keeps its channels where the
+# collector does not look: rt/chan.c stands in (see there).
+def Main.eff.src(+p: String) -> IO(String):
+  Main.eff.pick(p, String.ends_with(p, "/effs/chan.c"))
+
 # Reads the effect sources to splice into the output.
 @unsafe
 def Main.effs(ps, acc):
@@ -6155,7 +6168,7 @@ def Main.effs(ps, acc):
       IO.pure(String, acc)
     case p <> t:
       do IO<String>:
-        src : String <- IO.read_file(p)
+        src : String <- Main.eff.src(p)
         Main.effs(t, acc ++ src ++ "\n")
 
 def Main.emit.ok(head: String, effs: List<&2, String>, body: String) -> IO(Unit):
@@ -6188,15 +6201,50 @@ def Main.emit.c(+ds: List<&2, Decl>) -> IO(Unit):
     r : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
     Main.emit(Gen.program(ds, Main.free(r)))
 
+def Main.js.path(r: String & String) -> String:
+  (p, h) = r
+  p
+
+# The JS files of the effect table's entries (path\thost), each once.
+def Main.js.paths.go(es: List<&2, String>) -> List<&2, String>:
+  match es:
+    case Nil{}:
+      Nil{}
+    case e <> t:
+      Main.js.path(Str.split_tab(e)) <> Main.js.paths.go(t)
+
+def Main.js.paths(es: List<&2, String>) -> List<&2, String>:
+  Gen.dedup(Main.js.paths.go(es), Nil{})
+
+def Main.js.hosts.if(h: String, rest: List<&2, String>, hit: Bool) -> List<&2, String>:
+  match hit:
+    case True{}:
+      h <> rest
+    case False{}:
+      rest
+
+def Main.js.hosts.one(r: String & String, +p: String, rest: List<&2, String>) -> List<&2, String>:
+  (q, h) = r
+  Main.js.hosts.if(h, rest, Str.eq(q, p))
+
+# The host functions of the effect table's entries at path p.
+def Main.js.hosts(es: List<&2, String>, +p: String) -> List<&2, String>:
+  match es:
+    case Nil{}:
+      Nil{}
+    case e <> t:
+      Main.js.hosts.one(Str.split_tab(e), p, Main.js.hosts(t, p))
+
 law Main.js.effs:
-  for es: List<&2, String>
+  for ps: List<&2, String>
+  for +es: List<&2, String>
   for acc: String
   IO(String)
 
 @unsafe
-def Main.emit.js.ok(head: String, effs: List<&2, String>, body: String) -> IO(Unit):
+def Main.emit.js.ok(head: String, +effs: List<&2, String>, body: String) -> IO(Unit):
   do IO<Unit>:
-    tab : String <- Main.js.effs(effs, "")
+    tab : String <- Main.js.effs(Main.js.paths(effs), effs, "")
     IO.write(head ++ "\nconst EFF = {\n" ++ tab ++ "};\n\n" ++ body)
 
 def Main.emit.js(r: COut) -> IO(Unit):
@@ -6819,28 +6867,32 @@ def Main.load(fuel, path):
         src : String <- IO.read_file(path)
         Main.load.parsed(f, Mod.dir(path), path, Main.parse(src))
 
-def Main.js.wrap(src: String, +host: String) -> String:
-  "...(() => {\n" ++ src ++ "\nreturn { [\"" ++ host ++ "\"]: { run: typeof " ++ host ++ " === \"function\" ? " ++ host ++
-    " : undefined, need: typeof " ++ host ++ "_need === \"function\" ? " ++ host ++ "_need : undefined } };\n})(),\n"
+def Main.js.entry(+host: String) -> String:
+  "  [\"" ++ host ++ "\"]: { run: typeof " ++ host ++ " === \"function\" ? " ++ host ++
+    " : undefined, need: typeof " ++ host ++ "_need === \"function\" ? " ++ host ++ "_need : undefined },\n"
 
-def Main.js.eff(r: String & String) -> IO(String):
-  (path, host) = r
-  +h = host
-  do IO<String>:
-    src : String <- IO.read_file(path)
-    return Main.js.wrap(src, h)
+def Main.js.entries(hosts: List<&2, String>) -> String:
+  match hosts:
+    case Nil{}:
+      ""
+    case h <> t:
+      Main.js.entry(h) ++ Main.js.entries(t)
 
-# The effect table: each JS file an effect imports, wrapped as the official
-# target wraps it, answering its host function.
+def Main.js.wrap(src: String, hosts: List<&2, String>) -> String:
+  "...(() => {\n" ++ src ++ "\nreturn {\n" ++ Main.js.entries(hosts) ++ "};\n})(),\n"
+
+# The effect table: each JS file effects import, run once (Chan's four
+# effects share chan.js and its state) and wrapped as the official target
+# wraps it, answering the host functions of the effects that import it.
 @unsafe
-def Main.js.effs(es, acc):
-  match es:
+def Main.js.effs(ps, es, acc):
+  match ps:
     case Nil{}:
       IO.pure(String, acc)
-    case e <> t:
+    case +p <> t:
       do IO<String>:
-        w : String <- Main.js.eff(Str.split_tab(e))
-        Main.js.effs(t, acc ++ w)
+        src : String <- IO.read_file(p)
+        Main.js.effs(t, es, acc ++ Main.js.wrap(src, Main.js.hosts(es, p)))
 
 # Misc
 # ====
