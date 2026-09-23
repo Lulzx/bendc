@@ -7,13 +7,19 @@ case $BENDC in /*) ;; *) BENDC=$PWD/$BENDC ;; esac
 BASE=${BEND_BASE:-$HOME/.bend/bend2/base.bend}
 mkdir -p build/tests
 pass=0; fail=0
+RTO=$PWD/build/bendrt.o
+[ -f "$RTO" ] && [ "$RTO" -nt rt/bendrt_impl.c ] || ${CC:-clang} -O2 -w -I rt -c rt/bendrt_impl.c -o "$RTO"
+LDL=; [ "$(uname)" = Linux ] && LDL=-ldl
 for src in tests/*.bend; do
   name=$(basename "$src" .bend)
   out=build/tests/$name
   if ! "$BENDC" "$BASE" "$src" > "$out.c" 2> "$out.err"; then
     echo "FAIL $name (bendc)"; sed 's/^/  /' "$out.err" | head -5; fail=$((fail+1)); continue
   fi
-  if ! ${CC:-clang} -O2 -w -I rt "$out.c" -o "$out" -lm -lpthread 2> "$out.err"; then
+  # Against the runtime compiled once (build/bendrt.o), but hello, which
+  # compiles it whole.
+  if [ "$name" = hello ]; then split=""; obj=""; else split="-DBEND_RT_SPLIT"; obj=$RTO; fi
+  if ! ${CC:-clang} -O2 -w $split -I rt "$out.c" $obj -o "$out" -lm -lpthread $LDL 2> "$out.err"; then
     echo "FAIL $name (clang)"; sed 's/^/  /' "$out.err" | head -5; fail=$((fail+1)); continue
   fi
   "./$out" > "$out.txt" 2> "$out.stderr"

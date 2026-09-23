@@ -4720,7 +4720,7 @@ type COut is Data:
 def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
-  COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#include \"bendrt.h\"\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
+  COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#ifdef BEND_RT_SPLIT\n#include \"bendrt_split.h\"\n#else\n#include \"bendrt.h\"\n#endif\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
     Doc.flat(Doc.list([protos, DStr{"\n"}, code, DStr{Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
     Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
     DStr{"\n" ++ entry}])), errs}
@@ -5841,14 +5841,14 @@ def Main.checked(js: Bool, +base_path: String, user_path: String, r: Chk.Book & 
     Main.checked.go(js, base_path, user_path, bk, Main.normalized(bk))
 
 def Main.usage() -> IO(Unit):
-  IO.die(Unit, 1, "usage: bendc [--check-only | --no-check | --js] <base.bend> <input.bend> | --tokens <file> | --ast <file>")
+  IO.die(Unit, 1, "usage: bendc [--check-only | --no-check | --js | -o <binary>] <base.bend> <input.bend> | --tokens <file> | --ast <file>")
 
 # The option an argument names (0: none). The driver matches on this number,
 # not on string patterns, which the official compiler expands char by char.
 def Main.code(+s: String) -> Nat:
   Bool.pick(Nat, Str.eq(s, "--tokens"), 1n, Bool.pick(Nat, Str.eq(s, "--ast"), 2n, Bool.pick(Nat,
     Str.eq(s, "--check-only"), 3n, Bool.pick(Nat, Str.eq(s, "--no-check"), 4n, Bool.pick(Nat, Str.eq(s, "--js"), 5n,
-    0n)))))
+    Bool.pick(Nat, Str.eq(s, "-o"), 6n, 0n))))))
 
 @unsafe
 def Main.run2(code: Nat, +a: String, +b: String) -> IO(Unit):
@@ -5907,6 +5907,29 @@ def Main.boot(args: List<&2, String>) -> IO(Unit):
     case other:
       IO.die(Unit, 1, "usage: bendc0 --no-check <base.bend> <input.bend>")
 
+# bendc -o: what bendc writes goes to a C file (Cc.begin), which Cc.end
+# compiles into the binary out against the runtime compiled once (rt/cc.c).
+def Cc.begin() -> IO(Result<&1, &1, U32 & String, Unit>):
+  import "./rt/cc.c"
+  import "./rt/cc.js"
+
+def Cc.end(out: String) -> IO(Result<&1, &1, U32 & String, Unit>):
+  import "./rt/cc.c"
+  import "./rt/cc.js"
+
+# bendc -o out base.bend input.bend: the C, compiled into out.
+@unsafe
+def Main.run4(code: Nat, +out: String, +base_path: String, +user_path: String) -> IO(Unit):
+  match code:
+    case 6n:
+      do IO<Unit>:
+        u : Unit <- IO.try(Unit, Cc.begin())
+        r : Chk.Book & Nat <- Main.check(base_path, user_path)
+        Main.checked(False{}, base_path, user_path, r)
+        IO.try(Unit, Cc.end(out))
+    case other:
+      Main.usage()
+
 @unsafe
 def Main.run(args: List<&2, String>) -> IO(Unit):
   match args:
@@ -5914,6 +5937,8 @@ def Main.run(args: List<&2, String>) -> IO(Unit):
       Main.run2(Main.code(a), a, b)
     case +a <> +b <> +c <> Nil{}:
       Main.run3(Main.code(a), b, c)
+    case +a <> +b <> +c <> +d <> Nil{}:
+      Main.run4(Main.code(a), b, c, d)
     case other:
       Main.usage()
 

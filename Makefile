@@ -15,13 +15,23 @@ CFLAGS    ?= -O2 -w
 BEND_BASE ?= $(HOME)/.bend/bend2/base.bend
 export CC BEND_BASE
 
-all: build/bendc
+all: build/bendc build/bendrt.o
 
 build/bendc: seed/bendc.c rt/bendrt.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) -I rt seed/bendc.c -o $@ -lm -lpthread
 
-test: build/bendc
+# The runtime compiled once, for programs built with -DBEND_RT_SPLIT (bendc -o
+# does that, and builds it too when it is missing).
+build/bendrt.o: rt/bendrt_impl.c rt/bendrt_split.h
+	@mkdir -p build
+	$(CC) $(CFLAGS) -I rt -c rt/bendrt_impl.c -o $@
+
+# rt/bendrt_split.h and rt/bendrt_impl.c come from rt/bendrt.h.
+rt/bendrt_split.h rt/bendrt_impl.c: rt/bendrt.h tools/rtsplit.py
+	python3 tools/rtsplit.py
+
+test: build/bendc build/bendrt.o
 	./run_tests.sh build/bendc
 
 selfcheck: build/bendc
@@ -32,12 +42,7 @@ bootstrap:
 	./bootstrap.sh
 
 seed: build/bendc
-	./build/bendc --no-check $(BEND_BASE) bendc.bend > build/seed1.c
-	$(CC) $(CFLAGS) -I rt build/seed1.c -o build/seed1 -lm -lpthread
-	./build/seed1 --no-check $(BEND_BASE) bendc.bend > build/seed2.c
-	cmp build/seed1.c build/seed2.c
-	cp build/seed2.c seed/bendc.c
-	@echo "seed/bendc.c updated"
+	./tools/reseed.sh
 
 clean:
 	rm -rf build
