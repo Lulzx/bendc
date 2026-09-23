@@ -6,11 +6,39 @@
 #define _GNU_SOURCE
 #endif
 #define IMM(t) ((((V)(t)) << 3) | 1)
+#define BEND_SH ((V)1 << 20)
+#define BEND_DEEP ((V)1 << 21)
+#define BEND_SH_BITS (BEND_SH | BEND_DEEP)
+#define BEND_HOLE IMM(0x7ffff)
+#define BEND_BARRIER() __asm__ volatile("" ::: "memory")
 #define FLD(v, i) (((V *)(v))[(i) + 1])
 #define BOOL(b) ((b) ? IMM(1) : IMM(0))
 #define UNIT IMM(0)
+#if defined(__has_attribute)
+#if __has_attribute(musttail)
+#define BEND_MUSTTAIL __attribute__((musttail))
+#endif
+#endif
+#ifndef BEND_MUSTTAIL
+#define BEND_MUSTTAIL
+#endif
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
+#ifdef BEND_DEBUG_FREE
+void *bend_debug_stk[1 << 20][12];
+void bend_debug_record(uint64_t n) {
+  void *f[13];
+  int k = backtrace(f, 13);
+  for (int j = 0; j < 12; j++) bend_debug_stk[n][j] = j + 1 < k ? f[j + 1] : NULL;
+}
+void bend_debug_show(uint64_t n) {
+  int k = 0;
+  while (k < 12 && bend_debug_stk[n][k]) k++;
+  fprintf(stderr, "freed from:\n");
+  backtrace_symbols_fd(bend_debug_stk[n], k, 2);
+}
+#else
+#endif
 __attribute__((noreturn)) void bend_fail(const char *msg) {
   fflush(stdout);
   fprintf(stderr, "bend: %s\n", msg);
@@ -19,16 +47,20 @@ __attribute__((noreturn)) void bend_fail(const char *msg) {
 #define GC_BLK_SHIFT 16
 #define GC_BLK ((uintptr_t)1 << GC_BLK_SHIFT)
 #define GC_MAXBLK ((uintptr_t)1 << 22)
-#define GC_HDR 1056
+#define GC_HDR 64
 #define GC_SMALL 256
 #define GC_NCLS 31
 #define GC_MAXTHR 256
 #define GC_SIG SIGUSR2
+#define GC_RQCLS 15
 const uint16_t gc_cls_w[GC_NCLS] = {
   2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
   20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256};
 uint8_t gc_cls_of[GC_SMALL + 1];
 char *gc_base;
+uint64_t *gc_abits;
+uint64_t *gc_mbits;
+GcMeta *gc_meta;
 uintptr_t gc_top;                // blocks in use (high-water mark)
 uint8_t *gc_kind;                // per block: 0 free, 1 small, 2 large head, 3 large tail
 uint32_t *gc_back;               // large tail: distance back to its head
@@ -50,6 +82,14 @@ size_t gc_count;
 int gc_stats;
 Thr *gc_thrs[GC_MAXTHR];
 int gc_nthr;
+V *gc_rem;
+size_t gc_nrem, gc_caprem;
+V *gc_rem_prev;  // the last collection's, sorted (while this one roots)
+size_t gc_nprev, gc_capprev;
+#define GC_CANDW (GC_MAXBLK / 64)
+uint64_t *gc_cand;
+int gc_mt;
+GcHot gc_hot;
 GcRange *gc_roots;
 size_t gc_nroots, gc_caproots;
 void (*gc_hooks[16])(void);
@@ -66,11 +106,17 @@ void *gc_reserve(size_t bytes, void *hint) {
 void gc_init(void) {
   // A high address keeps small numbers from looking like heap pointers.
   gc_base = gc_reserve(GC_MAXBLK << GC_BLK_SHIFT, (void *)((uintptr_t)1 << 44));
+  if ((uintptr_t)gc_base < ((uintptr_t)1 << 32)) bend_fail("the heap must be above 4 GB (bend_share)");
   gc_kind = gc_reserve(GC_MAXBLK, NULL);
   gc_back = gc_reserve(GC_MAXBLK * sizeof(uint32_t), NULL);
   gc_runs = gc_reserve(GC_MAXBLK / 2 * sizeof(GcRun) + 64, NULL);
   gc_cap = ((size_t)1 << 33) / sizeof(GcItem);
   gc_stk = gc_reserve(gc_cap * sizeof(GcItem), NULL);
+  gc_abits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
+  gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
+  gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
+  gc_cand = gc_reserve(GC_RQCLS * GC_CANDW * sizeof(uint64_t), NULL);
+  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -84,6 +130,9 @@ void gc_init(void) {
   const char *m = getenv("BEND_GC_MIN_MB");
   if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20;
 }
+#define GC_ALLOC(b) (gc_abits + gc_bi(b) * 64)
+#define GC_MARK(b) (gc_mbits + gc_bi(b) * 64)
+#define GC_META(b) (&gc_meta[gc_bi(b)])
 uintptr_t gc_take_blocks(size_t n) {
   for (size_t i = 0; i < gc_nruns; i++) {
     if (gc_runs[i].len >= n) {
@@ -97,14 +146,18 @@ uintptr_t gc_take_blocks(size_t n) {
   if (gc_top + n > GC_MAXBLK) bend_fail("out of memory");
   uintptr_t at = gc_top;
   gc_top += n;
+  gc_hot.span = gc_top << GC_BLK_SHIFT;
   return at;
 }
 GcBlk *gc_new_small(int atomic, unsigned c) {
   uintptr_t at = gc_take_blocks(1);
   GcBlk *b = gc_blk(at);
   memset(b, 0, sizeof(GcBlk));
+  memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
+  memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
   b->words = gc_cls_w[c];
   b->nobj = (uint32_t)((GC_BLK - GC_HDR) / (b->words * 8));
+  *GC_META(b) = (GcMeta){(uint32_t)(((uint64_t)1 << 32) / (b->words * 8)) + 1, 0, {0}};
   b->nblk = 1;
   b->atomic = (uint8_t)atomic;
   b->cls = (uint8_t)c;
@@ -117,18 +170,57 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
     int t = __builtin_ctzll(k->bits);
     k->bits &= k->bits - 1;
     uint32_t i = k->j * 64 + (uint32_t)t;
-    k->blk->alloc[i >> 6] |= 1ull << (i & 63);
-    atomic_fetch_add_explicit(&gc_since, ((size_t)__builtin_popcountll(k->bits) + 1) * sw * sizeof(V),
-      memory_order_relaxed);
-    return k->objs + (size_t)i * sw;
+    V *p = k->objs + (size_t)i * sw;
+    p[0] = BEND_HOLE;
+    BEND_BARRIER();
+    GC_ALLOC(k->blk)[i >> 6] |= 1ull << (i & 63);
+    if (!k->reuse)
+      atomic_fetch_add_explicit(&gc_since, ((size_t)__builtin_popcountll(k->bits) + 1) * sw * sizeof(V),
+        memory_order_relaxed);
+    return p;
   }
   pthread_mutex_lock(&gc_lock);
   if (k->blk) { k->blk->owned = 0; k->blk = NULL; }
-  if (gc_since >= gc_limit) gc_collect_locked();
-  GcBlk *b = gc_partial[atomic][c];
-  int fresh = b == NULL;
-  if (b) gc_partial[atomic][c] = b->next;
-  else b = gc_new_small(atomic, c);
+  // First the next block, in address order, where matches freed slots and a
+  // 5th is free: lists built from its free slots stay in order in memory.
+  // Candidate bits may be stale; the block is checked here.
+  GcBlk *b = NULL;
+  k->reuse = 0;
+  if (!atomic && c < GC_RQCLS) {
+    Thr *t = thr_self;
+    uint64_t *cand = gc_cand + (size_t)c * GC_CANDW;
+    uintptr_t nw = (gc_top + 63) >> 6;
+    uintptr_t at = t->rcur[c] < gc_top ? t->rcur[c] : 0;
+    for (uintptr_t n = 0; b == NULL && n <= nw; n++) {
+      uintptr_t w = ((at >> 6) + n) % (nw ? nw : 1);
+      uint64_t f = cand[w];
+      if (n == 0) f &= ~0ull << (at & 63);
+      while (f && b == NULL) {
+        uintptr_t bi = (w << 6) + (uintptr_t)__builtin_ctzll(f);
+        f &= f - 1;
+        __atomic_fetch_and(&cand[w], ~(1ull << (bi & 63)), __ATOMIC_RELAXED);
+        if (bi >= gc_top || gc_kind[bi] != 1) continue;
+        GcBlk *q = gc_blk(bi);
+        if (q->cls != c || q->atomic || q->owned) continue;
+        uint32_t used = 0;
+        for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(GC_ALLOC(q)[j]);
+        if (q->nobj - used < q->nobj / 5) continue;
+        b = q;
+        k->reuse = 1;
+        t->rcur[c] = (uint32_t)bi + 1;
+      }
+    }
+  }
+  int fresh = 0;
+  if (b == NULL) {
+    if (gc_since >= gc_limit) gc_collect_locked();
+    // (A partly free block may have been claimed for reuse since the sweep.)
+    b = gc_partial[atomic][c];
+    while (b && b->owned) b = b->next;
+    fresh = b == NULL;
+    if (b) gc_partial[atomic][c] = b->next;
+    else b = gc_new_small(atomic, c);
+  }
   b->owned = 1;
   k->blk = b;
   pthread_mutex_unlock(&gc_lock);
@@ -145,7 +237,9 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
     k->bump = objs + sw;
     k->end = objs + (size_t)b->nobj * sw;
     k->idx = 1;
-    b->alloc[0] |= 1;
+    objs[0] = BEND_HOLE;
+    BEND_BARRIER();
+    GC_ALLOC(b)[0] |= 1;
     return objs;
   }
   k->bump = k->end = NULL;
@@ -160,20 +254,59 @@ __attribute__((noinline)) V *gc_alloc_large(size_t w, int atomic) {
   uintptr_t at = gc_take_blocks(n);
   GcBlk *b = gc_blk(at);
   memset(b, 0, sizeof(GcBlk));
+  memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
+  memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
+  *GC_META(b) = (GcMeta){0, 1, {0}};
   b->words = (uint32_t)w;
   b->nobj = 1;
   b->nblk = (uint32_t)n;
   b->atomic = (uint8_t)atomic;
   b->large = 1;
-  b->alloc[0] = 1;
+  memset(gc_objs(b), 0, w * sizeof(V));
+  gc_objs(b)[0] = BEND_HOLE;
+  BEND_BARRIER();
+  GC_ALLOC(b)[0] = 1;
   gc_kind[at] = 2;
   for (size_t j = 1; j < n; j++) { gc_kind[at + j] = 3; gc_back[at + j] = (uint32_t)j; }
   atomic_fetch_add_explicit(&gc_since, n * GC_BLK, memory_order_relaxed);
   pthread_mutex_unlock(&gc_lock);
-  V *p = gc_objs(b);
-  memset(p, 0, w * sizeof(V));
-  return p;
+  return gc_objs(b);
 }
+__attribute__((noinline)) void bend_share_slow(V v) {
+  uint32_t i;
+  GcBlk *b = gc_slot(v, &i);
+  if (b == NULL) {
+    uintptr_t off = (uintptr_t)v - (uintptr_t)gc_base;
+    uintptr_t bi = off >> GC_BLK_SHIFT;
+    uint8_t kd = gc_kind[bi];
+    if (kd != 2 && kd != 3) return;
+    if (kd == 3) bi -= gc_back[bi];
+    b = gc_blk(bi);
+    i = 0;
+  }
+  if (i >= b->nobj || b->atomic) return;
+  if ((uintptr_t)v != (uintptr_t)gc_objs(b) + (uintptr_t)i * b->words * sizeof(V)) return;
+  if (!(GC_ALLOC(b)[i >> 6] & (1ull << (i & 63)))) return;
+  V *p = (V *)v;
+  V w0 = __atomic_load_n(&p[0], __ATOMIC_RELAXED);
+  if (w0 >= ((V)1 << 22)) {
+    V n = p[2];
+    if (b->words >= 3 && n <= (V)b->words - 3)
+      for (V j = 0; j < n; j++) bend_share_slow(p[3 + j]);
+  } else if (!(w0 & BEND_SH)) {
+    __atomic_fetch_or(&p[0], BEND_SH, __ATOMIC_RELAXED);
+  }
+}
+__attribute__((noinline)) void bend_deep(V v, unsigned w) {
+  V *p = (V *)v;
+  for (unsigned j = 1; j < w; j++) bend_share(p[j]);
+  __atomic_fetch_or(&p[0], BEND_SH | BEND_DEEP, __ATOMIC_RELEASE);
+}
+#ifdef BEND_DEBUG_FREE
+#define bend_take(v, w) bend_take_at(v, w, __LINE__)
+#else
+#define bend_take(v, w) bend_take_at(v, w, 0)
+#endif
 void gc_root_add_locked(V *p, size_t n) {
   if (gc_nroots == gc_caproots) {
     gc_caproots = gc_caproots ? gc_caproots * 2 : 256;
@@ -187,6 +320,13 @@ void gc_root_add(V *p, size_t n) {
   pthread_mutex_unlock(&gc_lock);
 }
 void gc_hook(void (*f)(void)) { gc_hooks[gc_nhooks++] = f; }
+int gc_rem_wants(GcBlk *b, uint32_t i, uint64_t bit, uintptr_t o) {
+  (void)bit;
+  V *p = (V *)(o + i * (uintptr_t)b->words * sizeof(V));
+  for (uint32_t j = 0; j < b->words; j++)
+    if (p[j] == BEND_HOLE) return 1;
+  return 0;
+}
 void gc_scan(const void *lo, const void *hi) {
   uintptr_t a = ((uintptr_t)lo + 7) & ~(uintptr_t)7;
   for (const V *p = (const V *)a; (const void *)p < hi; p++) gc_mark(*p);
@@ -227,8 +367,8 @@ void gc_sweep(void) {
       size_t used = 0;
       int words = (int)((b->nobj + 63) >> 6);
       for (int j = 0; j < words; j++) {
-        b->alloc[j] &= b->mark[j];
-        used += (size_t)__builtin_popcountll(b->alloc[j]);
+        GC_ALLOC(b)[j] &= GC_MARK(b)[j];
+        used += (size_t)__builtin_popcountll(GC_ALLOC(b)[j]);
       }
       if (used == 0) {
         gc_kind[bi] = 0;
@@ -241,7 +381,7 @@ void gc_sweep(void) {
       }
     } else if (kd == 2) {
       GcBlk *b = gc_blk(bi);
-      if (b->mark[0] & 1) {
+      if (GC_MARK(b)[0] & 1) {
         live += (size_t)b->nblk * GC_BLK;
       } else {
         for (uint32_t j = 0; j < b->nblk; j++) gc_kind[bi + j] = 0;
@@ -251,6 +391,7 @@ void gc_sweep(void) {
   }
   // Free runs, rebuilt from the block kinds.
   while (gc_top > 0 && gc_kind[gc_top - 1] == 0) gc_top--;
+  gc_hot.span = gc_top << GC_BLK_SHIFT;
   gc_nruns = 0;
   for (uintptr_t bi = 0; bi < gc_top;) {
     if (gc_kind[bi] != 0) { bi++; continue; }
@@ -263,6 +404,18 @@ void gc_sweep(void) {
       madvise(gc_base + (at << GC_BLK_SHIFT), (bi - at) << GC_BLK_SHIFT, MADV_DONTNEED);
   }
   gc_live_bytes = live;
+}
+int gc_rem_cmp(const void *a, const void *b) {
+  V x = *(const V *)a, y = *(const V *)b;
+  return x < y ? -1 : x > y;
+}
+void gc_rem_unique(void) {
+  if (gc_nrem < 2) return;
+  qsort(gc_rem, gc_nrem, sizeof(V), gc_rem_cmp);
+  size_t n = 1;
+  for (size_t i = 1; i < gc_nrem; i++)
+    if (gc_rem[i] != gc_rem[n - 1]) gc_rem[n++] = gc_rem[i];
+  gc_nrem = n;
 }
 __attribute__((noinline)) void gc_collect_locked(void) {
   Thr *me = thr_self;
@@ -287,14 +440,27 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack;
   if (!gc_minor) {
     for (uintptr_t bi = 0; bi < gc_top; bi++) {
-      if (gc_kind[bi] == 1 || gc_kind[bi] == 2) memset(gc_blk(bi)->mark, 0, sizeof(gc_blk(bi)->mark));
+      if (gc_kind[bi] == 1 || gc_kind[bi] == 2) memset(gc_mbits + bi * 64, 0, 64 * sizeof(uint64_t));
     }
   }
   gc_rooting = 1;
+  {
+    // The last collection's list becomes gc_rem_prev (sorted by
+    // gc_rem_unique); this one records into gc_rem.
+    V *t = gc_rem_prev; gc_rem_prev = gc_rem; gc_rem = t;
+    size_t c = gc_capprev; gc_capprev = gc_caprem; gc_caprem = c;
+    gc_nprev = gc_nrem;
+    gc_nrem = 0;
+    gc_rooting = 2;  // rescanned, not recorded again
+    if (gc_minor) for (size_t i = 0; i < gc_nprev; i++) gc_mark(gc_rem_prev[i]);
+    gc_rooting = 1;
+  }
   for (int i = 0; i < gc_nthr; i++) {
     Thr *t = gc_thrs[i];
     if (t->live) gc_scan((const void *)t->sp, (const void *)t->top);
   }
+  gc_rem_unique();
+  gc_rooting = 3;  // other roots hold no half-made nodes
   for (size_t i = 0; i < gc_nroots; i++) gc_scan(gc_roots[i].p, gc_roots[i].p + gc_roots[i].n);
   for (int i = 0; i < gc_nhooks; i++) gc_hooks[i]();
   gc_rooting = 0;
@@ -311,8 +477,9 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   gc_count++;
   if (gc_stats) {
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    fprintf(stderr, "[gc %zu %s] live %zu MB, heap %zu MB, next at +%zu MB, %.1f ms\n", gc_count,
-      gc_minor ? "minor" : "major", gc_live_bytes >> 20, (size_t)(gc_top << GC_BLK_SHIFT) >> 20, gc_limit >> 20,
+    fprintf(stderr, "[gc %zu %s] live %zu MB, heap %zu MB, next at +%zu MB, %zu rescans next, %.1f ms\n",
+      gc_count, gc_minor ? "minor" : "major", gc_live_bytes >> 20, (size_t)(gc_top << GC_BLK_SHIFT) >> 20,
+      gc_limit >> 20, gc_nrem,
       (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6);
   }
 }
@@ -376,10 +543,11 @@ V mk_str(const char *s, size_t n) {
   return r;
 }
 #define MKS(lit) mk_str(lit, sizeof(lit) - 1)
-#define STRC(c, lit) ((c) ? (c) : str_cache(&(c), lit, sizeof(lit) - 1))
+#define STRC(c, lit) (__atomic_load_n(&(c), __ATOMIC_ACQUIRE) ? (c) : str_cache(&(c), lit, sizeof(lit) - 1))
 #define mk_str_heap mk_str
 __attribute__((noinline)) V str_cache(V *slot, const char *s, size_t n) {
   V v = mk_str(s, n);
+  bend_share(v);  // before another thread can see it
   pthread_mutex_lock(&gc_lock);
   if (*slot == 0) {
     __atomic_store_n(slot, v, __ATOMIC_RELEASE);
@@ -725,6 +893,8 @@ void par_hook(void) {
 void par_start(void) {
   pthread_mutex_lock(&par_mu);
   if (!atomic_load(&par_started)) {
+    gc_mt = 1;
+    gc_hot.mt = 1;
     for (int i = 1; i < par_nthreads; i++) {
       pthread_attr_t attr;
       pthread_attr_init(&attr);
@@ -738,6 +908,15 @@ void par_start(void) {
   pthread_mutex_unlock(&par_mu);
 }
 V par_fork(V clo) {
+#ifdef BEND_DEBUG_FREE
+  // Debugging, on one thread: BEND_DEBUG_EAGER runs forks as they are made,
+  // in the order other threads may run them (the result boxed, tagged 4).
+  if (par_nthreads <= 1 && getenv("BEND_DEBUG_EAGER")) {
+    V *box = halloc(1);
+    box[0] = apply(clo, 0);
+    return (V)box | 4;
+  }
+#endif
   if (par_nthreads <= 1) return clo | 2;
   PDeque *d = thr_self->dq;
   long b = atomic_load_explicit(&d->bot, memory_order_relaxed);
@@ -755,6 +934,7 @@ V par_fork(V clo) {
   return (V)t;
 }
 V par_join(V tv) {
+  if (tv & 4) return ((V *)(tv & ~(V)4))[0];
   if (tv & 2) return apply(tv & ~(V)2, 0);
   PTask *t = (PTask *)tv;
   PTask *p = pdq_pop(thr_self->dq);

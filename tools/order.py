@@ -152,7 +152,7 @@ SECTIONS = [
     ('Operator resolution', r'^R\.'),
     ('Free variables', r'^(FV\.|Pats?\.vars)'),
     ('Global tables', r'^(CInfo|DInfo|G|Natives)(\.|$)'),
-    ('Code generation', r'^(St|Gen|Bind|Env|Tgt|Self|PatR|Split|Sig)(\.|$)'),
+    ('Code generation', r'^(St|Gen|Bind|Env|Tgt|Self|PatR|Split|Sig|Dps|DEdge|DGrp)(\.|$)'),
     ('Value printers', r'^(TB$|Ty\.)'),
     ('Modules', r'^(Mod\.|Qual$)'),
     ('Driver', r'^(Main\.|main$)'),

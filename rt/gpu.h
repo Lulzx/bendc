@@ -148,7 +148,7 @@ KINLINE bool k_in(KTHR KCtx *c, KW v) { return v - c->ab < c->an; }
 KINLINE KW k_word(KTHR KCtx *c, KW v, KW i) {
   return k_in(c, v) ? c->H[((v - c->ab) >> 3) + i] : c->G[((v - c->gb) >> 3) + i];
 }
-KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : k_word(c, v, 0); }
+KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : (k_word(c, v, 0) & ~(KW)0x300000); }
 #define KTAG(v) k_tag(c, v)
 #define KFLD(v, i) k_word(c, v, 1 + (i))
 

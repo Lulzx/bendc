@@ -1,14 +1,15 @@
 #!/bin/sh
 # Regenerates seed/bendc.c: compiles bendc.bend with build/bendc, then with
 # each new compiler, until one compiles itself to the same C (a compiler
-# change that changes its own output takes one more stage).
+# change that changes its own output takes one more stage). bendc builds
+# itself with BEND_NO_FREE=1 (see Main.emit.c in bendc.bend).
 set -e
 cd "$(dirname "$0")/.."
 BASE=${BEND_BASE:-$HOME/.bend/bend2/base.bend}
 CC=${CC:-clang}
 prev=build/bendc
 for i in 1 2 3 4; do
-  "$prev" --no-check "$BASE" bendc.bend > build/reseed$i.c
+  BEND_NO_FREE=1 "$prev" --no-check "$BASE" bendc.bend > build/reseed$i.c
   $CC -O2 -w -I rt build/reseed$i.c -o build/reseed$i -lm -lpthread
   if [ $i -gt 1 ] && cmp -s build/reseed$i.c build/reseed$((i - 1)).c; then
     cp build/reseed$i.c seed/bendc.c

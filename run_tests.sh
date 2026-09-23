@@ -22,7 +22,8 @@ for src in tests/*.bend; do
   if ! ${CC:-clang} -O2 -w $split -I rt "$out.c" $obj -o "$out" -lm -lpthread $LDL 2> "$out.err"; then
     echo "FAIL $name (clang)"; sed 's/^/  /' "$out.err" | head -5; fail=$((fail+1)); continue
   fi
-  "./$out" > "$out.txt" 2> "$out.stderr"
+  # tests/NAME.env: environment settings for the run (BEND_GC_MIN_MB=1, say).
+  env $(cat "tests/$name.env" 2>/dev/null) "./$out" > "$out.txt" 2> "$out.stderr"
   echo "exit $?" >> "$out.txt"
   if cmp -s "$out.txt" "tests/$name.out"; then
     echo "ok   $name"; pass=$((pass+1))

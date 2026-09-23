@@ -152,7 +152,7 @@ static const char K_GPU_H[] =
 "KINLINE KW k_word(KTHR KCtx *c, KW v, KW i) {\n"
 "  return k_in(c, v) ? c->H[((v - c->ab) >> 3) + i] : c->G[((v - c->gb) >> 3) + i];\n"
 "}\n"
-"KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : k_word(c, v, 0); }\n"
+"KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : (k_word(c, v, 0) & ~(KW)0x300000); }\n"
 "#define KTAG(v) k_tag(c, v)\n"
 "#define KFLD(v, i) k_word(c, v, 1 + (i))\n"
 "\n"

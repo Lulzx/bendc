@@ -2980,8 +2980,13 @@ type CInfo is Data:
 type DInfo is Data:
   DInfo{kind: U32, mask: List<&2, Bool>}
 
+# A destination-passing group (see Dps below): its name and the number of
+# value parameters its members' D_ functions share.
+type DGrp is Data:
+  DGrp{id: String, n: U32}
+
 type G is Data:
-  G{ctors: Map<&2, CInfo>, defs: Map<&2, DInfo>, bodies: Map<&2, Decl>}
+  G{ctors: Map<&2, CInfo>, defs: Map<&2, DInfo>, bodies: Map<&2, Decl>, dps: Map<&2, DGrp>}
 
 def G.opt_ctors(m: Map<&2, CInfo>) -> Map<&2, Maybe<&2, CInfo>>:
   match m:
@@ -2993,7 +2998,7 @@ def G.opt_ctors(m: Map<&2, CInfo>) -> Map<&2, Maybe<&2, CInfo>>:
       MNode{p, G.opt_ctors(lo), G.opt_ctors(hi)}
 
 def G.ctor(+g: G, +name: String) -> Maybe<&2, CInfo>:
-  G{ctors, defs, bodies} = g
+  G{ctors, defs, bodies, dps} = g
   Pair.snd(Map<&2, Maybe<&2, CInfo>>, Maybe<&2, CInfo>,
     Map.get(Maybe<&2, CInfo>, None{}, G.opt_ctors(ctors), name))
 
@@ -3001,12 +3006,17 @@ def G.get(-V: Data, +d: V, +m: Map<&2, V>, +key: String) -> V:
   Pair.snd(Map<&2, V>, V, Map.get(V, d, m, key))
 
 def G.def(+g: G, +name: String) -> DInfo:
-  G{ctors, defs, bodies} = g
+  G{ctors, defs, bodies, dps} = g
   G.get(DInfo, DInfo{4, Nil{}}, defs, name)
 
 def G.body(+g: G, +name: String) -> Decl:
-  G{ctors, defs, bodies} = g
+  G{ctors, defs, bodies, dps} = g
   G.get(Decl, DImport{"", ""}, bodies, name)
+
+# The destination-passing group of a def (id "" when it has none).
+def G.dps(+g: G, +name: String) -> DGrp:
+  G{ctors, defs, bodies, dps} = g
+  G.get(DGrp, DGrp{"", 0}, dps, name)
 
 def Natives() -> List<&2, String>:
   ["U32.inc", "U32.add", "U32.sub", "U32.mul", "U32.div", "U32.mod", "U32.not",
@@ -3081,30 +3091,30 @@ def G.params(+laws: Map<&2, List<&2, Param>>, +name: String, ps: List<&2, Param>
   G.params.go(G.get(List<&2, Param>, Nil{}, laws, name), ps)
 
 def G.add.type(+name: String, ps: List<&2, String>, +cs: List<&2, Ctor>, g: G) -> G:
-  G{ctors, defs, bodies} = g
+  G{ctors, defs, bodies, dps} = g
   +n = U32.from_nat(List.length(&2, Ctor, cs))
   G{G.ctors(name, cs, 0, n, ctors), Map.set(&2, DInfo, defs, name,
-    DInfo{3, Nil{}}), Map.set(&2, Decl, bodies, "%" ++ name, DType{name, ps, cs})}
+    DInfo{3, Nil{}}), Map.set(&2, Decl, bodies, "%" ++ name, DType{name, ps, cs}), dps}
 
 def G.add.law(+name: String, ps: List<&2, Param>, g: G) -> G:
-  G{ctors, defs, bodies} = g
+  G{ctors, defs, bodies, dps} = g
   G{ctors, Map.set(&2, DInfo, defs, name,
-    DInfo{Bool.pick(U32, G.is_native(name), 2, 3), G.mask(ps)}), bodies}
+    DInfo{Bool.pick(U32, G.is_native(name), 2, 3), G.mask(ps)}), bodies, dps}
 
 def G.add.def(
   +name: String, +ps: List<&2, Param>, body: Expr, ret: Expr,
   +laws: Map<&2, List<&2, Param>>, g: G
 ) -> G:
-  G{ctors, defs, bodies} = g
+  G{ctors, defs, bodies, dps} = g
   G{ctors, Map.set(&2, DInfo, defs, name,
     DInfo{Bool.pick(U32, G.is_native(name), 2, 0),
       G.mask(G.params(laws, name, ps))}),
-    Map.set(&2, Decl, bodies, name, DDef{name, ps, body, ret})}
+    Map.set(&2, Decl, bodies, name, DDef{name, ps, body, ret}), dps}
 
 def G.add.eff(+name: String, +ps: List<&2, Param>, ims: List<&2, String>, g: G) -> G:
-  G{ctors, defs, bodies} = g
+  G{ctors, defs, bodies, dps} = g
   G{ctors, Map.set(&2, DInfo, defs, name, DInfo{1, G.mask(ps)}),
-    Map.set(&2, Decl, bodies, name, DEff{name, ps, ims})}
+    Map.set(&2, Decl, bodies, name, DEff{name, ps, ims}), dps}
 
 def G.add(d: Decl, +laws: Map<&2, List<&2, Param>>, g: G) -> G:
   match d:
@@ -3129,11 +3139,15 @@ def G.build(
       G.build(t, laws, G.add(d, laws, g))
 
 def G.new(+ds: List<&2, Decl>) -> G:
-  G.build(ds, G.laws(ds, MTip{}), G{MTip{}, MTip{}, MTip{}})
+  G.build(ds, G.laws(ds, MTip{}), G{MTip{}, MTip{}, MTip{}, MTip{}})
 
 def DInfo.mask(i: DInfo) -> List<&2, Bool>:
   DInfo{kind, mask} = i
   mask
+
+def G.with_dps(g: G, m: Map<&2, DGrp>) -> G:
+  G{ctors, defs, bodies, dps} = g
+  G{ctors, defs, bodies, m}
 
 # Code generation
 # ===============
@@ -3291,9 +3305,12 @@ def Gen.arr(xs: List<&2, Doc>) -> Doc:
     case h <> t:
       Doc.list([DStr{"(V[]){"}, Gen.commas(h <> t), DStr{"}"}])
 
+# Where a statement's value goes: returned, assigned to a C variable, or
+# stored through dst (in a D_ function of destination-passing group id).
 type Tgt is Data:
   TRet{}
   TSet{v: String}
+  TDst{id: String, n: U32}
 
 type Self is Data:
   Self{name: String, mask: List<&2, Bool>, cps: List<&2, String>}
@@ -3307,6 +3324,8 @@ def Gen.ret(t: Tgt, d: Doc) -> Doc:
       Doc.list([DStr{"return "}, d, DStr{";\n"}])
     case TSet{v}:
       Doc.list([DStr{v}, DStr{" = "}, d, DStr{";\n"}])
+    case TDst{id, n}:
+      Doc.list([DStr{"*dst = "}, d, DStr{";\nreturn 0;\n"}])
 
 # A pattern against a C path yields tests and bindings.
 type PatR is Data:
@@ -3367,6 +3386,24 @@ law Gen.pat:
   for r: PatR
   PatR
 
+def Gen.is_field(path: String) -> Bool:
+  match path:
+    case SCon{Chr{c}, t}:
+      U32.is_eq(c, 70)
+    case SNil{}:
+      False{}
+
+# A node the pattern opens, for bend_take: a binding named %top (a
+# scrutinee) or %sub (a field), then its size in words.
+def Gen.pat.node(opens: Bool, +ar: U32, +path: String, r: PatR) -> PatR:
+  match opens:
+    case True{}:
+      PatR{conds, binds} = r
+      PatR{conds, Bind{Bool.pick(String, Gen.is_field(path), "%sub", "%top") ++ U32.show(U32.inc(ar)),
+        path} <> binds}
+    case False{}:
+      r
+
 # Field i of a node at path (99: the value itself, for newtypes).
 @unsafe
 def Gen.pat.fields(
@@ -3382,13 +3419,13 @@ def Gen.pat.fields(
 
 @unsafe
 def Gen.pat.kind(
-  +g: G, kind: Nat, +tag: U32, +single: Bool, args: List<&2, Pat>,
+  +g: G, kind: Nat, +tag: U32, +ar: U32, +single: Bool, +args: List<&2, Pat>,
   +path: String, r: PatR
 ) -> PatR:
   match kind:
     case 0n:
-      Gen.pat.fields(g, args, path, 0, Gen.pat.tag(single,
-        "TAG(" ++ path ++ ") == " ++ U32.show(tag), r))
+      Gen.pat.fields(g, args, path, 0, Gen.pat.node(Bool.not(List.is_empty(&2, Pat, args)), ar, path,
+        Gen.pat.tag(single, "TAG(" ++ path ++ ") == " ++ U32.show(tag), r)))
     case 1n:
       Gen.pat.tag(single, "(" ++ path ++ ") == IMM(" ++ U32.show(tag) ++ ")", r)
     case 2n:
@@ -3407,8 +3444,8 @@ def Gen.pat.ctor(
   match info:
     case None{}:
       Gen.pat.cond("0 /* unknown constructor " ++ name ++ " */", r)
-    case Some{CInfo{+tag, ar, +kind, +single}}:
-      Gen.pat.kind(g, U32.to_nat(kind), tag, single, args, path, r)
+    case Some{CInfo{+tag, +ar, +kind, +single}}:
+      Gen.pat.kind(g, U32.to_nat(kind), tag, ar, single, args, path, r)
 
 @unsafe
 def Gen.pat(g, p, path, r):
@@ -3514,6 +3551,15 @@ def Gen.ctor.node(+tag: U32, +ds: List<&2, Doc>) -> Doc:
     Doc.list([DStr{"CN(" ++ U32.show(tag) ++ ", " ++ U32.show(n) ++ ", "},
       Gen.arr(ds), DStr{")"}]))
 
+# A D_ node, with a hole: CH2 and the like (see bendrt.h).
+def Gen.ctor.hnode(+tag: U32, +ds: List<&2, Doc>) -> Doc:
+  +n = Gen.len(ds)
+  Bool.pick(Doc, U32.is_le(n, 4),
+    Doc.list([DStr{"CH" ++ U32.show(n) ++ "(" ++ U32.show(tag) ++ ", "}, Gen.commas(ds),
+      DStr{")"}]),
+    Doc.list([DStr{"CHN(" ++ U32.show(tag) ++ ", " ++ U32.show(n) ++ ", "},
+      Gen.arr(ds), DStr{")"}]))
+
 def Gen.ctor.kind(+tag: U32, kind: Nat, ds: List<&2, Doc>) -> Doc:
   match kind:
     case 0n:
@@ -3584,6 +3630,8 @@ def Gen.is_ret(t: Tgt) -> Bool:
       True{}
     case TSet{v}:
       False{}
+    case TDst{id, n}:
+      True{}
 
 def Gen.is_tail(+env: Env(), +self: Self, +tgt: Tgt, +name: String, +args: List<&2, Expr>) ->
   Bool:
@@ -3844,18 +3892,76 @@ def Gen.tail.self(+g: G, +env: Env(), self: Self, args: List<&2, Expr>) -> Gen(D
   Self{sn, +mask, cps} = self
   Gen.tail(g, env, cps, Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}))
 
+def DGrp.id(d: DGrp) -> String:
+  DGrp{id, n} = d
+  id
+
+# Whether a tail call jumps to a D_ function: the target is a D_ function's
+# (tgt) and name a def of its group, applied to all its parameters.
+def Gen.dst.call(+g: G, +env: Env(), +tgt: Tgt, +name: String, +args: List<&2, Expr>) -> Bool:
+  match tgt:
+    case TDst{+id, n}:
+      Bool.and(Str.eq(id, DGrp.id(G.dps(g, name))), Bool.and(Bool.not(Env.has(env, name)),
+        Nat.is_eq(List.length(&2, Bool, DInfo.mask(G.def(g, name))), List.length(&2, Expr, args))))
+    case other:
+      False{}
+
+def Tgt.n(t: Tgt) -> Nat:
+  match t:
+    case TDst{id, n}:
+      U32.to_nat(n)
+    case other:
+      0n
+
+# ", a, b, 0, 0": a D_ call's arguments after dst, padded with zeros to the
+# group's parameter count.
+def Gen.dst.args(n: Nat, ds: List<&2, Doc>) -> Doc:
+  match n ds:
+    case 0n dl:
+      DNil{}
+    case 1n+m Nil{}:
+      Doc.list([DStr{", 0"}, Gen.dst.args(m, Nil{})])
+    case 1n+m d <> t:
+      Doc.list([DStr{", "}, d, Gen.dst.args(m, t)])
+
+@unsafe
+def Gen.dst.jump.split(+g: G, +env: Env(), +tgt: Tgt, +name: String, s: Split) -> Gen(Doc):
+  Split{kept, all, extra, full} = s
+  do Gen<Doc>:
+    Gen.ref(name)
+    ds : List<&2, Doc> <- Gen.exprs(g, env, kept)
+    return Doc.list([DStr{"BEND_MUSTTAIL return D_" ++ Gen.mangle(name) ++ "(dst"},
+      Gen.dst.args(Tgt.n(tgt), ds), DStr{");\n"}])
+
+# A tail call to another def of the group: a jump to its D_ function, with
+# the same dst.
+@unsafe
+def Gen.dst.jump(+g: G, +env: Env(), +tgt: Tgt, +name: String, args: List<&2, Expr>) -> Gen(Doc):
+  Gen.dst.jump.split(g, env, tgt, name,
+    Gen.split(DInfo.mask(G.def(g, name)), args, Split{Nil{}, Nil{}, Nil{}, False{}}))
+
+@unsafe
+def Gen.stmt.call.dst(+g: G, +env: Env(), +tgt: Tgt, +name: String, args: List<&2, Expr>,
+  dst: Bool
+) -> Gen(Doc):
+  match dst:
+    case True{}:
+      Gen.dst.jump(g, env, tgt, name, args)
+    case False{}:
+      do Gen<Doc>:
+        d : Doc <- Gen.call(g, env, EVar{name}, args)
+        return Gen.ret(tgt, d)
+
 @unsafe
 def Gen.stmt.call(
-  +g: G, +env: Env(), +self: Self, +tgt: Tgt, +name: String, args: List<&2, Expr>,
+  +g: G, +env: Env(), +self: Self, +tgt: Tgt, +name: String, +args: List<&2, Expr>,
   tail: Bool
 ) -> Gen(Doc):
   match tail:
     case True{}:
       Gen.tail.self(g, env, self, args)
     case False{}:
-      do Gen<Doc>:
-        d : Doc <- Gen.call(g, env, EVar{name}, args)
-        return Gen.ret(tgt, d)
+      Gen.stmt.call.dst(g, env, tgt, name, args, Gen.dst.call(g, env, tgt, name, args))
 
 law Gen.stmt:
   for +g: G
@@ -3864,6 +3970,110 @@ law Gen.stmt:
   for +tgt: Tgt
   for e: Expr
   Gen(Doc)
+
+def Gen.dst.node(info: Maybe<&2, CInfo>) -> Bool:
+  match info:
+    case Some{CInfo{tag, ar, kind, single}}:
+      U32.is_zero(kind)
+    case None{}:
+      False{}
+
+def Gen.dst.hole.at(+g: G, +env: Env(), +tgt: Tgt, a: Expr, +i: U32, acc: U32) -> U32:
+  match a:
+    case ECall{EVar{+h}, +hargs}:
+      Bool.pick(U32, Gen.dst.call(g, env, tgt, h, hargs), U32.inc(i), acc)
+    case other:
+      acc
+
+# In a D_ function, the field of a constructor node left as a hole: the
+# last one that is a call to the group (1-based; 0 when there is none).
+def Gen.dst.hole(+g: G, +env: Env(), +tgt: Tgt, node: Bool, as: List<&2, Expr>, +i: U32, acc: U32) ->
+  U32:
+  match node as:
+    case True{} a <> t:
+      Gen.dst.hole(g, env, tgt, True{}, t, U32.inc(i), Gen.dst.hole.at(g, env, tgt, a, i, acc))
+    case n l:
+      acc
+
+@unsafe
+# The hole holds BEND_HOLE until it is filled (the collector looks for it).
+def Gen.dst.field(hole: Bool, +g: G, +env: Env(), a: Expr) -> Gen(Doc):
+  match hole:
+    case True{}:
+      Gen.pure(Doc, DStr{"BEND_HOLE"})
+    case False{}:
+      Gen.expr(g, env, a)
+
+@unsafe
+def Gen.dst.fields(+g: G, +env: Env(), as: List<&2, Expr>, +i: U32, +hole: U32) ->
+  Gen(List<&2, Doc>):
+  match as:
+    case Nil{}:
+      Gen.pure(List<&2, Doc>, Nil{})
+    case a <> t:
+      do Gen<List<&2, Doc>>:
+        d : Doc <- Gen.dst.field(U32.is_eq(U32.inc(i), hole), g, env, a)
+        r : List<&2, Doc> <- Gen.dst.fields(g, env, t, U32.inc(i), hole)
+        return d <> r
+
+def Gen.dst.nth(k: Nat, as: List<&2, Expr>) -> Expr:
+  match k as:
+    case 0n a <> t:
+      a
+    case 1n+m a <> t:
+      Gen.dst.nth(m, t)
+    case n Nil{}:
+      EErr{"hole"}
+
+@unsafe
+def Gen.stmt.ctor.next(+g: G, +env: Env(), +self: Self, +tgt: Tgt, e: Expr) -> Gen(Doc):
+  match e:
+    case ECall{EVar{+h}, +hargs}:
+      Gen.stmt.call(g, env, self, tgt, h, hargs, Gen.is_tail(env, self, tgt, h, hargs))
+    case other:
+      Gen.pure(Doc, DStr{"bend_fail(\"hole\");\n"})
+
+def Gen.stmt.ctor.tag.go(info: Maybe<&2, CInfo>) -> U32:
+  match info:
+    case Some{CInfo{tag, ar, kind, single}}:
+      tag
+    case None{}:
+      0
+
+@unsafe
+def Gen.stmt.ctor.tag(+g: G, +name: String) -> U32:
+  Gen.stmt.ctor.tag.go(G.ctor(g, name))
+
+@unsafe
+def Gen.stmt.ctor.hole(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +name: String,
+  args: List<&2, Expr>, +hole: U32, next: Expr
+) -> Gen(Doc):
+  do Gen<Doc>:
+    ds : List<&2, Doc> <- Gen.dst.fields(g, env, args, 0, hole)
+    b : Doc <- Gen.stmt.ctor.next(g, env, self, tgt, next)
+    return Doc.list([DStr{"{ V dc = "}, Gen.ctor.hnode(Gen.stmt.ctor.tag(g, name), ds),
+      DStr{"; *dst = dc; dst = &FLD(dc, " ++ U32.show((hole - 1 : U32)) ++ ");\n"}, b, DStr{"}\n"}])
+
+@unsafe
+def Gen.stmt.ctor.pick(none: Bool, +g: G, +env: Env(), +self: Self, +tgt: Tgt, +name: String,
+  +args: List<&2, Expr>, +hole: U32
+) -> Gen(Doc):
+  match none:
+    case True{}:
+      do Gen<Doc>:
+        d : Doc <- Gen.expr(g, env, ECtor{name, args})
+        return Gen.ret(tgt, d)
+    case False{}:
+      Gen.stmt.ctor.hole(g, env, self, tgt, name, args, hole,
+        Gen.dst.nth(U32.to_nat(hole), EErr{"hole"} <> args))
+
+# C(.., f(..), ..) with f in the group: the node is stored with a hole
+# where f's result goes, dst moves to the hole, and f's code follows.
+@unsafe
+def Gen.stmt.ctor(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +name: String, +args: List<&2, Expr>,
+  +hole: U32
+) -> Gen(Doc):
+  Gen.stmt.ctor.pick(U32.is_zero(hole), g, env, self, tgt, name, args, hole)
 
 # A statement-level expression used as a value: ({ V r; ...; r; }).
 @unsafe
@@ -3912,9 +4122,85 @@ def Gen.expr(g, env, e):
         Gen.error("unexpected expression: " ++ Expr.show(other))
         return DStr{"0"}
 
+def Gen.share.if(ok: Bool, c: String) -> Doc:
+  match ok:
+    case True{}:
+      DStr{"bend_share(" ++ c ++ ");\n"}
+    case False{}:
+      DNil{}
+
+# Scalars (numbers, characters, booleans) are never shared: a variable known
+# to hold one is bound to its C name in parentheses, "(a1)", which
+# Gen.shares skips, as it skips a Nat pattern's nat_subk(..).
+def Gen.scalar.ty(+t: String) -> Bool:
+  Str.has(["U32", "F32", "Nat", "Bool", "Char"], t)
+
+def Gen.scalar.wrap(scalar: Bool, +c: String) -> String:
+  Bool.pick(String, scalar, "(" ++ c ++ ")", c)
+
+def Gen.scalar.c(c: String) -> Bool:
+  match c:
+    case SCon{Chr{40}, t}:
+      True{}
+    case SCon{Chr{110}, SCon{Chr{97}, SCon{Chr{116}, SCon{Chr{95}, t}}}}:
+      True{}
+    case other:
+      False{}
+
+def Gen.scalar.find(m: Maybe<&2, String>) -> Bool:
+  match m:
+    case Some{c}:
+      Gen.scalar.c(c)
+    case None{}:
+      False{}
+
+# Whether a let's value is a variable holding a scalar.
+def Gen.scalar.var(+env: Env(), v: Expr) -> Bool:
+  match v:
+    case EVar{+y}:
+      Gen.scalar.find(Env.find(env, y))
+    case other:
+      False{}
+
+#
+# A value bound to a variable used twice (on some path) is marked shared
+# where it is bound (bend_share). A match or destructuring let that opens a
+# node reads its fields into locals and hands the node to bend_take, which
+# frees it unless it is shared, in which case the fields are shared too. See
+# "Freeing on match" in bendrt.h.
+law Use.n:
+  for +x: String
+  for e: Expr
+  U32
+
+# bend_share for each binding whose variable body uses twice.
+@unsafe
+def Gen.shares(binds: Env(), +body: Expr) -> Doc:
+  match binds:
+    case Nil{}:
+      DNil{}
+    case Bind{+x, +c} <> t:
+      Doc.list([Gen.share.if(Bool.and(Bool.not(Bool.or(Bool.or(Str.eq(x, "_"), Str.eq(c, "0")), Gen.scalar.c(c))),
+        U32.is_le(2, Use.n(x, body))), c), Gen.shares(t, body)])
+
+# Whether matches free the nodes they open (BEND_NO_FREE turns it off: no
+# sharing, no bend_take, the code of a traced heap only).
+def Gen.free(+g: G) -> Bool:
+  Str.eq(DGrp.id(G.dps(g, "%free")), "1")
+
+def Gen.shares.if(free: Bool, binds: Env(), +body: Expr) -> Doc:
+  match free:
+    case True{}:
+      Gen.shares(binds, body)
+    case False{}:
+      DNil{}
+
+def Gen.shares.g(+g: G, binds: Env(), +body: Expr) -> Doc:
+  Gen.shares.if(Gen.free(g), binds, body)
+
 @unsafe
 def Gen.let.var(
-  +g: G, +env: Env(), +self: Self, +tgt: Tgt, +x: String, v: Expr, body: Expr,
+  +g: G, +env: Env(), +self: Self, +tgt: Tgt, +x: String, +v: Expr, +body: Expr,
   hole: Bool
 ) -> Gen(Doc):
   match hole:
@@ -3926,10 +4212,10 @@ def Gen.let.var(
     case False{}:
       do Gen<Doc>:
         +k : U32 <- Gen.fresh()
-        +c : String <- Gen.pure(String, "v" ++ U32.show(k))
+        +c : String <- Gen.pure(String, Gen.scalar.wrap(Gen.scalar.var(env, v), "v" ++ U32.show(k)))
         d : Doc <- Gen.expr(g, env, v)
         b : Doc <- Gen.stmt(g, Bind{x, c} <> env, self, tgt, body)
-        return Doc.list([DStr{"V " ++ c ++ " = "}, d, DStr{";\n"}, b])
+        return Doc.list([DStr{"V " ++ c ++ " = "}, d, DStr{";\n"}, Gen.shares.g(g, [Bind{x, c}], body), b])
 
 law Gen.cases:
   for +g: G
@@ -3981,6 +4267,9 @@ def Gen.stmt(g, env, self, tgt, e):
       Gen.match(g, env, self, tgt, scrs, cases)
     case ECall{EVar{+name}, +args}:
       Gen.stmt.call(g, env, self, tgt, name, args, Gen.is_tail(env, self, tgt, name, args))
+    case ECtor{+name, +args}:
+      Gen.stmt.ctor(g, env, self, tgt, name, args,
+        Gen.dst.hole(g, env, tgt, Gen.dst.node(G.ctor(g, name)), args, 0, 0))
     case other:
       do Gen<Doc>:
         d : Doc <- Gen.expr(g, env, other)
@@ -3989,6 +4278,121 @@ def Gen.stmt(g, env, self, tgt, e):
 def PatR.binds(r: PatR) -> Env():
   PatR{conds, binds} = r
   binds
+
+def Gen.takes.if(keep: Bool, c: String, rest: List<&2, String>) -> List<&2, String>:
+  match keep:
+    case True{}:
+      c <> rest
+    case False{}:
+      rest
+
+# "%top3" is "%top" and "3".
+def Gen.take.kind(x: String) -> String:
+  match x:
+    case SCon{a, SCon{b, SCon{c, SCon{d, t}}}}:
+      SCon{a, SCon{b, SCon{c, SCon{d, SNil{}}}}}
+    case other:
+      ""
+
+def Gen.take.words(x: String) -> String:
+  match x:
+    case SCon{a, SCon{b, SCon{c, SCon{d, t}}}}:
+      t
+    case other:
+      ""
+
+# bend_take calls for the nodes a pattern opens (kind: "%top" or "%sub").
+def Gen.takes(binds: Env(), +kind: String) -> List<&2, String>:
+  match binds:
+    case Nil{}:
+      Nil{}
+    case Bind{+x, +c} <> t:
+      Gen.takes.if(Str.eq(Gen.take.kind(x), kind), "bend_take(" ++ c ++ ", " ++ Gen.take.words(x) ++ ")",
+        Gen.takes(t, kind))
+
+def Gen.is_take(x: String) -> Bool:
+  match x:
+    case SCon{Chr{c}, t}:
+      U32.is_eq(c, 37)
+    case SNil{}:
+      False{}
+
+def Gen.vars.if(skip: Bool, b: Bind, rest: Env()) -> Env():
+  match skip:
+    case True{}:
+      rest
+    case False{}:
+      b <> rest
+
+# Whether a pattern opens a node.
+def Gen.opens(binds: Env()) -> Bool:
+  match binds:
+    case Nil{}:
+      False{}
+    case Bind{x, c} <> t:
+      Bool.or(Gen.is_take(x), Gen.opens(t))
+
+# The bindings of variables (not of opened nodes).
+def Gen.vars(binds: Env()) -> Env():
+  match binds:
+    case Nil{}:
+      Nil{}
+    case Bind{+x, c} <> t:
+      Gen.vars.if(Gen.is_take(x), Bind{x, c}, Gen.vars(t))
+
+def Gen.mat.put(x: String, +m: String, path: String, r: Env() & Doc) -> Env() & Doc:
+  (bs, d) = r
+  (Bind{x, m} <> bs, Doc.list([DStr{"V " ++ m ++ " = " ++ path ++ ";\n"}, d]))
+
+# Reads each binding's path into a fresh local.
+def Gen.mat(binds: Env()) -> Gen(Env() & Doc):
+  match binds:
+    case Nil{}:
+      Gen.pure(Env() & Doc, (Nil{}, DNil{}))
+    case Bind{x, path} <> t:
+      do Gen<Env() & Doc>:
+        +k : U32 <- Gen.fresh()
+        r : Env() & Doc <- Gen.mat(t)
+        return Gen.mat.put(x, "m" ++ U32.show(k), path, r)
+
+def Gen.takes.stmts(cs: List<&2, String>) -> String:
+  match cs:
+    case Nil{}:
+      ""
+    case c <> t:
+      c ++ ";\n" ++ Gen.takes.stmts(t)
+
+# The fields and the opened nodes are read, then the nodes taken, each
+# before the nodes inside it: a shared one shares its fields, so the nodes
+# inside it are shared when they are taken, and share theirs.
+@unsafe
+def Gen.case.body.mat(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +body: Expr, r: Env() & Doc) ->
+  Gen(Doc):
+  (+mb, loads) = r
+  +vars = Gen.vars(mb)
+  do Gen<Doc>:
+    b : Doc <- Gen.stmt(g, List.append(&2, Bind, vars, env), self, tgt, body)
+    return Doc.list([loads, DStr{Gen.takes.stmts(Gen.takes(mb, "%top")) ++
+      Gen.takes.stmts(List.reverse(&2, String, Gen.takes(mb, "%sub")))}, Gen.shares.g(g, vars, body), b])
+
+@unsafe
+def Gen.case.body.go(opens: Bool, +g: G, +env: Env(), +self: Self, +tgt: Tgt, +binds: Env(), +body: Expr) ->
+  Gen(Doc):
+  match opens:
+    case False{}:
+      do Gen<Doc>:
+        b : Doc <- Gen.stmt(g, List.append(&2, Bind, binds, env), self, tgt, body)
+        return Doc.list([Gen.shares.g(g, binds, body), b])
+    case True{}:
+      do Gen<Doc>:
+        r : Env() & Doc <- Gen.mat(binds)
+        Gen.case.body.mat(g, env, self, tgt, body, r)
+
+# A body after a pattern's bindings: the nodes the pattern opens are freed
+# (see above).
+@unsafe
+def Gen.case.body(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +binds: Env(), +body: Expr) -> Gen(Doc):
+  Gen.case.body.go(Bool.and(Gen.free(g), Gen.opens(binds)), g, env, self, tgt, binds, body)
 
 @unsafe
 def Gen.lam(g, env, p, body):
@@ -4000,21 +4404,20 @@ def Gen.lam(g, env, p, body):
     Gen.proto(DStr{"static V " ++ name ++ "(V *a);\n"})
     +binds : Env() <- Gen.pure(Env(), PatR.binds(Gen.pat(g, p, "a[" ++ U32.show(n) ++ "]",
       PatR{Nil{}, Nil{}})))
-    b : Doc <- Gen.stmt(g, List.append(&2, Bind, binds, Gen.caps.inner(caps, 0)),
-      Self.none(), TRet{}, body)
+    b : Doc <- Gen.case.body(g, Gen.caps.inner(caps, 0), Self.none(), TRet{}, binds, body)
     Gen.code(Doc.list([DStr{"static V " ++ name ++ "(V *a) {\n"}, b, DStr{"}\n"}]))
     return Doc.list([DStr{"mk_clo(" ++ name ++ ", " ++ U32.show(U32.inc(n)) ++ ", " ++
       U32.show(n) ++ ", "}, Gen.arr(Gen.caps.outer(caps)), DStr{")"}])
 
 @unsafe
-def Gen.let.pat(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +p: Pat, v: Expr, body: Expr) ->
+def Gen.let.pat(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +p: Pat, v: Expr, +body: Expr) ->
   Gen(Doc):
   do Gen<Doc>:
     +k : U32 <- Gen.fresh()
     +c : String <- Gen.pure(String, "v" ++ U32.show(k))
     d : Doc <- Gen.expr(g, env, v)
     +binds : Env() <- Gen.pure(Env(), PatR.binds(Gen.pat(g, p, c, PatR{Nil{}, Nil{}})))
-    b : Doc <- Gen.stmt(g, List.append(&2, Bind, binds, env), self, tgt, body)
+    b : Doc <- Gen.case.body(g, env, self, tgt, binds, body)
     return Doc.list([DStr{"V " ++ c ++ " = "}, d, DStr{";\n"}, b])
 
 def Gen.par.name(+k: U32, +i: U32) -> String:
@@ -4253,7 +4656,7 @@ def Gen.memo.find(+k: String) -> Gen(Maybe<&2, String>):
 
 @unsafe
 def Gen.par(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +ps: List<&2, Pat>, +vs: List<&2, Expr>,
-  body: Expr
+  +body: Expr
 ) -> Gen(Doc):
   Self{+sn, sm, sc} = self
   do Gen<Doc>:
@@ -4261,7 +4664,7 @@ def Gen.par(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +ps: List<&2, Pat>, +vs:
     mode : Maybe<&2, String> <- Gen.memo.find("%seqmode")
     pre : Doc <- Gen.par.pick(Gen.par.mode(mode, sn), g, env, sn, k, vs)
     b : Doc <- Gen.stmt(g, Gen.par.env(ps, k, 0, env), self, tgt, body)
-    return Doc.list([pre, b])
+    return Doc.list([pre, Gen.shares.g(g, Gen.par.env(ps, k, 0, Nil{}), body), b])
 
 @unsafe
 def Gen.let.par(+g: G, +env: Env(), +self: Self, +tgt: Tgt, ps: List<&2, Pat>, v: Expr,
@@ -4302,12 +4705,12 @@ def Gen.cases(g, env, self, tgt, cs, cases):
   match cases:
     case Nil{}:
       Gen.pure(Doc, DStr{"{ bend_fail(\"incomplete match\"); }\n"})
-    case ECase{ps, body} <> t:
+    case ECase{+ps, +body} <> t:
       +pr = Gen.pats(g, ps, cs, PatR{Nil{}, Nil{}})
       +conds = PatR.conds(pr)
       +binds = PatR.binds(pr)
       do Gen<Doc>:
-        b : Doc <- Gen.stmt(g, List.append(&2, Bind, binds, env), self, tgt, body)
+        b : Doc <- Gen.case.body(g, env, self, tgt, binds, body)
         Gen.cases.next(g, env, self, tgt, cs, t, List.reverse(&2, String, conds), b)
     case other <> t:
       Gen.cases(g, env, self, tgt, cs, t)
@@ -4322,7 +4725,8 @@ def Gen.sig(ps: List<&2, Param>, mask: List<&2, Bool>, +i: U32, r: Sig) -> Sig:
       Sig{params, env, wargs} = r
       +c = "a" ++ U32.show(i)
       Gen.sig(pt, mt, U32.inc(i), Sig{List.append(&2, String, params, [c]),
-        Bind{x, c} <> env, List.append(&2, String, wargs, ["a[" ++ U32.show(i) ++ "]"])})
+        Bind{x, Gen.scalar.wrap(Gen.scalar.ty(t), c)} <> env, List.append(&2, String, wargs,
+        ["a[" ++ U32.show(i) ++ "]"])})
     case Param{x, m, t} <> pt False{} <> mt:
       Sig{params, env, wargs} = r
       Gen.sig(pt, mt, U32.inc(i), Sig{params, Bind{x, "0"} <> env, wargs})
@@ -4345,7 +4749,7 @@ def Gen.memo.add(b: Bind) -> Gen(Unit):
 
 # S_name, a seq def's sequential clone: its parallel lets run in order and
 # its calls to itself stay in S_name (F_name is renamed to it inside).
-def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, body: Expr, +env: Env(),
+def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Expr, +env: Env(),
   +params: List<&2, String>) -> Gen(Unit):
   match sq:
     case True{}:
@@ -4356,25 +4760,72 @@ def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, body: Exp
         b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
         Gen.memo.add(Bind{"%seqmode", ""})
         Gen.code(Doc.list([DStr{"#define " ++ Gen.f(name) ++ " S_" ++ Gen.mangle(name) ++ "\n" ++ head ++ " {\ntop:;\n"},
-          b, DStr{"}\n#undef " ++ Gen.f(name) ++ "\n"}]))
+          Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n#undef " ++ Gen.f(name) ++ "\n"}]))
     case False{}:
       Gen.pure(Unit, Unit{})
+
+# A C parameter or argument list padded to n entries: names z0, z1, ...
+# (names) or zeros.
+def Gen.dst.pad(n: Nat, xs: List<&2, String>, +names: Bool, +i: U32) -> List<&2, String>:
+  match n xs:
+    case 0n l:
+      Nil{}
+    case 1n+m Nil{}:
+      Bool.pick(String, names, "z" ++ U32.show(i), "0") <> Gen.dst.pad(m, Nil{}, names, U32.inc(i))
+    case 1n+m x <> t:
+      x <> Gen.dst.pad(m, t, names, U32.inc(i))
+
+# A def of a destination-passing group: D_name stores its result through
+# dst (see Dps), and F_name calls it with dst pointing at a local.
+@unsafe
+def Gen.def.dst(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr, +params: List<&2, String>,
+  +env: Env(), +wargs: List<&2, String>, grp: DGrp
+) -> Gen(Unit):
+  DGrp{+id, +n} = grp
+  +m = Gen.mangle(name)
+  +dhead = "static V D_" ++ m ++ "(" ++ String.join("V *dst" <> Gen.cparams.go(Gen.dst.pad(U32.to_nat(n),
+    params, True{}, 0)), ", ") ++ ")"
+  +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
+  do Gen<Unit>:
+    Gen.proto(DStr{head ++ ";\n" ++ dhead ++ ";\n"})
+    b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TDst{id, n}, R.ops(body, "Nat"))
+    Gen.code(Doc.list([DStr{dhead ++ " {\ntop:;\n"}, Gen.shares.g(g, env, R.ops(body, "Nat")), b,
+      DStr{"}\n"}]))
+    Gen.code(DStr{head ++ " { V r; D_" ++ m ++ "(" ++ String.join("&r" <> Gen.dst.pad(U32.to_nat(n), params,
+      False{}, 0), ", ") ++ "); return r; }\n"})
+    Gen.wrapper(name, wargs)
 
 law Expr.has_par:
   for e: Expr
   Bool
 
 @unsafe
-def Gen.def.body(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr, sig: Sig) ->
-  Gen(Unit):
-  Sig{+params, +env, +wargs} = sig
+def Gen.def.plain(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr,
+  +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
+) -> Gen(Unit):
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n"})
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
-    Gen.code(Doc.list([DStr{head ++ " {\ntop:;\n"}, b, DStr{"}\n"}]))
+    Gen.code(Doc.list([DStr{head ++ " {\ntop:;\n"}, Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
     Gen.wrapper(name, wargs)
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
+
+@unsafe
+def Gen.def.body.pick(plain: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Expr,
+  +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
+) -> Gen(Unit):
+  match plain:
+    case False{}:
+      Gen.def.dst(g, name, mask, body, params, env, wargs, G.dps(g, name))
+    case True{}:
+      Gen.def.plain(g, name, mask, body, params, env, wargs)
+
+@unsafe
+def Gen.def.body(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr, sig: Sig) ->
+  Gen(Unit):
+  Sig{+params, +env, +wargs} = sig
+  Gen.def.body.pick(String.is_empty(DGrp.id(G.dps(g, name))), g, name, mask, body, params, env, wargs)
 
 def Gen.eff.args(n: Nat, +i: U32) -> List<&2, String>:
   match n:
@@ -4839,10 +5290,294 @@ def Gen.cids(+g: G, ds: List<&2, Decl>, +i: U32) -> String:
     case d <> t:
       Gen.cids(g, t, i)
 
-def Gen.program(+ds: List<&2, Decl>) -> COut:
-  +g = G.new(ds)
+# Destination-passing. merge(x <> xt, ys) = x <> merge(xt, ys) builds its
+# result around a call to itself: compiled directly, each element costs a C
+# stack frame, so merging a million elements takes a million frames. Such
+# defs get a D_ function that stores its result through a pointer, dst: for
+# C(.., f(..), ..) with f in the group, it stores the node with a hole where
+# f's result goes, points dst at the hole and jumps to f. A group is a
+# strongly connected set of defs under tail calls (C(.., f(..), ..) counts
+# as one), with at least one such constructor on a cycle. Its D_ functions
+# share one C signature, so the jumps between them are guaranteed tail calls
+# (BEND_MUSTTAIL). The collector rescans a node whose hole was open at the
+# last collection (see gc_rem in bendrt.h): the one kind of write to an
+# existing node.
+type DEdge is Data:
+  DEdge{to: String, ctor: Bool}
+
+law Dps.tails:
+  for +g: G
+  for e: Expr
+  for acc: List<&2, DEdge>
+  List<&2, DEdge>
+
+def Dps.add(ok: Bool, +name: String, es: List<&2, DEdge>, m: Map<&2, List<&2, DEdge>>) ->
+  Map<&2, List<&2, DEdge>>:
+  match ok es:
+    case True{} +e <> t:
+      Map.set(&2, List<&2, DEdge>, m, name, e <> t)
+    case o l:
+      m
+
+def Dps.kind(i: DInfo) -> U32:
+  DInfo{kind, mask} = i
+  kind
+
+def Dps.plain(+g: G, +name: String) -> Bool:
+  U32.is_zero(Dps.kind(G.def(g, name)))
+
+# The tail-call edges of every plain def without parallel lets.
+@unsafe
+def Dps.edges(+g: G, ds: List<&2, Decl>, m: Map<&2, List<&2, DEdge>>) -> Map<&2, List<&2, DEdge>>:
+  match ds:
+    case Nil{}:
+      m
+    case DDef{+name, ps, +body, ret} <> t:
+      Dps.edges(g, t, Dps.add(Bool.and(Dps.plain(g, name), Bool.not(Expr.has_par(body))), name,
+        Dps.tails(g, R.ops(body, "Nat"), Nil{}), m))
+    case d <> t:
+      Dps.edges(g, t, m)
+
+def Dps.out(+em: Map<&2, List<&2, DEdge>>, +name: String) -> List<&2, DEdge>:
+  G.get(List<&2, DEdge>, Nil{}, em, name)
+
+@unsafe
+def Dps.rev.add(+from: String, es: List<&2, DEdge>, +m: Map<&2, List<&2, DEdge>>) ->
+  Map<&2, List<&2, DEdge>>:
+  match es:
+    case Nil{}:
+      m
+    case DEdge{+to, c} <> t:
+      Dps.rev.add(from, t, Map.set(&2, List<&2, DEdge>, m, to,
+        DEdge{from, c} <> G.get(List<&2, DEdge>, Nil{}, m, to)))
+
+# The reversed graph: for each def, the defs with an edge to it.
+@unsafe
+def Dps.rev(ks: List<&2, String>, +em: Map<&2, List<&2, DEdge>>, m: Map<&2, List<&2, DEdge>>) ->
+  Map<&2, List<&2, DEdge>>:
+  match ks:
+    case Nil{}:
+      m
+    case +k <> t:
+      Dps.rev(t, em, Dps.rev.add(k, Dps.out(em, k), m))
+
+law Dps.groups:
+  for +g: G
+  for ks: List<&2, String>
+  for +em: Map<&2, List<&2, DEdge>>
+  for +rv: Map<&2, List<&2, DEdge>>
+  for +m: Map<&2, DGrp>
+  Map<&2, DGrp>
+
+@unsafe
+def Dps.build(+g: G, +ds: List<&2, Decl>, free: Bool) -> G:
+  +em = Dps.edges(g, ds, MTip{})
+  +ks = Map.keys(&2, List<&2, DEdge>, em)
+  G.with_dps(g, Map.set(&2, DGrp, Dps.groups(g, ks, em, Dps.rev(ks, em, MTip{}), MTip{}), "%free",
+    DGrp{Bool.pick(String, free, "1", "0"), 0}))
+
+def Gen.program(+ds: List<&2, Decl>, free: Bool) -> COut:
+  +g = Dps.build(G.new(ds), ds, free)
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
+
+def Dps.target.info(i: DInfo, +k: Nat) -> Bool:
+  DInfo{kind, mask} = i
+  Bool.and(U32.is_zero(kind), Nat.is_eq(List.length(&2, Bool, mask), k))
+
+# Whether a call of name with args is a full call of a plain def.
+def Dps.target(+g: G, +name: String, +args: List<&2, Expr>) -> Bool:
+  Dps.target.info(G.def(g, name), List.length(&2, Expr, args))
+
+def Dps.edge(ok: Bool, +to: String, ctor: Bool, acc: List<&2, DEdge>) -> List<&2, DEdge>:
+  match ok:
+    case True{}:
+      DEdge{to, ctor} <> acc
+    case False{}:
+      acc
+
+def Dps.ctor(+g: G, node: Bool, as: List<&2, Expr>, acc: List<&2, DEdge>) -> List<&2, DEdge>:
+  match node as:
+    case True{} ECall{EVar{+h}, +hargs} <> t:
+      Dps.ctor(g, True{}, t, Dps.edge(Dps.target(g, h, hargs), h, True{}, acc))
+    case True{} a <> t:
+      Dps.ctor(g, True{}, t, acc)
+    case n l:
+      acc
+
+@unsafe
+def Dps.cases(+g: G, cs: List<&2, Expr>, acc: List<&2, DEdge>) -> List<&2, DEdge>:
+  match cs:
+    case Nil{}:
+      acc
+    case ECase{ps, b} <> t:
+      Dps.cases(g, t, Dps.tails(g, b, acc))
+    case other <> t:
+      Dps.cases(g, t, acc)
+
+# The tail calls of an expression, as Gen.stmt compiles it.
+@unsafe
+def Dps.tails(g, e, acc):
+  match e:
+    case ELet{p, v, b}:
+      Dps.tails(g, b, acc)
+    case EMatch{scrs, cases}:
+      Dps.cases(g, cases, acc)
+    case ECall{EVar{+name}, +args}:
+      Dps.edge(Dps.target(g, name, args), name, False{}, acc)
+    case ECtor{+name, args}:
+      Dps.ctor(g, Gen.dst.node(G.ctor(g, name)), args, acc)
+    case other:
+      acc
+
+def Dps.has(+s: Set(), +k: String) -> Bool:
+  Pair.snd(Set(), Bool, Set.has(s, k))
+
+def Dps.tos(es: List<&2, DEdge>, acc: List<&2, String>) -> List<&2, String>:
+  match es:
+    case Nil{}:
+      acc
+    case DEdge{to, c} <> t:
+      Dps.tos(t, to <> acc)
+
+law Dps.reach:
+  for +em: Map<&2, List<&2, DEdge>>
+  for todo: List<&2, String>
+  for +seen: Set()
+  Set()
+
+@unsafe
+def Dps.reach.go(+em: Map<&2, List<&2, DEdge>>, +h: String, t: List<&2, String>, +seen: Set(),
+  was: Bool
+) -> Set():
+  match was:
+    case True{}:
+      Dps.reach(em, t, seen)
+    case False{}:
+      Dps.reach(em, Dps.tos(Dps.out(em, h), t), Set.add(seen, h))
+
+# The defs reachable from the queue (the queue's included).
+@unsafe
+def Dps.reach(em, todo, seen):
+  match todo:
+    case Nil{}:
+      seen
+    case +h <> t:
+      Dps.reach.go(em, h, t, seen, Dps.has(seen, h))
+
+def Dps.both.if(keep: Bool, x: String, rest: List<&2, String>) -> List<&2, String>:
+  match keep:
+    case True{}:
+      x <> rest
+    case False{}:
+      rest
+
+def Dps.both(xs: List<&2, String>, +s: Set()) -> List<&2, String>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case +x <> t:
+      Dps.both.if(Dps.has(s, x), x, Dps.both(t, s))
+
+def Dps.inner(es: List<&2, DEdge>, +s: Set()) -> Bool:
+  match es:
+    case Nil{}:
+      False{}
+    case DEdge{+to, c} <> t:
+      Bool.or(Bool.and(c, Dps.has(s, to)), Dps.inner(t, s))
+
+# Whether a group has a constructor edge between two of its members.
+def Dps.ctors(ms: List<&2, String>, +em: Map<&2, List<&2, DEdge>>, +s: Set()) -> Bool:
+  match ms:
+    case Nil{}:
+      False{}
+    case +m <> t:
+      Bool.or(Dps.inner(Dps.out(em, m), s), Dps.ctors(t, em, s))
+
+def Dps.kept(ms: List<&2, Bool>) -> U32:
+  match ms:
+    case Nil{}:
+      0
+    case True{} <> t:
+      U32.inc(Dps.kept(t))
+    case False{} <> t:
+      Dps.kept(t)
+
+def Dps.arity(+g: G, ms: List<&2, String>) -> U32:
+  match ms:
+    case Nil{}:
+      0
+    case +m <> t:
+      U32.max(Dps.kept(DInfo.mask(G.def(g, m))), Dps.arity(g, t))
+
+def Dps.put(ms: List<&2, String>, +d: DGrp, m: Map<&2, DGrp>) -> Map<&2, DGrp>:
+  match ms:
+    case Nil{}:
+      m
+    case +k <> t:
+      Dps.put(t, d, Map.set(&2, DGrp, m, k, d))
+
+def Dps.group.put(ok: Bool, +g: G, +name: String, +ms: List<&2, String>, m: Map<&2, DGrp>) ->
+  Map<&2, DGrp>:
+  match ok:
+    case True{}:
+      Dps.put(ms, DGrp{name, Dps.arity(g, ms)}, m)
+    case False{}:
+      m
+
+def Dps.group.fin(+g: G, +em: Map<&2, List<&2, DEdge>>, +name: String, +ms: List<&2, String>,
+  m: Map<&2, DGrp>
+) -> Map<&2, DGrp>:
+  +s = Set.from_list(ms)
+  Dps.group.put(Dps.ctors(ms, em, s), g, name, ms, m)
+
+@unsafe
+def Dps.group.cyc(cyc: Bool, +g: G, +em: Map<&2, List<&2, DEdge>>, +rv: Map<&2, List<&2, DEdge>>,
+  +name: String, +fwd: Set(), m: Map<&2, DGrp>
+) -> Map<&2, DGrp>:
+  match cyc:
+    case True{}:
+      Dps.group.fin(g, em, name,
+        Dps.both(Set.to_list(Dps.reach(rv, Dps.tos(Dps.out(rv, name), Nil{}), Set.new())), fwd), m)
+    case False{}:
+      m
+
+# name's group: what it reaches that reaches it back.
+@unsafe
+def Dps.group(+g: G, +em: Map<&2, List<&2, DEdge>>, +rv: Map<&2, List<&2, DEdge>>, +name: String,
+  m: Map<&2, DGrp>
+) -> Map<&2, DGrp>:
+  +fwd = Dps.reach(em, Dps.tos(Dps.out(em, name), Nil{}), Set.new())
+  Dps.group.cyc(Dps.has(fwd, name), g, em, rv, name, fwd, m)
+
+def Dps.has_ctor(es: List<&2, DEdge>) -> Bool:
+  match es:
+    case Nil{}:
+      False{}
+    case DEdge{t, c} <> r:
+      Bool.or(c, Dps.has_ctor(r))
+
+def Dps.in(+m: Map<&2, DGrp>, +k: String) -> Bool:
+  Pair.snd(Map<&2, DGrp>, Bool, Map.has(&2, DGrp, m, k))
+
+@unsafe
+def Dps.groups.if(new: Bool, +g: G, +k: String, ks: List<&2, String>, +em: Map<&2, List<&2, DEdge>>,
+  +rv: Map<&2, List<&2, DEdge>>, +m: Map<&2, DGrp>
+) -> Map<&2, DGrp>:
+  match new:
+    case True{}:
+      Dps.groups(g, ks, em, rv, Dps.group(g, em, rv, k, m))
+    case False{}:
+      Dps.groups(g, ks, em, rv, m)
+
+# Each def with a constructor edge that is in no group yet starts one.
+@unsafe
+def Dps.groups(g, ks, em, rv, m):
+  match ks:
+    case Nil{}:
+      m
+    case +k <> t:
+      Dps.groups.if(Bool.and(Dps.has_ctor(Dps.out(em, k)), Bool.not(Dps.in(m, k))), g, k, t, em, rv, m)
 
 # Value printers
 # ==============
@@ -5369,6 +6104,21 @@ def Main.emit(r: COut) -> IO(Unit):
         IO.print_err(String.join(List.reverse(&2, String, e <> t), "\n"))
         IO.die(Unit, 1, "bendc: compilation failed")
 
+def Main.free(r: Result<&1, &1, U32 & String, String>) -> Bool:
+  match r:
+    case Done{v}:
+      String.is_empty(v)
+    case Fail{e}:
+      True{}
+
+# C for a program: matches free what they open unless BEND_NO_FREE is set
+# (bendc builds itself so: a compiler's heap is mostly shared, short-lived
+# data, which tracing handles for less).
+def Main.emit.c(+ds: List<&2, Decl>) -> IO(Unit):
+  do IO<Unit>:
+    r : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
+    Main.emit(Gen.program(ds, Main.free(r)))
+
 law Main.js.effs:
   for es: List<&2, String>
   for acc: String
@@ -5477,7 +6227,7 @@ def Main.emit.to(js: Bool, +ds: List<&2, Decl>) -> IO(Unit):
     case True{}:
       Main.emit.js(J.program(ds))
     case False{}:
-      Main.emit(Gen.program(ds))
+      Main.emit.c(ds)
 
 def Main.compile(js: Bool, base: Result<&2, &2, String, List<&2, Decl>>,
   user: Result<&2, &2, String, List<&2, Decl>>
@@ -5893,7 +6643,7 @@ def Main.boot.compile(base: Result<&2, &2, String, List<&2, Decl>>, user: Result
     case Done{b} Fail{e}:
       IO.die(Unit, 1, "bendc: parse error: " ++ e)
     case Done{b} Done{u}:
-      Main.emit(Gen.program(List.append(&2, Decl, b, u)))
+      Main.emit.c(List.append(&2, Decl, b, u))
 
 # The driver of boot.bend: bendc --no-check, without the checker.
 @unsafe
@@ -6025,6 +6775,49 @@ def Main.js.effs(es, acc):
 
 # Misc
 # ====
+
+@unsafe
+def Use.ns(+x: String, es: List<&2, Expr>) -> U32:
+  match es:
+    case Nil{}:
+      0
+    case e <> t:
+      (Use.n(x, e) + Use.ns(x, t) : U32)
+
+@unsafe
+def Use.max(+x: String, es: List<&2, Expr>) -> U32:
+  match es:
+    case Nil{}:
+      0
+    case e <> t:
+      U32.max(Use.n(x, e), Use.max(x, t))
+
+# The uses of x on the path through e that uses it most.
+@unsafe
+def Use.n(x, e):
+  match e:
+    case EVar{+n}:
+      Bool.pick(U32, Str.eq(n, x), 1, 0)
+    case ECall{f, args}:
+      (Use.n(x, f) + Use.ns(x, args) : U32)
+    case ECtor{n, args}:
+      Use.ns(x, args)
+    case ELam{p, b}:
+      Use.n(x, b)
+    case ELet{p, v, b}:
+      (Use.n(x, v) + Use.n(x, b) : U32)
+    case EMatch{scrs, cases}:
+      (Use.ns(x, scrs) + Use.max(x, cases) : U32)
+    case ECase{ps, b}:
+      Use.n(x, b)
+    case ESucc{k, y}:
+      Use.n(x, y)
+    case EOp{op, a, b}:
+      (Use.n(x, a) + Use.n(x, b) : U32)
+    case EAnn{y, t}:
+      Use.n(x, y)
+    case other:
+      0
 
 law Exprs.has_par:
   for es: List<&2, Expr>
@@ -8507,6 +9300,8 @@ def J.ret(t: Tgt, d: Doc) -> Doc:
       Doc.list([DStr{"return "}, d, DStr{";\n"}])
     case TSet{v}:
       Doc.list([DStr{v}, DStr{" = "}, d, DStr{";\n"}])
+    case TDst{id, n}:
+      Doc.list([DStr{"*dst = "}, d, DStr{";\nreturn 0;\n"}])
 
 def J.tail.temps(ds: List<&2, Doc>, +i: U32) -> Doc:
   match ds:

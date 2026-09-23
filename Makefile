@@ -35,7 +35,7 @@ test: build/bendc build/bendrt.o
 	./run_tests.sh build/bendc
 
 selfcheck: build/bendc
-	./build/bendc --no-check $(BEND_BASE) bendc.bend > build/self.c
+	BEND_NO_FREE=1 ./build/bendc --no-check $(BEND_BASE) bendc.bend > build/self.c
 	cmp build/self.c seed/bendc.c && echo "selfcheck: bendc.bend compiles to the seed byte for byte"
 
 bootstrap:

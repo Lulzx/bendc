@@ -19,9 +19,9 @@ $ ./bootstrap.sh
 [stage0] bend boot.bend -o build/bendc0           # the official Bend builds bendc once
 [stage1] bendc0 -> build/stage1.c                 # bendc compiles itself
 [stage2] stage1 -> build/stage2.c                 # the result compiles itself again
-fixpoint: stage1.c == stage2.c (31499 lines)
-tests with stage1: 76 passed, 0 failed
-tests with stage2: 76 passed, 0 failed
+fixpoint: stage1.c == stage2.c (35574 lines)
+tests with stage1: 78 passed, 0 failed
+tests with stage2: 78 passed, 0 failed
 ```
 
 `bendc.bend` (the compiler) and `check.bend` (the type checker) are Bend: about 12,000 lines that
@@ -213,6 +213,8 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables &
 5. **Code generation.** A state monad threads fresh names, emitted C, references and errors through
    the generator. Only defs reachable from `main` are emitted.
    - Each def becomes a C function, and self tail calls become `goto` loops.
+   - Defs that build their result around a tail call (`x <> merge(xt, ys)`) are compiled
+     destination-passing: see [Benchmarks](#benchmarks).
    - Lambdas are lambda-lifted using free-variable analysis.
    - A call with every argument goes direct; with fewer it builds a partial closure; with more it
      goes through `apply`.
@@ -311,7 +313,7 @@ compile time. On an Apple M4 Pro (12 cores, 24 GB, macOS 27):
 | `forks_gpu 28` | the same as a `!`-call, on the GPU | **0.05s** | 0.09s | 20 MB | 14 MB |
 | `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | **0.74s** | 0.98s | 3 MB | 3 MB |
 | `leaves_gpu 14` | the same as a `!`-call, on the GPU | **0.06s** | 0.07s | 20 MB | 14 MB |
-| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | **0.35s** | 0.53s | 481 MB | 32 MB |
+| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | **0.30s** | 0.54s | **30 MB** | 32 MB |
 
 | task | bendc | official bend |
 |---|---|---|
@@ -320,7 +322,7 @@ compile time. On an Apple M4 Pro (12 cores, 24 GB, macOS 27):
 | build `leaves.bend` | **0.16s** | 0.27s |
 | build `leaves_gpu.bend` | **0.26s** | 0.48s |
 | build `sort.bend` | **0.18s** | 0.28s |
-| type-check `bendc.bend` (16,000 lines with `check.bend`) | **0.78s**, 501 MB | 0.96s, 996 MB |
+| type-check `bendc.bend` (16,000 lines with `check.bend`) | **0.75s**, 487 MB | 0.94s, 978 MB |
 | build `bendc.bend` into a binary | **8.1s** | 70s, 9.9 GB |
 
 Where the time goes:
@@ -332,18 +334,42 @@ Where the time goes:
   defs run in their own small kernel (`bend_kq`), a whole SIMD group at a time.
 - **Builds.** The runtime is compiled once (`build/bendrt.o`, from `rt/bendrt_impl.c`), so a program
   compiles only its own code; bendc's own front end takes about 0.1s for these programs.
+- **Building lists.** `merge` returns `x <> merge(xt, ys)`: a cell around a call. Such defs (a group
+  of defs that tail-call one another, with such a cell on the cycle) get a `D_name(dst, ..)` function
+  that stores its result through `dst`: it allocates the cell with a hole, stores it, points `dst`
+  at the hole and jumps to the next call. That jump is `goto top` for the def itself, and a call
+  marked `musttail` for another def of the group (the group's `D_` functions share one signature).
+  `sort` builds its lists in a loop instead of a million-deep recursion.
 - **Checking.** Declarations are checked in parallel on the CPU threads, against the book as it stands
   before each; the allocator hands out partly free blocks by their bitmaps; `Map.bit` is native.
 
-Where bendc loses is **peak memory** in two cases. On the GPU, Metal itself costs about 16 MB before a
-program does anything (the official runtime's 14 MB is less than a bare Metal program here). On
-allocation-heavy code such as `sort`, the official runtime counts references: it frees a list cell
-the moment it dies and reuses it in place, so sorting a million-element list stays near one list's
-size. bendc's collector is a tracing one: garbage waits for the next collection (every 256 MB of
-allocation), and a million-deep recursion (`merge` builds its result as `x <> merge(..)`) keeps a
-deep stack. Collecting more often (`BEND_GC_MIN_MB`, `BEND_GC_FACTOR`, `BEND_GC_MINOR`) trades speed
-for memory: 341 MB at 0.45s for `sort`. Closing the rest needs reference counting, or destination-
-passing for recursions like `merge`, which bendc does not do yet.
+**Memory.** Bend values are affine: a value has one owner unless it went through a variable used
+more than once. So, as in the official runtime (which counts references), a `match` that opens a
+node frees it, and `sort` stays near one list's size: 30 MB where the collector alone needed 481 MB.
+
+- A value bound to a variable that some path uses twice is marked shared where it is bound
+  (`bend_share`): a bit in the node's tag word. Cached string literals are shared too.
+- A match reads the node's fields, then hands it to `bend_take`: a shared node stays and marks its
+  fields shared (once: a second bit says it did); any other is dead, and its slot goes back to its
+  block's allocation bitmap.
+- A block where a fifth of the slots are free again is a reuse candidate. A thread's next
+  allocations of that size take its free slots in address order, blocks in address order, so a list
+  built from reused slots stays in order in memory, which keeps list walks fast.
+- The tracing collector still runs; freed slots only make it rarer.
+
+A compiler's heap is mostly shared, short-lived data, where freeing costs more than it saves:
+bendc builds itself with `BEND_NO_FREE=1`, which compiles matches without it (as do `make
+selfcheck`, `tools/reseed.sh` and `bootstrap.sh`). `-DBEND_DEBUG_FREE` builds a program whose
+freed nodes are poisoned and kept, so a use after free stops with the C line that freed it.
+
+On the GPU, Metal itself costs about 16 MB before a program does anything (the official runtime's
+14 MB is less than a bare Metal program here).
+
+Filling a hole writes into a cell after it was made, which the collector otherwise never sees: a
+minor collection skips the fields of old cells. A hole holds `BEND_HOLE` until it is filled (and a
+D_ node's tag word holds it from before its slot is allocated until its fields are stored), so a
+collection records the objects a thread's stack or registers point to that hold `BEND_HOLE`, and
+the next minor collection rescans them.
 
 ## Writing a compiler under Bend's rules
 
@@ -371,12 +397,14 @@ fixpoint meaningful.
 
 `tests/` holds programs covering the features above: closures, trees, maps, sorting, strings and
 UTF-8, file IO, concurrent fork/join, TCP, user-defined C effects, modules, string patterns, arrays,
-proofs, value printing, exit codes, deep recursion, parallel lets, the collector, and bignum `Nat`.
+proofs, value printing, exit codes, deep recursion, parallel lets, the collector, destination-passing,
+and bignum `Nat`.
 Each `.out` file is the stdout and exit code of the **official** `bend` running the same program
 (for bignums, which the official runtime cannot reach, the expected values come from Python).
 `run_tests.sh` compiles each program with a given `bendc`, runs it, and diffs the result; programs
 with `!`-calls run again on the GPU simulator and, on a Mac, on Metal, and must not fall back to the
-CPU;
+CPU. A `tests/NAME.env` file sets environment variables for a run (`dps` collects every megabyte, so
+collections happen while holes are open);
 `tests/hub/run.sh` serves a package from a local hub and imports it by hash.
 
 ```sh
