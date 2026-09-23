@@ -2975,7 +2975,7 @@ def FV.expr(e, bound, acc):
 type CInfo is Data:
   CInfo{tag: U32, arity: U32, kind: U32, single: Bool}
 
-# kind: 0 def, 1 effect, 2 native, 3 dead (types, laws, type-level)
+# kind: 0 def, 1 effect, 2 native, 3 dead (types, laws, type-level), 4 unknown
 # mask: one flag per parameter, True when kept at runtime.
 type DInfo is Data:
   DInfo{kind: U32, mask: List<&2, Bool>}
@@ -3002,7 +3002,7 @@ def G.get(-V: Data, +d: V, +m: Map<&2, V>, +key: String) -> V:
 
 def G.def(+g: G, +name: String) -> DInfo:
   G{ctors, defs, bodies} = g
-  G.get(DInfo, DInfo{99, Nil{}}, defs, name)
+  G.get(DInfo, DInfo{4, Nil{}}, defs, name)
 
 def G.body(+g: G, +name: String) -> Decl:
   G{ctors, defs, bodies} = g
@@ -3454,7 +3454,7 @@ def Gen.var.kind(+name: String, kind: Nat, +total: U32) -> Gen(Doc):
   match kind:
     case 3n:
       Gen.pure(Doc, DStr{"0"})
-    case 99n:
+    case 4n:
       do Gen<Doc>:
         Gen.error("unknown name: " ++ name)
         return DStr{"0"}
@@ -3671,7 +3671,7 @@ def Gen.call.kind(
   match kind:
     case 3n:
       Gen.pure(Doc, DStr{"0"})
-    case 99n:
+    case 4n:
       do Gen<Doc>:
         Gen.error("unknown function: " ++ name)
         return DStr{"0"}
@@ -5652,33 +5652,59 @@ def Main.checked(js: Bool, +base_path: String, user_path: String, r: Chk.Book & 
     Bool.pick(IO(Unit), List.is_empty(&2, String, bad), IO.pure(Unit, Unit{}), IO.write_err(Chk.report_text(bad)))
     Main.checked.go(js, base_path, user_path, bk, Main.normalized(bk))
 
+def Main.usage() -> IO(Unit):
+  IO.die(Unit, 1, "usage: bendc [--check-only | --no-check | --js] <base.bend> <input.bend> | --tokens <file> | --ast <file>")
+
+# The option an argument names (0: none). The driver matches on this number,
+# not on string patterns, which the official compiler expands char by char.
+def Main.code(+s: String) -> Nat:
+  Bool.pick(Nat, Str.eq(s, "--tokens"), 1n, Bool.pick(Nat, Str.eq(s, "--ast"), 2n, Bool.pick(Nat,
+    Str.eq(s, "--check-only"), 3n, Bool.pick(Nat, Str.eq(s, "--no-check"), 4n, Bool.pick(Nat, Str.eq(s, "--js"), 5n,
+    0n)))))
+
 @unsafe
-def Main.run(args: List<&2, String>) -> IO(Unit):
-  match args:
-    case "--tokens" <> path <> Nil{}:
+def Main.run2(code: Nat, +a: String, +b: String) -> IO(Unit):
+  match code:
+    case 0n:
       do IO<Unit>:
-        src : String <- IO.read_file(path)
+        r : Chk.Book & Nat <- Main.check(a, b)
+        Main.checked(False{}, a, b, r)
+    case 1n:
+      do IO<Unit>:
+        src : String <- IO.read_file(b)
         IO.print(Toks.show(Lex.all(src)))
-    case "--ast" <> path <> Nil{}:
+    case 2n:
       do IO<Unit>:
-        src : String <- IO.read_file(path)
+        src : String <- IO.read_file(b)
         Main.ast(Main.parse(src))
-    case "--check-only" <> base_path <> user_path <> Nil{}:
+    case other:
+      Main.usage()
+
+@unsafe
+def Main.run3(code: Nat, +base_path: String, +user_path: String) -> IO(Unit):
+  match code:
+    case 3n:
       do IO<Unit>:
         r : Chk.Book & Nat <- Main.check(base_path, user_path)
         Main.check_only.fin(r)
-    case "--no-check" <> +base_path <> user_path <> Nil{}:
+    case 4n:
       Main.build(False{}, base_path, user_path)
-    case "--js" <> +base_path <> +user_path <> Nil{}:
+    case 5n:
       do IO<Unit>:
         r : Chk.Book & Nat <- Main.check(base_path, user_path)
         Main.checked(True{}, base_path, user_path, r)
-    case +base_path <> +user_path <> Nil{}:
-      do IO<Unit>:
-        r : Chk.Book & Nat <- Main.check(base_path, user_path)
-        Main.checked(False{}, base_path, user_path, r)
     case other:
-      IO.die(Unit, 1, "usage: bendc [--check-only | --no-check | --js] <base.bend> <input.bend> | --tokens <file> | --ast <file>")
+      Main.usage()
+
+@unsafe
+def Main.run(args: List<&2, String>) -> IO(Unit):
+  match args:
+    case +a <> +b <> Nil{}:
+      Main.run2(Main.code(a), a, b)
+    case +a <> +b <> +c <> Nil{}:
+      Main.run3(Main.code(a), b, c)
+    case other:
+      Main.usage()
 
 def main() -> IO(Unit):
   do IO<Unit>:
@@ -6095,7 +6121,7 @@ def K.var.kind(+g: G, +name: String, kind: Nat, +total: U32) -> KM(Doc):
   match kind:
     case 3n:
       KM.pure(Doc, DStr{"0"})
-    case 99n:
+    case 4n:
       do KM<Doc>:
         K.error("unknown name: " ++ name)
         return DStr{"0"}
@@ -6144,7 +6170,7 @@ def K.call.def.kind(
   match kind:
     case 3n:
       KM.pure(Doc, DStr{"0"})
-    case 99n:
+    case 4n:
       do KM<Doc>:
         K.error("unknown function: " ++ name)
         return DStr{"0"}
@@ -7460,7 +7486,7 @@ def J.var.kind(+name: String, kind: Nat, +total: U32) -> Gen(Doc):
   match kind:
     case 3n:
       Gen.pure(Doc, DStr{"null"})
-    case 99n:
+    case 4n:
       do Gen<Doc>:
         Gen.error("unknown name: " ++ name)
         return DStr{"null"}
@@ -7512,7 +7538,7 @@ def J.call.kind(+j: JG, +env: Env(), +name: String, kind: Nat, s: Split) -> Gen(
   match kind:
     case 3n:
       Gen.pure(Doc, DStr{"null"})
-    case 99n:
+    case 4n:
       do Gen<Doc>:
         Gen.error("unknown function: " ++ name)
         return DStr{"null"}

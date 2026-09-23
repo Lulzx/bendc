@@ -7340,12 +7340,28 @@ def is_ident(s: String) -> Bool:
       Bool.and(is_head(c), is_ident.rest(t))
 
 # An import line: (path, alias); the alias is "" for Base.
+def import.base(base: Bool) -> Maybe<&1, String & String>:
+  match base:
+    case True{}:
+      Some{("Base", "")}
+    case False{}:
+      None{}
+
+def import.as(is_as: Bool, p: String, +a: String) -> Maybe<&1, String & String>:
+  match is_as:
+    case True{}:
+      Bool.pick(Maybe<&1, String & String>, is_ident(a), Some{(p, a)}, None{})
+    case False{}:
+      None{}
+
+# (String patterns would do, but the official compiler expands them char by
+# char, with the other arms copied into each branch.)
 def import.parse(ws: List<&2, String>) -> Maybe<&1, String & String>:
   match ws:
-    case "Base" <> Nil{}:
-      Some{("Base", "")}
-    case p <> "as" <> +a <> Nil{}:
-      Bool.pick(Maybe<&1, String & String>, is_ident(a), Some{(p, a)}, None{})
+    case +w <> Nil{}:
+      import.base(String.eq(w, "Base"))
+    case p <> +k <> +a <> Nil{}:
+      import.as(String.eq(k, "as"), p, a)
     case other:
       None{}
 
