@@ -4058,13 +4058,208 @@ def Gen.par.vals(g, env, k, i, vs):
           rest, DStr{"V " ++ Gen.par.name(k, i) ++ " = par_join(" ++ Gen.par.name(k, i) ++
           "t);\n"}])
 
+# 1: in S_name (in order); 3: elsewhere (forks, and, in a def with a
+# sequential clone, only above the frontier).
+def Gen.par.mode(m: Maybe<&2, String>, +sn: String) -> Nat:
+  match m:
+    case Some{+v}:
+      Bool.pick(Nat, Str.eq(v, sn), 1n, 3n)
+    case None{}:
+      3n
+
+# The values in order: declared (in S_name), or assigned (at the frontier).
 @unsafe
-def Gen.par(+g: G, +env: Env(), +self: Self, +tgt: Tgt, ps: List<&2, Pat>, vs: List<&2, Expr>,
+def Gen.par.seq(+g: G, +env: Env(), +k: U32, +i: U32, vs: List<&2, Expr>, +decl: Bool) -> Gen(Doc):
+  match vs:
+    case Nil{}:
+      Gen.pure(Doc, DNil{})
+    case v <> t:
+      do Gen<Doc>:
+        d : Doc <- Gen.expr(g, env, v)
+        rest : Doc <- Gen.par.seq(g, env, k, U32.inc(i), t, decl)
+        return Doc.list([DStr{Bool.pick(String, decl, "V ", "") ++ Gen.par.name(k, i) ++ " = "}, d, DStr{";\n"}, rest])
+
+@unsafe
+def Gen.par.decls(+k: U32, +i: U32, n: Nat) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+m:
+      "V " ++ Gen.par.name(k, i) ++ "; " ++ Gen.par.decls(k, U32.inc(i), m)
+
+@unsafe
+def Gen.par.copy(+k: U32, +j: U32, +i: U32, n: Nat) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+m:
+      Gen.par.name(k, i) ++ " = " ++ Gen.par.name(j, i) ++ "; " ++ Gen.par.copy(k, j, U32.inc(i), m)
+
+# A seq def's parallel let: forks above the frontier (par_depth), and in
+# order below it, through S_name.
+@unsafe
+def Gen.par.front(+g: G, +env: Env(), +sn: String, +k: U32, +vs: List<&2, Expr>) -> Gen(Doc):
+  +n = List.length(&2, Expr, vs)
+  do Gen<Doc>:
+    sq : Doc <- Gen.par.seq(g, env, k, 0, vs, False{})
+    +j : U32 <- Gen.fresh()
+    fk : Doc <- Gen.par.vals(g, env, j, 0, vs)
+    return Doc.list([DStr{Gen.par.decls(k, 0, n) ++ "\nif (par_depth >= par_front) {\n#define " ++ Gen.f(sn) ++ " S_" ++
+      Gen.mangle(sn) ++ "\n"}, sq, DStr{"#undef " ++ Gen.f(sn) ++ "\n} else {\npar_depth += 1;\n"}, fk,
+      DStr{Gen.par.copy(k, j, 0, n) ++ "\npar_depth -= 1;\n}\n"}])
+
+@unsafe
+def Gen.par.sq(sq: Bool, +g: G, +env: Env(), +sn: String, +k: U32, +vs: List<&2, Expr>) -> Gen(Doc):
+  match sq:
+    case True{}:
+      Gen.par.front(g, env, sn, k, vs)
+    case False{}:
+      Gen.par.vals(g, env, k, 0, vs)
+
+#
+# The functions a !-call can reach compile into one flat state machine (see
+# rt/gpu.h): a function is an entry block, a call ends a block (the callee
+# returns to a fresh one), every local lives in a frame slot, S(k), and a
+# parallel let forks thunks and joins. The text compiles as MSL (the Metal
+# kernel) and as C (the CPU simulator).
+type KSt is Data:
+  KSt{n: U32, sl: U32, curl: U32, cur: Doc, out: Doc, fns: List<&2, Bind>, todo: List<&2, String>,
+    frames: List<&2, Bind>, errs: List<&2, String>, flat: Doc, memo: List<&2, Bind>}
+
+def Gen.isseq.fst(r: Bool & KSt) -> Bool:
+  (b, st) = r
+  b
+
+def KM(-A: Type) -> Type:
+  KSt -> A & KSt
+
+def KM.go(-A: Type, -B: Type, r: A & KSt, f: A -> KM(B)) -> B & KSt:
+  (a, st) = r
+  f(a, st)
+
+def KM.bind(-A: Type, -B: Type, m: KM(A), f: A -> KM(B)) -> KM(B):
+  st => KM.go(A, B, m(st), f)
+
+def KM.pure(-A: Type, x: A) -> KM(A):
+  st => (x, st)
+
+#
+# A def is flat when its body only matches, binds, builds constructors,
+# calls natives and other flat defs, and calls itself in tail position. It
+# becomes a plain function, KX_name, with its locals in registers and a loop
+# for its tail calls: no frames, no trips through the kernel's switch.
+def K.memo.get.go(+k: String, st: KSt) -> Maybe<&2, String> & KSt:
+  KSt{n, sl, curl, cur, out, fns, todo, frames, errs, flat, +memo} = st
+  (Env.find(memo, k), KSt{n, sl, curl, cur, out, fns, todo, frames, errs, flat, memo})
+
+def K.memo.get(+k: String) -> KM(Maybe<&2, String>):
+  st => K.memo.get.go(k, st)
+
+def K.memo.put.go(k: String, v: String, st: KSt) -> Unit & KSt:
+  KSt{n, sl, curl, cur, out, fns, todo, frames, errs, flat, memo} = st
+  (Unit{}, KSt{n, sl, curl, cur, out, fns, todo, frames, errs, flat, Bind{k, v} <> memo})
+
+def K.memo.put(k: String, v: String) -> KM(Unit):
+  st => K.memo.put.go(k, v, st)
+
+def K.kept(mask: List<&2, Bool>) -> U32:
+  match mask:
+    case Nil{}:
+      0
+    case True{} <> t:
+      U32.inc(K.kept(t))
+    case False{} <> t:
+      K.kept(t)
+
+type KSelf is Data:
+  KSelf{name: String, entry: U32, mask: List<&2, Bool>}
+
+law K.fl.expr:
+  for +g: G
+  for +self: KSelf
+  for +bound: List<&2, String>
+  for e: Expr
+  for tail: Bool
+  KM(Bool)
+
+def K.params(ps: List<&2, Param>, mask: List<&2, Bool>) -> List<&2, String>:
+  match ps mask:
+    case Param{x, m, t} <> pt True{} <> mt:
+      x <> K.params(pt, mt)
+    case Param{x, m, t} <> pt False{} <> mt:
+      x <> K.params(pt, mt)
+    case pl ml:
+      Nil{}
+
+# Both, analysing the second only when the first holds.
+def K.fl.and(a: Bool, b: KM(Bool)) -> KM(Bool):
+  match a:
+    case True{}:
+      b
+    case False{}:
+      KM.pure(Bool, False{})
+
+@unsafe
+def K.sq.decl.go(kind: Nat, d: Decl, +g: G, +name: String, +mask: List<&2, Bool>) -> KM(Bool):
+  match kind d:
+    case 0n DDef{n, ps, body, ret}:
+      K.fl.and(U32.is_le(K.kept(mask), 8), K.fl.expr(g, KSelf{name, 1, mask}, K.params(ps, mask), R.ops(body, "Nat"),
+        True{}))
+    case k o:
+      KM.pure(Bool, False{})
+
+def K.sq.decl(+g: G, +name: String, info: DInfo, d: Decl) -> KM(Bool):
+  DInfo{kind, mask} = info
+  K.sq.decl.go(U32.to_nat(kind), d, g, name, mask)
+
+def K.isseq.memo(+g: G, +name: String, m: Maybe<&2, String>) -> KM(Bool):
+  match m:
+    case Some{v}:
+      KM.pure(Bool, Str.eq(v, "1"))
+    case None{}:
+      do KM<Bool>:
+        +ok : Bool <- K.sq.decl(g, name, G.def(g, name), G.body(g, name))
+        K.memo.put("%seq " ++ name, Bool.pick(String, ok, "1", "0"))
+        return ok
+
+# A def is seq when it would be flat if its parallel lets ran in order and
+# it could call itself at statement level (in tail position, or as a let's
+# or a parallel let's value): its sequential part (past the fork limit)
+# runs in KQ_name (see KQ.def).
+def K.isseq(+g: G, +name: String) -> KM(Bool):
+  do KM<Bool>:
+    m : Maybe<&2, String> <- K.memo.get("%seq " ++ name)
+    K.isseq.memo(g, name, m)
+
+# Whether a def is seq (see K.isseq): flat but for its parallel lets and
+# calls to itself.
+def Gen.isseq(+g: G, +name: String) -> Bool:
+  Gen.isseq.fst(K.isseq(g, name)(KSt{8, 0, 0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}, DNil{}, Nil{}}))
+
+@unsafe
+def Gen.par.pick(mode: Nat, +g: G, +env: Env(), +sn: String, +k: U32, +vs: List<&2, Expr>) -> Gen(Doc):
+  match mode:
+    case 1n:
+      Gen.par.seq(g, env, k, 0, vs, True{})
+    case other:
+      Gen.par.sq(Gen.isseq(g, sn), g, env, sn, k, vs)
+
+def Gen.memo.find.go(st: St, +k: String) -> Maybe<&2, String> & St:
+  St{n, protos, code, refs, errs, +memo, effs} = st
+  (Env.find(memo, k), St{n, protos, code, refs, errs, memo, effs})
+
+def Gen.memo.find(+k: String) -> Gen(Maybe<&2, String>):
+  st => Gen.memo.find.go(st, k)
+
+@unsafe
+def Gen.par(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +ps: List<&2, Pat>, +vs: List<&2, Expr>,
   body: Expr
 ) -> Gen(Doc):
+  Self{+sn, sm, sc} = self
   do Gen<Doc>:
     +k : U32 <- Gen.fresh()
-    pre : Doc <- Gen.par.vals(g, env, k, 0, vs)
+    mode : Maybe<&2, String> <- Gen.memo.find("%seqmode")
+    pre : Doc <- Gen.par.pick(Gen.par.mode(mode, sn), g, env, sn, k, vs)
     b : Doc <- Gen.stmt(g, Gen.par.env(ps, k, 0, env), self, tgt, body)
     return Doc.list([pre, b])
 
@@ -4141,15 +4336,45 @@ def Gen.wrapper(+name: String, wargs: List<&2, String>) -> Gen(Unit):
     Gen.code(DStr{"static V " ++ w ++ "(V *a) { (void)a; return " ++ Gen.f(name) ++ "(" ++
       String.join(wargs, ", ") ++ "); }\n"})
 
-def Gen.def.body(+g: G, +name: String, +mask: List<&2, Bool>, body: Expr, sig: Sig) ->
+def Gen.memo.add.go(st: St, b: Bind) -> Unit & St:
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (Unit{}, St{n, protos, code, refs, errs, b <> memo, effs})
+
+def Gen.memo.add(b: Bind) -> Gen(Unit):
+  st => Gen.memo.add.go(st, b)
+
+# S_name, a seq def's sequential clone: its parallel lets run in order and
+# its calls to itself stay in S_name (F_name is renamed to it inside).
+def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, body: Expr, +env: Env(),
+  +params: List<&2, String>) -> Gen(Unit):
+  match sq:
+    case True{}:
+      +head = "static V S_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams(params) ++ ")"
+      do Gen<Unit>:
+        Gen.proto(DStr{head ++ ";\n"})
+        Gen.memo.add(Bind{"%seqmode", name})
+        b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
+        Gen.memo.add(Bind{"%seqmode", ""})
+        Gen.code(Doc.list([DStr{"#define " ++ Gen.f(name) ++ " S_" ++ Gen.mangle(name) ++ "\n" ++ head ++ " {\ntop:;\n"},
+          b, DStr{"}\n#undef " ++ Gen.f(name) ++ "\n"}]))
+    case False{}:
+      Gen.pure(Unit, Unit{})
+
+law Expr.has_par:
+  for e: Expr
+  Bool
+
+@unsafe
+def Gen.def.body(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr, sig: Sig) ->
   Gen(Unit):
-  Sig{+params, env, +wargs} = sig
+  Sig{+params, +env, +wargs} = sig
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n"})
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
     Gen.code(Doc.list([DStr{head ++ " {\ntop:;\n"}, b, DStr{"}\n"}]))
     Gen.wrapper(name, wargs)
+    Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
 
 def Gen.eff.args(n: Nat, +i: U32) -> List<&2, String>:
   match n:
@@ -4302,15 +4527,6 @@ def Gen.gpu.stub.go(+name: String, kernel: Bool, +n: Nat) -> String:
   Gen.gpu.stub.pick(kernel, "static V G_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams(Gen.gpu.params(n, 0)) ++ ") {\n",
     "return " ++ Gen.f(name) ++ "(" ++ Gen.gpu.args(n) ++ ");\n}\n", name, n)
 
-def K.kept(mask: List<&2, Bool>) -> U32:
-  match mask:
-    case Nil{}:
-      0
-    case True{} <> t:
-      U32.inc(K.kept(t))
-    case False{} <> t:
-      K.kept(t)
-
 # G_f for a target f: on the device when it compiled, else on the CPU.
 def Gen.gpu.stub(+g: G, +name: String, kernel: Bool) -> String:
   Gen.gpu.stub.go(name, kernel, U32.to_nat(K.kept(DInfo.mask(G.def(g, name)))))
@@ -4374,16 +4590,6 @@ def Gen.gpu.emit(+g: G, +ts: List<&2, String>, out: KOut) -> String:
   KOut{code, wraps, errs} = out
   Gen.gpu.emit.errs(g, ts, errs, code, wraps)
 
-#
-# The functions a !-call can reach compile into one flat state machine (see
-# rt/gpu.h): a function is an entry block, a call ends a block (the callee
-# returns to a fresh one), every local lives in a frame slot, S(k), and a
-# parallel let forks thunks and joins. The text compiles as MSL (the Metal
-# kernel) and as C (the CPU simulator).
-type KSt is Data:
-  KSt{n: U32, sl: U32, curl: U32, cur: Doc, out: Doc, fns: List<&2, Bind>, todo: List<&2, String>,
-    frames: List<&2, Bind>, errs: List<&2, String>, flat: Doc, memo: List<&2, Bind>}
-
 def K.defines(fns: List<&2, Bind>) -> String:
   match fns:
     case Nil{}:
@@ -4440,19 +4646,6 @@ def K.fin(r: Unit & KSt) -> KOut:
     flat, DStr{"\nKINLINE KW k_kq(KTHR KCtx *c, KTHR bool *ok) {\nswitch (c->kq) {\n" ++ KQ.cases.of(memo) ++
     "default:\n*ok = false;\nreturn 0;\n}\n}\n"}, DStr{"\nKINLINE void k_cases(KTHR KCtx *c) {\nswitch (c->pc) {\n"}, out, K.block_doc(curl, cur),
     DStr{"default: {\nk_fail(c, KE_PC);\nbreak;\n}\n}\n}\n"}])), K.wraps(fns), errs}
-
-def KM(-A: Type) -> Type:
-  KSt -> A & KSt
-
-def KM.go(-A: Type, -B: Type, r: A & KSt, f: A -> KM(B)) -> B & KSt:
-  (a, st) = r
-  f(a, st)
-
-def KM.bind(-A: Type, -B: Type, m: KM(A), f: A -> KM(B)) -> KM(B):
-  st => KM.go(A, B, m(st), f)
-
-def KM.pure(-A: Type, x: A) -> KM(A):
-  st => (x, st)
 
 law K.all:
   for +g: G
@@ -4677,20 +4870,6 @@ def Ty.bind.go(ps: List<&2, String>, xs: List<&2, Expr>) -> List<&2, TB>:
 # quantity argument may be left out).
 def Ty.bind(ps: List<&2, String>, xs: List<&2, Expr>) -> List<&2, TB>:
   Ty.bind.go(List.reverse(&2, String, ps), List.reverse(&2, Expr, xs))
-
-def Gen.memo.find.go(st: St, +k: String) -> Maybe<&2, String> & St:
-  St{n, protos, code, refs, errs, +memo, effs} = st
-  (Env.find(memo, k), St{n, protos, code, refs, errs, memo, effs})
-
-def Gen.memo.find(+k: String) -> Gen(Maybe<&2, String>):
-  st => Gen.memo.find.go(st, k)
-
-def Gen.memo.add.go(st: St, b: Bind) -> Unit & St:
-  St{n, protos, code, refs, errs, memo, effs} = st
-  (Unit{}, St{n, protos, code, refs, errs, b <> memo, effs})
-
-def Gen.memo.add(b: Bind) -> Gen(Unit):
-  st => Gen.memo.add.go(st, b)
 
 def Gen.printer.test(+kind: U32, +tag: U32, single: Bool) -> String:
   Bool.pick(String, single, "if (1)",
@@ -5822,6 +6001,41 @@ def Main.js.effs(es, acc):
 # Misc
 # ====
 
+law Exprs.has_par:
+  for es: List<&2, Expr>
+  Bool
+
+@unsafe
+def Expr.has_par.or(a: Bool, t: List<&2, Expr>) -> Bool:
+  match a:
+    case True{}:
+      True{}
+    case False{}:
+      Exprs.has_par(t)
+
+@unsafe
+def Exprs.has_par(es):
+  match es:
+    case Nil{}:
+      False{}
+    case e <> t:
+      Expr.has_par.or(Expr.has_par(e), t)
+
+# Whether an expression holds a parallel let (outside lambdas).
+@unsafe
+def Expr.has_par(e):
+  match e:
+    case ELet{PCtor{+n, ps}, v, b}:
+      Expr.has_par.or(Str.eq(n, "%par"), [v, b])
+    case ELet{p, v, b}:
+      Exprs.has_par([v, b])
+    case EMatch{scrs, cases}:
+      Exprs.has_par(cases)
+    case ECase{ps, b}:
+      Expr.has_par(b)
+    case other:
+      False{}
+
 def KM.if(-A: Type, c: Bool, t: KM(A), e: KM(A)) -> KM(A):
   match c:
     case True{}:
@@ -5929,9 +6143,6 @@ law K.expr:
   for e: Expr
   KM(Doc)
 
-type KSelf is Data:
-  KSelf{name: String, entry: U32, mask: List<&2, Bool>}
-
 type KTgt is Data:
   KRet{}
   KSet{slot: U32, merge: U32}
@@ -6037,25 +6248,6 @@ law K.isflat:
   for +g: G
   for +name: String
   KM(Bool)
-
-#
-# A def is flat when its body only matches, binds, builds constructors,
-# calls natives and other flat defs, and calls itself in tail position. It
-# becomes a plain function, KX_name, with its locals in registers and a loop
-# for its tail calls: no frames, no trips through the kernel's switch.
-def K.memo.get.go(+k: String, st: KSt) -> Maybe<&2, String> & KSt:
-  KSt{n, sl, curl, cur, out, fns, todo, frames, errs, flat, +memo} = st
-  (Env.find(memo, k), KSt{n, sl, curl, cur, out, fns, todo, frames, errs, flat, memo})
-
-def K.memo.get(+k: String) -> KM(Maybe<&2, String>):
-  st => K.memo.get.go(k, st)
-
-def K.memo.put.go(k: String, v: String, st: KSt) -> Unit & KSt:
-  KSt{n, sl, curl, cur, out, fns, todo, frames, errs, flat, memo} = st
-  (Unit{}, KSt{n, sl, curl, cur, out, fns, todo, frames, errs, flat, Bind{k, v} <> memo})
-
-def K.memo.put(k: String, v: String) -> KM(Unit):
-  st => K.memo.put.go(k, v, st)
 
 def K.flat.add.go(d: Doc, st: KSt) -> Unit & KSt:
   KSt{n, sl, curl, cur, out, fns, todo, frames, errs, flat, memo} = st
@@ -6767,63 +6959,6 @@ def K.par.seq.pick(sq: Bool, extra: List<&2, Expr>, full: Bool, +g: G, +env: Env
 def K.par.seq.split(sq: Bool, +g: G, +env: Env(), +f: String, args: List<&2, Expr>, +r: U32, s: Split) -> KM(Unit):
   Split{kept, all, extra, full} = s
   K.par.seq.pick(sq, extra, full, g, env, f, args, kept, r)
-
-law K.fl.expr:
-  for +g: G
-  for +self: KSelf
-  for +bound: List<&2, String>
-  for e: Expr
-  for tail: Bool
-  KM(Bool)
-
-def K.params(ps: List<&2, Param>, mask: List<&2, Bool>) -> List<&2, String>:
-  match ps mask:
-    case Param{x, m, t} <> pt True{} <> mt:
-      x <> K.params(pt, mt)
-    case Param{x, m, t} <> pt False{} <> mt:
-      x <> K.params(pt, mt)
-    case pl ml:
-      Nil{}
-
-# Both, analysing the second only when the first holds.
-def K.fl.and(a: Bool, b: KM(Bool)) -> KM(Bool):
-  match a:
-    case True{}:
-      b
-    case False{}:
-      KM.pure(Bool, False{})
-
-@unsafe
-def K.sq.decl.go(kind: Nat, d: Decl, +g: G, +name: String, +mask: List<&2, Bool>) -> KM(Bool):
-  match kind d:
-    case 0n DDef{n, ps, body, ret}:
-      K.fl.and(U32.is_le(K.kept(mask), 8), K.fl.expr(g, KSelf{name, 1, mask}, K.params(ps, mask), R.ops(body, "Nat"),
-        True{}))
-    case k o:
-      KM.pure(Bool, False{})
-
-def K.sq.decl(+g: G, +name: String, info: DInfo, d: Decl) -> KM(Bool):
-  DInfo{kind, mask} = info
-  K.sq.decl.go(U32.to_nat(kind), d, g, name, mask)
-
-def K.isseq.memo(+g: G, +name: String, m: Maybe<&2, String>) -> KM(Bool):
-  match m:
-    case Some{v}:
-      KM.pure(Bool, Str.eq(v, "1"))
-    case None{}:
-      do KM<Bool>:
-        +ok : Bool <- K.sq.decl(g, name, G.def(g, name), G.body(g, name))
-        K.memo.put("%seq " ++ name, Bool.pick(String, ok, "1", "0"))
-        return ok
-
-# A def is seq when it would be flat if its parallel lets ran in order and
-# it could call itself at statement level (in tail position, or as a let's
-# or a parallel let's value): its sequential part (past the fork limit)
-# runs in KQ_name (see KQ.def).
-def K.isseq(+g: G, +name: String) -> KM(Bool):
-  do KM<Bool>:
-    m : Maybe<&2, String> <- K.memo.get("%seq " ++ name)
-    K.isseq.memo(g, name, m)
 
 @unsafe
 def K.par.seq.def(+g: G, +env: Env(), +f: String, +args: List<&2, Expr>, +r: U32, info: DInfo) -> KM(Unit):

@@ -995,7 +995,13 @@ static V F_F32_dread(V s) {
 #define P_QUEUED 1
 #define P_DONE 2
 
-typedef struct PTask { V clo; V res; V state; } PTask;
+typedef struct PTask { V clo; V res; V state; V depth; } PTask;
+
+// The fork depth of the running code, and the frontier past which a def
+// with a sequential clone (S_name, see bendc) runs its parallel lets in
+// order: below it, forking costs more than it balances.
+static __thread int par_depth;
+static int par_front = 0;
 
 typedef struct PDeque {
   _Atomic long top;
@@ -1051,7 +1057,10 @@ static PTask *pdq_steal(PDeque *d) {
 }
 
 static void par_exec(PTask *t) {
+  int d = par_depth;
+  par_depth = (int)t->depth;
   V r = apply(t->clo, 0);
+  par_depth = d;
   t->res = r;
   __atomic_store_n(&t->state, P_DONE, __ATOMIC_RELEASE);
 }
@@ -1134,8 +1143,9 @@ static V par_fork(V clo) {
   long tp = atomic_load_explicit(&d->top, memory_order_relaxed);
   if (b - tp >= 4) return clo | 2;
   if (UNLIKELY(!atomic_load_explicit(&par_started, memory_order_relaxed))) par_start();
-  PTask *t = (PTask *)halloc(3);
+  PTask *t = (PTask *)halloc(4);
   t->clo = clo;
+  t->depth = (V)par_depth;
   t->state = P_QUEUED;
   __atomic_store_n(&d->buf[b & d->mask], t, __ATOMIC_RELAXED);
   atomic_thread_fence(memory_order_release);
@@ -1862,6 +1872,13 @@ static int bend_start(int argc, char **argv, V (*m)(void), int value) {
     }
   }
   par_nthreads = thr > 0 ? (int)thr : cpu_count();
+  // Fork 2^6 tasks a thread deep, then run subtrees in order.
+  if (par_nthreads > 1) {
+    int f = 0;
+    while ((1 << f) < par_nthreads) f++;
+    const char *fd = getenv("BEND_FORK_DEPTH");
+    par_front = fd && *fd ? atoi(fd) : f + 6;
+  }
   gc_init();
   struct sigaction sa;
   memset(&sa, 0, sizeof sa);
