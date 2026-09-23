@@ -1,6 +1,7 @@
 #!/bin/sh
 # Bootstraps bendc and checks that it reaches a fixpoint:
-#   stage0: bendc.bend built by the official `bend`
+#   stage0: bendc built by the official `bend` (from boot.bend: bendc
+#           without its checker, which stage0 does not need)
 #   stage1: bendc.bend compiled by stage0 (C, then clang)
 #   stage2: bendc.bend compiled by stage1
 # stage1.c and stage2.c must be byte-identical.
@@ -8,8 +9,8 @@ set -e
 cd "$(dirname "$0")"
 BASE=${BEND_BASE:-$HOME/.bend/bend2/base.bend}
 mkdir -p build
-echo "[stage0] bend bendc.bend -o build/bendc0"
-if ! out=$(bend bendc.bend -o build/bendc0 2>&1); then echo "$out"; exit 1; fi
+echo "[stage0] bend boot.bend -o build/bendc0"
+if ! out=$(bend boot.bend -o build/bendc0 2>&1); then echo "$out"; exit 1; fi
 echo "$out" | head -1
 echo "[stage1] bendc0 -> build/stage1.c"
 ./build/bendc0 --no-check "$BASE" bendc.bend > build/stage1.c
@@ -22,6 +23,6 @@ if cmp -s build/stage1.c build/stage2.c; then
 else
   echo "NO FIXPOINT: stage1.c and stage2.c differ"; exit 1
 fi
-for b in bendc0 stage1 stage2; do
+for b in stage1 stage2; do
   printf "tests with %-7s " "$b:"; ./run_tests.sh build/$b | tail -1
 done

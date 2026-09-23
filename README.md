@@ -16,13 +16,12 @@
 
 ```
 $ ./bootstrap.sh
-[stage0] bend bendc.bend -o build/bendc0          # the official Bend builds bendc once
+[stage0] bend boot.bend -o build/bendc0           # the official Bend builds bendc once
 [stage1] bendc0 -> build/stage1.c                 # bendc compiles itself
 [stage2] stage1 -> build/stage2.c                 # the result compiles itself again
-fixpoint: stage1.c == stage2.c (9432 lines)
-tests with bendc0: 16 passed, 0 failed
-tests with stage1: 16 passed, 0 failed
-tests with stage2: 16 passed, 0 failed
+fixpoint: stage1.c == stage2.c (31499 lines)
+tests with stage1: 76 passed, 0 failed
+tests with stage2: 76 passed, 0 failed
 ```
 
 `bendc.bend` (the compiler) and `check.bend` (the type checker) are Bend: about 12,000 lines that
@@ -147,7 +146,7 @@ def main() -> List<&2, Tree<String>> & Maybe<&2, Box> & Nat & Char & String & Bo
 
 ```mermaid
 flowchart LR
-    src[bendc.bend] -->|official bend| s0[stage0 binary]
+    boot[boot.bend] -->|official bend| s0[stage0 binary]
     src -->|stage0| c1[stage1.c]
     c1 -->|clang| s1[stage1 binary]
     src -->|stage1| c2[stage2.c]
@@ -155,9 +154,15 @@ flowchart LR
     c2 -.-> seed[seed/bendc.c]
 ```
 
-- **`make bootstrap`** does the full chain. The official `bend` builds stage0 from `bendc.bend`.
-  Stage0 compiles `bendc.bend` into `stage1.c`, and stage1 compiles it again into `stage2.c`. The two
-  C files must be identical, and all three compilers must pass the test suite.
+- **`make bootstrap`** does the full chain. The official `bend` builds stage0 from `boot.bend`, an
+  entry that reaches bendc's C code generator but not its type checker or JavaScript backend (stage0
+  only translates `bendc.bend` with `--no-check`). Stage0 compiles `bendc.bend` into `stage1.c`, and
+  stage1 compiles it again into `stage2.c`. The two C files must be identical, and stage1 and stage2
+  must pass the test suite.
+- **Memory.** The official compiler's footprint grows with the code `main` reaches, and it expands a
+  `match` on string literals char by char (and a large `Nat` literal level by level), copying the
+  other arms into every branch. bendc avoids such patterns, so building stage0 takes about 16 s and
+  4 GB (building all of `bendc.bend` would take about 70 s and 10 GB).
 - **`seed/bendc.c`** is the committed fixpoint, the way self-hosting compilers usually ship a seed.
   Building `bendc` needs only a C compiler. `make selfcheck` verifies that the current `bendc.bend`
   still compiles to exactly this seed, and `make seed` regenerates it after the compiler changes.

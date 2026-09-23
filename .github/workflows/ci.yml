@@ -40,15 +40,5 @@ jobs:
           BEND_NO_TELEMETRY=1 bend bendc.bend --check-only > build/official.txt
           cmp build/ours.txt build/official.txt
 
-      # Headroom for the official bend building bendc (~10 GB).
-      - name: Add swap (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo fallocate -l 16G /swap2 && sudo chmod 600 /swap2 && sudo mkswap /swap2 && sudo swapon /swap2
-          free -g
-
-      # On Linux only: the official bend needs ~10 GB to build bendc, past
-      # the 7 GB of a macOS runner.
       - name: Full bootstrap (official bend -> stage1 -> stage2 fixpoint)
-        if: runner.os == 'Linux'
         run: BEND_NO_TELEMETRY=1 ./bootstrap.sh

@@ -5696,6 +5696,29 @@ def Main.run3(code: Nat, +base_path: String, +user_path: String) -> IO(Unit):
     case other:
       Main.usage()
 
+# Main.compile to C only (reaching no JS backend).
+def Main.boot.compile(base: Result<&2, &2, String, List<&2, Decl>>, user: Result<&2, &2, String, List<&2, Decl>>) ->
+  IO(Unit):
+  match base user:
+    case Fail{e} u:
+      IO.die(Unit, 1, "bendc: parse error in base: " ++ e)
+    case Done{b} Fail{e}:
+      IO.die(Unit, 1, "bendc: parse error: " ++ e)
+    case Done{b} Done{u}:
+      Main.emit(Gen.program(List.append(&2, Decl, b, u)))
+
+# The driver of boot.bend: bendc --no-check, without the checker.
+@unsafe
+def Main.boot(args: List<&2, String>) -> IO(Unit):
+  match args:
+    case a <> +b <> c <> Nil{}:
+      do IO<Unit>:
+        base : String <- IO.read_file(b)
+        user : List<&2, Decl> <- Main.load(64n, c)
+        Main.boot.compile(Main.resolve(Mod.dir(b), Main.parse(base)), Done{user})
+    case other:
+      IO.die(Unit, 1, "usage: bendc0 --no-check <base.bend> <input.bend>")
+
 @unsafe
 def Main.run(args: List<&2, String>) -> IO(Unit):
   match args:
