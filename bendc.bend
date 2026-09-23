@@ -6463,7 +6463,8 @@ def K.kx.id.memo(+name: String, +n: Nat, m: Maybe<&2, String>) -> KM(U32):
       do KM<U32>:
         +id : U32 <- K.fresh()
         K.memo.put("%kxid " ++ name, U32.show(id))
-        K.memo.put("%kqcase", "case " ++ U32.show(id) ++ ": return KX_" ++ Gen.mangle(name) ++ "(c" ++ KQ.case.args(n, 0) ++
+        K.memo.put("%kqcase", "case " ++ U32.show(id) ++ ":\nif (k_big(c, " ++ U32.show(U32.from_nat(n)) ++
+          ")) { k_fail(c, KE_NAT); *ok = false; return 0; }\nreturn KX_" ++ Gen.mangle(name) ++ "(c" ++ KQ.case.args(n, 0) ++
           ");\n")
         return id
 
@@ -7795,6 +7796,9 @@ def KX.tail.set(+k: U32, +n: Nat, +i: U32) -> String:
       "a" ++ U32.show(i) ++ " = " ++ KX.v(k) ++ "_" ++ U32.show(i) ++ "; " ++ KX.tail.set(k, m, U32.inc(i))
 
 # A self tail call: the new arguments, then back to the top of the loop.
+# (No error check in the loop: reading c->err there keeps the lane's context
+# in memory, 3x slower. A looping call starts only on arguments that are not
+# bignums (see K.kx.id), and an error still stops the call when it returns.)
 @unsafe
 def KX.tail(+g: G, +env: Env(), s: Split) -> KM(Doc):
   Split{kept, all, extra, full} = s
@@ -7802,7 +7806,7 @@ def KX.tail(+g: G, +env: Env(), s: Split) -> KM(Doc):
     +k : U32 <- K.fresh()
     +ds : List<&2, Doc> <- KX.exprs(g, env, kept)
     return Doc.list([DStr{"{ "}, KX.temps(ds, k, 0), DStr{KX.tail.set(k, U32.to_nat(Gen.len(ds)), 0) ++
-      "if (c->err) return 0; continue; }\n"}])
+      "continue; }\n"}])
 
 @unsafe
 def KX.stmt.call(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, +name: String, args: List<&2, Expr>, tail: Bool) ->

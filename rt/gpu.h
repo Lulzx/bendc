@@ -446,7 +446,7 @@ KINLINE KW KF_F32_dread(KTHR KCtx *c, KW a) { k_fail(c, KE_FX); return 0; }
 // A KR_ function's frames: a thread-private stack, with room past its end
 // for the frame that overflows it (the function then gives up, and the call
 // runs through the kernel's frames).
-#define KR_WORDS 256
+#define KR_WORDS 128
 #define KR_SLACK 64
 KINLINE KW kr_push(KTHR KW *st, KTHR KW *sp, KW fp, KW ret, KW fs) {
   KW f = *sp;
@@ -467,6 +467,14 @@ KINLINE KW kr_push(KTHR KW *st, KTHR KW *sp, KW fp, KW ret, KW fs) {
 KINLINE KW k_frame_size(KW l);
 KINLINE void k_cases(KTHR KCtx *c);
 KINLINE KW k_kq(KTHR KCtx *c, KTHR bool *ok);
+
+// Whether one of a KQ_ call's first n arguments is a bignum (bit 63: no
+// other value has it), which the device cannot run.
+KINLINE bool k_big(KTHR KCtx *c, KW n) {
+  KW any = 0;
+  for (KW i = 0; i < n; i++) any |= c->kqa[i];
+  return (any >> 63) != 0;
+}
 
 // Applies closure f to x; the value goes to block ret.
 KINLINE void k_call_clo(KTHR KCtx *c, KW f, KW x, KW ret) {

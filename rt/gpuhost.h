@@ -296,7 +296,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
   memset(gpu_A, 0, (KA_SEQ + P.qcap) * sizeof(KAU));
   gpu_A[KA_HEAP] = 1;
   for (KW i = 0; i < P.qcap; i++) gpu_A[KA_SEQ + i] = (KAU)i;
-  memset(H, 0, P.lane0 * 8);
+  memset(H, 0, P.qd * 8);  // the queue's data is written before it is read
   memset(H + P.lane0, 0, K_LANE * gpu_lanes * 8);
   for (KW i = 0; i < nfn; i++) {
     H[P.fn0 + 2 * i] = (KW)(uintptr_t)prog->fns[i].f;
