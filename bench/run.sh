@@ -40,7 +40,7 @@ for name, n in progs:
     a, b = out([me, '--', n]), out([off, n])
     assert a == b, (name, a, b)
     (t1, m1), (t2, m2) = run([me, '--', n]), run([off, n])
-    print('| `%s %s` | %.2fs | %.2fs | %.0f MB | %.0f MB |' % (name, n, t1, t2, m1, m2))
+    print('| `%s %s` | %.2fs | %.2fs | %.1f MB | %.1f MB |' % (name, n, t1, t2, m1, m2))
 print()
 print('| task | bendc | official bend |')
 print('|---|---|---|')

@@ -273,9 +273,11 @@ defs are gathered the same way. A 2^30-leaf fork tree runs in 0.145s on an M4 Pr
 0.178s for the official runtime (see [Benchmarks](#benchmarks)).
 
 The kernel's text (`rt/gpu.h` plus the generated blocks) compiles both as Metal Shading Language and
-as C. The host (`rt/gpuhost.h`) reaches Metal through the Objective-C runtime, so programs need no
-extra link flags. Memory is unified: the device reads the arguments where they are in the CPU heap,
-builds new objects in an arena, and the host copies the result back into the heap. Anything the
+as C. The host (`rt/gpuhost.h`) reaches Metal through the Objective-C runtime and asks the linker
+for Metal itself, so programs need no extra link flags. The first run of a program keeps its
+compiled kernels in `~/Library/Caches/bend` (see [Benchmarks](#benchmarks)). Memory is unified: the
+device reads the arguments where they are in the CPU heap, builds new objects in an arena, and the
+host copies the result back into the heap. Anything the
 device cannot do (an effect, a `Nat` past 2^63, a full arena, a closure made by a CPU lambda) stops
 the device, and the call runs on the CPU instead, so a `!` never changes what a program prints.
 
@@ -309,11 +311,11 @@ compile time. On an Apple M4 Pro (12 cores, 24 GB, macOS 27):
 
 | program | what it does | bendc | official bend | bendc memory | official memory |
 |---|---|---|---|---|---|
-| `forks 28` | a parallel let at every level of a 2^28-leaf tree, CPU threads | **0.04s** | 0.10s | 3 MB | 3 MB |
-| `forks_gpu 28` | the same as a `!`-call, on the GPU | **0.05s** | 0.09s | 20 MB | 14 MB |
-| `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | **0.74s** | 0.98s | 3 MB | 3 MB |
-| `leaves_gpu 14` | the same as a `!`-call, on the GPU | **0.06s** | 0.07s | 20 MB | 14 MB |
-| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | **0.30s** | 0.54s | **30 MB** | 32 MB |
+| `forks 28` | a parallel let at every level of a 2^28-leaf tree, CPU threads | **0.04s** | 0.10s | 2.8 MB | 2.7 MB |
+| `forks_gpu 28` | the same as a `!`-call, on the GPU | **0.05s** | 0.09s | **13.0 MB** | 13.3 MB |
+| `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | **0.74s** | 0.98s | 2.8 MB | 2.7 MB |
+| `leaves_gpu 14` | the same as a `!`-call, on the GPU | **0.06s** | 0.07s | **13.0 MB** | 13.3 MB |
+| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | **0.30s** | 0.54s | **30.4 MB** | 32.4 MB |
 
 | task | bendc | official bend |
 |---|---|---|
@@ -362,8 +364,19 @@ bendc builds itself with `BEND_NO_FREE=1`, which compiles matches without it (as
 selfcheck`, `tools/reseed.sh` and `bootstrap.sh`). `-DBEND_DEBUG_FREE` builds a program whose
 freed nodes are poisoned and kept, so a use after free stops with the C line that freed it.
 
-On the GPU, Metal itself costs about 16 MB before a program does anything (the official runtime's
-14 MB is less than a bare Metal program here).
+On the GPU, most of the memory is Metal's: making the device alone costs about 6 MB. The rest is
+kept down three ways:
+
+- Metal is linked with the program (weakly, through a `.linker_option` in `rt/gpuhost.h`), which
+  the loader maps for about 3 MB less than opening it at the first `!`-call.
+- The first run keeps Metal's binary archive of the kernels in `~/Library/Caches/bend`, named by a
+  hash of the device code; later runs load the library and the pipelines from it, for 1 MB where
+  compiling costs 2.5 (an archive for another GPU or OS misses, and the kernels compile again).
+  The first run, which compiles, peaks near 16 MB.
+- Pages the GPU writes and the CPU never reads are not counted: the host reads the lanes' `pc`s after
+  each dispatch, so a lane's state is stored word by word across all lanes (the `pc`s take 64 KB,
+  not the 1.5 MB of every lane's state), and the queue, whose slots keep their sequence numbers
+  less their index, starts empty on fresh zero pages.
 
 Filling a hole writes into a cell after it was made, which the collector otherwise never sees: a
 minor collection skips the fields of old cells. A hole holds `BEND_HOLE` until it is filled (and a
@@ -425,7 +438,7 @@ make test                      # with build/bendc
 | [`check.bend`](check.bend) | the type checker, a port of the official one: parser, normalizer, conversion, quantities, termination, templates, error reports |
 | [`bendc.bend`](bendc.bend) | the compiler, organized by section: lexer, layout, parser monad, expressions, patterns, statements, declarations, operator resolution, free variables, global tables, code generation, value printers, modules, driver |
 | [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, bignum `Nat`, native `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
-| [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the simulator, copying results back |
+| [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the kernel cache, the simulator, copying results back |
 | [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
 | [`seed/bendc.c`](seed/bendc.c) | the fixpoint C output of `bendc.bend`, for building without Bend |
 | [`bench/`](bench) | benchmark programs and `run.sh`, which times them against the official `bend` |

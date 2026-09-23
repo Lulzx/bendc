@@ -82,7 +82,7 @@ typedef struct {
   KW gb;          // CPU address of the heap the device reads
   KW qcap;        // queue entries (a power of two)
   KW qd;          // queue data (4 words an entry)
-  KW lane0;       // lane states (8 words a lane)
+  KW lane0;       // lane states: word k of lane l at lane0 + k * nlanes + l
   KW fn0;         // the CPU functions the device knows: {address, label} pairs
   KW nfn;
   KW heap0;       // the heap, in chunks of K_CHUNK words
@@ -99,7 +99,7 @@ typedef struct {
 #define PC_TASK 3
 #define PC_KQ 4      // waiting to run a KQ_ call (see the kernel's loop)
 #define KQ_ARGS 8
-#define K_LANE 24    // words of a lane's saved state
+#define K_LANE (10 + KQ_ARGS)  // words of a lane's saved state
 
 #define K_CHUNK 256
 
@@ -207,12 +207,16 @@ KINLINE void k_ret(KTHR KCtx *c, KW x) {
 }
 
 // The queue (Vyukov's bounded MPMC queue): an entry is {pc, fp, rv, dep}.
+// A slot keeps its sequence number less its index, so a zeroed queue is
+// empty (the host clears only the slots a call used).
+#define KQ_SEQ(i) (K_LOAD(&c->A[KA_SEQ + (i)]) + (KU)(i))
+#define KQ_SET(i, s) K_STORE(&c->A[KA_SEQ + (i)], (s) - (KU)(i))
 KINLINE bool k_push_task(KTHR KCtx *c, KW pc, KW fp, KW rv, KW dep) {
   KW mask = c->P->qcap - 1;
   KU pos = K_LOAD(&c->A[KA_QTAIL]);
   for (int tries = 0;; tries++) {
     if (tries > 100000) return false;
-    KU seq = K_LOAD(&c->A[KA_SEQ + (pos & mask)]);
+    KU seq = KQ_SEQ(pos & mask);
     KI dif = (KI)(seq - pos);
     if (dif == 0) {
       KU e = pos;
@@ -230,7 +234,7 @@ KINLINE bool k_push_task(KTHR KCtx *c, KW pc, KW fp, KW rv, KW dep) {
   c->H[q + 2] = rv;
   c->H[q + 3] = dep;
   K_FENCE();
-  K_STORE(&c->A[KA_SEQ + (pos & mask)], pos + 1);
+  KQ_SET(pos & mask, pos + 1);
   return true;
 }
 
@@ -239,7 +243,7 @@ KINLINE bool k_pop_task(KTHR KCtx *c) {
   KU pos = K_LOAD(&c->A[KA_QHEAD]);
   for (int tries = 0;; tries++) {
     if (tries > 64) return false;
-    KU seq = K_LOAD(&c->A[KA_SEQ + (pos & mask)]);
+    KU seq = KQ_SEQ(pos & mask);
     KI dif = (KI)(seq - (pos + 1));
     if (dif == 0) {
       KU e = pos;
@@ -258,7 +262,7 @@ KINLINE bool k_pop_task(KTHR KCtx *c) {
   c->rv = c->H[q + 2];
   c->dep = c->H[q + 3];
   K_FENCE();
-  K_STORE(&c->A[KA_SEQ + (pos & mask)], pos + (KU)mask + 1);
+  KQ_SET(pos & mask, pos + (KU)mask + 1);
   return true;
 }
 
@@ -519,33 +523,37 @@ KINLINE void k_load(KTHR KCtx *c, KCOH KW *H, KDEV KAU *A, KCP KParams *P, KDEV 
   c->an = P->an;
   c->gb = P->gb;
   c->err = 0;
-  KW ls = P->lane0 + (KW)lane * K_LANE;
-  c->pc = H[ls];
-  c->fp = H[ls + 1];
-  c->rv = H[ls + 2];
-  c->dep = H[ls + 3];
-  c->hp = H[ls + 4];
-  c->he = H[ls + 5];
-  c->ax = H[ls + 6];
-  c->kq = H[ls + 7];
-  c->kqret = H[ls + 8];
-  c->kqfb = H[ls + 9];
-  for (int i = 0; i < KQ_ARGS; i++) c->kqa[i] = H[ls + 10 + i];
+  // Word k of every lane side by side: the host reads the pcs of all lanes
+  // after a dispatch, and so touches only their pages.
+  KCOH KW *ls = H + P->lane0 + lane;
+  KW n = P->nlanes;
+  c->pc = ls[0];
+  c->fp = ls[n];
+  c->rv = ls[2 * n];
+  c->dep = ls[3 * n];
+  c->hp = ls[4 * n];
+  c->he = ls[5 * n];
+  c->ax = ls[6 * n];
+  c->kq = ls[7 * n];
+  c->kqret = ls[8 * n];
+  c->kqfb = ls[9 * n];
+  for (int i = 0; i < KQ_ARGS; i++) c->kqa[i] = ls[(10 + i) * n];
 }
 
 KINLINE void k_save(KTHR KCtx *c) {
-  KW ls = c->P->lane0 + (KW)c->lane * K_LANE;
-  c->H[ls] = c->pc;
-  c->H[ls + 1] = c->fp;
-  c->H[ls + 2] = c->rv;
-  c->H[ls + 3] = c->dep;
-  c->H[ls + 4] = c->hp;
-  c->H[ls + 5] = c->he;
-  c->H[ls + 6] = c->ax;
-  c->H[ls + 7] = c->kq;
-  c->H[ls + 8] = c->kqret;
-  c->H[ls + 9] = c->kqfb;
-  for (int i = 0; i < KQ_ARGS; i++) c->H[ls + 10 + i] = c->kqa[i];
+  KCOH KW *ls = c->H + c->P->lane0 + c->lane;
+  KW n = c->P->nlanes;
+  ls[0] = c->pc;
+  ls[n] = c->fp;
+  ls[2 * n] = c->rv;
+  ls[3 * n] = c->dep;
+  ls[4 * n] = c->hp;
+  ls[5 * n] = c->he;
+  ls[6 * n] = c->ax;
+  ls[7 * n] = c->kq;
+  ls[8 * n] = c->kqret;
+  ls[9 * n] = c->kqfb;
+  for (int i = 0; i < KQ_ARGS; i++) ls[(10 + i) * n] = c->kqa[i];
 }
 
 KINLINE bool k_active(KW pc) { return pc != PC_IDLE && pc != PC_KQ; }
@@ -621,7 +629,7 @@ kernel void bend_kq(device coherent(device) KW *H [[buffer(0)]], device KAU *A [
 #else
 static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
 #endif
-  if (lane >= P->nlanes || H[P->lane0 + (KW)lane * K_LANE] != PC_KQ) return;
+  if (lane >= P->nlanes || H[P->lane0 + lane] != PC_KQ) return;
   KCtx cx;
   KTHR KCtx *c = &cx;
   k_load(c, H, A, P, G, lane);
