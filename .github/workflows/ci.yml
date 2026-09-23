@@ -3,6 +3,10 @@ name: CI
 on:
   push:
   pull_request:
+  # Mondays, and on demand: against the latest Bend rather than the pinned one
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
 
 jobs:
   bootstrap:
@@ -13,11 +17,14 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install the official Bend (for base.bend, reference outputs and stage0)
         run: |
-          curl -fsSL https://bend-lang.com/install.sh | BEND_NO_TELEMETRY=1 sh
+          case "${{ github.event_name }}" in
+            schedule|workflow_dispatch) BEND_NO_TELEMETRY=1 tools/install-bend.sh latest;;
+            *) tools/install-bend.sh;;
+          esac
           echo "$HOME/.bend/bin" >> "$GITHUB_PATH"
 
       - name: Install Bun (runs the JavaScript target's tests)

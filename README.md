@@ -168,7 +168,9 @@ flowchart LR
   Building `bendc` needs only a C compiler. `make selfcheck` verifies that the current `bendc.bend`
   still compiles to exactly this seed, and `make seed` regenerates it after the compiler changes.
 
-CI runs the whole chain on Linux and macOS: seed build, tests, selfcheck, and full bootstrap.
+CI runs the whole chain on Linux and macOS: seed build, tests, selfcheck, and full bootstrap. It
+pins the official Bend it tests against (`tools/install-bend.sh`, Bend 2.0.26; 2.0.25 works too),
+and a weekly run tries the latest release, so a new Bend shows up there before it breaks a push.
 
 ## Language support
 
@@ -449,12 +451,13 @@ make test                      # with build/bendc
 | [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, bignum `Nat`, native `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
 | [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the kernel cache, the simulator, copying results back |
 | [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
+| [`rt/chan.c`](rt/chan.c) | the channel effects, spliced for Base's `effs/chan.c` (whose own channel rows the collector would not see) |
 | [`seed/bendc.c`](seed/bendc.c) | the fixpoint C output of `bendc.bend`, for building without Bend |
 | [`bench/`](bench) | benchmark programs and `run.sh`, which times them against the official `bend` |
 | [`tests/`](tests) | test programs and the official `bend`'s output for each |
 | [`bootstrap.sh`](bootstrap.sh), [`run_tests.sh`](run_tests.sh), [`Makefile`](Makefile) | bootstrap and fixpoint check, test runner, build entry points |
 | [`tools/order.py`](tools/order.py) | dev tool: section-aware dependency sort, with automatic `law` forward declarations for cycles |
-| [`tools/embed.py`](tools/embed.py) | dev tool: embeds `rt/bendrt.js` and `rt/gpu.h` in bendc (`rt/rtjs.bend`, `rt/gpuh.bend`) |
+| [`tools/embed.py`](tools/embed.py) | dev tool: embeds `rt/bendrt.js`, `rt/chan.c` and `rt/gpu.h` (`rt/rtjs.bend`, `rt/rtchan.bend`, `rt/gpu_src.h`) |
 
 ## License
 
