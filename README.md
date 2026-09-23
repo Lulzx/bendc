@@ -168,7 +168,7 @@ flowchart LR
   Building `bendc` needs only a C compiler. `make selfcheck` verifies that the current `bendc.bend`
   still compiles to exactly this seed, and `make seed` regenerates it after the compiler changes.
 
-CI runs the whole chain on Linux (x64 and arm64) and macOS: seed build, tests, selfcheck, and full bootstrap. It
+CI runs the whole chain on Linux (arm64) and macOS: seed build, tests, selfcheck, and full bootstrap. It
 pins the official Bend it tests against (`tools/install-bend.sh`, Bend 2.0.26; 2.0.25 works too),
 and a weekly run tries the latest release, so a new Bend shows up there before it breaks a push.
 
