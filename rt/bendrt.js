@@ -107,6 +107,14 @@ const F_Nat_dmin = (a, b) => (a < b ? a : b);
 const F_Nat_dmax = (a, b) => (a < b ? b : a);
 const F_Nat_dpow = (a, n) => a ** n;
 const F_Nat_dshow = (a) => a.toString();
+const F_Map_dbit = (key, pos) => {
+  const n = Number(pos), off = n % 33;
+  let ci = Math.floor(n / 33);
+  for (const ch of key) {
+    if (ci-- === 0) return { $: "Tuple", fst: key, snd: off === 0 ? true : ((ch.codePointAt(0) >>> (32 - off)) & 1) === 1 };
+  }
+  return { $: "Tuple", fst: key, snd: false };
+};
 
 // Natives: F32
 // ============

@@ -49,12 +49,25 @@ def Str.last_dot(s: String) -> Nat:
   Str.last_dot.go(s, 0n, 999999n)
 
 # The index of the first dot, or the length.
-def Str.first_dot(s: String) -> Nat:
+law Str.first_dot:
+  for s: String
+  Nat
+
+@unsafe
+def Str.first_dot.if(dot: Bool, t: String) -> Nat:
+  match dot:
+    case True{}:
+      0n
+    case False{}:
+      1n+Str.first_dot(t)
+
+@unsafe
+def Str.first_dot(s):
   match s:
     case SNil{}:
       0n
     case SCon{Chr{+c}, t}:
-      Bool.pick(Nat, U32.is_eq(c, 46), 0n, 1n+Str.first_dot(t))
+      Str.first_dot.if(U32.is_eq(c, 46), t)
 
 def Str.has_dot(s: String) -> Bool:
   match s:
@@ -204,12 +217,25 @@ def Str.words.go(s, cur, acc):
     case SCon{Chr{+c}, t}:
       Str.words.chr(t, c, cur, acc, is_space(c))
 
-def Str.until_hash(ws: List<&2, String>) -> List<&2, String>:
+law Str.until_hash:
+  for ws: List<&2, String>
+  List<&2, String>
+
+@unsafe
+def Str.until_hash.if(hash: Bool, w: String, t: List<&2, String>) -> List<&2, String>:
+  match hash:
+    case True{}:
+      Nil{}
+    case False{}:
+      w <> Str.until_hash(t)
+
+@unsafe
+def Str.until_hash(ws):
   match ws:
     case Nil{}:
       Nil{}
     case +w <> t:
-      Bool.pick(List<&2, String>, String.starts_with(w, "#"), Nil{}, w <> Str.until_hash(t))
+      Str.until_hash.if(String.starts_with(w, "#"), w, t)
 
 def Str.trim(s: String) -> String:
   String.trim(s)
@@ -2579,13 +2605,11 @@ def P.flt.go(+txt: String, m: Maybe<&2, F32>, +s: Sp) -> P(Tm):
     case None{}:
       P.fail(Tm, "a float literal with a finite f32 value (got " ++ txt ++ ")")
 
-def digits.span(s: String) -> Nat:
-  match s:
-    case SNil{}:
-      0n
-    case SCon{Chr{+c}, t}:
-      Bool.pick(Nat, is_digit(c), 1n+digits.span(t), 0n)
+law digits.span:
+  for s: String
+  Nat
 
+@unsafe
 def flt.exp(+s: String) -> String:
   +e = Str.first(s)
   +sign = Bool.or(U32.is_eq(Str.second(s), 43), U32.is_eq(Str.second(s), 45))
@@ -2594,6 +2618,7 @@ def flt.exp(+s: String) -> String:
     String.take(s, Nat.add(ed, Bool.pick(Nat, sign, 2n, 1n))), "")
 
 # The fraction and exponent of a float literal.
+@unsafe
 def flt.text(+s: String) -> String:
   +fd = digits.span(String.drop(s, 1n))
   +rest = String.drop(s, 1n+fd)
@@ -3875,6 +3900,23 @@ def P.decl():
 
 # Misc
 # ====
+
+# (A match, not Bool.pick: that would count every digit to the end.)
+@unsafe
+def digits.span.if(d: Bool, t: String) -> Nat:
+  match d:
+    case True{}:
+      1n+digits.span(t)
+    case False{}:
+      0n
+
+@unsafe
+def digits.span(s):
+  match s:
+    case SNil{}:
+      0n
+    case SCon{Chr{+c}, t}:
+      digits.span.if(is_digit(c), t)
 
 @unsafe
 def vars.find.if(v: Pt, t: List<&2, Pt>, +i: U32, hit: Bool) -> Maybe<&2, Pt>:
@@ -7306,17 +7348,244 @@ def book_valid.one(+k: String, +tld: Tld, fin: Bool) -> K(Unit):
     case TDef{n, x, ty, v, u, b, imps}:
       valid.def(k, tld, fin)
 
-# Checks every declaration in order: each sees only the ones before it
-# (and itself, for recursion).
-def book_valid(order: List<&2, String>, +full: Book) -> K(Unit):
-  match order:
+type KFin is Data:
+  KFin{k: String, fin: Bool}
+
+def book_valid.go(ks: List<&2, KFin>, +full: Book) -> K(Unit):
+  match ks:
     case Nil{}:
       K.pure(Unit, Unit{})
-    case +k <> +rest:
+    case KFin{+k, fin} <> rest:
       do K<Unit>:
-        book_valid.one(k, Maybe.default(&2, Tld, book_tld(full, k), TADT{0n, 0n, Qnt{NoSp{}}, Nil{}, False{}}),
-          Bool.not(Str.has(rest, k)))
-        book_valid(rest, full)
+        book_valid.one(k, Maybe.default(&2, Tld, book_tld(full, k), TADT{0n, 0n, Qnt{NoSp{}}, Nil{}, False{}}), fin)
+        book_valid.go(rest, full)
+
+law book_valid.lasts:
+  for rev: List<&2, String>
+  for seen: Set()
+  for acc: List<&2, KFin>
+  List<&2, KFin>
+
+#
+# Each declaration is checked against the book as it stands before it: the
+# declarations before it, and itself. Those books cost nothing to keep (maps
+# are persistent), so a first pass builds them, and the checks run in
+# parallel. A check that fails, or that makes a template instance (whose
+# name counts the ones before it), sends the whole book through the
+# sequential check instead, so errors and instances come out as before.
+type VJob is Data:
+  VADT{k: String, n: Nat, ty: Tm, cs: List<&2, CtrD>, book: Book}
+  VDef{k: String, dd: Tld, book: Book}
+
+law book_valid.jobs:
+  for ks: List<&2, KFin>
+  for +full: Book
+  for +b: Book
+  for acc: List<&2, VJob>
+  List<&2, VJob> & Book
+
+law VJob.all:
+  for js: List<&2, VJob>
+  for +n: Nat
+  Maybe<&2, List<&2, VJob>>
+
+law book_valid.redo:
+  for js: List<&2, VJob>
+  for +book: Book
+  Result<&1, &1, Err, Book>
+
+def book_valid.par.redo(r: Result<&1, &1, Err, Book>, +ks: List<&2, KFin>, +full: Book, +b0: Book) ->
+  Result<&1, &1, Err, Unit & Book>:
+  match r:
+    case Done{b}:
+      Done{(Unit{}, b)}
+    case Fail{e}:
+      book_valid.go(ks, full)(b0)
+
+@unsafe
+def book_valid.par.fin(m: Maybe<&2, List<&2, VJob>>, +ks: List<&2, KFin>, +full: Book, +b0: Book, bfin: Book) ->
+  Result<&1, &1, Err, Unit & Book>:
+  match m:
+    case Some{js}:
+      book_valid.par.redo(book_valid.redo(js, bfin), ks, full, b0)
+    case None{}:
+      book_valid.go(ks, full)(b0)
+
+@unsafe
+def book_valid.par.go(+ks: List<&2, KFin>, +full: Book, +b0: Book, r: List<&2, VJob> & Book) ->
+  Result<&1, &1, Err, Unit & Book>:
+  (js, bfin) = r
+  +js2 = js
+  book_valid.par.fin(VJob.all(js2, List.length(&2, VJob, js2)), ks, full, b0, bfin)
+
+@unsafe
+def book_valid.par(+ks: List<&2, KFin>, +full: Book, +b0: Book) -> Result<&1, &1, Err, Unit & Book>:
+  book_valid.par.go(ks, full, b0, book_valid.jobs(ks, full, b0, Nil{}))
+
+# Checks every declaration in order: each sees only the ones before it
+# (and itself, for recursion).
+@unsafe
+def book_valid(order: List<&2, String>, +full: Book) -> K(Unit):
+  +ks = book_valid.lasts(List.reverse(&2, String, order), Set.new(), Nil{})
+  b0 => book_valid.par(ks, full, b0)
+
+@unsafe
+def book_valid.jobs.def(+k: String, +t: Tld, +fin: Bool, rest: List<&2, KFin>, +full: Book, +b: Book,
+  acc: List<&2, VJob>) -> List<&2, VJob> & Book:
+  +b1 = Bool.pick(Book, Bool.and(fin, Tld.is_law_open(t)), book_opened(b), b)
+  +bs = book_set(b1, k, Tld.dec(t))
+  +dd = Bool.pick(Tld, fin, t, Tld.dec(t))
+  book_valid.jobs(rest, full, book_set(bs, k, dd), VDef{k, dd, bs} <> acc)
+
+@unsafe
+def book_valid.jobs.one(+k: String, tld: Tld, fin: Bool, rest: List<&2, KFin>, +full: Book, +b: Book,
+  acc: List<&2, VJob>) -> List<&2, VJob> & Book:
+  match tld:
+    case TADT{+n, g, +ty, +cs, bb}:
+      +b2 = book_set_ctrs(book_set(b, k, TADT{n, g, ty, cs, bb}), cs)
+      book_valid.jobs(rest, full, b2, VADT{k, n, ty, cs, b2} <> acc)
+    case TDef{n, x, ty, v, u, bb, imps}:
+      book_valid.jobs.def(k, TDef{n, x, ty, v, u, bb, imps}, fin, rest, full, b, acc)
+
+# The checks to run, each with its book, and the book after them all.
+@unsafe
+def book_valid.jobs(ks, full, b, acc):
+  match ks:
+    case Nil{}:
+      (List.reverse(&2, VJob, acc), b)
+    case KFin{+k, fin} <> rest:
+      book_valid.jobs.one(k, Maybe.default(&2, Tld, book_tld(full, k), TADT{0n, 0n, Qnt{NoSp{}}, Nil{}, False{}}), fin,
+        rest, full, b, acc)
+
+def Book.ntmps(+b: Book) -> Nat:
+  Book{tlds, ctrs, order, hols, open, +tmps, tcnt} = b
+  Map.size(&2, String, tmps)
+
+# A check's outcome: 0 passes, 1 passes but makes template instances, 2 fails.
+def VJob.status(+b0: Book, r: Result<&1, &1, Err, Unit & Book>) -> Nat:
+  match r:
+    case Fail{e}:
+      2n
+    case Done{v}:
+      Bool.pick(Nat, Nat.is_eq(Book.ntmps(Pair.snd(Unit, Book, v)), Book.ntmps(b0)), 0n, 1n)
+
+# valid.def past its book updates: the type, foreign imports, the body.
+def valid.def.check(+k: String, +dd: Tld) -> K(Unit):
+  do K<Unit>:
+    u : List<&2, Us> <- term_check(CL.of(k, Tld.du(dd)), Tld.t(dd), QNone{}, typ(QLone{}), Nil{}, 0)
+    valid.foreign(k, dd, Tld.imps(dd))
+    K.if(Unit, Maybe.is_some(&2, Tm, Tld.dval(dd)), def_check(k, dd, 0n), K.pure(Unit, Unit{}))
+
+def VJob.run(j: VJob) -> Nat:
+  match j:
+    case VADT{+k, +n, +ty, +cs, +b}:
+      VJob.status(b, valid.adt(k, n, ty, cs)(b))
+    case VDef{+k, +dd, +b}:
+      VJob.status(b, valid.def.check(k, dd)(b))
+
+# None when a check fails; else the checks that make instances, in order.
+def VJob.one(+j: VJob, st: Nat) -> Maybe<&2, List<&2, VJob>>:
+  match st:
+    case 0n:
+      Some{Nil{}}
+    case 1n:
+      Some{[j]}
+    case other:
+      None{}
+
+def VJob.join(a: Maybe<&2, List<&2, VJob>>, b: Maybe<&2, List<&2, VJob>>) -> Maybe<&2, List<&2, VJob>>:
+  match a b:
+    case Some{x} Some{y}:
+      Some{List.append(&2, VJob, x, y)}
+    case p q:
+      None{}
+
+law VJob.seq:
+  for js: List<&2, VJob>
+  Maybe<&2, List<&2, VJob>>
+
+@unsafe
+def VJob.seq.join(a: Maybe<&2, List<&2, VJob>>, t: List<&2, VJob>) -> Maybe<&2, List<&2, VJob>>:
+  match a:
+    case None{}:
+      None{}
+    case Some{x}:
+      VJob.join(Some{x}, VJob.seq(t))
+
+def VJob.seq(js):
+  match js:
+    case Nil{}:
+      Some{Nil{}}
+    case +j <> t:
+      VJob.seq.join(VJob.one(j, VJob.run(j)), t)
+
+@unsafe
+def VJob.all.split(+js: List<&2, VJob>, +n: Nat) -> Maybe<&2, List<&2, VJob>>:
+  +h = Nat.div(n, 2n)
+  a b = VJob.all(List.take(&2, VJob, js, h), h) VJob.all(List.drop(&2, VJob, js, h), Nat.sub(n, h))
+  VJob.join(a, b)
+
+@unsafe
+def VJob.all.if(small: Bool, js: List<&2, VJob>, +n: Nat) -> Maybe<&2, List<&2, VJob>>:
+  match small:
+    case True{}:
+      VJob.seq(js)
+    case False{}:
+      VJob.all.split(js, n)
+
+# All the checks, halves in parallel.
+@unsafe
+def VJob.all(js, n):
+  VJob.all.if(Nat.is_le(n, 16n), js, n)
+
+def VJob.after(j: VJob, b: Book) -> Book:
+  match j:
+    case VADT{k, n, ty, cs, bj}:
+      b
+    case VDef{+k, dd, bj}:
+      book_set(b, k, dd)
+
+# The checks that make instances, again, in order, on the book so far: each
+# makes its instances with the counts of the ones before it.
+@unsafe
+def book_valid.redo.next(+j: VJob, t: List<&2, VJob>, r: Result<&1, &1, Err, Unit & Book>) ->
+  Result<&1, &1, Err, Book>:
+  match r:
+    case Fail{e}:
+      Fail{e}
+    case Done{v}:
+      book_valid.redo(t, VJob.after(j, Pair.snd(Unit, Book, v)))
+
+def VJob.redo(j: VJob, +book: Book) -> Result<&1, &1, Err, Unit & Book>:
+  match j:
+    case VADT{+k, +n, +ty, +cs, bj}:
+      valid.adt(k, n, ty, cs)(book)
+    case VDef{+k, +dd, bj}:
+      valid.def.check(k, dd)(book_set(book, k, Tld.dec(dd)))
+
+@unsafe
+def book_valid.redo(js, book):
+  match js:
+    case Nil{}:
+      Done{book}
+    case +j <> t:
+      book_valid.redo.next(j, t, VJob.redo(j, book))
+
+@unsafe
+def book_valid.lasts.if(+k: String, t: List<&2, String>, r: Set() & Bool, acc: List<&2, KFin>) ->
+  List<&2, KFin>:
+  (seen, hit) = r
+  book_valid.lasts(t, Set.add(seen, k), KFin{k, Bool.not(hit)} <> acc)
+
+# Each name of the order with whether it is its last occurrence (from the
+# reversed order, with the names seen so far: one pass, not a scan each).
+@unsafe
+def book_valid.lasts(rev, seen, acc):
+  match rev:
+    case Nil{}:
+      acc
+    case +k <> t:
+      book_valid.lasts.if(k, t, Set.has(seen, k), acc)
 
 def CtrD.k(c: CtrD) -> String:
   CtrD{k, n, t} = c
@@ -7738,12 +8007,96 @@ def Book.tlds(+b: Book) -> Map<&2, Tld>:
   Book{+tlds, ctrs, order, hols, open, tmps, tcnt} = b
   tlds
 
+def report.umap.add(+m: Map<&2, List<&2, String>>, +r: String, by: String) -> Map<&2, List<&2, String>>:
+  Map.set(&2, List<&2, String>, m, r, by <> Maybe.default(&2, List<&2, String>, Map.find(List<&2, String>, m, r), Nil{}))
+
+# Who uses each name.
+def report.umap(uses: List<&2, Use>, m: Map<&2, List<&2, String>>) -> Map<&2, List<&2, String>>:
+  match uses:
+    case Nil{}:
+      m
+    case Use{+r, by} <> t:
+      report.umap(t, report.umap.add(m, r, by))
+
+law report.close2:
+  for +um: Map<&2, List<&2, String>>
+  for todo: List<&2, String>
+  for bad: Set()
+  Set()
+
+law report.close2.add:
+  for +um: Map<&2, List<&2, String>>
+  for todo: List<&2, String>
+  for bad: Set()
+  for us: List<&2, String>
+  Set()
+
+# The names that rely on unsafe or foreign code: the closure of bad under
+# "is used by" (a map of users and a set, not lists: bendc.bend has
+# thousands of uses).
+@unsafe
+def report.close2(um, todo, bad):
+  match todo:
+    case Nil{}:
+      bad
+    case +k <> t:
+      report.close2.add(um, t, bad, Maybe.default(&2, List<&2, String>, Map.find(List<&2, String>, um, k), Nil{}))
+
+@unsafe
+def report.close2.if.go(seen: Bool, +um: Map<&2, List<&2, String>>, todo: List<&2, String>, +u: String,
+  us: List<&2, String>, bad: Set()) -> Set():
+  match seen:
+    case True{}:
+      report.close2.add(um, todo, bad, us)
+    case False{}:
+      report.close2.add(um, u <> todo, Set.add(bad, u), us)
+
+@unsafe
+def report.close2.if(+um: Map<&2, List<&2, String>>, todo: List<&2, String>, +u: String, us: List<&2, String>,
+  r: Set() & Bool) -> Set():
+  (bad, seen) = r
+  report.close2.if.go(seen, um, todo, u, us, bad)
+
+@unsafe
+def report.close2.add(um, todo, bad, us):
+  match us:
+    case Nil{}:
+      report.close2(um, todo, bad)
+    case +u <> t:
+      report.close2.if(um, todo, u, t, Set.has(bad, u))
+
+law report.keep:
+  for ks: List<&2, String>
+  for s: Set()
+  List<&2, String>
+
+@unsafe
+def report.keep.go(hit: Bool, +k: String, t: List<&2, String>, s: Set()) -> List<&2, String>:
+  match hit:
+    case True{}:
+      k <> report.keep(t, s)
+    case False{}:
+      report.keep(t, s)
+
+def report.keep.if(+k: String, t: List<&2, String>, r: Set() & Bool) -> List<&2, String>:
+  (s, hit) = r
+  report.keep.go(hit, k, t, s)
+
+# The names of ks in s, in order.
+@unsafe
+def report.keep(ks, s):
+  match ks:
+    case Nil{}:
+      Nil{}
+    case +k <> t:
+      report.keep.if(k, t, Set.has(s, k))
+
 def report.go(+b: Book, +own: List<&2, String>, +bad: List<&2, String>, none: Bool) -> List<&2, String>:
   match none:
     case True{}:
       Nil{}
     case False{}:
-      Str.filter_in(own, report.close(report.walk(b, own, Set.new(), Nil{}), bad, bad))
+      report.keep(own, report.close2(report.umap(report.walk(b, own, Set.new(), Nil{}), MTip{}), bad, Set.from_list(bad)))
 
 # The defs of the file (those after the first n0) that rely on unsafe or
 # foreign code.

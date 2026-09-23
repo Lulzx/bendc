@@ -3022,7 +3022,7 @@ def Natives() -> List<&2, String>:
    "F32.neg", "F32.abs", "F32.sqrt", "F32.exp", "F32.log", "F32.log2",
    "F32.log10", "F32.sin", "F32.cos", "F32.tan", "F32.asin", "F32.acos",
    "F32.atan", "F32.sinh", "F32.cosh", "F32.tanh", "F32.floor", "F32.ceil",
-   "F32.trunc", "F32.bits", "F32.to_u32", "F32.show", "F32.read"]
+   "F32.trunc", "F32.bits", "F32.to_u32", "F32.show", "F32.read", "Map.bit"]
 
 def G.is_native(+name: String) -> Bool:
   Str.has(Natives(), name)
@@ -4720,7 +4720,7 @@ type COut is Data:
 def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
-  COut{cids ++ "#include \"bendrt.h\"\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
+  COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#include \"bendrt.h\"\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
     Doc.flat(Doc.list([protos, DStr{"\n"}, code, DStr{Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
     Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
     DStr{"\n" ++ entry}])), errs}

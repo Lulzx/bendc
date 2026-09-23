@@ -114,9 +114,19 @@ def src.p1() -> String:
   "const F_Nat_dmax = (a, b) => (a < b ? b : a);\n" ++
   "const F_Nat_dpow = (a, n) => a ** n;\n" ++
   "const F_Nat_dshow = (a) => a.toString();\n" ++
+  "const F_Map_dbit = (key, pos) => {\n" ++
+  "  const n = Number(pos), off = n % 33;\n" ++
+  "  let ci = Math.floor(n / 33);\n" ++
+  "  for (const ch of key) {\n" ++
+  "    if (ci-- === 0) return { $: \"Tuple\", fst: key, snd: off === 0 ? true : ((ch.codePointAt(0) >>> (32 - off)) & 1) === 1 };\n" ++
+  "  }\n" ++
+  "  return { $: \"Tuple\", fst: key, snd: false };\n" ++
+  "};\n" ++
   "\n" ++
   "// Natives: F32\n" ++
-  "// ============\n" ++
+  "// ============\n"
+
+def src.p2() -> String:
   "\n" ++
   "const fr = Math.fround;\n" ++
   "const F_F32_dadd = (a, b) => fr(a + b);\n" ++
@@ -124,9 +134,7 @@ def src.p1() -> String:
   "const F_F32_dmul = (a, b) => fr(a * b);\n" ++
   "const F_F32_ddiv = (a, b) => fr(a / b);\n" ++
   "const F_F32_dmod = (a, b) => fr(a % b);\n" ++
-  "const F_F32_dpow = (a, b) => fr(a ** b);\n"
-
-def src.p2() -> String:
+  "const F_F32_dpow = (a, b) => fr(a ** b);\n" ++
   "const F_F32_datan2 = (a, b) => fr(Math.atan2(a, b));\n" ++
   "const F_F32_dis__eq = (a, b) => a === b;\n" ++
   "const F_F32_dis__ne = (a, b) => a !== b;\n" ++
@@ -178,7 +186,9 @@ def src.p2() -> String:
   "// Printing values (a main that is not IO)\n" ++
   "// =======================================\n" ++
   "\n" ++
-  "function show_chr(c, q) {\n" ++
+  "function show_chr(c, q) {\n"
+
+def src.p3() -> String:
   "  const k = { 10: \"n\", 9: \"t\", 13: \"r\", 0: \"0\", 92: \"\\\\\" }[c] ?? (c === q.codePointAt(0) ? q : null);\n" ++
   "  return k !== null ? \"\\\\\" + k\n" ++
   "    : c < 32 || c === 127 || (c >= 0xD800 && c <= 0xDFFF) ? \"\\\\u{\" + c.toString(16) + \"}\"\n" ++
@@ -186,9 +196,7 @@ def src.p2() -> String:
   "}\n" ++
   "const pr_u32 = (v) => String(v);\n" ++
   "const pr_nat = (v) => v + \"n\";\n" ++
-  "const pr_f32 = (v) => f32_show(v).replace(/^-?\\d+(?=e|$)/, \"$&.0\");\n"
-
-def src.p3() -> String:
+  "const pr_f32 = (v) => f32_show(v).replace(/^-?\\d+(?=e|$)/, \"$&.0\");\n" ++
   "const pr_char = (v) => \"'\" + show_chr(v.codePointAt(0), \"'\") + \"'\";\n" ++
   "const pr_str = (v) => '\"' + [...v].map((c) => show_chr(c.codePointAt(0), '\"')).join(\"\") + '\"';\n" ++
   "\n" ++
@@ -240,7 +248,9 @@ def src.p3() -> String:
   "  let text = \"error \" + code;\n" ++
   "  try {\n" ++
   "    text = String(io_sys().strerror(code));\n" ++
-  "  } catch (e) {\n" ++
+  "  } catch (e) {\n"
+
+def src.p4() -> String:
   "  }\n" ++
   "  return { $: \"Fail\", error: io_tup(code >>> 0, text) };\n" ++
   "}\n" ++
@@ -248,9 +258,7 @@ def src.p3() -> String:
   "function io_done(value) {\n" ++
   "  return { $: \"Done\", value };\n" ++
   "}\n" ++
-  "\n"
-
-def src.p4() -> String:
+  "\n" ++
   "function io_tup(...xs) {\n" ++
   "  return xs.reduceRight((snd, fst) => ({ $: \"Tuple\", fst, snd }));\n" ++
   "}\n" ++
@@ -302,7 +310,9 @@ def src.p4() -> String:
   "  io.waits = io.waits.filter((w) => {\n" ++
   "    const ready = w.at <= now || (w.fd !== undefined && io.ready !== undefined && io.ready(w));\n" ++
   "    if (ready) io_push(io_wake, w, false);\n" ++
-  "    return !ready;\n" ++
+  "    return !ready;\n"
+
+def src.p5() -> String:
   "  });\n" ++
   "  io.ready = undefined;\n" ++
   "}\n" ++
@@ -310,9 +320,7 @@ def src.p4() -> String:
   "// Resumes k with more's value; undefined means re-parked.\n" ++
   "function io_wake(w) {\n" ++
   "  const x = w.more();\n" ++
-  "  return x === undefined ? undefined : w.k(x);\n"
-
-def src.p5() -> String:
+  "  return x === undefined ? undefined : w.k(x);\n" ++
   "}\n" ++
   "\n" ++
   "// Parks for read/write (out) or a deadline at (performance.now()).\n" ++
@@ -364,7 +372,9 @@ def src.p5() -> String:
   "}\n" ++
   "\n" ++
   "// A request for effect e with arguments args, continued by k.\n" ++
-  "function io_req(e, name, args, k) {\n" ++
+  "function io_req(e, name, args, k) {\n"
+
+def src.p6() -> String:
   "  return { $: \"$REQ\", name, run: e?.run, need: e?.need, args, kont: k };\n" ++
   "}\n" ++
   "\n" ++
@@ -372,9 +382,7 @@ def src.p5() -> String:
   "// ----\n" ++
   "\n" ++
   "const CHAN_RECV = Symbol();\n" ++
-  "\n"
-
-def src.p6() -> String:
+  "\n" ++
   "function chan_wake(row, x) {\n" ++
   "  const w = row.wait.shift();\n" ++
   "  io_push(w.cont, x, false);\n" ++
@@ -426,7 +434,9 @@ def src.p6() -> String:
   "  }\n" ++
   "  process.exit(code);\n" ++
   "}\n" ++
-  "\n" ++
+  "\n"
+
+def src.p7() -> String:
   "function bend_run_value(main, show) {\n" ++
   "  cli(process.argv.slice(2));\n" ++
   "  try {\n" ++
@@ -434,9 +444,7 @@ def src.p6() -> String:
   "  } catch (e) {\n" ++
   "    io_errs(e instanceof RangeError ? \"bend: the machine stack overflowed\" : String(e));\n" ++
   "    process.exit(1);\n" ++
-  "  }\n"
-
-def src.p7() -> String:
+  "  }\n" ++
   "  process.exit(0);\n" ++
   "}\n" ++
   "\n"

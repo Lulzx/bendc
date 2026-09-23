@@ -101,14 +101,21 @@ typedef struct GcBlk {
   uint32_t nblk;     // blocks spanned
   uint8_t atomic;    // holds no pointers: never scanned
   uint8_t large;
-  uint8_t owned;     // behind a thread's free list: not swept
+  uint8_t owned;     // in a thread's cache: not swept
   uint8_t cls;
   struct GcBlk *next;
   uint64_t alloc[64];
   uint64_t mark[64];
 } GcBlk;
 
-typedef struct GcCache { V *free; V *bump; V *end; GcBlk *blk; uint32_t idx; } GcCache;
+// A thread's allocation cache for one size class: a fresh block is handed out
+// by bumping; a partly free one by the free bits of its bitmap, a word at a
+// time (the slots are not touched until they are handed out).
+typedef struct GcCache {
+  V *bump; V *end; GcBlk *blk; V *objs;
+  uint64_t bits;    // free slots of word j
+  uint32_t idx, j, nj;
+} GcCache;
 
 struct PDeque;
 
@@ -221,7 +228,29 @@ static GcBlk *gc_new_small(int atomic, unsigned c) {
   return b;
 }
 
+// The next word of free bits in the cache's block; 0 when none is left.
+static inline uint64_t gc_next_bits(GcCache *k) {
+  GcBlk *b = k->blk;
+  while (++k->j < k->nj) {
+    uint64_t f = ~b->alloc[k->j];
+    if (k->j == (b->nobj >> 6)) f &= (1ull << (b->nobj & 63)) - 1;
+    if (f) return f;
+  }
+  return 0;
+}
+
+// Slow path: the rest of the block's free words, or another block.
 __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c) {
+  size_t sw = gc_cls_w[c];
+  if (k->blk && (k->bits = gc_next_bits(k))) {
+    int t = __builtin_ctzll(k->bits);
+    k->bits &= k->bits - 1;
+    uint32_t i = k->j * 64 + (uint32_t)t;
+    k->blk->alloc[i >> 6] |= 1ull << (i & 63);
+    atomic_fetch_add_explicit(&gc_since, ((size_t)__builtin_popcountll(k->bits) + 1) * sw * sizeof(V),
+      memory_order_relaxed);
+    return k->objs + (size_t)i * sw;
+  }
   pthread_mutex_lock(&gc_lock);
   if (k->blk) { k->blk->owned = 0; k->blk = NULL; }
   if (gc_since >= gc_limit) gc_collect_locked();
@@ -235,39 +264,23 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
   // A slot's allocation bit is set when the slot is handed out, never
   // before: a stale pointer must not mark a slot that is still free.
   V *objs = gc_objs(b);
-  size_t sw = b->words;
+  k->objs = objs;
+  k->nj = (b->nobj + 63) >> 6;
   if (fresh) {
     // A fresh block is handed out by bumping a pointer.
     atomic_fetch_add_explicit(&gc_since, (size_t)b->nobj * sw * sizeof(V), memory_order_relaxed);
-    k->free = NULL;
+    k->bits = 0;
+    k->j = k->nj;
     k->bump = objs + sw;
     k->end = objs + (size_t)b->nobj * sw;
     k->idx = 1;
     b->alloc[0] |= 1;
     return objs;
   }
-  // Otherwise: a free list of the unallocated slots, each holding its index.
-  V *head = NULL;
-  size_t n = 0;
-  for (int j = (int)((b->nobj + 63) >> 6) - 1; j >= 0; j--) {
-    uint64_t freebits = ~b->alloc[j];
-    if (j == (int)(b->nobj >> 6)) freebits &= (1ull << (b->nobj & 63)) - 1;
-    while (freebits) {
-      int t = 63 - __builtin_clzll(freebits);
-      freebits &= ~(1ull << t);
-      V *p = objs + (size_t)(j * 64 + t) * sw;
-      p[0] = (V)head;
-      p[1] = (V)(j * 64 + t);
-      head = p;
-      n++;
-    }
-  }
-  atomic_fetch_add_explicit(&gc_since, n * sw * sizeof(V), memory_order_relaxed);
   k->bump = k->end = NULL;
-  k->free = (V *)head[0];
-  uint32_t i = (uint32_t)head[1];
-  b->alloc[i >> 6] |= 1ull << (i & 63);
-  return head;
+  k->j = (uint32_t)-1;
+  k->bits = 0;
+  return gc_refill(k, atomic, c);
 }
 
 __attribute__((noinline)) static V *gc_alloc_large(size_t w, int atomic) {
@@ -298,16 +311,18 @@ static inline V *gc_alloc(size_t w, int atomic) {
   if (UNLIKELY(w > GC_SMALL)) return gc_alloc_large(w, atomic);
   unsigned c = gc_cls_of[w];
   GcCache *k = &thr_self->cache[atomic][c];
-  V *p = k->free;
-  if (p != NULL) {
-    k->free = (V *)p[0];
-    uint32_t i = (uint32_t)p[1];
-    k->blk->alloc[i >> 6] |= 1ull << (i & 63);
-  } else if (k->bump < k->end) {
+  V *p;
+  if (k->bump < k->end) {
     p = k->bump;
     k->bump += gc_cls_w[c];
     uint32_t i = k->idx++;
     k->blk->alloc[i >> 6] |= 1ull << (i & 63);
+  } else if (k->bits) {
+    int t = __builtin_ctzll(k->bits);
+    k->bits &= k->bits - 1;
+    uint32_t i = k->j * 64 + (uint32_t)t;
+    k->blk->alloc[i >> 6] |= 1ull << (i & 63);
+    p = k->objs + (size_t)i * gc_cls_w[c];
   } else {
     p = gc_refill(k, atomic, c);
   }
@@ -878,6 +893,25 @@ static V F_Nat_dshow(V a) {
   free(s);
   return r;
 }
+
+// Map.bit(key, pos): bit pos of key as Base's tries read it (char pos / 33;
+// offset 0 is "the char exists", offset 1 + b is bit 31 - b of its code),
+// with the key handed back. Base rebuilds the key's prefix to hand it back;
+// here the key is shared, so a lookup allocates nothing.
+#ifdef BEND_NATIVE_MAP_BIT
+static inline V F_Map_dbit(V key, V pos) {
+  if (pos >> 63) return C2(0, key, IMM(0));
+  V ci = pos / 33, off = pos % 33, s = key;
+  for (;;) {
+    if (s == SNIL) return C2(0, key, IMM(0));
+    if (ci == 0) break;
+    s = ((V *)s)[2];
+    ci--;
+  }
+  V x = ((V *)s)[1];
+  return C2(0, key, off == 0 ? IMM(1) : (((uint32_t)x >> (32 - off)) & 1) ? IMM(1) : IMM(0));
+}
+#endif
 
 // Natives: U32
 // ------------
