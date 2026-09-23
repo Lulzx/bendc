@@ -40,6 +40,7 @@ backend that runs `f!(x)` calls on Metal.
 - [Language support](#language-support)
 - [How it works](#how-it-works)
 - [The GPU backend](#the-gpu-backend)
+- [Benchmarks](#benchmarks)
 - [Writing a compiler under Bend's rules](#writing-a-compiler-under-bends-rules)
 - [Testing](#testing)
 - [Limitations](#limitations)
@@ -258,8 +259,8 @@ through a join record, so no lane ever waits: the lane that brings a join its la
 rest of the function. Past a fork depth that fills the lanes, parallel lets run in order. A def that
 only matches, binds, builds constructors, calls natives and other such defs, and calls itself in tail
 position is *flat*: it becomes a plain device function with its locals in registers and a loop for its
-tail calls. On an M4 Pro, 16384 leaves of a 200,000-step `F32` loop take 0.32s on the GPU against
-1.1s on the 12 CPU threads.
+tail calls. On an M4 Pro, 16384 leaves of a 200,000-step `F32` loop take 0.30s on the GPU against
+0.79s on the 12 CPU threads (see [Benchmarks](#benchmarks)).
 
 The kernel's text (`rt/gpu.h` plus the generated blocks) compiles both as Metal Shading Language and
 as C. The host (`rt/gpuhost.h`) reaches Metal through the Objective-C runtime, so programs need no
@@ -287,6 +288,37 @@ other constructor an object `{$: "Name", field: value}`. Functions are curried J
 tail calls become loops. Effects are requests answered by an event loop with the official helpers
 (`io_done`, `io_fail`, `io_tup`, `io_park_on`, `io_sys`, ...); the ones that make system calls use
 `bun:ffi`, so run the output with Bun. Parallel lets run one value after the other.
+
+## Benchmarks
+
+`bench/run.sh` builds each program in [`bench/`](bench) with bendc and with the official `bend`
+(2.0.25), checks that both print the same thing, and reports the best of three runs. Sizes come from
+the command line, so neither compiler can compute the answer at compile time. On an Apple M4 Pro
+(12 cores, 24 GB, macOS 27):
+
+| program | what it does | bendc | official bend |
+|---|---|---|---|
+| `forks 28` | a parallel let at every level of a 2^28-leaf tree, CPU threads | 0.38s | 0.10s |
+| `forks_gpu 28` | the same as a `!`-call, on the GPU | 1.48s | 0.10s |
+| `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | 0.79s | 1.00s |
+| `leaves_gpu 14` | the same as a `!`-call, on the GPU | 0.30s | 0.09s |
+| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | 0.36s | 0.64s |
+
+| task | bendc | official bend |
+|---|---|---|
+| type-check `bendc.bend` (15,000 lines with `check.bend`) | 4.4s | 1.1s |
+| build `bendc.bend` into a binary | 8.1s (1.1s to C, 7.0s in clang) | 70s, 9.9 GB |
+| build the bootstrap's stage0 (`boot.bend`) | n/a | 16s, 3.8 GB |
+
+bendc is faster on sequential, allocation-heavy code (its collector and native `Nat`/`U32`) and on
+numeric loops on the CPU. The official runtime is well ahead on fork-heavy code: it turns the levels
+below its fork frontier into native loops, where bendc still pays for a closure, a deque push and a
+join per fork. On the GPU the gap is widest for forks: bendc's kernel runs every call through its
+state machine, so `forks_gpu` is slower there than on bendc's own CPU threads. Flat leaf loops, which
+bendc compiles to plain device functions, are where its GPU backend pays off (`leaves_gpu` runs 2.6x faster than on its
+CPU threads). The official checker is about 4x faster than bendc's port of it. The official compiler's
+build numbers are for a whole compiler; bendc keeps them down by avoiding the patterns it expands
+(see [Bootstrapping](#bootstrapping)).
 
 ## Writing a compiler under Bend's rules
 
@@ -343,6 +375,7 @@ make test                      # with build/bendc
 | [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the simulator, copying results back |
 | [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
 | [`seed/bendc.c`](seed/bendc.c) | the fixpoint C output of `bendc.bend`, for building without Bend |
+| [`bench/`](bench) | benchmark programs and `run.sh`, which times them against the official `bend` |
 | [`tests/`](tests) | test programs and the official `bend`'s output for each |
 | [`bootstrap.sh`](bootstrap.sh), [`run_tests.sh`](run_tests.sh), [`Makefile`](Makefile) | bootstrap and fixpoint check, test runner, build entry points |
 | [`tools/order.py`](tools/order.py) | dev tool: section-aware dependency sort, with automatic `law` forward declarations for cycles |
