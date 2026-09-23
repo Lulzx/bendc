@@ -259,8 +259,16 @@ through a join record, so no lane ever waits: the lane that brings a join its la
 rest of the function. Past a fork depth that fills the lanes, parallel lets run in order. A def that
 only matches, binds, builds constructors, calls natives and other such defs, and calls itself in tail
 position is *flat*: it becomes a plain device function with its locals in registers and a loop for its
-tail calls. On an M4 Pro, 16384 leaves of a 200,000-step `F32` loop take 0.30s on the GPU against
-0.79s on the 12 CPU threads (see [Benchmarks](#benchmarks)).
+tail calls.
+
+Below the fork depth, a def that is flat but for its parallel lets and calls to itself becomes
+`KQ_name`: its parallel lets run in order, its locals stay in registers, and a call to itself saves
+only the variables used after it, with a resume label, on a small thread-private stack (a tail call is
+a jump). The lanes of a SIMD group run in lockstep, so a lane that entered such a call alone would
+hold its 31 neighbours up for the whole subtree; instead a lane waits at the call until each lane of
+its group waits too or has nothing to do, and they run their calls together. Calls of looping flat
+defs are gathered the same way. A 2^30-leaf fork tree runs in 0.145s on an M4 Pro's GPU, against
+0.178s for the official runtime (see [Benchmarks](#benchmarks)).
 
 The kernel's text (`rt/gpu.h` plus the generated blocks) compiles both as Metal Shading Language and
 as C. The host (`rt/gpuhost.h`) reaches Metal through the Objective-C runtime, so programs need no
@@ -275,7 +283,8 @@ BEND_GPU=sim ./prog         # run the kernel in its C form, lanes interleaved (a
 ./prog --gpu off            # !-calls on the CPU threads
 ```
 
-`BEND_GPU_LANES`, `BEND_GPU_MB` (arena size) and `BEND_GPU_FORK` (fork depth) tune the device.
+`BEND_GPU_LANES` (default 8192), `BEND_GPU_MB` (arena size) and `BEND_GPU_FORK` (fork depth, default
+log2 of the lanes plus 2) tune the device.
 Without Metal (Linux), `!` runs on the CPU threads, as the official runtime does without a GPU.
 
 ## The JavaScript target
@@ -299,26 +308,25 @@ the command line, so neither compiler can compute the answer at compile time. On
 | program | what it does | bendc | official bend |
 |---|---|---|---|
 | `forks 28` | a parallel let at every level of a 2^28-leaf tree, CPU threads | 0.38s | 0.10s |
-| `forks_gpu 28` | the same as a `!`-call, on the GPU | 1.48s | 0.10s |
-| `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | 0.79s | 1.00s |
-| `leaves_gpu 14` | the same as a `!`-call, on the GPU | 0.30s | 0.09s |
-| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | 0.36s | 0.64s |
+| `forks_gpu 28` | the same as a `!`-call, on the GPU | **0.07s** | 0.09s |
+| `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | **0.77s** | 0.98s |
+| `leaves_gpu 14` | the same as a `!`-call, on the GPU | 0.08s | 0.07s |
+| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | **0.36s** | 0.63s |
 
 | task | bendc | official bend |
 |---|---|---|
-| type-check `bendc.bend` (15,000 lines with `check.bend`) | 4.4s | 1.1s |
+| type-check `bendc.bend` (15,000 lines with `check.bend`) | 4.3s | 0.9s |
 | build `bendc.bend` into a binary | 8.1s (1.1s to C, 7.0s in clang) | 70s, 9.9 GB |
 | build the bootstrap's stage0 (`boot.bend`) | n/a | 16s, 3.8 GB |
 
-bendc is faster on sequential, allocation-heavy code (its collector and native `Nat`/`U32`) and on
-numeric loops on the CPU. The official runtime is well ahead on fork-heavy code: it turns the levels
-below its fork frontier into native loops, where bendc still pays for a closure, a deque push and a
-join per fork. On the GPU the gap is widest for forks: bendc's kernel runs every call through its
-state machine, so `forks_gpu` is slower there than on bendc's own CPU threads. Flat leaf loops, which
-bendc compiles to plain device functions, are where its GPU backend pays off (`leaves_gpu` runs 2.6x faster than on its
-CPU threads). The official checker is about 4x faster than bendc's port of it. The official compiler's
-build numbers are for a whole compiler; bendc keeps them down by avoiding the patterns it expands
-(see [Bootstrapping](#bootstrapping)).
+bendc is faster on sequential, allocation-heavy code (its collector and native `Nat`/`U32`), on
+numeric loops on the CPU, and on fork-heavy code on the GPU (at 2^30 leaves: 0.145s against
+0.178s). Its fixed GPU cost (starting Metal, loading the cached kernel) is 0.04s, against 0.06s.
+The official runtime is well ahead on fork-heavy code on the CPU: it turns the levels below its fork
+frontier into native loops, where bendc still pays for a closure, a deque push and a join per fork.
+The official checker is about 4x faster than bendc's port of it. The official compiler's build
+numbers are for a whole compiler; bendc keeps them down by avoiding the patterns it expands (see
+[Bootstrapping](#bootstrapping)).
 
 ## Writing a compiler under Bend's rules
 

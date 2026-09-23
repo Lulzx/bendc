@@ -185,7 +185,7 @@ static int gpu_setup(const GpuProg *prog) {
   gpu_An = ((KA_SEQ + gpu_qcap) * sizeof(KAU) + 0xffff) & ~(size_t)0xffff;
   gpu_A = mmap(NULL, gpu_An, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
   if (gpu_H == MAP_FAILED || gpu_A == MAP_FAILED) return GPU_OFF;
-  gpu_lanes = (KW)gpu_env("BEND_GPU_LANES", sim ? 64 : 4096);
+  gpu_lanes = (KW)gpu_env("BEND_GPU_LANES", sim ? 64 : 8192);
   gpu_budget = (KW)gpu_env("BEND_GPU_STEPS", sim ? 37 : 16384);
   KW f = 0;
   while (((KW)1 << f) < gpu_lanes) f++;
@@ -280,13 +280,14 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
   P.an = gpu_Hn;
   P.gb = (KW)(uintptr_t)gc_base;
   P.qcap = gpu_qcap;
-  P.q0 = 16;
-  P.lane0 = P.q0 + 4 * P.qcap;
-  P.fn0 = P.lane0 + 8 * gpu_lanes;
+  P.qd = 16;
+  P.lane0 = P.qd + 4 * P.qcap;
+  P.fn0 = P.lane0 + K_LANE * gpu_lanes;
   P.nfn = nfn;
   KW rf = P.fn0 + 2 * nfn + 1;
   KW fs = k_frame_size(entry);
-  P.heap0 = (rf + fs + K_CHUNK) / K_CHUNK * K_CHUNK;
+  P.q0 = (rf + fs + 63) / 64 * 64;
+  P.heap0 = (P.q0 + KR_WORDS * gpu_lanes + K_CHUNK) / K_CHUNK * K_CHUNK;
   P.heapw = gpu_Hn / 8 - P.heap0;
   P.budget = gpu_budget;
   P.nlanes = gpu_lanes;
@@ -296,7 +297,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
   gpu_A[KA_HEAP] = 1;
   for (KW i = 0; i < P.qcap; i++) gpu_A[KA_SEQ + i] = (KAU)i;
   memset(H, 0, P.lane0 * 8);
-  memset(H + P.lane0, 0, 8 * gpu_lanes * 8);
+  memset(H + P.lane0, 0, K_LANE * gpu_lanes * 8);
   for (KW i = 0; i < nfn; i++) {
     H[P.fn0 + 2 * i] = (KW)(uintptr_t)prog->fns[i].f;
     H[P.fn0 + 2 * i + 1] = prog->fns[i].l;

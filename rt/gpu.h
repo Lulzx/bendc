@@ -39,6 +39,7 @@ typedef atomic_uint KAU;
 #define KMF(n) n
 #define KINLINE inline
 #define K_ATW(p) ((device atomic_uint *)(p))
+#define K_SIMD_ALL(b) simd_all(b)
 #else
 typedef uint64_t KW;
 typedef uint32_t KU;
@@ -62,6 +63,7 @@ static inline KW k_u_of(float f) { union { uint32_t i; float f; } x; x.f = f; re
 #define KMF(n) n##f
 #define KINLINE static inline
 #define K_ATW(p) ((KAU *)(p))
+#define K_SIMD_ALL(b) (b)
 #endif
 
 // The control words (A).
@@ -78,7 +80,7 @@ typedef struct {
   KW an;          // arena bytes
   KW gb;          // CPU address of the heap the device reads
   KW qcap;        // queue entries (a power of two)
-  KW q0;          // queue data (4 words an entry)
+  KW qd;          // queue data (4 words an entry)
   KW lane0;       // lane states (8 words a lane)
   KW fn0;         // the CPU functions the device knows: {address, label} pairs
   KW nfn;
@@ -87,12 +89,16 @@ typedef struct {
   KW budget;      // steps a lane runs in one dispatch
   KW nlanes;
   KW fork_limit;  // tasks fork only this many levels deep
+  KW q0;          // the KQ_ stacks (KR_WORDS words a lane)
 } KParams;
 
 #define PC_IDLE 0
 #define PC_ROOT 1
 #define PC_JOIN 2
 #define PC_TASK 3
+#define PC_KQ 4      // waiting to run a KQ_ call (see the kernel's loop)
+#define KQ_ARGS 8
+#define K_LANE 24    // words of a lane's saved state
 
 #define K_CHUNK 4096
 
@@ -107,10 +113,13 @@ typedef struct {
 typedef struct {
   KCOH KW *H;
   KDEV KW *G;
+  KDEV KW *Q;
   KDEV KAU *A;
-  KW ab, an, gb;
+  KW ab, an, gb, lane;
   KW pc, fp, rv, dep, hp, he, ax;
   KU err;
+  KW kq, kqret, kqfb;  // a KQ_ call: its def, where its value goes, the way through frames
+  KW kqa[KQ_ARGS];     // and its arguments
   KCP KParams *P;
 } KCtx;
 
@@ -118,7 +127,18 @@ typedef struct {
 #define KBOOL(b) ((b) ? KIMM(1) : KIMM(0))
 #define KIX(c, v) (((v) - (c)->ab) >> 3)
 #define KPTR(c, i) ((c)->ab + ((KW)(i) << 3))
+// The generated blocks reach frames only through these, so a def's blocks
+// also run inside its KR_ function (thread-private frames; see bendc).
 #define KS(k) c->H[c->fp + 4 + (k)]
+#define KPC c->pc
+#define KFP c->fp
+#define KRV c->rv
+#define KFORK (c->dep < c->P->fork_limit)
+#define KPUSH(ret, e) k_push(c, ret, K_FRAME[e])
+#define KARG(nf, i) c->H[(nf) + 4 + (i)]
+#define KRET(x) k_ret(c, x)
+#define KRSEQ true
+#define KRCALL(f, ...) f(__VA_ARGS__)
 // A closure's code word: a label, where the CPU has a function address.
 #define KCLO ((KW)0x7ff << 52)
 
@@ -203,7 +223,7 @@ KINLINE bool k_push_task(KTHR KCtx *c, KW pc, KW fp, KW rv, KW dep) {
       pos = K_LOAD(&c->A[KA_QTAIL]);
     }
   }
-  KW q = c->P->q0 + (KW)(pos & mask) * 4;
+  KW q = c->P->qd + (KW)(pos & mask) * 4;
   c->H[q] = pc;
   c->H[q + 1] = fp;
   c->H[q + 2] = rv;
@@ -231,7 +251,7 @@ KINLINE bool k_pop_task(KTHR KCtx *c) {
     }
   }
   K_FENCE();
-  KW q = c->P->q0 + (KW)(pos & mask) * 4;
+  KW q = c->P->qd + (KW)(pos & mask) * 4;
   c->pc = c->H[q];
   c->fp = c->H[q + 1];
   c->rv = c->H[q + 2];
@@ -412,9 +432,41 @@ KF1(to__u32, x <= 0.0f ? 0 : x >= 4294967295.0f ? (KW)0xffffffffu : (KW)(KU)x)
 KINLINE KW KF_F32_dshow(KTHR KCtx *c, KW a) { k_fail(c, KE_FX); return 0; }
 KINLINE KW KF_F32_dread(KTHR KCtx *c, KW a) { k_fail(c, KE_FX); return 0; }
 
+// A KQ_ function's stack (see bendc): in the lane's private memory, or
+// (KQ_SHARED) in the arena, word i of every lane side by side, so lanes at the
+// same depth touch neighbouring words.
+#ifdef KQ_SHARED
+#define KQ_STACK KDEV KW *kq_ = c->Q + c->lane
+#define KQ_ST(i) kq_[(KW)(i) * c->P->nlanes]
+#else
+#define KQ_STACK KW kq_[KR_WORDS]
+#define KQ_ST(i) kq_[i]
+#endif
+
+// A KR_ function's frames: a thread-private stack, with room past its end
+// for the frame that overflows it (the function then gives up, and the call
+// runs through the kernel's frames).
+#define KR_WORDS 256
+#define KR_SLACK 64
+KINLINE KW kr_push(KTHR KW *st, KTHR KW *sp, KW fp, KW ret, KW fs) {
+  KW f = *sp;
+  if (f + fs > KR_WORDS) {
+    *sp = KR_WORDS + 1;
+    f = KR_WORDS;
+  } else {
+    *sp = f + fs;
+  }
+  st[f] = ret;
+  st[f + 1] = fp;
+  st[f + 2] = 0;
+  st[f + 3] = fs;
+  return f;
+}
+
 // Generated after this file.
 KINLINE KW k_frame_size(KW l);
 KINLINE void k_cases(KTHR KCtx *c);
+KINLINE KW k_kq(KTHR KCtx *c, KTHR bool *ok);
 
 // Applies closure f to x; the value goes to block ret.
 KINLINE void k_call_clo(KTHR KCtx *c, KW f, KW x, KW ret) {
@@ -458,13 +510,15 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   KTHR KCtx *c = &cx;
   c->H = H;
   c->G = G;
+  c->Q = (KDEV KW *)H + P->q0;
+  c->lane = lane;
   c->A = A;
   c->P = P;
   c->ab = P->ab;
   c->an = P->an;
   c->gb = P->gb;
   c->err = 0;
-  KW ls = P->lane0 + (KW)lane * 8;
+  KW ls = P->lane0 + (KW)lane * K_LANE;
   c->pc = H[ls];
   c->fp = H[ls + 1];
   c->rv = H[ls + 2];
@@ -472,13 +526,32 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   c->hp = H[ls + 4];
   c->he = H[ls + 5];
   c->ax = H[ls + 6];
+  c->kq = H[ls + 7];
+  c->kqret = H[ls + 8];
+  c->kqfb = H[ls + 9];
+  for (int i = 0; i < KQ_ARGS; i++) c->kqa[i] = H[ls + 10 + i];
   KW budget = P->budget;
   for (KW step = 0; step < budget; step++) {
     if (c->pc == PC_IDLE) {
       if (K_LOAD(&A[KA_DONE]) != 0 || K_LOAD(&A[KA_ERR]) != 0) break;
-      if (!k_pop_task(c)) continue;
+      k_pop_task(c);
     }
-    switch (c->pc) {
+    // A KQ_ call runs a whole subtree in one step. The lanes of a SIMD group
+    // run in lockstep, so one lane alone in its call would hold up the rest:
+    // a lane waits (PC_KQ) until each of its group waits too or has nothing
+    // to do, and they make their calls together.
+    bool kq = c->pc == PC_KQ;
+    if (K_SIMD_ALL(kq || c->pc == PC_IDLE)) {
+      if (kq) {
+        bool ok = true;
+        KW r = k_kq(c, &ok);
+        c->rv = r;
+        c->pc = ok ? c->kqret : c->kqfb;
+      }
+    } else if (!kq) switch (c->pc) {
+      case PC_IDLE: {
+        break;
+      }
       case PC_ROOT: {
         H[2] = c->rv;
         K_FENCE();
@@ -517,4 +590,8 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   H[ls + 4] = c->hp;
   H[ls + 5] = c->he;
   H[ls + 6] = c->ax;
+  H[ls + 7] = c->kq;
+  H[ls + 8] = c->kqret;
+  H[ls + 9] = c->kqfb;
+  for (int i = 0; i < KQ_ARGS; i++) H[ls + 10 + i] = c->kqa[i];
 }
