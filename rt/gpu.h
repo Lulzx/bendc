@@ -72,6 +72,7 @@ static inline KW k_u_of(float f) { union { uint32_t i; float f; } x; x.f = f; re
 #define KA_HEAP 2
 #define KA_QHEAD 3
 #define KA_QTAIL 4
+#define KA_ACTIVE 5
 #define KA_SEQ 16
 
 // Where things are, in words of the arena (H) unless said otherwise.
@@ -100,7 +101,7 @@ typedef struct {
 #define KQ_ARGS 8
 #define K_LANE 24    // words of a lane's saved state
 
-#define K_CHUNK 4096
+#define K_CHUNK 256
 
 // The errors a lane can hit.
 #define KE_FX 2      // an effect, or a closure with no device code
@@ -164,7 +165,7 @@ KINLINE KW k_alloc(KTHR KCtx *c, KW n) {
     KW k = (need + K_CHUNK - 1) / K_CHUNK;
     KW at = (KW)K_ADD(&c->A[KA_HEAP], (KU)k);
     KW start = c->P->heap0 + at * K_CHUNK;
-    if (n + 1 > K_CHUNK || start + k * K_CHUNK > c->P->heap0 + c->P->heapw) {
+    if (start + k * K_CHUNK > c->P->heap0 + c->P->heapw) {
       k_fail(c, KE_HEAP);
       c->hp = c->P->heap0;
       c->he = c->hp + K_CHUNK;
@@ -506,16 +507,8 @@ KINLINE void k_call_clo(KTHR KCtx *c, KW f, KW x, KW ret) {
   c->pc = l;
 }
 
-#ifdef __METAL_VERSION__
-kernel void bend_kernel(device coherent(device) KW *H [[buffer(0)]], device KAU *A [[buffer(1)]],
-  constant KParams &PP [[buffer(2)]], device KW *G [[buffer(3)]], uint lane [[thread_position_in_grid]]) {
-  constant KParams *P = &PP;
-#else
-static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
-#endif
-  if (lane >= P->nlanes) return;
-  KCtx cx;
-  KTHR KCtx *c = &cx;
+// A lane's state, from and to its slot of the arena.
+KINLINE void k_load(KTHR KCtx *c, KCOH KW *H, KDEV KAU *A, KCP KParams *P, KDEV KW *G, KU lane) {
   c->H = H;
   c->G = G;
   c->Q = (KDEV KW *)H + P->q0;
@@ -538,28 +531,53 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   c->kqret = H[ls + 8];
   c->kqfb = H[ls + 9];
   for (int i = 0; i < KQ_ARGS; i++) c->kqa[i] = H[ls + 10 + i];
+}
+
+KINLINE void k_save(KTHR KCtx *c) {
+  KW ls = c->P->lane0 + (KW)c->lane * K_LANE;
+  c->H[ls] = c->pc;
+  c->H[ls + 1] = c->fp;
+  c->H[ls + 2] = c->rv;
+  c->H[ls + 3] = c->dep;
+  c->H[ls + 4] = c->hp;
+  c->H[ls + 5] = c->he;
+  c->H[ls + 6] = c->ax;
+  c->H[ls + 7] = c->kq;
+  c->H[ls + 8] = c->kqret;
+  c->H[ls + 9] = c->kqfb;
+  for (int i = 0; i < KQ_ARGS; i++) c->H[ls + 10 + i] = c->kqa[i];
+}
+
+KINLINE bool k_active(KW pc) { return pc != PC_IDLE && pc != PC_KQ; }
+
+// The kernel: each lane runs blocks, taking tasks from the queue when it has
+// none. A lane that reaches a gathered call (PC_KQ) leaves the dispatch, and
+// so does an idle one once no lane is running (A[KA_ACTIVE] counts them):
+// the host then runs the calls with bend_kq, all at once, and dispatches this
+// again. (A long call run here, inside this big kernel, runs 3-5x slower.)
+#ifdef __METAL_VERSION__
+kernel void bend_kernel(device coherent(device) KW *H [[buffer(0)]], device KAU *A [[buffer(1)]],
+  constant KParams &PP [[buffer(2)]], device KW *G [[buffer(3)]], uint lane [[thread_position_in_grid]]) {
+  constant KParams *P = &PP;
+#else
+static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
+#endif
+  if (lane >= P->nlanes) return;
+  KCtx cx;
+  KTHR KCtx *c = &cx;
+  k_load(c, H, A, P, G, lane);
   KW budget = P->budget;
   for (KW step = 0; step < budget; step++) {
+    if (c->pc == PC_KQ) break;
     if (c->pc == PC_IDLE) {
       if (K_LOAD(&A[KA_DONE]) != 0 || K_LOAD(&A[KA_ERR]) != 0) break;
-      k_pop_task(c);
+      if (!k_pop_task(c)) {
+        if (K_LOAD(&A[KA_ACTIVE]) == 0) break;
+        continue;
+      }
+      K_ADD(&A[KA_ACTIVE], 1u);
     }
-    // A KQ_ call runs a whole subtree in one step. The lanes of a SIMD group
-    // run in lockstep, so one lane alone in its call would hold up the rest:
-    // a lane waits (PC_KQ) until each of its group waits too or has nothing
-    // to do, and they make their calls together.
-    bool kq = c->pc == PC_KQ;
-    if (K_SIMD_ALL(kq || c->pc == PC_IDLE)) {
-      if (kq) {
-        bool ok = true;
-        KW r = k_kq(c, &ok);
-        c->rv = r;
-        c->pc = ok ? c->kqret : c->kqfb;
-      }
-    } else if (!kq) switch (c->pc) {
-      case PC_IDLE: {
-        break;
-      }
+    switch (c->pc) {
       case PC_ROOT: {
         H[2] = c->rv;
         K_FENCE();
@@ -585,21 +603,35 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
         break;
       }
     }
+    if (!k_active(c->pc)) K_SUB(&A[KA_ACTIVE], 1u);
     if (c->err != 0) {
       KU z = 0;
       K_CAS(&A[KA_ERR], z, c->err);
       break;
     }
   }
-  H[ls] = c->pc;
-  H[ls + 1] = c->fp;
-  H[ls + 2] = c->rv;
-  H[ls + 3] = c->dep;
-  H[ls + 4] = c->hp;
-  H[ls + 5] = c->he;
-  H[ls + 6] = c->ax;
-  H[ls + 7] = c->kq;
-  H[ls + 8] = c->kqret;
-  H[ls + 9] = c->kqfb;
-  for (int i = 0; i < KQ_ARGS; i++) H[ls + 10 + i] = c->kqa[i];
+  k_save(c);
+}
+
+// The waiting calls, a lane each: a small kernel, which runs them fast.
+#ifdef __METAL_VERSION__
+kernel void bend_kq(device coherent(device) KW *H [[buffer(0)]], device KAU *A [[buffer(1)]],
+  constant KParams &PP [[buffer(2)]], device KW *G [[buffer(3)]], uint lane [[thread_position_in_grid]]) {
+  constant KParams *P = &PP;
+#else
+static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
+#endif
+  if (lane >= P->nlanes || H[P->lane0 + (KW)lane * K_LANE] != PC_KQ) return;
+  KCtx cx;
+  KTHR KCtx *c = &cx;
+  k_load(c, H, A, P, G, lane);
+  bool ok = true;
+  KW r = k_kq(c, &ok);
+  c->rv = r;
+  c->pc = ok ? c->kqret : c->kqfb;
+  if (c->err != 0) {
+    KU z = 0;
+    K_CAS(&A[KA_ERR], z, c->err);
+  }
+  k_save(c);
 }

@@ -22,6 +22,7 @@ typedef struct { Fn f; KW l; } GpuFn;
 typedef struct {
   const char *src;       // the generated device code (Metal gets gpu.h first)
   void (*sim)(KW *, KAU *, const KParams *, KW *, uint32_t);
+  void (*sim_kq)(KW *, KAU *, const KParams *, KW *, uint32_t);
   const GpuFn *fns;
 } GpuProg;
 
@@ -34,6 +35,7 @@ static int gpu_mode = -1;
 static int gpu_log;
 static KW *gpu_H;          // the arena
 static size_t gpu_Hn;      // its bytes
+static size_t gpu_Hmax;    // the most it grows to (BEND_GPU_MB)
 static KAU *gpu_A;         // the control words
 static size_t gpu_An;
 static KW gpu_qcap = (KW)1 << 16;
@@ -70,7 +72,7 @@ static GSel (*g_sel)(const char *);
 static void *g_send;
 static void *(*g_pool_push)(void);
 static void (*g_pool_pop)(void *);
-static GId g_dev, g_queue, g_pso, g_bufH, g_bufA, g_bufG;
+static GId g_dev, g_queue, g_pso, g_pso_kq, g_bufH, g_bufA, g_bufG;
 static KW g_bufG_len;
 static unsigned long g_tpg;
 
@@ -123,6 +125,11 @@ static int g_init(const GpuProg *prog) {
   g_pso = fn ? G_SEND(GId (*)(GId, GSel, GId, GId *))(g_dev, g_sel("newComputePipelineStateWithFunction:error:"), fn,
     &err) : NULL;
   if (!g_pso) { gpu_note("no pipeline: %s", g_err_text(err)); g_pool_pop(pool); return 0; }
+  GId name_kq = G_SEND(GId (*)(GId, GSel, const char *))(g_class("NSString"), g_sel("stringWithUTF8String:"), "bend_kq");
+  GId fn_kq = G_SEND(GId (*)(GId, GSel, GId))(lib, g_sel("newFunctionWithName:"), name_kq);
+  g_pso_kq = fn_kq ? G_SEND(GId (*)(GId, GSel, GId, GId *))(g_dev,
+    g_sel("newComputePipelineStateWithFunction:error:"), fn_kq, &err) : NULL;
+  if (!g_pso_kq) { gpu_note("no pipeline: %s", g_err_text(err)); g_pool_pop(pool); return 0; }
   g_tpg = G_SEND(unsigned long (*)(GId, GSel))(g_pso, g_sel("maxTotalThreadsPerThreadgroup"));
   if (g_tpg > 256) g_tpg = 256;
   g_queue = g_msg(g_dev, "newCommandQueue");
@@ -134,11 +141,11 @@ static int g_init(const GpuProg *prog) {
 }
 
 // One dispatch of every lane; 0 when the GPU failed.
-static int g_dispatch(const KParams *P) {
+static int g_dispatch(const KParams *P, GId pso) {
   void *pool = g_pool_push();
   GId cb = g_msg(g_queue, "commandBuffer");
   GId enc = g_msg(cb, "computeCommandEncoder");
-  G_SEND(void (*)(GId, GSel, GId))(enc, g_sel("setComputePipelineState:"), g_pso);
+  G_SEND(void (*)(GId, GSel, GId))(enc, g_sel("setComputePipelineState:"), pso);
   void (*set)(GId, GSel, GId, unsigned long, unsigned long) = G_SEND(void (*)(GId, GSel, GId, unsigned long,
     unsigned long));
   set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufH, 0, 0);
@@ -180,7 +187,10 @@ static int gpu_setup(const GpuProg *prog) {
 #ifndef __APPLE__
   if (!sim) return GPU_OFF;
 #endif
-  gpu_Hn = (size_t)gpu_env("BEND_GPU_MB", 1024) << 20;
+  // The arena starts small (a dispatch's first use of a buffer costs with its
+  // size: 30 ms for 1 GB) and grows when a call fills it (see gpu_call).
+  gpu_Hmax = (size_t)gpu_env("BEND_GPU_MB", 4096) << 20;
+  gpu_Hn = gpu_Hmax < ((size_t)64 << 20) ? gpu_Hmax : (size_t)64 << 20;
   gpu_H = mmap(NULL, gpu_Hn, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
   gpu_An = ((KA_SEQ + gpu_qcap) * sizeof(KAU) + 0xffff) & ~(size_t)0xffff;
   gpu_A = mmap(NULL, gpu_An, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
@@ -189,7 +199,7 @@ static int gpu_setup(const GpuProg *prog) {
   gpu_budget = (KW)gpu_env("BEND_GPU_STEPS", sim ? 37 : 16384);
   KW f = 0;
   while (((KW)1 << f) < gpu_lanes) f++;
-  gpu_fork = (KW)gpu_env("BEND_GPU_FORK", (long)f + 2);
+  gpu_fork = (KW)gpu_env("BEND_GPU_FORK", (long)f);
   pthread_mutex_lock(&gc_lock);
   gc_hook(gpu_hook);
   pthread_mutex_unlock(&gc_lock);
@@ -269,7 +279,8 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
 #undef GPU_OBJ
 }
 
-// Runs target entry on args; 0 when the caller must run it on the CPU.
+// Runs target entry on args; 0 when the caller must run it on the CPU, 2 when
+// the arena filled up (and may grow).
 static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
   KParams P;
   memset(&P, 0, sizeof P);
@@ -286,8 +297,12 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
   P.nfn = nfn;
   KW rf = P.fn0 + 2 * nfn + 1;
   KW fs = k_frame_size(entry);
+#ifdef KQ_SHARED
   P.q0 = (rf + fs + 63) / 64 * 64;
   P.heap0 = (P.q0 + KR_WORDS * gpu_lanes + K_CHUNK) / K_CHUNK * K_CHUNK;
+#else
+  P.heap0 = (rf + fs + K_CHUNK) / K_CHUNK * K_CHUNK;
+#endif
   P.heapw = gpu_Hn / 8 - P.heap0;
   P.budget = gpu_budget;
   P.nlanes = gpu_lanes;
@@ -314,20 +329,47 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
   __atomic_thread_fence(__ATOMIC_SEQ_CST);
   KW rounds = 0;
   for (;;) {
+    // The lanes running (not idle, not waiting for bend_kq): idle lanes stay
+    // in the dispatch while one does.
+    KW active = 0, waiting = 0;
+    for (KW l = 0; l < gpu_lanes; l++) {
+      KW pc = H[P.lane0 + l * K_LANE];
+      active += pc != PC_IDLE && pc != PC_KQ;
+    }
+    gpu_A[KA_ACTIVE] = (KAU)active;
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
     if (gpu_mode == GPU_SIM) {
       for (KW l = 0; l < gpu_lanes; l++) prog->sim(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
     }
 #ifdef __APPLE__
-    else if (!g_heap() || !g_dispatch(&P)) {
+    else if (!g_heap() || !g_dispatch(&P, g_pso)) {
       return 0;
     }
 #endif
     rounds++;
-    if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) {
-      if (gpu_log) fprintf(stderr, "bend gpu: a lane failed (error %u), running on the CPU\n", gpu_A[KA_ERR]);
+    if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) break;
+    if (__atomic_load_n(&gpu_A[KA_DONE], __ATOMIC_SEQ_CST) != 0) break;
+    for (KW l = 0; l < gpu_lanes; l++) waiting += H[P.lane0 + l * K_LANE] == PC_KQ;
+    if (waiting > 0) {
+      if (gpu_mode == GPU_SIM) {
+        for (KW l = 0; l < gpu_lanes; l++) prog->sim_kq(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
+      }
+#ifdef __APPLE__
+      else if (!g_dispatch(&P, g_pso_kq)) {
+        return 0;
+      }
+#endif
+      if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) break;
+    } else if (active == 0 && gpu_A[KA_QHEAD] == gpu_A[KA_QTAIL]) {
+      // Nothing runs, waits or is queued, and the root has not returned.
+      gpu_note("%s", "the device stalled");
       return 0;
     }
-    if (__atomic_load_n(&gpu_A[KA_DONE], __ATOMIC_SEQ_CST) != 0) break;
+  }
+  if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) {
+    if (gpu_A[KA_ERR] == KE_HEAP && gpu_Hn < gpu_Hmax) return 2;
+    if (gpu_log) fprintf(stderr, "bend gpu: a lane failed (error %u), running on the CPU\n", gpu_A[KA_ERR]);
+    return 0;
   }
   if (gpu_log) {
     fprintf(stderr, "bend gpu: done in %llu dispatches, %llu MB of arena\n", (unsigned long long)rounds,
@@ -339,10 +381,31 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
   return ok;
 }
 
+// A 4x bigger arena, for a call that filled this one.
+static int gpu_grow(void) {
+  size_t n = gpu_Hn * 4 > gpu_Hmax ? gpu_Hmax : gpu_Hn * 4;
+  KW *h = mmap(NULL, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
+  if (h == MAP_FAILED) return 0;
+#ifdef __APPLE__
+  if (gpu_mode == GPU_METAL) {
+    GId b = g_nocopy(h, n);
+    if (!b) { munmap(h, n); return 0; }
+    g_msg(g_bufH, "release");
+    g_bufH = b;
+  }
+#endif
+  munmap(gpu_H, gpu_Hn);
+  gpu_H = h;
+  gpu_Hn = n;
+  if (gpu_log) fprintf(stderr, "bend gpu: arena grows to %llu MB\n", (unsigned long long)(n >> 20));
+  return 1;
+}
+
 static int gpu_call(const GpuProg *prog, KW entry, V *args, int n, V *out) {
   pthread_mutex_lock(&gpu_lock);
   if (gpu_mode < 0) gpu_mode = gpu_setup(prog);
-  int ok = gpu_mode != GPU_OFF && gpu_run(prog, entry, args, n, out);
+  int r = gpu_mode != GPU_OFF ? gpu_run(prog, entry, args, n, out) : 0;
+  while (r == 2) r = gpu_grow() ? gpu_run(prog, entry, args, n, out) : 0;
   pthread_mutex_unlock(&gpu_lock);
-  return ok;
+  return r == 1;
 }

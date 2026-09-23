@@ -20895,7 +20895,7 @@ static V W_Gen_dgpu_demit(V *a) { (void)a; return F_Gen_dgpu_demit(a[0], a[1], a
 static V S2678(void) { static V c; return STRC(c, "\012// The device code of the !-calls: rt/gpu.h, then this program's part\012#include \042gpu.h\042\012\012"); }
 static V S2679(void) { static V c; return STRC(c, "\012#include \042gpuhost.h\042\012\012static const char K_SRC[] =\012"); }
 static V S2680(void) { static V c; return STRC(c, ";\012\012static const GpuFn K_FNS[] = {"); }
-static V S2681(void) { static V c; return STRC(c, "{0, 0}};\012static GpuProg K_PROG = {K_SRC, bend_kernel, K_FNS};\012\012"); }
+static V S2681(void) { static V c; return STRC(c, "{0, 0}};\012static GpuProg K_PROG = {K_SRC, bend_kernel, bend_kq, K_FNS};\012\012"); }
 static V S2682(void) { static V c; return STRC(c, "\012// The !-calls run on the CPU:\012"); }
 static V F_Gen_dgpu_demit_derrs(V a0, V a1, V a2, V a3, V a4) {
 top:;

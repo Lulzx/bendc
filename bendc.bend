@@ -4576,7 +4576,7 @@ def Gen.gpu.emit.errs(+g: G, +ts: List<&2, String>, errs: List<&2, String>, +cod
       "\n// The device code of the !-calls: rt/gpu.h, then this program's part\n#include \"gpu.h\"\n\n" ++ code ++
         "\n#include \"gpuhost.h\"\n\nstatic const char K_SRC[] =\n" ++ K.lit(code) ++
         ";\n\nstatic const GpuFn K_FNS[] = {" ++ Gen.gpu.fns(wraps) ++
-        "{0, 0}};\nstatic GpuProg K_PROG = {K_SRC, bend_kernel, K_FNS};\n\n" ++ Gen.gpu.stubs(g, ts, True{})
+        "{0, 0}};\nstatic GpuProg K_PROG = {K_SRC, bend_kernel, bend_kq, K_FNS};\n\n" ++ Gen.gpu.stubs(g, ts, True{})
     case e <> t:
       "\n// The !-calls run on the CPU:\n" ++ Gen.gpu.errs(e <> t) ++ Gen.gpu.stubs(g, ts, False{})
 
