@@ -782,6 +782,10 @@ V F_Nat_dshow(V a) {
 #define U(x) ((uint32_t)(x))
 #define F2(name, expr) static inline V F_F32_d##name(V a, V b) { float x = FV(a), y = FV(b); return expr; }
 #define F1(name, expr) static inline V F_F32_d##name(V a) { float x = FV(a); return expr; }
+__attribute__((noinline, cold)) float F32_mul_add(float x, float k, float c) {
+  float p = x * k;
+  return p + c;
+}
 V F_F32_dshow(V a) {
   char buf[64];
   snprintf(buf, sizeof buf, "%g", FV(a));

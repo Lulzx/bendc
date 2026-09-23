@@ -1336,6 +1336,27 @@ static inline V VF(float f) { union { uint32_t u; float f; } x; x.f = f; return 
 F2(add, VF(x + y))
 F2(sub, VF(x - y))
 F2(mul, VF(x * y))
+
+// x * k + b for a literal k (bendc emits it for F32.add(F32.mul(x, k), b)):
+// one fma when k is a power of two and x * k a normal float, for then the
+// product is exact and fma rounds once where the two operations would
+// round the same sum; else the two, as written. A loop like
+// x = x * x * 0.5 + c then waits on two operations a step, not three.
+// (The other case is a call, so the compiler branches to it rather than
+// computing both and selecting, which would put both on the loop's path.)
+__attribute__((noinline, cold)) static float F32_mul_add(float x, float k, float c) {
+  float p = x * k;
+  return p + c;
+}
+static inline V F32_mulk_add(V a, V kv, V b) {
+  float x = FV(a), k = FV(kv);
+  uint32_t e = (U(kv) >> 23) & 0xff;
+  float p = fabsf(x * k);
+  if ((U(kv) & 0x7fffff) == 0 && e != 0 && e != 0xff && p >= 0x1p-126f && p <= 0x1.fffffep127f) {
+    return VF(fmaf(x, k, FV(b)));
+  }
+  return VF(F32_mul_add(x, k, FV(b)));
+}
 F2(div, VF(x / y))
 F2(mod, VF(fmodf(x, y)))
 F2(pow, VF(powf(x, y)))

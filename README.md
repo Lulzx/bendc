@@ -313,7 +313,7 @@ compile time. On an Apple M4 Pro (12 cores, 24 GB, macOS 27):
 |---|---|---|---|---|---|
 | `forks 28` | a parallel let at every level of a 2^28-leaf tree, CPU threads | **0.06s** | 0.12s | 2.8 MB | 2.7 MB |
 | `forks_gpu 28` | the same as a `!`-call, on the GPU | **0.07s** | 0.13s | **13.0 MB** | 13.3 MB |
-| `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | **0.82s** | 1.05s | 2.8 MB | 2.7 MB |
+| `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | **0.68s** | 1.02s | 2.8 MB | 2.7 MB |
 | `leaves_gpu 14` | the same as a `!`-call, on the GPU | **0.05s** | 0.10s | **13.1 MB** | 13.2 MB |
 | `leaves_gpu 16` | the same with 65536 leaves | **0.08s** | 0.15s | 13.1 MB | 13.1 MB |
 | `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | **0.36s** | 1.10s | **30.4 MB** | 32.4 MB |
@@ -338,6 +338,11 @@ Where the time goes:
   device is below 2^63: a bignum can only come from the CPU (an argument, which runs the call on the
   CPU, or a word read from its heap, which fails the lane), so a `1n+p` match is one compare. With
   a bignum check in it, `iter`'s loop was no longer a counted loop to Metal, and ran 2.4x slower.
+- **Float loops on the CPU.** `iter`'s step, `x * x * 0.5 + c`, is a chain of three float operations,
+  each waiting on the last. `bendc` emits `a * k + b` with a literal `k` as `F32_mulk_add`, one
+  `fma` when `k` is a power of two and `a * k` a normal float: the product is then exact, so the
+  `fma`'s one rounding is the add's, and the result the same to the bit. The chain is two operations,
+  and `leaves` 17% faster; any other case branches to the two operations as written.
 - **Builds.** The runtime is compiled once (`build/bendrt.o`, from `rt/bendrt_impl.c`), so a program
   compiles only its own code; bendc's own front end takes about 0.1s for these programs.
 - **Building lists.** `merge` returns `x <> merge(xt, ys)`: a cell around a call. Such defs (a group

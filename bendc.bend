@@ -3742,6 +3742,75 @@ def Gen.call.local(+g: G, +env: Env(), f: Expr, args: List<&2, Expr>) -> Gen(Doc
     xs : List<&2, Doc> <- Gen.exprs(g, env, args)
     return Gen.apply(xs, fd)
 
+# F32.add(F32.mul(x, k), b), either way round, with k a literal: 1n when k is
+# the mul's second argument, 2n when its first, else 0n.
+def Gen.fadd.k(e: Expr) -> Nat:
+  match e:
+    case ECall{EVar{f}, x <> EFlt{s} <> Nil{}}:
+      Bool.pick(Nat, Str.eq(f, "F32.mul"), 1n, 0n)
+    case ECall{EVar{f}, EFlt{s} <> x <> Nil{}}:
+      Bool.pick(Nat, Str.eq(f, "F32.mul"), 2n, 0n)
+    case other:
+      0n
+
+@unsafe
+def Gen.fadd.doc(+g: G, +env: Env(), x: Expr, k: Expr, b: Expr) -> Gen(Doc):
+  do Gen<Doc>:
+    xd : Doc <- Gen.expr(g, env, x)
+    kd : Doc <- Gen.expr(g, env, k)
+    bd : Doc <- Gen.expr(g, env, b)
+    return Doc.list([DStr{"F32_mulk_add("}, xd, DStr{", "}, kd, DStr{", "}, bd, DStr{")"}])
+
+@unsafe
+def Gen.fadd.emit(+g: G, +env: Env(), k: Nat, x: Expr, y: Expr, b: Expr) -> Gen(Doc):
+  match k:
+    case 1n:
+      Gen.fadd.doc(g, env, x, y, b)
+    case other:
+      Gen.fadd.doc(g, env, y, x, b)
+
+@unsafe
+def Gen.fadd.mul(+g: G, +env: Env(), m: Expr, b: Expr, k: Nat) -> Gen(Doc):
+  match m:
+    case ECall{f, x <> y <> Nil{}}:
+      Gen.fadd.emit(g, env, k, x, y, b)
+    case other:
+      Gen.call.def(g, env, "F32.add", G.def(g, "F32.add"), [other, b])
+
+# a + m, where m is x * k when km is not 0n.
+@unsafe
+def Gen.fadd.one(+g: G, +env: Env(), a: Expr, m: Expr, km: Nat) -> Gen(Doc):
+  match km:
+    case 0n:
+      Gen.call.def(g, env, "F32.add", G.def(g, "F32.add"), [a, m])
+    case 1n+p:
+      Gen.fadd.mul(g, env, m, a, km)
+
+@unsafe
+def Gen.fadd.two(+g: G, +env: Env(), a: Expr, b: Expr, ka: Nat, kb: Nat) -> Gen(Doc):
+  match ka:
+    case 0n:
+      Gen.fadd.one(g, env, a, b, kb)
+    case 1n+p:
+      Gen.fadd.mul(g, env, a, b, ka)
+
+# a + b as F32_mulk_add(x, k, b) when a is x * k (see rt/bendrt.h).
+@unsafe
+def Gen.fadd(+g: G, +env: Env(), args: List<&2, Expr>) -> Gen(Doc):
+  match args:
+    case +a <> +b <> Nil{}:
+      Gen.fadd.two(g, env, a, b, Gen.fadd.k(a), Gen.fadd.k(b))
+    case other:
+      Gen.call.def(g, env, "F32.add", G.def(g, "F32.add"), other)
+
+@unsafe
+def Gen.call.global(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, fadd: Bool) -> Gen(Doc):
+  match fadd:
+    case True{}:
+      Gen.fadd(g, env, args)
+    case False{}:
+      Gen.call.def(g, env, name, G.def(g, name), args)
+
 @unsafe
 def Gen.call.var(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, local: Bool) ->
   Gen(Doc):
@@ -3749,7 +3818,7 @@ def Gen.call.var(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, local:
     case True{}:
       Gen.call.local(g, env, EVar{name}, args)
     case False{}:
-      Gen.call.def(g, env, name, G.def(g, name), args)
+      Gen.call.global(g, env, name, args, Str.eq(name, "F32.add"))
 
 def Gen.gpu.go(+name: String, st: St) -> Unit & St:
   St{n, protos, code, refs, errs, memo, effs} = st
