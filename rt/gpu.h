@@ -143,18 +143,30 @@ typedef struct {
 // A closure's code word: a label, where the CPU has a function address.
 #define KCLO ((KW)0x7ff << 52)
 
+KINLINE void k_fail(KTHR KCtx *c, KU e) {
+  if (c->err == 0) c->err = e;
+}
+
 // The words of the object at v: in the arena or in the CPU's heap.
+//
+// A Nat on the device is below 2^63: a bignum (bit 63 set; no other value
+// has it) can only come from the CPU, as an argument (the host runs such a
+// call on the CPU) or a word of the CPU's heap, which fails the lane and
+// reads as 0 (so no loop runs on it). Matches and arithmetic on Nats need
+// no check then, and a loop that counts down stays a counted loop.
 KINLINE bool k_in(KTHR KCtx *c, KW v) { return v - c->ab < c->an; }
 KINLINE KW k_word(KTHR KCtx *c, KW v, KW i) {
-  return k_in(c, v) ? c->H[((v - c->ab) >> 3) + i] : c->G[((v - c->gb) >> 3) + i];
+  if (k_in(c, v)) return c->H[((v - c->ab) >> 3) + i];
+  KW w = c->G[((v - c->gb) >> 3) + i];
+  if (w >> 63) {
+    k_fail(c, KE_NAT);
+    return 0;
+  }
+  return w;
 }
 KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : (k_word(c, v, 0) & ~(KW)0x300000); }
 #define KTAG(v) k_tag(c, v)
 #define KFLD(v, i) k_word(c, v, 1 + (i))
-
-KINLINE void k_fail(KTHR KCtx *c, KU e) {
-  if (c->err == 0) c->err = e;
-}
 
 // n words from the lane's heap chunk; the word before an object holds its
 // size (the host copies results out with it). Chunk 0 is scratch: a lane
@@ -303,24 +315,22 @@ KINLINE KW k_fn_label(KTHR KCtx *c, KW f) {
 // Natives
 // -------
 
+// Nats are below 2^63 (see k_word); a result past it fails, as 0.
 #define KNAT_BIG(x) ((x) >> 63)
-KINLINE KW k_nat(KTHR KCtx *c, KW a) { if (KNAT_BIG(a)) k_fail(c, KE_NAT); return a; }
-KINLINE bool k_nge(KTHR KCtx *c, KW x, KW k) { k_nat(c, x); return x >= k; }
-KINLINE bool k_nz(KTHR KCtx *c, KW x) { k_nat(c, x); return x != 0; }
+KINLINE bool k_nge(KTHR KCtx *c, KW x, KW k) { return x >= k; }
+KINLINE bool k_nz(KTHR KCtx *c, KW x) { return x != 0; }
 KINLINE KW k_nat_add(KTHR KCtx *c, KW a, KW b) {
   KW s = a + b;
-  if (KNAT_BIG(a | b | s)) k_fail(c, KE_NAT);
+  if (KNAT_BIG(s)) { k_fail(c, KE_NAT); return 0; }
   return s;
 }
 KINLINE KW k_nat_mul(KTHR KCtx *c, KW a, KW b) {
-  if (KNAT_BIG(a | b) || (a != 0 && b > ((KW)1 << 63) / a)) { k_fail(c, KE_NAT); return 0; }
-  KW p = a * b;
-  if (KNAT_BIG(p)) k_fail(c, KE_NAT);
-  return p;
+  if (a != 0 && b > (((KW)1 << 63) - 1) / a) { k_fail(c, KE_NAT); return 0; }
+  return a * b;
 }
 KINLINE KW k_cmp3(KW a, KW b) { return a < b ? KIMM(0) : a == b ? KIMM(1) : KIMM(2); }
-#define KN1(name, expr) KINLINE KW KF_Nat_d##name(KTHR KCtx *c, KW a) { k_nat(c, a); return expr; }
-#define KN2(name, expr) KINLINE KW KF_Nat_d##name(KTHR KCtx *c, KW a, KW b) { k_nat(c, a); k_nat(c, b); return expr; }
+#define KN1(name, expr) KINLINE KW KF_Nat_d##name(KTHR KCtx *c, KW a) { return expr; }
+#define KN2(name, expr) KINLINE KW KF_Nat_d##name(KTHR KCtx *c, KW a, KW b) { return expr; }
 KN1(double, k_nat_add(c, a, a))
 KN2(add, k_nat_add(c, a, b))
 KN2(sub, a > b ? a - b : 0)
@@ -337,15 +347,12 @@ KN2(is__ge, KBOOL(a >= b))
 KN2(min, a < b ? a : b)
 KN2(max, a < b ? b : a)
 KINLINE KW KF_Nat_ddivmod(KTHR KCtx *c, KW a, KW b) {
-  k_nat(c, a);
-  k_nat(c, b);
   KW p = k_node(c, 0, 2);
   c->H[KIX(c, p) + 1] = b == 0 ? 0 : a / b;
   c->H[KIX(c, p) + 2] = b == 0 ? a : a % b;
   return p;
 }
 KINLINE KW KF_Nat_dpow(KTHR KCtx *c, KW a, KW n) {
-  k_nat(c, n);
   KW r = 1;
   for (KW i = 0; i < n && c->err == 0; i++) r = k_nat_mul(c, r, a);
   return r;
@@ -379,11 +386,10 @@ KU2(is__ge, KBOOL(a >= b))
 KU1(is__zero, KBOOL(a == 0))
 KU1(is__even, KBOOL((a & 1) == 0))
 KU1(to__nat, a)
-KU1(from__nat, KU32(k_nat(c, a)))
+KU1(from__nat, KU32(a))
 KU2(min, a < b ? a : b)
 KU2(max, a < b ? b : a)
 KINLINE KW KF_U32_dpow(KTHR KCtx *c, KW a, KW n) {
-  k_nat(c, n);
   KU r = 1, b = (KU)a;
   for (KW e = n; e; e >>= 1) {
     if (e & 1) r *= b;

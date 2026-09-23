@@ -269,8 +269,8 @@ only the variables used after it, with a resume label, on a small thread-private
 a jump). The lanes of a SIMD group run in lockstep, so a lane that entered such a call alone would
 hold its 31 neighbours up for the whole subtree; instead a lane waits at the call until each lane of
 its group waits too or has nothing to do, and they run their calls together. Calls of looping flat
-defs are gathered the same way. A 2^30-leaf fork tree runs in 0.145s on an M4 Pro's GPU, against
-0.178s for the official runtime (see [Benchmarks](#benchmarks)).
+defs are gathered the same way. A 2^30-leaf fork tree runs in 0.14s on an M4 Pro's GPU, against
+0.24s for the official runtime (see [Benchmarks](#benchmarks)).
 
 The kernel's text (`rt/gpu.h` plus the generated blocks) compiles both as Metal Shading Language and
 as C. The host (`rt/gpuhost.h`) reaches Metal through the Objective-C runtime and asks the linker
@@ -311,20 +311,21 @@ compile time. On an Apple M4 Pro (12 cores, 24 GB, macOS 27):
 
 | program | what it does | bendc | official bend | bendc memory | official memory |
 |---|---|---|---|---|---|
-| `forks 28` | a parallel let at every level of a 2^28-leaf tree, CPU threads | **0.04s** | 0.10s | 2.8 MB | 2.7 MB |
-| `forks_gpu 28` | the same as a `!`-call, on the GPU | **0.05s** | 0.09s | **13.0 MB** | 13.3 MB |
-| `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | **0.74s** | 0.98s | 2.8 MB | 2.7 MB |
-| `leaves_gpu 14` | the same as a `!`-call, on the GPU | **0.06s** | 0.07s | **13.0 MB** | 13.3 MB |
-| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | **0.30s** | 0.54s | **30.4 MB** | 32.4 MB |
+| `forks 28` | a parallel let at every level of a 2^28-leaf tree, CPU threads | **0.06s** | 0.12s | 2.8 MB | 2.7 MB |
+| `forks_gpu 28` | the same as a `!`-call, on the GPU | **0.07s** | 0.13s | **13.0 MB** | 13.3 MB |
+| `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | **0.82s** | 1.05s | 2.8 MB | 2.7 MB |
+| `leaves_gpu 14` | the same as a `!`-call, on the GPU | **0.05s** | 0.10s | **13.1 MB** | 13.2 MB |
+| `leaves_gpu 16` | the same with 65536 leaves | **0.08s** | 0.15s | 13.1 MB | 13.1 MB |
+| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | **0.36s** | 1.10s | **30.4 MB** | 32.4 MB |
 
 | task | bendc | official bend |
 |---|---|---|
-| build `forks.bend` (source to binary) | **0.17s** | 0.27s |
-| build `forks_gpu.bend` | **0.27s** | 0.48s |
-| build `leaves.bend` | **0.16s** | 0.27s |
-| build `leaves_gpu.bend` | **0.26s** | 0.48s |
-| build `sort.bend` | **0.18s** | 0.28s |
-| type-check `bendc.bend` (16,000 lines with `check.bend`) | **0.75s**, 487 MB | 0.94s, 978 MB |
+| build `forks.bend` (source to binary) | **0.19s** | 0.31s |
+| build `forks_gpu.bend` | **0.32s** | 0.55s |
+| build `leaves.bend` | **0.19s** | 0.30s |
+| build `leaves_gpu.bend` | **0.31s** | 0.55s |
+| build `sort.bend` | **0.21s** | 0.32s |
+| type-check `bendc.bend` (16,000 lines with `check.bend`) | **0.88s**, 482 MB | 1.01s, 1004 MB |
 | build `bendc.bend` into a binary | **8.1s** | 70s, 9.9 GB |
 
 Where the time goes:
@@ -333,7 +334,10 @@ Where the time goes:
   sequential clone, `S_name`. Each thread tracks its fork depth; past log2(threads) + 6 levels a
   parallel let runs its values in order through the clone: no closures, deque pushes or joins.
 - **Forks and loops on the GPU.** See [The GPU backend](#the-gpu-backend): seq defs and looping flat
-  defs run in their own small kernel (`bend_kq`), a whole SIMD group at a time.
+  defs run in their own small kernel (`bend_kq`), a whole SIMD group at a time. A `Nat` on the
+  device is below 2^63: a bignum can only come from the CPU (an argument, which runs the call on the
+  CPU, or a word read from its heap, which fails the lane), so a `1n+p` match is one compare. With
+  a bignum check in it, `iter`'s loop was no longer a counted loop to Metal, and ran 2.4x slower.
 - **Builds.** The runtime is compiled once (`build/bendrt.o`, from `rt/bendrt_impl.c`), so a program
   compiles only its own code; bendc's own front end takes about 0.1s for these programs.
 - **Building lists.** `merge` returns `x <> merge(xt, ys)`: a cell around a call. Such defs (a group

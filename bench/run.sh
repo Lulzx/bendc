@@ -28,7 +28,7 @@ def run(cmd, env=None):
 def out(cmd):
     return subprocess.run(cmd, capture_output=True, text=True).stdout
 
-progs = [('forks', '28'), ('forks_gpu', '28'), ('leaves', '14'), ('leaves_gpu', '14'), ('sort', '1000000')]
+progs = [('forks', '28'), ('forks_gpu', '28'), ('leaves', '14'), ('leaves_gpu', '14'), ('leaves_gpu', '16'), ('sort', '1000000')]
 print('| program | bendc | official bend | bendc memory | official memory |')
 print('|---|---|---|---|---|')
 builds = []
@@ -36,7 +36,7 @@ for name, n in progs:
     src, me, off = 'bench/%s.bend' % name, 'build/bench/' + name, 'build/bench/%s.off' % name
     tb, _ = run([bendc, '-o', me, base, src])
     to, _ = run(['bend', src, '-o', off])
-    builds.append((name, tb, to))
+    if name not in [b[0] for b in builds]: builds.append((name, tb, to))
     a, b = out([me, '--', n]), out([off, n])
     assert a == b, (name, a, b)
     (t1, m1), (t2, m2) = run([me, '--', n]), run([off, n])

@@ -517,6 +517,10 @@ static int gpu_grow(void) {
 }
 
 static int gpu_call(const GpuProg *prog, KW entry, V *args, int n, V *out) {
+  // A bignum argument (bit 63): the device only has Nats below 2^63.
+  for (int i = 0; i < n; i++) {
+    if (args[i] >> 63) return 0;
+  }
   pthread_mutex_lock(&gpu_lock);
   if (gpu_mode < 0) gpu_mode = gpu_setup(prog);
   int r = gpu_mode != GPU_OFF ? gpu_run(prog, entry, args, n, out) : 0;
