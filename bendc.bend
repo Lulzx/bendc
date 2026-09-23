@@ -5,7 +5,6 @@
 import Base
 import ./check.bend as Chk
 import ./rt/rtjs.bend as RtJs
-import ./rt/gpuh.bend as GpuH
 
 # Utilities
 # =========
@@ -4354,26 +4353,26 @@ def K.lit.go(s: String) -> String:
 def K.lit(s: String) -> String:
   "\"" ++ K.lit.go(s)
 
-def Gen.gpu.emit.errs(+g: G, +ts: List<&2, String>, errs: List<&2, String>, +tables: String, +cases: String,
-  wraps: List<&2, String>) -> String:
+def Gen.gpu.emit.errs(+g: G, +ts: List<&2, String>, errs: List<&2, String>, +code: String, wraps: List<&2, String>) ->
+  String:
   match errs:
     case Nil{}:
-      "\n// The device code of the !-calls (rt/gpu.h)\n" ++ GpuH.head() ++ tables ++ GpuH.mid() ++ cases ++
-        GpuH.tail() ++ "#include \"gpuhost.h\"\n\nstatic const char K_SRC[] =\n" ++ GpuH.head_lit() ++ K.lit(tables) ++
-        GpuH.mid_lit() ++ K.lit(cases) ++ GpuH.tail_lit() ++ ";\n\nstatic const GpuFn K_FNS[] = {" ++ Gen.gpu.fns(wraps) ++
-        "{0, 0}};\nstatic GpuProg K_PROG = {K_SRC, bend_kernel, K_FNS, K_FRAME, K_NLABELS};\n\n" ++
-        Gen.gpu.stubs(g, ts, True{})
+      "\n// The device code of the !-calls: rt/gpu.h, then this program's part\n#include \"gpu.h\"\n\n" ++ code ++
+        "\n#include \"gpuhost.h\"\n\nstatic const char K_SRC[] =\n" ++ K.lit(code) ++
+        ";\n\nstatic const GpuFn K_FNS[] = {" ++ Gen.gpu.fns(wraps) ++
+        "{0, 0}};\nstatic GpuProg K_PROG = {K_SRC, bend_kernel, K_FNS};\n\n" ++ Gen.gpu.stubs(g, ts, True{})
     case e <> t:
       "\n// The !-calls run on the CPU:\n" ++ Gen.gpu.errs(e <> t) ++ Gen.gpu.stubs(g, ts, False{})
 
-# The device code: tables (label defines and frame sizes), the cases of the
-# kernel's switch, the defs it has wrappers for, and errors.
+# A program's device code (what follows rt/gpu.h: label defines, frame sizes,
+# flat functions and the blocks, k_cases), the defs it has wrappers for, and
+# errors.
 type KOut is Data:
-  KOut{tables: String, cases: String, wraps: List<&2, String>, errs: List<&2, String>}
+  KOut{code: String, wraps: List<&2, String>, errs: List<&2, String>}
 
 def Gen.gpu.emit(+g: G, +ts: List<&2, String>, out: KOut) -> String:
-  KOut{tables, cases, wraps, errs} = out
-  Gen.gpu.emit.errs(g, ts, errs, tables, cases, wraps)
+  KOut{code, wraps, errs} = out
+  Gen.gpu.emit.errs(g, ts, errs, code, wraps)
 
 #
 # The functions a !-call can reach compile into one flat state machine (see
@@ -4428,9 +4427,10 @@ def K.block_doc(+l: U32, d: Doc) -> Doc:
 def K.fin(r: Unit & KSt) -> KOut:
   (u, st) = r
   KSt{+n, sl, +curl, cur, out, +fns, todo, +frames, errs, flat, memo} = st
-  KOut{"#define K_NLABELS " ++ U32.show(n) ++ "\n" ++ K.defines(fns) ++ "KCONST KW K_FRAME[] = {" ++
-    K.frame_table(frames, 0, n) ++ "0};\n" ++ Doc.flat(flat), Doc.flat(DCat{out, K.block_doc(curl, cur)}), K.wraps(fns),
-    errs}
+  KOut{Doc.flat(Doc.list([DStr{"#define K_NLABELS " ++ U32.show(n) ++ "\n" ++ K.defines(fns) ++ "KCONST KW K_FRAME[] = {" ++
+    K.frame_table(frames, 0, n) ++ "0};\n\nKINLINE KW k_frame_size(KW l) {\n  return l < K_NLABELS ? K_FRAME[l] : 0;\n}\n\n"},
+    flat, DStr{"\nKINLINE void k_cases(KTHR KCtx *c) {\nswitch (c->pc) {\n"}, out, K.block_doc(curl, cur),
+    DStr{"default: {\nk_fail(c, KE_PC);\nbreak;\n}\n}\n}\n"}])), K.wraps(fns), errs}
 
 def KM(-A: Type) -> Type:
   KSt -> A & KSt

@@ -11,8 +11,10 @@
 // effect, a Nat past 2^63, a full arena or queue, a failed match, a closure
 // it has no code for) sets an error, and the host runs the call on the CPU.
 //
-// bendc puts its tables where //@TABLES is and its cases where //@CASES is.
-// Every name starts with k or K: the C version shares a file with bendrt.h.
+// bendc generates, after this file, k_frame_size (the frame of each label),
+// the flat functions, and k_cases (the blocks). The host gives Metal this
+// file's text (rt/gpu_src.h) followed by the generated text. Every name
+// starts with k or K: the C version shares a file with bendrt.h.
 
 #ifdef __METAL_VERSION__
 #include <metal_stdlib>
@@ -410,13 +412,16 @@ KF1(to__u32, x <= 0.0f ? 0 : x >= 4294967295.0f ? (KW)0xffffffffu : (KW)(KU)x)
 KINLINE KW KF_F32_dshow(KTHR KCtx *c, KW a) { k_fail(c, KE_FX); return 0; }
 KINLINE KW KF_F32_dread(KTHR KCtx *c, KW a) { k_fail(c, KE_FX); return 0; }
 
-//@TABLES
+// Generated after this file.
+KINLINE KW k_frame_size(KW l);
+KINLINE void k_cases(KTHR KCtx *c);
 
 // Applies closure f to x; the value goes to block ret.
 KINLINE void k_call_clo(KTHR KCtx *c, KW f, KW x, KW ret) {
   KW fw = k_word(c, f, 0), ar = k_word(c, f, 1), n = k_word(c, f, 2);
   KW l = (fw >> 52) == 0x7ff ? (fw & 0xffffffffu) : k_fn_label(c, fw);
-  if (l == 0 || l >= K_NLABELS) {
+  KW fs = k_frame_size(l);
+  if (l == 0 || fs == 0) {
     k_fail(c, KE_FX);
     c->rv = 0;
     c->pc = ret;
@@ -434,7 +439,7 @@ KINLINE void k_call_clo(KTHR KCtx *c, KW f, KW x, KW ret) {
     c->pc = ret;
     return;
   }
-  KW nf = k_push(c, ret, K_FRAME[l]);
+  KW nf = k_push(c, ret, fs);
   for (KW i = 0; i < n; i++) c->H[nf + 4 + i] = k_word(c, f, 3 + i);
   c->H[nf + 4 + n] = x;
   c->fp = nf;
@@ -494,9 +499,8 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
         c->H[c->fp + 2] = i;
         break;
       }
-//@CASES
       default: {
-        k_fail(c, KE_PC);
+        k_cases(c);
         break;
       }
     }

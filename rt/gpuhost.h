@@ -15,15 +15,14 @@
 // --gpu off, runs !-calls on the CPU. BEND_GPU_LOG=1 says what happened.
 
 #include <dlfcn.h>
+#include "gpu_src.h"
 
 typedef struct { Fn f; KW l; } GpuFn;
 
 typedef struct {
-  const char *src;
+  const char *src;       // the generated device code (Metal gets gpu.h first)
   void (*sim)(KW *, KAU *, const KParams *, KW *, uint32_t);
   const GpuFn *fns;
-  const KW *frames;
-  KW nlabels;
 } GpuProg;
 
 #define GPU_OFF 0
@@ -104,7 +103,12 @@ static int g_init(const GpuProg *prog) {
   void *pool = g_pool_push();
   g_dev = create();
   if (!g_dev) { gpu_note("%s", "no GPU"); g_pool_pop(pool); return 0; }
-  GId src = G_SEND(GId (*)(GId, GSel, const char *))(g_class("NSString"), g_sel("stringWithUTF8String:"), prog->src);
+  size_t nh = strlen(K_GPU_H), np = strlen(prog->src);
+  char *text = malloc(nh + np + 1);
+  memcpy(text, K_GPU_H, nh);
+  memcpy(text + nh, prog->src, np + 1);
+  GId src = G_SEND(GId (*)(GId, GSel, const char *))(g_class("NSString"), g_sel("stringWithUTF8String:"), text);
+  free(text);
   GId opts = g_msg(g_msg(g_class("MTLCompileOptions"), "alloc"), "init");
   G_SEND(void (*)(GId, GSel, unsigned long))(opts, g_sel("setLanguageVersion:"), (3ul << 16) | 2);
   G_SEND(void (*)(GId, GSel, signed char))(opts, g_sel("setFastMathEnabled:"), 0);
@@ -281,7 +285,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
   P.fn0 = P.lane0 + 8 * gpu_lanes;
   P.nfn = nfn;
   KW rf = P.fn0 + 2 * nfn + 1;
-  KW fs = prog->frames[entry];
+  KW fs = k_frame_size(entry);
   P.heap0 = (rf + fs + K_CHUNK) / K_CHUNK * K_CHUNK;
   P.heapw = gpu_Hn / 8 - P.heap0;
   P.budget = gpu_budget;
