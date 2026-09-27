@@ -91,6 +91,12 @@ def Str.codes32(s: String) -> List<&2, U32>:
     case SCon{Chr{x}, t}:
       x <> Str.codes32(t)
 
+# Fuel for recursion that is not structural: a parser's over tokens, or
+# one def that merges a cycle of defs and switches between them. More than
+# any input needs; a def that runs out fails loudly.
+def Fuel.max() -> Nat:
+  U32.to_nat(4000000000)
+
 # Lexer
 # =====
 
@@ -6201,6 +6207,120 @@ def Gen.cids(+g: G, ds: List<&2, Decl>, +i: U32) -> String:
     case d <> t:
       Gen.cids(g, t, i)
 
+# Branches. Bend has no if, and a match takes only a parameter or a field,
+# so a def that branches on a computed value and recurses in a branch needs
+# a helper def, and the recursion then runs through a law. Written as
+# Bool.pick(T, c, u => a, u => b)(x), the branches stay in the def (the
+# termination check reads self-calls under lambdas), and here they become
+# match c: case True{}: a; case False{}: b, with u = x: no closures.
+law Pick.expr:
+  for e: Expr
+  Expr
+
+@unsafe
+def Pick.exprs(es: List<&2, Expr>) -> List<&2, Expr>:
+  match es:
+    case Nil{}:
+      Nil{}
+    case e <> t:
+      Pick.expr(e) <> Pick.exprs(t)
+
+def Pick.lam.is(+e: Expr) -> Bool:
+  match e:
+    case ELam{p, b}:
+      True{}
+    case other:
+      False{}
+
+def Pick.name(+f: Expr) -> Bool:
+  match f:
+    case EVar{+n}:
+      Str.eq(n, "Bool.pick")
+    case other:
+      False{}
+
+def Pick.args(+as: List<&2, Expr>) -> Bool:
+  match as:
+    case ty <> c <> a <> b <> Nil{}:
+      Bool.and(Pick.lam.is(a), Pick.lam.is(b))
+    case other:
+      False{}
+
+def Pick.lam(l: Expr, x: Expr) -> Expr:
+  match l:
+    case ELam{p, b}:
+      ELet{p, x, b}
+    case other:
+      ECall{other, [x]}
+
+def Pick.first(xs: List<&2, Expr>) -> Expr:
+  match xs:
+    case x <> t:
+      x
+    case Nil{}:
+      EErr{"pick"}
+
+def Pick.build(as: List<&2, Expr>, +x: Expr) -> Expr:
+  match as:
+    case ty <> c <> a <> b <> Nil{}:
+      EMatch{[c], [ECase{[PCtor{"True", Nil{}}], Pick.lam(a, x)}, ECase{[PCtor{"False", Nil{}}], Pick.lam(b, x)}]}
+    case other:
+      ECall{EVar{"Bool.pick"}, other}
+
+def Pick.one(+xs: List<&2, Expr>) -> Bool:
+  Nat.is_eq(List.length(&2, Expr, xs), 1n)
+
+def Pick.hit(hit: Bool, +g: Expr, +as: List<&2, Expr>, +xs: List<&2, Expr>) -> Expr:
+  match hit:
+    case True{}:
+      Pick.build(as, Pick.first(xs))
+    case False{}:
+      ECall{ECall{g, as}, xs}
+
+def Pick.call(f: Expr, +xs: List<&2, Expr>) -> Expr:
+  match f:
+    case ECall{+g, +as}:
+      Pick.hit(Bool.and(Pick.name(g), Bool.and(Pick.args(as), Pick.one(xs))), g, as, xs)
+    case other:
+      ECall{other, xs}
+
+def Pick.expr(e):
+  match e:
+    case ECall{f, args}:
+      Pick.call(Pick.expr(f), Pick.exprs(args))
+    case ECtor{k, args}:
+      ECtor{k, Pick.exprs(args)}
+    case EOp{op, a, b}:
+      EOp{op, Pick.expr(a), Pick.expr(b)}
+    case ELam{p, b}:
+      ELam{p, Pick.expr(b)}
+    case ELet{p, v, b}:
+      ELet{p, Pick.expr(v), Pick.expr(b)}
+    case EMatch{scrs, cases}:
+      EMatch{Pick.exprs(scrs), Pick.exprs(cases)}
+    case ECase{ps, b}:
+      ECase{ps, Pick.expr(b)}
+    case ESucc{k, x}:
+      ESucc{k, Pick.expr(x)}
+    case EAnn{x, ty}:
+      EAnn{Pick.expr(x), ty}
+    case other:
+      other
+
+def Pick.decl(d: Decl) -> Decl:
+  match d:
+    case DDef{name, ps, body, ret}:
+      DDef{name, ps, Pick.expr(body), ret}
+    case other:
+      other
+
+def Pick.decls(ds: List<&2, Decl>) -> List<&2, Decl>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> t:
+      Pick.decl(d) <> Pick.decls(t)
+
 # Implicit parallelism (see Main.auto_par). Bend is pure, so the operands of
 # one node (an operator's, a call's arguments, a constructor's fields) may
 # run in any order; where two or more of them call back into the def (a
@@ -6615,7 +6735,7 @@ def Dps.build(+g: G, +ds: List<&2, Decl>, free: Bool) -> G:
     DGrp{Bool.pick(String, free, "1", "0"), 0}))
 
 def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool) -> COut:
-  +ds = Par.auto(par, ds0)
+  +ds = Par.auto(par, Pick.decls(ds0))
   +g = Dps.build(G.new(ds), ds, free)
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
@@ -8038,8 +8158,11 @@ def J.program.fin(r: String & St) -> COut:
   St{n, protos, code, refs, errs, memo, effs} = st
   COut{RtJs.src(), Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}), Doc.flat(Doc.list([code, DStr{"\n" ++ entry}])), errs}
 
-def J.program(+ds: List<&2, Decl>) -> COut:
+def J.program.go(+ds: List<&2, Decl>) -> COut:
   J.program.fin(J.program.m(JG{G.new(ds), J.info(ds, MTip{})})(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
+
+def J.program(ds: List<&2, Decl>) -> COut:
+  J.program.go(Pick.decls(ds))
 
 # Lambda-matches
 # ==============

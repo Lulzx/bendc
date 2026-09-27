@@ -3,6 +3,12 @@ import Base
 # Utilities
 # =========
 
+# Fuel for recursion that is not structural: a parser's over tokens, or
+# one def that merges a cycle of defs and switches between them. More than
+# any input needs; a def that runs out fails loudly.
+def Fuel.max() -> Nat:
+  U32.to_nat(4000000000)
+
 def Str.eq(+a: String, +b: String) -> Bool:
   String.eq(a, b)
 
