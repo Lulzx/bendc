@@ -8751,8 +8751,7 @@ def LM.ctor.top(+ds: List<&2, Decl>, e: Expr) -> Expr:
     case other:
       other
 
-# Whether the body b never reads x (Use.n is filled later).
-@unsafe
+# Whether the body b never reads x.
 def LM.dead(+x: String, +b: Expr) -> Bool:
   U32.is_zero(Use.n(x, b))
 
