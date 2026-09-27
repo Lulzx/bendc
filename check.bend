@@ -527,14 +527,6 @@ def list.build(xs: List<&2, Tm>, +s: Sp) -> Tm:
     case x <> t:
       Ctr{"Con", [x, list.build(t, s)], s}
 
-@unsafe
-def P.brack.list(+beg: U32, xs: List<&2, Tm>) -> P(Tm):
-  do P<Tm>:
-    comma : Bool <- P.take(",")
-    ys : List<&2, Tm> <- P.args("]")
-    +spn : Sp <- P.span(beg)
-    return list.build(List.append(&2, Tm, xs, ys), spn)
-
 def P.brack.log2.go(+s: Sp, n: Nat, m: Maybe<&2, Nat>) -> P(Tm):
   match m:
     case None{}:
@@ -920,20 +912,6 @@ def P.base.var(+k: String, +beg: U32) -> P(Tm):
   do P<Tm>:
     s : Sp <- P.span(beg)
     P.var(k, s)
-
-@unsafe
-def P.base.ctor(+k: String, +beg: U32) -> P(Tm):
-  do P<Tm>:
-    P.bump()
-    xs : List<&2, Tm> <- P.args("}")
-    q : String <- P.reso(k)
-    s : Sp <- P.span(beg)
-    return Ctr{q, xs, s}
-
-def P.base.name(+k: String, +beg: U32) -> P(Tm):
-  do P<Tm>:
-    brace : Bool <- P.at("{")
-    P.if(Tm, brace, P.base.ctor(k, beg), P.base.var(k, beg))
 
 law P.do:
   for +beg: U32
@@ -1422,11 +1400,6 @@ type Body is Data:
   BReply{x: Tm, s: Sp}
   Row{ps: List<&2, Pt>, f: Body}
 
-law P.flatten:
-  for b: Body
-  for vars: List<&2, Pt>
-  P(Tm)
-
 law P.body:
   for +col: U32
   P(Body)
@@ -1502,20 +1475,6 @@ law P.do_stmt:
   for +col: U32
   P(Tm)
 
-@unsafe
-def P.do(beg):
-  do P<Tm>:
-    +m : String <- P.name()
-    P.eat("<")
-    args : List<&2, Tm> <- P.args(">")
-    +q : String <- P.reso(m)
-    s : Sp <- P.span(beg)
-    +ts : List<&2, Tm> <- P.fill(q, args, s)
-    P.eat(":")
-    P.skip()
-    +col : U32 <- P.col()
-    P.do_stmt(m, ts, col)
-
 # Whether the word w comes next (not as the start of a longer name).
 def P.at_word(+w: String) -> P(Bool):
   do P<Bool>:
@@ -1530,26 +1489,8 @@ law P.row:
   for +rcol: U32
   P(List<&2, Body>)
 
-@unsafe
-def P.rows(+col: U32, +ccol: U32, +n: Nat) -> P(List<&2, Body>):
-  do P<List<&2, Body>>:
-    cw : Bool <- P.at_word("case")
-    +c : U32 <- P.col()
-    P.if(List<&2, Body>, Bool.and(U32.is_gt(ccol, col), Bool.and(cw, U32.is_ge(c, ccol))), P.row(col, ccol, n, c),
-      P.pure(List<&2, Body>, Nil{}))
-
 law P.terms:
   P(List<&2, Tm>)
-
-@unsafe
-def P.body.match(+col: U32, +beg: U32) -> P(Body):
-  do P<Body>:
-    +es : List<&2, Tm> <- P.terms()
-    P.skip()
-    +ccol : U32 <- P.col()
-    rows : List<&2, Body> <- P.rows(col, ccol, List.length(&2, Tm, es))
-    s : Sp <- P.span(beg)
-    return BMatch{es, rows, s}
 
 def P.body.erased_name(+beg: U32) -> P(Tm):
   do P<Tm>:
@@ -2229,6 +2170,527 @@ def P.ns.go(n: Nat, sel: NsK) -> P(NsK.ty(sel)):
 def P.ns(tm: Tm, ty: Tm) -> P(Tm):
   P.ns.go(Fuel.max(), NkNs{tm, ty})
 
+def List.init_tm(xs: List<&2, Tm>) -> List<&2, Tm>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case h <> Nil{}:
+      Nil{}
+    case h <> t:
+      h <> List.init_tm(t)
+
+def List.last_tm(xs: List<&2, Tm>) -> List<&2, Tm>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case h <> Nil{}:
+      [h]
+    case h <> t:
+      List.last_tm(t)
+
+def do.call(+book: Book, +ps: PS, +m: String, +op: String, +ts: List<&2, Tm>, xs: List<&2, Tm>,
+  ys: List<&2, Tm>, +s: Sp
+) -> Tm:
+  apps(Ref{PS.reso(ps, m ++ op), s, False{}}, List.append(&2, Tm, List.append(&2, Tm, List.append(&2, Tm,
+    List.init_tm(ts), xs), List.last_tm(ts)), ys), s)
+
+def P.docall(+m: String, +op: String, +ts: List<&2, Tm>, xs: List<&2, Tm>, ys: List<&2, Tm>, +s: Sp) ->
+  P(Tm):
+  +ps => Done{(do.call(PS.book(ps), ps, m, op, ts, xs, ys, s), ps)}
+
+def Tld.is_adt(t: Maybe<&2, Tld>) -> Bool:
+  match t:
+    case Some{TADT{n, g, ty, cs, tbase}}:
+      True{}
+    case other:
+      False{}
+
+# The last statement of a block: its value, annotated with the block's type.
+def P.do_last(+m: String, +ts: List<&2, Tm>, +t: Tm) -> P(Tm):
+  do P<Tm>:
+    +k : String <- P.reso(m)
+    b : Book <- P.book()
+    c : Tm <- P.docall(m, "", ts, Nil{}, Nil{}, Tm.span(t))
+    return Ann{t, Bool.pick(Tm, Tld.is_adt(book_tld(b, k)), ADT{k, ts, Tm.span(t), Nil{}}, c), Tm.span(t)}
+
+def Pt.k(p: Pt) -> String:
+  match p:
+    case PVar{k, i, q, s}:
+      k
+    case PCtr{k, xs, s}:
+      k
+
+def Pt.i(p: Pt) -> U32:
+  match p:
+    case PVar{k, i, q, s}:
+      i
+    case PCtr{k, xs, s}:
+      0
+
+def Pt.q(p: Pt) -> Q:
+  match p:
+    case PVar{k, i, q, s}:
+      q
+    case PCtr{k, xs, s}:
+      QLone{}
+
+def do.let(+x: Pt, v: Tm, f: Tm, s: Sp) -> Tm:
+  Let{[Pt.k(x)], [Pt.i(x)], [v], CLet{Nil{}, [Pt.i(x)], f}, s, [Pt.q(x)]}
+
+def do.lam(+x: Pt, f: Tm, s: Sp) -> Tm:
+  Lam{Pt.k(x), Pt.i(x), CSyn{Nil{}, Pt.i(x), f}, s, Pt.q(x)}
+
+def Pt.s(p: Pt) -> Sp:
+  match p:
+    case PVar{k, i, q, s}:
+      s
+    case PCtr{k, xs, s}:
+      s
+
+# Peels the lambdas flatten put around the let's names.
+def P.flatten.strip(ws: List<&2, Pt>, g: Tm) -> P(Tm):
+  match ws g:
+    case Nil{} t:
+      P.pure(Tm, t)
+    case w <> wt Lam{k, i, f, s, q}:
+      P.flatten.strip(wt, syn_body(f))
+    case w <> wt t:
+      P.throw(Tm, err0("a parameter or field scrutinee (a match cannot scrutinize a local binder: give it its own def)",
+        MNone{}, Pt.s(w)))
+
+def flatten.lams(vars: List<&2, Pt>, x: Tm) -> Tm:
+  match vars:
+    case Nil{}:
+      x
+    case PVar{+k, +i, q, s} <> t:
+      Lam{k, i, CSyn{Nil{}, i, flatten.lams(t, x)}, s, q}
+    case p <> t:
+      flatten.lams(t, x)
+
+def Pt.ks(ps: List<&2, Pt>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      Pt.k(p) <> Pt.ks(t)
+
+def Pt.is(ps: List<&2, Pt>) -> List<&2, U32>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      Pt.i(p) <> Pt.is(t)
+
+def quant_dem(q: Q, qt: Q) -> Q:
+  match q:
+    case QNone{}:
+      QNone{}
+    case other:
+      qt
+
+def Pt.qs(ps: List<&2, Pt>, +q: Q) -> List<&2, Q>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      quant_dem(q, Pt.q(p)) <> Pt.qs(t, q)
+
+def Sp.or(a: Sp, b: Sp) -> Sp:
+  match a:
+    case NoSp{}:
+      b
+    case other:
+      other
+
+def P.mf.bad(e: Tm, +s: Sp) -> P(Tm):
+  match e:
+    case Var{k, i, es}:
+      P.throw(Tm, err0("a match on a parameter or field (this name is a def or a consumed binder: give the value its own def)",
+        MNone{}, es))
+    case VRf{k, i, es, r}:
+      P.throw(Tm, err0("a match on a parameter or field (this name is a def or a consumed binder: give the value its own def)",
+        MNone{}, es))
+    case Ctr{k, xs, es}:
+      P.throw(Tm, err0("an undestructed scrutinee (this value is already a constructor: bind its fields directly; if an outer match destructed it, fold the pattern into the outer case)",
+        MNone{}, s))
+    case Lit{v, es}:
+      P.throw(Tm, err0("an undestructed scrutinee (this value is already a constructor: bind its fields directly; if an outer match destructed it, fold the pattern into the outer case)",
+        MNone{}, s))
+    case other:
+      P.throw(Tm, err0("a parameter or field scrutinee (a match cannot scrutinize a computed value: give it its own def)",
+        MNone{}, Sp.or(Tm.span(other), s)))
+
+def Tm.var_i(t: Tm) -> Maybe<&2, U32>:
+  match t:
+    case Var{k, i, s}:
+      Some{i}
+    case other:
+      None{}
+
+def Tm.strip_subs(t: Tm) -> Tm:
+  match t:
+    case Sub{i, p, f, s}:
+      Tm.strip_subs(f)
+    case other:
+      other
+
+def vars.find(vars: List<&2, Pt>, +i: U32) -> Maybe<&2, Pt>:
+  match vars:
+    case Nil{}:
+      None{}
+    case PVar{+k, +j, +q, +s} <> t:
+      Bool.pick(Unit -> Maybe<&2, Pt>, U32.is_eq(i, j), u => Some{PVar{k, j, q, s}},
+        u => vars.find(t, i))(Unit{})
+    case p <> t:
+      vars.find(t, i)
+
+def Tm.ctr_cons(x: Tm, t: Tm) -> Tm:
+  match t:
+    case Ctr{k, xs, s}:
+      Ctr{k, x <> xs, s}
+    case other:
+      other
+
+# A pattern as a term; a constructor's fields one at a time, each step
+# on the same constructor with fewer fields.
+def patt_term(p: Pt, +s: Sp) -> Tm:
+  match p:
+    case PVar{k, i, q, ps}:
+      Var{k, i, Sp.or(s, ps)}
+    case PCtr{k, xs, ps}:
+      match xs:
+        case Nil{}:
+          Ctr{k, Nil{}, Sp.or(s, ps)}
+        case h <> t:
+          Tm.ctr_cons(patt_term(h, s), patt_term(PCtr{k, t, ps}, s))
+
+def patt_terms(ps: List<&2, Pt>, +s: Sp) -> List<&2, Tm>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      patt_term(p, s) <> patt_terms(t, s)
+
+# The Sub-substitution of a body: a variable scrutinee i becomes pattern v.
+def body_sub.scrut(+i: U32, +v: Pt, e: Tm) -> Tm:
+  match e:
+    case Var{+k, +j, +s}:
+      Bool.pick(Tm, U32.is_eq(i, j), patt_term(v, s), Var{k, j, s})
+    case other:
+      Sub{i, v, other, NoSp{}}
+
+def body_sub.scruts(+i: U32, +v: Pt, es: List<&2, Tm>) -> List<&2, Tm>:
+  match es:
+    case Nil{}:
+      Nil{}
+    case e <> t:
+      body_sub.scrut(i, v, e) <> body_sub.scruts(i, v, t)
+
+def Body.row_cons(r: Body, b: Body) -> Body:
+  match b:
+    case BMatch{es, rows, s}:
+      BMatch{es, r <> rows, s}
+    case other:
+      other
+
+# A match's rows one at a time, each step on the same match with fewer rows.
+def body_sub(b: Body, +i: U32, +v: Pt) -> Body:
+  match b:
+    case BMatch{es, rows, s}:
+      match rows:
+        case Nil{}:
+          BMatch{body_sub.scruts(i, v, es), Nil{}, s}
+        case r <> t:
+          Body.row_cons(body_sub(r, i, v), body_sub(BMatch{es, t, s}, i, v))
+    case BLocal{ks, q, vs, f}:
+      BLocal{ks, q, body_sub.scruts(i, v, vs), body_sub(f, i, v)}
+    case BReply{x, s}:
+      BReply{Sub{i, v, x, NoSp{}}, s}
+    case Row{ps, f}:
+      Row{ps, body_sub(f, i, v)}
+
+@unsafe
+def P.mf.varrows(rows: List<&2, Body>, +w: Pt) -> P(List<&2, Body>):
+  match rows:
+    case Nil{}:
+      P.pure(List<&2, Body>, Nil{})
+    case Row{PVar{k, i, q, ps} <> rest, f} <> t:
+      do P<List<&2, Body>>:
+        rs : List<&2, Body> <- P.mf.varrows(t, w)
+        return Row{rest, body_sub(f, i, w)} <> rs
+    case Row{p <> rest, f} <> t:
+      P.throw(List<&2, Body>, err0("a variable pattern (this column has no constructor row)", MNone{}, Pt.s(p)))
+    case r <> t:
+      P.mf.varrows(t, w)
+
+def quant_join(a: Q, b: Q) -> Q:
+  match a b:
+    case QMany{} y:
+      QMany{}
+    case x QMany{}:
+      QMany{}
+    case QNone{} y:
+      y
+    case x y:
+      x
+
+#
+# A body becomes a term: lets become Let, and a match on the parameters
+# becomes a tree of Mat eliminators (the official match_flatten).
+def patt_mark.go(rows: List<&2, Body>, +q: Q) -> Q:
+  match rows:
+    case Nil{}:
+      q
+    case Row{PVar{k, i, pq, s} <> rest, f} <> t:
+      patt_mark.go(t, quant_join(q, pq))
+    case r <> t:
+      patt_mark.go(t, q)
+
+def patt_mark(+q: Q, rows: List<&2, Body>) -> Q:
+  patt_mark.go(rows, q)
+
+def Pt.var_q(p: Pt) -> Q:
+  match p:
+    case PVar{k, i, q, s}:
+      q
+    case other:
+      QLone{}
+
+def Pt.with_q(p: Pt, q: Q) -> Pt:
+  match p:
+    case PVar{k, i, pq, s}:
+      PVar{k, i, q, s}
+    case other:
+      other
+
+def Pt.same(+a: Pt, +b: Pt) -> Bool:
+  U32.is_eq(Pt.i(a), Pt.i(b))
+
+def vars.replace(vars: List<&2, Pt>, +w: Pt) -> List<&2, Pt>:
+  match vars:
+    case Nil{}:
+      Nil{}
+    case +p <> t:
+      Bool.pick(Pt, Pt.same(p, w), w, p) <> vars.replace(t, w)
+
+# Fresh variables for the fields of the constructor column.
+def P.mf.fields(ps: List<&2, Pt>, +xq: Q) -> P(List<&2, Pt>):
+  match ps:
+    case Nil{}:
+      P.pure(List<&2, Pt>, Nil{})
+    case PVar{k, i, q, s} <> t:
+      do P<List<&2, Pt>>:
+        rest : List<&2, Pt> <- P.mf.fields(t, xq)
+        return PVar{k, i, quant_join(q, xq), s} <> rest
+    case p <> t:
+      do P<List<&2, Pt>>:
+        +i : U32 <- P.fresh_id()
+        rest : List<&2, Pt> <- P.mf.fields(t, xq)
+        return PVar{"_" ++ U32.show(i), i, xq, Pt.s(p)} <> rest
+
+@unsafe
+def mf.rows.ctr(
+  k: String, pxs: List<&2, Pt>, rest: List<&2, Pt>, f: Body, +ck: String, +x: Pt, +kx: Pt, +xs: List<&2, Pt>,
+  hit: Bool, tail: List<&2, Body>
+) -> List<&2, Body>:
+  match hit:
+    case True{}:
+      Row{List.append(&2, Pt, pxs, rest), body_sub(f, Pt.i(x), kx)} <> tail
+    case False{}:
+      tail
+
+# The rows that fit constructor ck, specialized to its fields.
+@unsafe
+def mf.rows(rows: List<&2, Body>, +ck: String, +x: Pt, +kx: Pt, +xs: List<&2, Pt>) -> List<&2, Body>:
+  match rows:
+    case Nil{}:
+      Nil{}
+    case Row{PCtr{+k, pxs, s} <> rest, f} <> t:
+      mf.rows.ctr(k, pxs, rest, f, ck, x, kx, xs, String.eq(k, ck), mf.rows(t, ck, x, kx, xs))
+    case Row{PVar{k, +i, q, s} <> rest, f} <> t:
+      Row{List.append(&2, Pt, xs, rest), body_sub(body_sub(f, i, x), Pt.i(x), kx)} <> mf.rows(t, ck, x, kx, xs)
+    case r <> t:
+      mf.rows(t, ck, x, kx, xs)
+
+def mf.others.if(r: Body, rest: List<&2, Body>, drop: Bool) -> List<&2, Body>:
+  match drop:
+    case True{}:
+      rest
+    case False{}:
+      r <> rest
+
+def mf.others(rows: List<&2, Body>, +ck: String) -> List<&2, Body>:
+  match rows:
+    case Nil{}:
+      Nil{}
+    case Row{PCtr{+k, pxs, s} <> rest, f} <> t:
+      mf.others.if(Row{PCtr{k, pxs, s} <> rest, f}, mf.others(t, ck), String.eq(k, ck))
+    case r <> t:
+      r <> mf.others(t, ck)
+
+def rows.ctr(rows: List<&2, Body>) -> Maybe<&2, Pt>:
+  match rows:
+    case Nil{}:
+      None{}
+    case Row{PCtr{k, xs, s} <> t, f} <> rest:
+      Some{PCtr{k, xs, s}}
+    case r <> rest:
+      rows.ctr(rest)
+
+# A body as a term (the official match_flatten); the selector says which step runs.
+type FlatK is Data:
+  FkFlattenLet{ws: List<&2, Pt>, q: Q, vs: List<&2, Tm>, f: Body, vars: List<&2, Pt>}
+  FkMfVars{e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, s: Sp, vars: List<&2, Pt>}
+  FkMatchFlatten{es: List<&2, Tm>, rows: List<&2, Body>, s: Sp, vars: List<&2, Pt>}
+  FkFlattenLocal{ks: List<&2, Pt>, q: Q, vs: List<&2, Tm>, f: Body, vars: List<&2, Pt>}
+  FkFlatten{b: Body, vars: List<&2, Pt>}
+  FkMfSkip{e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, s: Sp, x: Pt, xt: List<&2, Pt>}
+  FkMfVarcol{e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, s: Sp, x: Pt, xt: List<&2, Pt>, v: Pt}
+  FkMfCtr{e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, s: Sp, x: Pt, xt: List<&2, Pt>, c: Maybe<&2, Pt>}
+  FkMfColVar{e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, s: Sp, x: Pt, xt: List<&2, Pt>, w: Pt, c: Maybe<&2, Pt>, norows: Bool}
+  FkMfCol{e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, s: Sp, x: Pt, xt: List<&2, Pt>, v: Maybe<&2, Pt>}
+
+def P.flatten.go(n: Nat, sel: FlatK) -> P(Tm):
+  match n:
+    case 0n:
+      P.fuel(Tm)
+    case 1n+ +fu:
+      match sel:
+        case FkFlattenLet{+ws, +q, vs, f, vars}:
+          do P<Tm>:
+            g : Tm <- P.flatten.go(fu, FkFlatten{f, ws})
+            body : Tm <- P.flatten.strip(ws, g)
+            P.pure(Tm, flatten.lams(vars, Let{Pt.ks(ws), Pt.is(ws), vs, CLet{Nil{}, Pt.is(ws), body},
+              Pt.s(Lst.head(Pt, PVar{"_", 0, QLone{}, NoSp{}}, ws)), Pt.qs(ws, q)}))
+        case FkMfVars{+e, et, rows, +s, vars}:
+          match vars:
+            case Nil{}:
+              P.mf.bad(Tm.strip_subs(e), s)
+            case +x <> +xt:
+              P.flatten.go(fu, FkMfCol{e, et, rows, s, x, xt, vars.find(x <> xt, Maybe.default(&2, U32, Tm.var_i(e), 4294967295))})
+        case FkMatchFlatten{es, rows, +s, vars}:
+          match es rows:
+            case Nil{} Row{ps, f} <> t:
+              P.flatten.go(fu, FkFlatten{f, vars})
+            case Nil{} other <> t:
+              P.flatten.go(fu, FkFlatten{other, vars})
+            case Nil{} Nil{}:
+              P.throw(Tm, err0("a case (this match has no row to return)", MNone{}, s))
+            case e <> et rs:
+              P.flatten.go(fu, FkMfVars{e, et, rs, s, vars})
+        case FkFlattenLocal{ks, q, +vs, f, vars}:
+          match ks:
+            case PCtr{k, xs, s} <> Nil{}:
+              P.flatten.go(fu, FkMatchFlatten{vs, [Row{[PCtr{k, xs, s}], f}], Tm.span(Lst.head(Tm, Efq{NoSp{}}, vs)), vars})
+            case other:
+              P.flatten.go(fu, FkFlattenLet{other, q, vs, f, vars})
+        case FkFlatten{b, vars}:
+          match b:
+            case BReply{x, s}:
+              P.pure(Tm, flatten.lams(vars, x))
+            case BLocal{ks, q, vs, f}:
+              P.flatten.go(fu, FkFlattenLocal{ks, q, vs, f, vars})
+            case BMatch{es, rows, s}:
+              P.flatten.go(fu, FkMatchFlatten{es, rows, s, vars})
+            case Row{ps, f}:
+              P.flatten.go(fu, FkFlatten{f, vars})
+        # The scrutinee is not the next parameter: that parameter becomes a lambda.
+        case FkMfSkip{+e, et, rows, +s, x, xt}:
+          do P<Tm>:
+            t : Tm <- P.flatten.go(fu, FkMatchFlatten{e <> et, rows, s, xt})
+            return flatten.lams([x], t)
+        # A column of variable patterns: each row's variable becomes the scrutinee.
+        case FkMfVarcol{+e, et, +rows, +s, +x, xt, +v}:
+          +w = Pt.with_q(v, patt_mark(Pt.var_q(v), rows))
+          do P<Tm>:
+            rs : List<&2, Body> <- P.mf.varrows(rows, w)
+            P.flatten.go(fu, FkMatchFlatten{et, rs, s, vars.replace(x <> xt, w)})
+        case FkMfCtr{+e, +et, +rows, +s, +x, +xt, c}:
+          match c:
+            case None{}:
+              P.pure(Tm, Efq{s})
+            case Some{PCtr{+ck, cxs, +cs}}:
+              +xq = patt_mark(Pt.var_q(x), rows)
+              do P<Tm>:
+                +xs : List<&2, Pt> <- P.mf.fields(cxs, xq)
+                +kx : Pt <- P.pure(Pt, PCtr{ck, xs, Pt.s(x)})
+                ps : List<&2, Body> <- P.pure(List<&2, Body>, mf.rows(rows, ck, x, kx, xs))
+                pt : Tm <- P.flatten.go(fu, FkMatchFlatten{List.append(&2, Tm, patt_terms(xs, NoSp{}), et), ps, s,
+                  List.append(&2, Pt, xs, xt)})
+                dt : Tm <- P.flatten.go(fu, FkMatchFlatten{e <> et, mf.others(rows, ck), s, x <> xt})
+                return Mat{ck, pt, dt, cs}
+            case Some{other}:
+              P.pure(Tm, Efq{s})
+        case FkMfColVar{+e, +et, +rows, +s, +x, +xt, +w, c, norows}:
+          match c norows:
+            case None{} False{}:
+              P.flatten.go(fu, FkMfVarcol{e, et, rows, s, x, xt, w})
+            case m b:
+              P.if(Tm, Pt.same(w, x), P.flatten.go(fu, FkMfCtr{e, et, rows, s, x, xt, m}), P.flatten.go(fu, FkMfSkip{e, et, rows, s, x, xt}))
+        case FkMfCol{+e, et, +rows, +s, +x, xt, v}:
+          match v:
+            case Some{+w}:
+              P.flatten.go(fu, FkMfColVar{e, et, rows, s, x, xt, w, rows.ctr(rows), Nat.is_eq(List.length(&2, Body, rows), 0n)})
+            case None{}:
+              P.flatten.go(fu, FkMfSkip{e, et, rows, s, x, xt})
+
+def P.flatten(b: Body, vars: List<&2, Pt>) -> P(Tm):
+  P.flatten.go(Fuel.max(), FkFlatten{b, vars})
+
+@unsafe
+def P.brack.list(+beg: U32, xs: List<&2, Tm>) -> P(Tm):
+  do P<Tm>:
+    comma : Bool <- P.take(",")
+    ys : List<&2, Tm> <- P.args("]")
+    +spn : Sp <- P.span(beg)
+    return list.build(List.append(&2, Tm, xs, ys), spn)
+
+@unsafe
+def P.base.ctor(+k: String, +beg: U32) -> P(Tm):
+  do P<Tm>:
+    P.bump()
+    xs : List<&2, Tm> <- P.args("}")
+    q : String <- P.reso(k)
+    s : Sp <- P.span(beg)
+    return Ctr{q, xs, s}
+
+def P.base.name(+k: String, +beg: U32) -> P(Tm):
+  do P<Tm>:
+    brace : Bool <- P.at("{")
+    P.if(Tm, brace, P.base.ctor(k, beg), P.base.var(k, beg))
+
+@unsafe
+def P.do(beg):
+  do P<Tm>:
+    +m : String <- P.name()
+    P.eat("<")
+    args : List<&2, Tm> <- P.args(">")
+    +q : String <- P.reso(m)
+    s : Sp <- P.span(beg)
+    +ts : List<&2, Tm> <- P.fill(q, args, s)
+    P.eat(":")
+    P.skip()
+    +col : U32 <- P.col()
+    P.do_stmt(m, ts, col)
+
+@unsafe
+def P.rows(+col: U32, +ccol: U32, +n: Nat) -> P(List<&2, Body>):
+  do P<List<&2, Body>>:
+    cw : Bool <- P.at_word("case")
+    +c : U32 <- P.col()
+    P.if(List<&2, Body>, Bool.and(U32.is_gt(ccol, col), Bool.and(cw, U32.is_ge(c, ccol))), P.row(col, ccol, n, c),
+      P.pure(List<&2, Body>, Nil{}))
+
+@unsafe
+def P.body.match(+col: U32, +beg: U32) -> P(Body):
+  do P<Body>:
+    +es : List<&2, Tm> <- P.terms()
+    P.skip()
+    +ccol : U32 <- P.col()
+    rows : List<&2, Body> <- P.rows(col, ccol, List.length(&2, Tm, es))
+    s : Sp <- P.span(beg)
+    return BMatch{es, rows, s}
+
 @unsafe
 def P.arms(+beg: U32) -> P(Tm):
   do P<Tm>:
@@ -2897,81 +3359,11 @@ def P.args(close):
     done : Bool <- P.take(close)
     P.if(List<&2, Tm>, done, P.pure(List<&2, Tm>, Nil{}), P.args.one(close))
 
-def List.init_tm(xs: List<&2, Tm>) -> List<&2, Tm>:
-  match xs:
-    case Nil{}:
-      Nil{}
-    case h <> Nil{}:
-      Nil{}
-    case h <> t:
-      h <> List.init_tm(t)
-
-def List.last_tm(xs: List<&2, Tm>) -> List<&2, Tm>:
-  match xs:
-    case Nil{}:
-      Nil{}
-    case h <> Nil{}:
-      [h]
-    case h <> t:
-      List.last_tm(t)
-
-def do.call(+book: Book, +ps: PS, +m: String, +op: String, +ts: List<&2, Tm>, xs: List<&2, Tm>,
-  ys: List<&2, Tm>, +s: Sp
-) -> Tm:
-  apps(Ref{PS.reso(ps, m ++ op), s, False{}}, List.append(&2, Tm, List.append(&2, Tm, List.append(&2, Tm,
-    List.init_tm(ts), xs), List.last_tm(ts)), ys), s)
-
-def P.docall(+m: String, +op: String, +ts: List<&2, Tm>, xs: List<&2, Tm>, ys: List<&2, Tm>, +s: Sp) ->
-  P(Tm):
-  +ps => Done{(do.call(PS.book(ps), ps, m, op, ts, xs, ys, s), ps)}
-
 def P.do_ret(+m: String, +ts: List<&2, Tm>, +beg: U32) -> P(Tm):
   do P<Tm>:
     e : Tm <- P.term0()
     s : Sp <- P.span(beg)
     P.docall(m, ".pure", ts, Nil{}, [e], s)
-
-def Tld.is_adt(t: Maybe<&2, Tld>) -> Bool:
-  match t:
-    case Some{TADT{n, g, ty, cs, tbase}}:
-      True{}
-    case other:
-      False{}
-
-# The last statement of a block: its value, annotated with the block's type.
-def P.do_last(+m: String, +ts: List<&2, Tm>, +t: Tm) -> P(Tm):
-  do P<Tm>:
-    +k : String <- P.reso(m)
-    b : Book <- P.book()
-    c : Tm <- P.docall(m, "", ts, Nil{}, Nil{}, Tm.span(t))
-    return Ann{t, Bool.pick(Tm, Tld.is_adt(book_tld(b, k)), ADT{k, ts, Tm.span(t), Nil{}}, c), Tm.span(t)}
-
-def Pt.k(p: Pt) -> String:
-  match p:
-    case PVar{k, i, q, s}:
-      k
-    case PCtr{k, xs, s}:
-      k
-
-def Pt.i(p: Pt) -> U32:
-  match p:
-    case PVar{k, i, q, s}:
-      i
-    case PCtr{k, xs, s}:
-      0
-
-def Pt.q(p: Pt) -> Q:
-  match p:
-    case PVar{k, i, q, s}:
-      q
-    case PCtr{k, xs, s}:
-      QLone{}
-
-def do.let(+x: Pt, v: Tm, f: Tm, s: Sp) -> Tm:
-  Let{[Pt.k(x)], [Pt.i(x)], [v], CLet{Nil{}, [Pt.i(x)], f}, s, [Pt.q(x)]}
-
-def do.lam(+x: Pt, f: Tm, s: Sp) -> Tm:
-  Lam{Pt.k(x), Pt.i(x), CSyn{Nil{}, Pt.i(x), f}, s, Pt.q(x)}
 
 @unsafe
 def P.do_bind(
@@ -3071,410 +3463,6 @@ def P.terms():
     P.skip()
     colon : Bool <- P.take(":")
     P.if(List<&2, Tm>, colon, P.pure(List<&2, Tm>, [x]), P.terms.more(x))
-
-def Pt.s(p: Pt) -> Sp:
-  match p:
-    case PVar{k, i, q, s}:
-      s
-    case PCtr{k, xs, s}:
-      s
-
-# Peels the lambdas flatten put around the let's names.
-def P.flatten.strip(ws: List<&2, Pt>, g: Tm) -> P(Tm):
-  match ws g:
-    case Nil{} t:
-      P.pure(Tm, t)
-    case w <> wt Lam{k, i, f, s, q}:
-      P.flatten.strip(wt, syn_body(f))
-    case w <> wt t:
-      P.throw(Tm, err0("a parameter or field scrutinee (a match cannot scrutinize a local binder: give it its own def)",
-        MNone{}, Pt.s(w)))
-
-def flatten.lams(vars: List<&2, Pt>, x: Tm) -> Tm:
-  match vars:
-    case Nil{}:
-      x
-    case PVar{+k, +i, q, s} <> t:
-      Lam{k, i, CSyn{Nil{}, i, flatten.lams(t, x)}, s, q}
-    case p <> t:
-      flatten.lams(t, x)
-
-def Pt.ks(ps: List<&2, Pt>) -> List<&2, String>:
-  match ps:
-    case Nil{}:
-      Nil{}
-    case p <> t:
-      Pt.k(p) <> Pt.ks(t)
-
-def Pt.is(ps: List<&2, Pt>) -> List<&2, U32>:
-  match ps:
-    case Nil{}:
-      Nil{}
-    case p <> t:
-      Pt.i(p) <> Pt.is(t)
-
-def quant_dem(q: Q, qt: Q) -> Q:
-  match q:
-    case QNone{}:
-      QNone{}
-    case other:
-      qt
-
-def Pt.qs(ps: List<&2, Pt>, +q: Q) -> List<&2, Q>:
-  match ps:
-    case Nil{}:
-      Nil{}
-    case p <> t:
-      quant_dem(q, Pt.q(p)) <> Pt.qs(t, q)
-
-@unsafe
-def P.flatten.let(+ws: List<&2, Pt>, +q: Q, vs: List<&2, Tm>, f: Body, vars: List<&2, Pt>) -> P(Tm):
-  do P<Tm>:
-    g : Tm <- P.flatten(f, ws)
-    body : Tm <- P.flatten.strip(ws, g)
-    P.pure(Tm, flatten.lams(vars, Let{Pt.ks(ws), Pt.is(ws), vs, CLet{Nil{}, Pt.is(ws), body},
-      Pt.s(Lst.head(Pt, PVar{"_", 0, QLone{}, NoSp{}}, ws)), Pt.qs(ws, q)}))
-
-def Sp.or(a: Sp, b: Sp) -> Sp:
-  match a:
-    case NoSp{}:
-      b
-    case other:
-      other
-
-def P.mf.bad(e: Tm, +s: Sp) -> P(Tm):
-  match e:
-    case Var{k, i, es}:
-      P.throw(Tm, err0("a match on a parameter or field (this name is a def or a consumed binder: give the value its own def)",
-        MNone{}, es))
-    case VRf{k, i, es, r}:
-      P.throw(Tm, err0("a match on a parameter or field (this name is a def or a consumed binder: give the value its own def)",
-        MNone{}, es))
-    case Ctr{k, xs, es}:
-      P.throw(Tm, err0("an undestructed scrutinee (this value is already a constructor: bind its fields directly; if an outer match destructed it, fold the pattern into the outer case)",
-        MNone{}, s))
-    case Lit{v, es}:
-      P.throw(Tm, err0("an undestructed scrutinee (this value is already a constructor: bind its fields directly; if an outer match destructed it, fold the pattern into the outer case)",
-        MNone{}, s))
-    case other:
-      P.throw(Tm, err0("a parameter or field scrutinee (a match cannot scrutinize a computed value: give it its own def)",
-        MNone{}, Sp.or(Tm.span(other), s)))
-
-law P.mf.col:
-  for +e: Tm
-  for et: List<&2, Tm>
-  for +rows: List<&2, Body>
-  for +s: Sp
-  for +x: Pt
-  for xt: List<&2, Pt>
-  for v: Maybe<&2, Pt>
-  P(Tm)
-
-def Tm.var_i(t: Tm) -> Maybe<&2, U32>:
-  match t:
-    case Var{k, i, s}:
-      Some{i}
-    case other:
-      None{}
-
-def Tm.strip_subs(t: Tm) -> Tm:
-  match t:
-    case Sub{i, p, f, s}:
-      Tm.strip_subs(f)
-    case other:
-      other
-
-def vars.find(vars: List<&2, Pt>, +i: U32) -> Maybe<&2, Pt>:
-  match vars:
-    case Nil{}:
-      None{}
-    case PVar{+k, +j, +q, +s} <> t:
-      Bool.pick(Unit -> Maybe<&2, Pt>, U32.is_eq(i, j), u => Some{PVar{k, j, q, s}},
-        u => vars.find(t, i))(Unit{})
-    case p <> t:
-      vars.find(t, i)
-
-@unsafe
-def P.mf.vars(+e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, +s: Sp, vars: List<&2, Pt>) -> P(Tm):
-  match vars:
-    case Nil{}:
-      P.mf.bad(Tm.strip_subs(e), s)
-    case +x <> +xt:
-      P.mf.col(e, et, rows, s, x, xt, vars.find(x <> xt, Maybe.default(&2, U32, Tm.var_i(e), 4294967295)))
-
-@unsafe
-def P.match_flatten(es: List<&2, Tm>, rows: List<&2, Body>, +s: Sp, vars: List<&2, Pt>) -> P(Tm):
-  match es rows:
-    case Nil{} Row{ps, f} <> t:
-      P.flatten(f, vars)
-    case Nil{} other <> t:
-      P.flatten(other, vars)
-    case Nil{} Nil{}:
-      P.throw(Tm, err0("a case (this match has no row to return)", MNone{}, s))
-    case e <> et rs:
-      P.mf.vars(e, et, rs, s, vars)
-
-def P.flatten.local(ks: List<&2, Pt>, q: Q, +vs: List<&2, Tm>, f: Body, vars: List<&2, Pt>) -> P(Tm):
-  match ks:
-    case PCtr{k, xs, s} <> Nil{}:
-      P.match_flatten(vs, [Row{[PCtr{k, xs, s}], f}], Tm.span(Lst.head(Tm, Efq{NoSp{}}, vs)), vars)
-    case other:
-      P.flatten.let(other, q, vs, f, vars)
-
-def P.flatten(b, vars):
-  match b:
-    case BReply{x, s}:
-      P.pure(Tm, flatten.lams(vars, x))
-    case BLocal{ks, q, vs, f}:
-      P.flatten.local(ks, q, vs, f, vars)
-    case BMatch{es, rows, s}:
-      P.match_flatten(es, rows, s, vars)
-    case Row{ps, f}:
-      P.flatten(f, vars)
-
-# The scrutinee is not the next parameter: that parameter becomes a lambda.
-def P.mf.skip(+e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, +s: Sp, x: Pt, xt: List<&2, Pt>) -> P(Tm):
-  do P<Tm>:
-    t : Tm <- P.match_flatten(e <> et, rows, s, xt)
-    return flatten.lams([x], t)
-
-def Tm.ctr_cons(x: Tm, t: Tm) -> Tm:
-  match t:
-    case Ctr{k, xs, s}:
-      Ctr{k, x <> xs, s}
-    case other:
-      other
-
-# A pattern as a term; a constructor's fields one at a time, each step
-# on the same constructor with fewer fields.
-def patt_term(p: Pt, +s: Sp) -> Tm:
-  match p:
-    case PVar{k, i, q, ps}:
-      Var{k, i, Sp.or(s, ps)}
-    case PCtr{k, xs, ps}:
-      match xs:
-        case Nil{}:
-          Ctr{k, Nil{}, Sp.or(s, ps)}
-        case h <> t:
-          Tm.ctr_cons(patt_term(h, s), patt_term(PCtr{k, t, ps}, s))
-
-def patt_terms(ps: List<&2, Pt>, +s: Sp) -> List<&2, Tm>:
-  match ps:
-    case Nil{}:
-      Nil{}
-    case p <> t:
-      patt_term(p, s) <> patt_terms(t, s)
-
-# The Sub-substitution of a body: a variable scrutinee i becomes pattern v.
-def body_sub.scrut(+i: U32, +v: Pt, e: Tm) -> Tm:
-  match e:
-    case Var{+k, +j, +s}:
-      Bool.pick(Tm, U32.is_eq(i, j), patt_term(v, s), Var{k, j, s})
-    case other:
-      Sub{i, v, other, NoSp{}}
-
-def body_sub.scruts(+i: U32, +v: Pt, es: List<&2, Tm>) -> List<&2, Tm>:
-  match es:
-    case Nil{}:
-      Nil{}
-    case e <> t:
-      body_sub.scrut(i, v, e) <> body_sub.scruts(i, v, t)
-
-def Body.row_cons(r: Body, b: Body) -> Body:
-  match b:
-    case BMatch{es, rows, s}:
-      BMatch{es, r <> rows, s}
-    case other:
-      other
-
-# A match's rows one at a time, each step on the same match with fewer rows.
-def body_sub(b: Body, +i: U32, +v: Pt) -> Body:
-  match b:
-    case BMatch{es, rows, s}:
-      match rows:
-        case Nil{}:
-          BMatch{body_sub.scruts(i, v, es), Nil{}, s}
-        case r <> t:
-          Body.row_cons(body_sub(r, i, v), body_sub(BMatch{es, t, s}, i, v))
-    case BLocal{ks, q, vs, f}:
-      BLocal{ks, q, body_sub.scruts(i, v, vs), body_sub(f, i, v)}
-    case BReply{x, s}:
-      BReply{Sub{i, v, x, NoSp{}}, s}
-    case Row{ps, f}:
-      Row{ps, body_sub(f, i, v)}
-
-@unsafe
-def P.mf.varrows(rows: List<&2, Body>, +w: Pt) -> P(List<&2, Body>):
-  match rows:
-    case Nil{}:
-      P.pure(List<&2, Body>, Nil{})
-    case Row{PVar{k, i, q, ps} <> rest, f} <> t:
-      do P<List<&2, Body>>:
-        rs : List<&2, Body> <- P.mf.varrows(t, w)
-        return Row{rest, body_sub(f, i, w)} <> rs
-    case Row{p <> rest, f} <> t:
-      P.throw(List<&2, Body>, err0("a variable pattern (this column has no constructor row)", MNone{}, Pt.s(p)))
-    case r <> t:
-      P.mf.varrows(t, w)
-
-def quant_join(a: Q, b: Q) -> Q:
-  match a b:
-    case QMany{} y:
-      QMany{}
-    case x QMany{}:
-      QMany{}
-    case QNone{} y:
-      y
-    case x y:
-      x
-
-#
-# A body becomes a term: lets become Let, and a match on the parameters
-# becomes a tree of Mat eliminators (the official match_flatten).
-def patt_mark.go(rows: List<&2, Body>, +q: Q) -> Q:
-  match rows:
-    case Nil{}:
-      q
-    case Row{PVar{k, i, pq, s} <> rest, f} <> t:
-      patt_mark.go(t, quant_join(q, pq))
-    case r <> t:
-      patt_mark.go(t, q)
-
-def patt_mark(+q: Q, rows: List<&2, Body>) -> Q:
-  patt_mark.go(rows, q)
-
-def Pt.var_q(p: Pt) -> Q:
-  match p:
-    case PVar{k, i, q, s}:
-      q
-    case other:
-      QLone{}
-
-def Pt.with_q(p: Pt, q: Q) -> Pt:
-  match p:
-    case PVar{k, i, pq, s}:
-      PVar{k, i, q, s}
-    case other:
-      other
-
-def Pt.same(+a: Pt, +b: Pt) -> Bool:
-  U32.is_eq(Pt.i(a), Pt.i(b))
-
-def vars.replace(vars: List<&2, Pt>, +w: Pt) -> List<&2, Pt>:
-  match vars:
-    case Nil{}:
-      Nil{}
-    case +p <> t:
-      Bool.pick(Pt, Pt.same(p, w), w, p) <> vars.replace(t, w)
-
-# A column of variable patterns: each row's variable becomes the scrutinee.
-def P.mf.varcol(
-  +e: Tm, et: List<&2, Tm>, +rows: List<&2, Body>, +s: Sp, +x: Pt, xt: List<&2, Pt>, +v: Pt
-) -> P(Tm):
-  +w = Pt.with_q(v, patt_mark(Pt.var_q(v), rows))
-  do P<Tm>:
-    rs : List<&2, Body> <- P.mf.varrows(rows, w)
-    P.match_flatten(et, rs, s, vars.replace(x <> xt, w))
-
-# Fresh variables for the fields of the constructor column.
-def P.mf.fields(ps: List<&2, Pt>, +xq: Q) -> P(List<&2, Pt>):
-  match ps:
-    case Nil{}:
-      P.pure(List<&2, Pt>, Nil{})
-    case PVar{k, i, q, s} <> t:
-      do P<List<&2, Pt>>:
-        rest : List<&2, Pt> <- P.mf.fields(t, xq)
-        return PVar{k, i, quant_join(q, xq), s} <> rest
-    case p <> t:
-      do P<List<&2, Pt>>:
-        +i : U32 <- P.fresh_id()
-        rest : List<&2, Pt> <- P.mf.fields(t, xq)
-        return PVar{"_" ++ U32.show(i), i, xq, Pt.s(p)} <> rest
-
-@unsafe
-def mf.rows.ctr(
-  k: String, pxs: List<&2, Pt>, rest: List<&2, Pt>, f: Body, +ck: String, +x: Pt, +kx: Pt, +xs: List<&2, Pt>,
-  hit: Bool, tail: List<&2, Body>
-) -> List<&2, Body>:
-  match hit:
-    case True{}:
-      Row{List.append(&2, Pt, pxs, rest), body_sub(f, Pt.i(x), kx)} <> tail
-    case False{}:
-      tail
-
-# The rows that fit constructor ck, specialized to its fields.
-@unsafe
-def mf.rows(rows: List<&2, Body>, +ck: String, +x: Pt, +kx: Pt, +xs: List<&2, Pt>) -> List<&2, Body>:
-  match rows:
-    case Nil{}:
-      Nil{}
-    case Row{PCtr{+k, pxs, s} <> rest, f} <> t:
-      mf.rows.ctr(k, pxs, rest, f, ck, x, kx, xs, String.eq(k, ck), mf.rows(t, ck, x, kx, xs))
-    case Row{PVar{k, +i, q, s} <> rest, f} <> t:
-      Row{List.append(&2, Pt, xs, rest), body_sub(body_sub(f, i, x), Pt.i(x), kx)} <> mf.rows(t, ck, x, kx, xs)
-    case r <> t:
-      mf.rows(t, ck, x, kx, xs)
-
-def mf.others.if(r: Body, rest: List<&2, Body>, drop: Bool) -> List<&2, Body>:
-  match drop:
-    case True{}:
-      rest
-    case False{}:
-      r <> rest
-
-def mf.others(rows: List<&2, Body>, +ck: String) -> List<&2, Body>:
-  match rows:
-    case Nil{}:
-      Nil{}
-    case Row{PCtr{+k, pxs, s} <> rest, f} <> t:
-      mf.others.if(Row{PCtr{k, pxs, s} <> rest, f}, mf.others(t, ck), String.eq(k, ck))
-    case r <> t:
-      r <> mf.others(t, ck)
-
-def P.mf.ctr(
-  +e: Tm, +et: List<&2, Tm>, +rows: List<&2, Body>, +s: Sp, +x: Pt, +xt: List<&2, Pt>, c: Maybe<&2, Pt>
-) -> P(Tm):
-  match c:
-    case None{}:
-      P.pure(Tm, Efq{s})
-    case Some{PCtr{+ck, cxs, +cs}}:
-      +xq = patt_mark(Pt.var_q(x), rows)
-      do P<Tm>:
-        +xs : List<&2, Pt> <- P.mf.fields(cxs, xq)
-        +kx : Pt <- P.pure(Pt, PCtr{ck, xs, Pt.s(x)})
-        ps : List<&2, Body> <- P.pure(List<&2, Body>, mf.rows(rows, ck, x, kx, xs))
-        pt : Tm <- P.match_flatten(List.append(&2, Tm, patt_terms(xs, NoSp{}), et), ps, s,
-          List.append(&2, Pt, xs, xt))
-        dt : Tm <- P.match_flatten(e <> et, mf.others(rows, ck), s, x <> xt)
-        return Mat{ck, pt, dt, cs}
-    case Some{other}:
-      P.pure(Tm, Efq{s})
-
-def P.mf.col.var(
-  +e: Tm, +et: List<&2, Tm>, +rows: List<&2, Body>, +s: Sp, +x: Pt, +xt: List<&2, Pt>, +w: Pt,
-  c: Maybe<&2, Pt>, norows: Bool
-) -> P(Tm):
-  match c norows:
-    case None{} False{}:
-      P.mf.varcol(e, et, rows, s, x, xt, w)
-    case m b:
-      P.if(Tm, Pt.same(w, x), P.mf.ctr(e, et, rows, s, x, xt, m), P.mf.skip(e, et, rows, s, x, xt))
-
-def rows.ctr(rows: List<&2, Body>) -> Maybe<&2, Pt>:
-  match rows:
-    case Nil{}:
-      None{}
-    case Row{PCtr{k, xs, s} <> t, f} <> rest:
-      Some{PCtr{k, xs, s}}
-    case r <> rest:
-      rows.ctr(rest)
-
-def P.mf.col(e, et, rows, s, x, xt, v):
-  match v:
-    case Some{+w}:
-      P.mf.col.var(e, et, rows, s, x, xt, w, rows.ctr(rows), Nat.is_eq(List.length(&2, Body, rows), 0n))
-    case None{}:
-      P.mf.skip(e, et, rows, s, x, xt)
 
 type TC is Data:
   TC{q: Q, k: String, i: U32, t: Tm, s: Sp}
