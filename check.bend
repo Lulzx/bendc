@@ -102,30 +102,16 @@ def Str.subset(xs: List<&2, String>, +ys: List<&2, String>) -> Bool:
     case +h <> t:
       Lazy.and(Str.has(ys, h), u => Str.subset(t, ys))
 
-law Str.index:
-  for xs: List<&2, String>
-  for +k: String
-  for +i: Nat
-  Maybe<&2, Nat>
-
-@unsafe
-def Str.index.if(t: List<&2, String>, +k: String, +i: Nat, hit: Bool) -> Maybe<&2, Nat>:
-  match hit:
-    case True{}:
-      Some{i}
-    case False{}:
-      Str.index(t, k, 1n+i)
-
 #
 # term_show prints a lowered term as the official does. bnd holds the names
 # of the enclosing binders, innermost first; n is their count. Precedences
 # are shifted by one (the official -1 is 0 here).
-def Str.index(xs, k, i):
+def Str.index(xs: List<&2, String>, +k: String, +i: Nat) -> Maybe<&2, Nat>:
   match xs:
     case Nil{}:
       None{}
     case +h <> t:
-      Str.index.if(t, k, i, String.eq(h, k))
+      Bool.pick(Unit -> Maybe<&2, Nat>, String.eq(h, k), u => Some{i}, u => Str.index(t, k, 1n+i))(Unit{})
 
 def Str.count_nl(s: String) -> Nat:
   match s:
@@ -1601,13 +1587,15 @@ def Tld.x(t: Maybe<&2, Tld>) -> Nat:
     case other:
       0n
 
-@unsafe
-def apps(f: Tm, xs: List<&2, Tm>, +s: Sp) -> Tm:
+def apps.go(xs: List<&2, Tm>, f: Tm, +s: Sp) -> Tm:
   match xs:
     case Nil{}:
       f
     case x <> t:
-      apps(TApp{f, x, s}, t, s)
+      apps.go(t, TApp{f, x, s}, s)
+
+def apps(f: Tm, xs: List<&2, Tm>, +s: Sp) -> Tm:
+  apps.go(xs, f, s)
 
 law P.call.tmpl:
   for +h: Tm
@@ -2249,20 +2237,18 @@ def show.paren(b: Bool, s: String) -> String:
     case False{}:
       s
 
-law show_hex.more:
-  for +n: U32
-  for acc: String
-  for last: Bool
-  String
-
-@unsafe
-def U32.show_hex.go(+n: U32, acc: String) -> String:
-  +d = (n .&. 15 : U32)
-  +c = Str.chr(Bool.pick(U32, U32.is_lt(d, 10), (48 + d : U32), (87 + d : U32)))
-  show_hex.more(n, c ++ acc, U32.is_lt(n, 16))
+# k: the digits left; a U32 has at most 8.
+def U32.show_hex.go(k: Nat, +n: U32, acc: String) -> String:
+  match k:
+    case 0n:
+      acc
+    case 1n+j:
+      +d = (n .&. 15 : U32)
+      +a = Str.chr(Bool.pick(U32, U32.is_lt(d, 10), (48 + d : U32), (87 + d : U32))) ++ acc
+      Bool.pick(Unit -> String, U32.is_lt(n, 16), u => a, u => U32.show_hex.go(j, (n >> 4n : U32), a))(Unit{})
 
 def U32.show_hex(+n: U32) -> String:
-  U32.show_hex.go(n, "")
+  U32.show_hex.go(8n, n, "")
 
 def show.chr(+c: U32, +quote: U32) -> String:
   Bool.pick(String, U32.is_eq(c, 10), "\\n",
@@ -5102,13 +5088,6 @@ def cmp.go(le, book, a, b, dep):
     case x y:
       False{}
 
-def show_hex.more(n, acc, last):
-  match last:
-    case True{}:
-      acc
-    case False{}:
-      U32.show_hex.go((n >> 4n : U32), acc)
-
 def show.chain.cons(x: Tm, r: List<&2, Tm> & Tm) -> List<&2, Tm> & Tm:
   (xs, t) = r
   (x <> xs, t)
@@ -5122,29 +5101,39 @@ def Lst.last(-A: Data, d: A, xs: List<&2, A>) -> A:
     case h <> t:
       Lst.last(A, d, t)
 
-law show.chain:
-  for t: Tm
-  for +k: String
-  for +n: Nat
-  List<&2, Tm> & Tm
-
-@unsafe
-def show.chain.if(+t: Tm, +xs: List<&2, Tm>, +k: String, +n: Nat, hit: Bool) ->
-  List<&2, Tm> & Tm:
-  match hit:
-    case True{}:
-      show.chain.cons(Lst.head(Tm, t, xs), show.chain(Lst.last(Tm, t, xs), k, n))
-    case False{}:
-      (Nil{}, t)
-
-# The heads of a chain of k nodes with n fields, and its tail.
-def show.chain(t, k, n):
+# The heads of a chain of k nodes with n fields (n > 0), and its tail. A
+# node goes on in its last field; seek walks to it, on the node with fewer
+# fields each step.
+def show.chain.go(t: Tm, seek: Bool, +k: String, +n: Nat) -> List<&2, Tm> & Tm:
   match t:
-    case Ctr{+k2, +xs, s}:
-      show.chain.if(Ctr{k2, xs, s}, xs, k, n, Bool.and(String.eq(k, k2),
-        Nat.is_eq(List.length(&2, Tm, xs), n)))
+    case Ctr{+k2, xs, +s}:
+      match xs:
+        case +x <> +xt:
+          match xt:
+            case Nil{}:
+              match seek:
+                case True{}:
+                  show.chain.go(x, False{}, k, n)
+                case False{}:
+                  Bool.pick(Unit -> List<&2, Tm> & Tm, Bool.and(String.eq(k, k2), Nat.is_eq(n, 1n)),
+                    u => show.chain.cons(x, show.chain.go(x, False{}, k, n)),
+                    u => (Nil{}, Ctr{k2, [x], s}))(Unit{})
+            case y <> yt:
+              match seek:
+                case True{}:
+                  show.chain.go(Ctr{k2, xt, s}, True{}, k, n)
+                case False{}:
+                  Bool.pick(Unit -> List<&2, Tm> & Tm,
+                    Bool.and(String.eq(k, k2), Nat.is_eq(1n+List.length(&2, Tm, xt), n)),
+                    u => show.chain.cons(x, show.chain.go(Ctr{k2, xt, s}, True{}, k, n)),
+                    u => (Nil{}, Ctr{k2, x <> xt, s}))(Unit{})
+        case Nil{}:
+          (Nil{}, Ctr{k2, Nil{}, s})
     case other:
       (Nil{}, other)
+
+def show.chain(t: Tm, +k: String, +n: Nat) -> List<&2, Tm> & Tm:
+  show.chain.go(t, False{}, k, n)
 
 def show.args(bnd, n, xs, p):
   match xs:
