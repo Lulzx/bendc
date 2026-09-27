@@ -3426,12 +3426,6 @@ def P.mf.col(e, et, rows, s, x, xt, v):
 type TC is Data:
   TC{q: Q, k: String, i: U32, t: Tm, s: Sp}
 
-law P.tele:
-  for +close: String
-  for +tele: List<&2, TC>
-  for +tk: Nat
-  P(List<&2, TC> & Nat)
-
 def TC.k(c: TC) -> String:
   TC{q, k, i, t, s} = c
   k
@@ -3443,38 +3437,46 @@ def TC.names(tele: List<&2, TC>) -> List<&2, String>:
     case c <> t:
       TC.k(c) <> TC.names(t)
 
-@unsafe
-def P.tele.one(+close: String, +tele: List<&2, TC>, +tk: Nat) -> P(List<&2, TC> & Nat):
-  +paren = String.eq(close, ")")
-  +len = List.length(&2, TC, tele)
-  do P<List<&2, TC> & Nat>:
-    tl : Bool <- P.at("~")
-    P.if(Unit, Bool.and(Bool.and(paren, tl), Nat.is_lt(tk, len)),
-      P.fail(Unit, "a plain binder (only leading binders take ~)"), P.pure(Unit, Unit{}))
-    +ct : Bool <- P.if(Bool, paren, P.take("~"), P.pure(Bool, False{}))
-    +q : Q <- P.if(Q, ct, P.pure(Q, QNone{}), P.quant())
-    +beg : U32 <- P.pos()
-    +k : String <- P.name()
-    P.if(Unit, Bool.and(Bool.not(paren), Str.has(TC.names(tele), k)),
-      P.fail.at(Unit, "a fresh field name (duplicate declaration: " ++ k ++ ")", beg), P.pure(Unit, Unit{}))
-    +s : Sp <- P.span(beg)
-    P.skip()
-    colon : Bool <- P.at(":")
-    +bare : Bool <- P.pure(Bool, Bool.and(Q.is_lone(q), Bool.not(colon)))
-    P.if(Unit, bare, P.pure(Unit, Unit{}), P.eat(":"))
-    ty : Tm <- P.if(Tm, bare, P.pure(Tm, Qnt{s}), P.term0())
-    +i : U32 <- P.open(k)
-    P.skip()
-    comma : Bool <- P.take(",")
-    P.tele(close, List.append(&2, TC, tele, [TC{Bool.pick(Q, bare, QNone{}, q), k, i, ty, s}]),
-      Bool.pick(Nat, ct, 1n+tk, tk))
+# Parameters up to close: (x: A, -y: B, +z: C, ~f: F, a) or {x: A, ..}; one
+# reads a parameter.
+def P.tele.go(n: Nat, +one: Bool, +close: String, +tele: List<&2, TC>, +tk: Nat) -> P(List<&2, TC> & Nat):
+  match n:
+    case 0n:
+      P.fuel(List<&2, TC> & Nat)
+    case 1n+ +p:
+      match one:
+        case True{}:
+          +paren = String.eq(close, ")")
+          +len = List.length(&2, TC, tele)
+          do P<List<&2, TC> & Nat>:
+            tl : Bool <- P.at("~")
+            P.if(Unit, Bool.and(Bool.and(paren, tl), Nat.is_lt(tk, len)),
+              P.fail(Unit, "a plain binder (only leading binders take ~)"), P.pure(Unit, Unit{}))
+            +ct : Bool <- P.if(Bool, paren, P.take("~"), P.pure(Bool, False{}))
+            +q : Q <- P.if(Q, ct, P.pure(Q, QNone{}), P.quant())
+            +beg : U32 <- P.pos()
+            +k : String <- P.name()
+            P.if(Unit, Bool.and(Bool.not(paren), Str.has(TC.names(tele), k)),
+              P.fail.at(Unit, "a fresh field name (duplicate declaration: " ++ k ++ ")", beg), P.pure(Unit, Unit{}))
+            +s : Sp <- P.span(beg)
+            P.skip()
+            colon : Bool <- P.at(":")
+            +bare : Bool <- P.pure(Bool, Bool.and(Q.is_lone(q), Bool.not(colon)))
+            P.if(Unit, bare, P.pure(Unit, Unit{}), P.eat(":"))
+            ty : Tm <- P.if(Tm, bare, P.pure(Tm, Qnt{s}), P.term0())
+            +i : U32 <- P.open(k)
+            P.skip()
+            comma : Bool <- P.take(",")
+            P.tele.go(p, False{}, close, List.append(&2, TC, tele, [TC{Bool.pick(Q, bare, QNone{}, q), k, i, ty, s}]),
+              Bool.pick(Nat, ct, 1n+tk, tk))
+        case False{}:
+          do P<List<&2, TC> & Nat>:
+            P.skip()
+            done : Bool <- P.take(close)
+            P.if(List<&2, TC> & Nat, done, P.pure(List<&2, TC> & Nat, (tele, tk)), P.tele.go(p, True{}, close, tele, tk))
 
-# Parameters up to close: (x: A, -y: B, +z: C, ~f: F, a) or {x: A, ..}.
-def P.tele(close, tele, tk):
-  do P<List<&2, TC> & Nat>:
-    P.skip()
-    done : Bool <- P.take(close)
-    P.if(List<&2, TC> & Nat, done, P.pure(List<&2, TC> & Nat, (tele, tk)), P.tele.one(close, tele, tk))
+def P.tele(+close: String, +tele: List<&2, TC>, +tk: Nat) -> P(List<&2, TC> & Nat):
+  P.tele.go(Fuel.max(), False{}, close, tele, tk)
 
 def SB2.has(xs: List<&2, SB2>, +k: String) -> Bool:
   match xs:
@@ -3729,22 +3731,54 @@ def P.def(u: Bool) -> P(Unit):
     P.skip()
     P.def.go(Bool.or(u, qm), k, lw, n0, r)
 
-law P.ctor:
-  for +k: String
-  for +params: List<&2, TC>
-  for cs: List<&2, CtrD>
-  P(List<&2, CtrD>)
+def book_set_ctr(book: Book, k: String, c: CtrD) -> Book:
+  Book{tlds, ctrs, order, hols, open, tmps, tcnt, files} = book
+  Book{tlds, Map.set(&2, CtrD, ctrs, k, c), order, hols, open, tmps, tcnt, files}
 
-@unsafe
+def TC.params(tele: List<&2, TC>) -> List<&2, Tm>:
+  match tele:
+    case Nil{}:
+      Nil{}
+    case TC{q, k, i, t, s} <> rest:
+      Var{k, i, NoSp{}} <> TC.params(rest)
+
+# The constructors of type k, up to the next declaration; one reads a
+# constructor.
+def P.ctors.go(n: Nat, +one: Bool, +k: String, +params: List<&2, TC>, +cs: List<&2, CtrD>) -> P(List<&2, CtrD>):
+  match n:
+    case 0n:
+      P.fuel(List<&2, CtrD>)
+    case 1n+ +p:
+      match one:
+        case True{}:
+          do P<List<&2, CtrD>>:
+            +nm : String <- P.name()
+            +c : String <- P.qual(nm)
+            +b : Book <- P.book()
+            P.fresh.in(nm, "a fresh constructor name", Bool.or(Maybe.is_some(&2, CtrD, book_ctr(b, c)),
+              Maybe.is_some(&2, CtrD, book_ctr(b, nm))))
+            P.eat("{")
+            +n1 : Nat <- P.stn()
+            r : List<&2, TC> & Nat <- P.tele("}", Nil{}, 0n)
+            +fs : List<&2, TC> <- P.pure(List<&2, TC>, Pair.fst(List<&2, TC>, Nat, r))
+            +b2 : Book <- P.book()
+            +ctr : CtrD <- P.pure(CtrD, CtrD{c, List.length(&2, TC, fs), higher0(b2, tele_bind(List.append(&2, TC, params, fs),
+              ADT{k, TC.params(params), NoSp{}, Nil{}}))})
+            P.close(n1)
+            P.set_book(book_set_ctr(b2, c, ctr))
+            P.ctors.go(p, False{}, k, params, List.append(&2, CtrD, cs, [ctr]))
+        case False{}:
+          do P<List<&2, CtrD>>:
+            P.skip()
+            +c : U32 <- P.peek()
+            d : Bool <- P.at_word("def")
+            t : Bool <- P.at_word("type")
+            l : Bool <- P.at_word("law")
+            P.if(List<&2, CtrD>, Bool.or(Bool.not(is_head(c)), Bool.or(d, Bool.or(t, l))), P.pure(List<&2, CtrD>, cs),
+              P.ctors.go(p, True{}, k, params, cs))
+
 def P.ctors(+k: String, +params: List<&2, TC>, +cs: List<&2, CtrD>) -> P(List<&2, CtrD>):
-  do P<List<&2, CtrD>>:
-    P.skip()
-    +c : U32 <- P.peek()
-    d : Bool <- P.at_word("def")
-    t : Bool <- P.at_word("type")
-    l : Bool <- P.at_word("law")
-    P.if(List<&2, CtrD>, Bool.or(Bool.not(is_head(c)), Bool.or(d, Bool.or(t, l))), P.pure(List<&2, CtrD>, cs),
-      P.ctor(k, params, cs))
+  P.ctors.go(Fuel.max(), False{}, k, params, cs)
 
 # The index of the first parameter that is not a bare quantity.
 def TC.first_typed(tele: List<&2, TC>) -> Nat:
@@ -3786,35 +3820,6 @@ def P.type() -> P(Unit):
     r : List<&2, TC> & Nat <- P.if(List<&2, TC> & Nat, lt, P.tele(">", Nil{}, 0n), P.pure(List<&2, TC> & Nat, (Nil{}, 0n)))
     P.type.go(k, n0, Pair.fst(List<&2, TC>, Nat, r))
 
-def book_set_ctr(book: Book, k: String, c: CtrD) -> Book:
-  Book{tlds, ctrs, order, hols, open, tmps, tcnt, files} = book
-  Book{tlds, Map.set(&2, CtrD, ctrs, k, c), order, hols, open, tmps, tcnt, files}
-
-def TC.params(tele: List<&2, TC>) -> List<&2, Tm>:
-  match tele:
-    case Nil{}:
-      Nil{}
-    case TC{q, k, i, t, s} <> rest:
-      Var{k, i, NoSp{}} <> TC.params(rest)
-
-def P.ctor(k, params, cs):
-  do P<List<&2, CtrD>>:
-    +nm : String <- P.name()
-    +c : String <- P.qual(nm)
-    +b : Book <- P.book()
-    P.fresh.in(nm, "a fresh constructor name", Bool.or(Maybe.is_some(&2, CtrD, book_ctr(b, c)),
-      Maybe.is_some(&2, CtrD, book_ctr(b, nm))))
-    P.eat("{")
-    +n1 : Nat <- P.stn()
-    r : List<&2, TC> & Nat <- P.tele("}", Nil{}, 0n)
-    +fs : List<&2, TC> <- P.pure(List<&2, TC>, Pair.fst(List<&2, TC>, Nat, r))
-    +b2 : Book <- P.book()
-    +ctr : CtrD <- P.pure(CtrD, CtrD{c, List.length(&2, TC, fs), higher0(b2, tele_bind(List.append(&2, TC, params, fs),
-      ADT{k, TC.params(params), NoSp{}, Nil{}}))})
-    P.close(n1)
-    P.set_book(book_set_ctr(b2, c, ctr))
-    P.ctors(k, params, List.append(&2, CtrD, cs, [ctr]))
-
 # law f:
 #   for x: A        (also for -x, for +x, for ~x, and "for y: B where P(y)")
 #   exs z: C
@@ -3851,18 +3856,50 @@ def P.law.fin(+k: String, r: List<&2, LC> & Nat, body: Tm, +b: Book) -> P(Unit):
   P.set_book(book_push(book_set(b, k, TDef{LC.first_exs(cl), tc, higher0(b, LC.bind(cl, body)), None{}, False{},
     False{}, None{}}), k))
 
-law P.clause:
-  for +cls: List<&2, LC>
-  for +tc: Nat
-  for +all: Bool
-  P(List<&2, LC> & Nat)
+def P.clause.where(+c: String, a0: Tm, +s: Sp) -> P(Tm):
+  do P<Tm>:
+    +beg2 : U32 <- P.pos()
+    w : Bool <- P.word("where")
+    ws : Sp <- P.span(beg2)
+    +n1 : Nat <- P.stn()
+    +i : U32 <- P.open(c)
+    pw : Tm <- P.term0()
+    P.close(n1)
+    return TApp{TApp{Ref{"Exists", ws, False{}}, a0, s}, Lam{c, i, CSyn{Nil{}, i, pw}, s, QUnd{}}, s}
 
-@unsafe
+# The clauses of a law; one reads a clause (a for when all, else an exs).
+def P.clauses.go(n: Nat, +one: Bool, +cls: List<&2, LC>, +tc: Nat, +all: Bool) -> P(List<&2, LC> & Nat):
+  match n:
+    case 0n:
+      P.fuel(List<&2, LC> & Nat)
+    case 1n+ +p:
+      match one:
+        case True{}:
+          do P<List<&2, LC> & Nat>:
+            w : Bool <- P.word(Bool.pick(String, all, "for", "exs"))
+            P.skip()
+            tl : Bool <- P.at("~")
+            P.if(Unit, Bool.and(Bool.and(all, tl), Nat.is_lt(tc, List.length(&2, LC, cls))),
+              P.fail(Unit, "a plain clause (only leading clauses take ~)"), P.pure(Unit, Unit{}))
+            +ct : Bool <- P.if(Bool, all, P.take("~"), P.pure(Bool, False{}))
+            q : Q <- P.if(Q, ct, P.pure(Q, QNone{}), P.if(Q, all, P.quant(), P.pure(Q, QLone{})))
+            +beg : U32 <- P.pos()
+            +c : String <- P.name()
+            +s : Sp <- P.span(beg)
+            P.eat(":")
+            +a0 : Tm <- P.term0()
+            wh : Bool <- P.at_word("where")
+            a : Tm <- P.if(Tm, wh, P.clause.where(c, a0, s), P.pure(Tm, a0))
+            +i : U32 <- P.open(c)
+            P.clauses.go(p, False{}, List.append(&2, LC, cls, [LC{all, q, c, i, a, s}]), Bool.pick(Nat, ct, 1n+tc, tc), False{})
+        case False{}:
+          do P<List<&2, LC> & Nat>:
+            +f : Bool <- P.at_word("for")
+            e : Bool <- P.at_word("exs")
+            P.if(List<&2, LC> & Nat, Bool.or(f, e), P.clauses.go(p, True{}, cls, tc, f), P.pure(List<&2, LC> & Nat, (cls, tc)))
+
 def P.clauses(+cls: List<&2, LC>, +tc: Nat) -> P(List<&2, LC> & Nat):
-  do P<List<&2, LC> & Nat>:
-    +f : Bool <- P.at_word("for")
-    e : Bool <- P.at_word("exs")
-    P.if(List<&2, LC> & Nat, Bool.or(f, e), P.clause(cls, tc, f), P.pure(List<&2, LC> & Nat, (cls, tc)))
+  P.clauses.go(Fuel.max(), False{}, cls, tc, False{})
 
 def P.law() -> P(Unit):
   do P<Unit>:
@@ -3878,53 +3915,12 @@ def P.law() -> P(Unit):
     b : Book <- P.book()
     P.law.fin(k, r, body, b)
 
-def P.clause.where(+c: String, a0: Tm, +s: Sp) -> P(Tm):
-  do P<Tm>:
-    +beg2 : U32 <- P.pos()
-    w : Bool <- P.word("where")
-    ws : Sp <- P.span(beg2)
-    +n1 : Nat <- P.stn()
-    +i : U32 <- P.open(c)
-    pw : Tm <- P.term0()
-    P.close(n1)
-    return TApp{TApp{Ref{"Exists", ws, False{}}, a0, s}, Lam{c, i, CSyn{Nil{}, i, pw}, s, QUnd{}}, s}
-
-def P.clause(cls, tc, all):
-  do P<List<&2, LC> & Nat>:
-    w : Bool <- P.word(Bool.pick(String, all, "for", "exs"))
-    P.skip()
-    tl : Bool <- P.at("~")
-    P.if(Unit, Bool.and(Bool.and(all, tl), Nat.is_lt(tc, List.length(&2, LC, cls))),
-      P.fail(Unit, "a plain clause (only leading clauses take ~)"), P.pure(Unit, Unit{}))
-    +ct : Bool <- P.if(Bool, all, P.take("~"), P.pure(Bool, False{}))
-    q : Q <- P.if(Q, ct, P.pure(Q, QNone{}), P.if(Q, all, P.quant(), P.pure(Q, QLone{})))
-    +beg : U32 <- P.pos()
-    +c : String <- P.name()
-    +s : Sp <- P.span(beg)
-    P.eat(":")
-    +a0 : Tm <- P.term0()
-    wh : Bool <- P.at_word("where")
-    a : Tm <- P.if(Tm, wh, P.clause.where(c, a0, s), P.pure(Tm, a0))
-    +i : U32 <- P.open(c)
-    P.clauses(List.append(&2, LC, cls, [LC{all, q, c, i, a, s}]), Bool.pick(Nat, ct, 1n+tc, tc))
-
 def PS.set_scope(ps: PS, s: List<&2, SB>, n: Nat, f: U32) -> PS:
   PS{cur, stk, stn, frs, book, src, ns, dir, al} = ps
   PS{cur, s, n, f, book, src, ns, dir, al}
 
 def P.reset_scope() -> P(Unit):
   ps => Done{(Unit{}, PS.set_scope(ps, Nil{}, 0n, 0))}
-
-law P.decl:
-  P(Unit)
-
-# A whole file, declaration by declaration.
-@unsafe
-def P.decls() -> P(Unit):
-  do P<Unit>:
-    P.skip()
-    +c : U32 <- P.peek()
-    P.if(Unit, U32.is_zero(c), P.pure(Unit, Unit{}), P.decl())
 
 def P.unsafe() -> P(Unit):
   do P<Unit>:
@@ -3942,15 +3938,30 @@ def P.decl.go(at: Bool, d: Bool, t: Bool, l: Bool) -> P(Unit):
       P.if(Unit, d, P.def(False{}), P.if(Unit, t, P.type(), P.if(Unit, l, P.law(),
         P.fail(Unit, "'def', 'type' or 'law'"))))
 
-def P.decl():
-  do P<Unit>:
-    P.reset_scope()
-    at : Bool <- P.take("@")
-    d : Bool <- P.at_word("def")
-    t : Bool <- P.at_word("type")
-    l : Bool <- P.at_word("law")
-    P.decl.go(at, d, t, l)
-    P.decls()
+# A whole file, declaration by declaration; one reads a declaration.
+def P.decls.go(n: Nat, +one: Bool) -> P(Unit):
+  match n:
+    case 0n:
+      P.fuel(Unit)
+    case 1n+ +p:
+      match one:
+        case True{}:
+          do P<Unit>:
+            P.reset_scope()
+            at : Bool <- P.take("@")
+            d : Bool <- P.at_word("def")
+            t : Bool <- P.at_word("type")
+            l : Bool <- P.at_word("law")
+            P.decl.go(at, d, t, l)
+            P.decls.go(p, False{})
+        case False{}:
+          do P<Unit>:
+            P.skip()
+            +c : U32 <- P.peek()
+            P.if(Unit, U32.is_zero(c), P.pure(Unit, Unit{}), P.decls.go(p, True{}))
+
+def P.decls() -> P(Unit):
+  P.decls.go(Fuel.max(), False{})
 
 # Misc
 # ====
