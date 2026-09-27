@@ -52,3 +52,26 @@ jobs:
 
       - name: Full bootstrap (official bend -> stage1 -> stage2 fixpoint)
         run: BEND_NO_TELEMETRY=1 ./bootstrap.sh
+
+  # Diverse double-compiling: the official Bend with GCC, and the seed with
+  # GCC, must both compile bendc.bend to the seed (tools/ddc.sh). On macOS
+  # because the official C needs GCC 15+ (musttail), which Homebrew has.
+  ddc:
+    name: diverse double-compiling
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install the official Bend
+        run: |
+          case "${{ github.event_name }}" in
+            schedule|workflow_dispatch) BEND_NO_TELEMETRY=1 tools/install-bend.sh latest;;
+            *) tools/install-bend.sh;;
+          esac
+          echo "$HOME/.bend/bin" >> "$GITHUB_PATH"
+
+      - name: Install GCC
+        run: brew install gcc
+
+      - name: Two toolchains, one seed
+        run: make ddc

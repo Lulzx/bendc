@@ -38,6 +38,10 @@ selfcheck: build/bendc
 	BEND_NO_FREE=1 ./build/bendc --no-check $(BEND_BASE) bendc.bend > build/self.c
 	cmp build/self.c seed/bendc.c && echo "selfcheck: bendc.bend compiles to the seed byte for byte"
 
+# Diverse double-compiling: two toolchains, no shared clang (tools/ddc.sh)
+ddc:
+	./tools/ddc.sh
+
 bootstrap:
 	./bootstrap.sh
 
@@ -47,4 +51,4 @@ seed: build/bendc
 clean:
 	rm -rf build
 
-.PHONY: all test selfcheck bootstrap seed clean
+.PHONY: all test selfcheck ddc bootstrap seed clean

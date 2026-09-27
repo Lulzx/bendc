@@ -168,8 +168,17 @@ flowchart LR
 - **`seed/bendc.c`** is the committed fixpoint, the way self-hosting compilers usually ship a seed.
   Building `bendc` needs only a C compiler. `make selfcheck` verifies that the current `bendc.bend`
   still compiles to exactly this seed, and `make seed` regenerates it after the compiler changes.
+- **`make ddc`** checks the seed by diverse double-compiling ([Wheeler,
+  2009](https://dwheeler.com/trusting-trust/)): a 41,000-line generated C file can't be audited
+  by reading it, so a compiler that plants something in its own output would survive every
+  fixpoint above. `tools/ddc.sh` compiles `bendc.bend` twice, once with a stage0 the official Bend
+  translates to C and GCC builds, once with the seed GCC builds. Both outputs must equal
+  `seed/bendc.c` byte for byte. The first path shares nothing with the seed (not its C, and not
+  clang, which the official `bend -o` calls), so a tampered seed would have to be matched by the
+  official Bend and GCC together. It needs GCC 15 or newer (the official C uses `musttail`).
 
-CI runs the whole chain on Linux (arm64) and macOS: seed build, tests, selfcheck, and full bootstrap. It
+CI runs the whole chain on Linux (arm64) and macOS: seed build, tests, selfcheck, full bootstrap,
+and (on macOS, with Homebrew's GCC) `make ddc`. It
 pins the official Bend it tests against (`tools/install-bend.sh`, Bend 2.0.32),
 and a weekly run tries the latest release, so a new Bend shows up there before it breaks a push.
 
@@ -486,6 +495,7 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`bench/`](bench) | benchmark programs and `run.sh`, which times them against the official `bend` |
 | [`tests/`](tests) | test programs and the official `bend`'s output for each |
 | [`bootstrap.sh`](bootstrap.sh), [`run_tests.sh`](run_tests.sh), [`Makefile`](Makefile) | bootstrap and fixpoint check, test runner, build entry points |
+| [`tools/ddc.sh`](tools/ddc.sh) | diverse double-compiling: the seed, reproduced by two toolchains that share no C compiler |
 | [`tools/order.py`](tools/order.py) | dev tool: section-aware dependency sort, with automatic `law` forward declarations for cycles |
 | [`tools/upstream.py`](tools/upstream.py) | dev tool: runs the official repository's tests through a `bendc` (see [Testing](#testing)) |
 | [`tools/embed.py`](tools/embed.py) | dev tool: embeds `rt/bendrt.js`, `rt/chan.c` and `rt/gpu.h` (`rt/rtjs.bend`, `rt/rtchan.bend`, `rt/gpu_src.h`) |
