@@ -2295,116 +2295,11 @@ def show.rems(r: List<&2, String>) -> String:
     case c <> t:
       " - " ++ c ++ "{}" ++ show.rems(t)
 
-law show.typ:
-  for g: Tm
-  for +bnd: List<&2, String>
-  for +n: Nat
-  String
-
-law show.app:
+law term_show:
   for t: Tm
   for +p: U32
   for +bnd: List<&2, String>
-  for +n: Nat
   String
-
-law show.rwt:
-  for e: Tm
-  for pr: Tm
-  for f: Tm
-  for +bnd: List<&2, String>
-  for +n: Nat
-  String
-
-law show.ctr:
-  for +t: Tm
-  for +p: U32
-  for +bnd: List<&2, String>
-  for +n: Nat
-  String
-
-law show.args:
-  for +bnd: List<&2, String>
-  for +n: Nat
-  for xs: List<&2, Tm>
-  for +p: U32
-  List<&2, String>
-
-law show.arms:
-  for t: Tm
-  for +bnd: List<&2, String>
-  for +n: Nat
-  List<&2, String>
-
-@unsafe
-def term_show.go(t: Tm, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
-  match t:
-    case Var{+k, +i, s}:
-      Bool.pick(String, show.bound_at(bnd, n, k, i), k, k ++ "^" ++ U32.show(i))
-    case Ref{+k, s, b}:
-      Bool.pick(String, Str.has(bnd, k), k ++ "^", k) ++ Bool.pick(String, b, "!", "")
-    case Sub{i, pt, f, s}:
-      term_show.go(f, p, bnd, n)
-    case Let{+ks, ids, vs, f, s, qs}:
-      +vs2 = show.args(bnd, n, vs, 2)
-      +m = List.length(&2, String, ks)
-      +f2 = term_show.go(syn_body(f), 0, List.append(&2, String, List.reverse(&2, String, ks), bnd), Nat.add(n, m))
-      show.paren(U32.is_ge(p, 1), show.join(show.let_ks(ks, qs), " ") ++ " = " ++ show.join(vs2, " ") ++
-        "; " ++ f2)
-    case Typ{g, s}:
-      show.typ(g, bnd, n)
-    case Qnt{s}:
-      "Quant"
-    case TQua{q, s}:
-      show.qua(q)
-    case Min{a, b, s}:
-      show.paren(U32.is_gt(p, 2), term_show.go(a, 3, bnd, n) ++ " <&> " ++ term_show.go(b, 3, bnd, n))
-    case All{q, +k, i, a, b, s}:
-      show.paren(U32.is_gt(p, 2), "@" ++ quant_show(q) ++ k ++ ":" ++ term_show.go(a, 3, bnd, n) ++ " -> " ++
-        term_show.go(syn_body(b), 2, k <> bnd, 1n+n))
-    case Lam{+k, i, f, s, q}:
-      show.paren(U32.is_gt(p, 1), quant_show(Q.def(q)) ++ k ++ " => " ++
-        term_show.go(syn_body(f), 0, k <> bnd, 1n+n))
-    case TApp{f, x, s}:
-      show.app(TApp{f, x, s}, p, bnd, n)
-    case ADT{+k, xs, s, r}:
-      +rs = show.rems(r)
-      +as = show.args(bnd, n, xs, 1)
-      show.paren(Bool.and(Bool.not(String.is_empty(rs)), U32.is_gt(p, 2)), k ++
-        Bool.pick(String, Bool.and(Lst.empty(&2, String, as), String.is_empty(rs)), "",
-          "<" ++ show.join(as, ", ") ++ ">") ++ rs)
-    case Ctr{k, xs, s}:
-      show.ctr(Ctr{k, xs, s}, p, bnd, n)
-    case Lit{LNat{v}, s}:
-      Nat.show(v) ++ "n"
-    case Lit{LStr{v}, s}:
-      "\"" ++ show.text(v) ++ "\""
-    case Mat{k, h, m, s}:
-      "\\{" ++ show.join(show.arms(Mat{k, h, m, s}, bnd, n), "; ") ++ "}"
-    case Efq{s}:
-      "\\{}"
-    case Eql{a, b, ty, s}:
-      "{" ++ term_show.go(a, 2, bnd, n) ++ " == " ++ term_show.go(b, 2, bnd, n) ++ " : " ++
-        term_show.go(ty, 2, bnd, n) ++ "}"
-    case Rfl{s}:
-      "{==}"
-    case Hol{k, s}:
-      "?" ++ k
-    case Rwt{e, pr, f, s}:
-      show.paren(U32.is_gt(p, 1), show.rwt(e, pr, f, bnd, n))
-    case Ann{x, ty, s}:
-      "{" ++ term_show.go(x, 2, bnd, n) ++ " : " ++ term_show.go(ty, 2, bnd, n) ++ "}"
-    case Cel{k, s, v, m}:
-      term_show.go(v, p, bnd, n)
-    case VRf{k, i, s, r}:
-      term_show.go(r, p, bnd, n)
-    case VPl{k, s}:
-      k
-    case other:
-      "?"
-
-def term_show(t: Tm, +p: U32, +bnd: List<&2, String>) -> String:
-  term_show.go(t, p, bnd, List.length(&2, String, bnd))
 
 law term_lower:
   for +book: Book
@@ -5220,13 +5115,6 @@ def show.chain.go(t: Tm, seek: Bool, +k: String, +n: Nat) -> List<&2, Tm> & Tm:
 def show.chain(t: Tm, +k: String, +n: Nat) -> List<&2, Tm> & Tm:
   show.chain.go(t, False{}, k, n)
 
-def show.args(bnd, n, xs, p):
-  match xs:
-    case Nil{}:
-      Nil{}
-    case x <> t:
-      term_show.go(x, p, bnd, n) <> show.args(bnd, n, t, p)
-
 def show.chr_term.u(m: Maybe<&2, U32>, +quote: U32) -> Maybe<&2, String>:
   match m:
     case None{}:
@@ -5287,21 +5175,6 @@ def show.arr.cat(a: Maybe<&2, List<&2, String>>, b: Maybe<&2, List<&2, String>>)
     case p q:
       None{}
 
-law show.arr:
-  for t: Tm
-  for +bnd: List<&2, String>
-  for +n: Nat
-  Maybe<&2, List<&2, String>>
-
-def show.arr(t, bnd, n):
-  match t:
-    case Ctr{"ALeaf", x <> Nil{}, s}:
-      Some{[term_show.go(x, 1, bnd, n)]}
-    case Ctr{"ANode", l <> r <> Nil{}, s}:
-      show.arr.cat(show.arr(l, bnd, n), show.arr(r, bnd, n))
-    case other:
-      None{}
-
 def Word.from_u32(+b: U32) -> Word(32n):
   match b:
     case U32{w}:
@@ -5315,134 +5188,319 @@ def f32_show(+bits: U32) -> String:
   Bool.pick(String, Bool.or(String.contains(s, "."), Bool.or(String.contains(s, "e"),
     Bool.or(String.contains(s, "n"), String.contains(s, "i")))), s, s ++ ".0")
 
-def show.typ(g, bnd, n):
-  match g:
-    case TQua{QLone{}, s}:
-      "Type"
-    case TQua{QMany{}, s}:
-      "Data"
-    case other:
-      "Kind(" ++ term_show.go(other, 1, bnd, n) ++ ")"
+type ShSel is Type:
+  STermShowGo{t: Tm, p: U32, bnd: List<&2, String>, n: Nat}
+  SShowArgs{bnd: List<&2, String>, n: Nat, xs: List<&2, Tm>, p: U32}
+  SShowArr{t: Tm, bnd: List<&2, String>, n: Nat}
+  SShowTyp{g: Tm, bnd: List<&2, String>, n: Nat}
+  SShowArms{t: Tm, bnd: List<&2, String>, n: Nat}
+  SShowAppGo{r: Tm & List<&2, Tm>, p: U32, bnd: List<&2, String>, n: Nat}
+  SShowApp{t: Tm, p: U32, bnd: List<&2, String>, n: Nat}
+  SShowRwtInner{es: String, pr: Tm, k1: String, b: Tm, f: Tm, bnd: List<&2, String>, n: Nat}
+  SShowRwtGo{es: String, pr: Tm, f: Tm, bnd: List<&2, String>, n: Nat}
+  SShowRwt{e: Tm, pr: Tm, f: Tm, bnd: List<&2, String>, n: Nat}
+  SShowCtrPlain{t: Tm, bnd: List<&2, String>, n: Nat}
+  SShowCtrArr{t: Tm, m: Maybe<&2, List<&2, String>>, bnd: List<&2, String>, n: Nat}
+  SShowCtrTup{t: Tm, r: List<&2, Tm> & Tm, p: U32, bnd: List<&2, String>, n: Nat}
+  SShowCtrLst{t: Tm, r: List<&2, Tm> & Tm, p: U32, bnd: List<&2, String>, n: Nat}
+  SShowCtrStr{t: Tm, m: Maybe<&2, String>, p: U32, bnd: List<&2, String>, n: Nat}
+  SShowCtrChr{t: Tm, m: Maybe<&2, String>, p: U32, bnd: List<&2, String>, n: Nat}
+  SShowCtrSucc{t: Tm, r: List<&2, Tm> & Tm, p: U32, bnd: List<&2, String>, n: Nat}
+  SShowCtrNat{t: Tm, m: Maybe<&2, Nat>, p: U32, bnd: List<&2, String>, n: Nat}
+  SShowCtrF32{t: Tm, m: Maybe<&2, U32>, p: U32, bnd: List<&2, String>, n: Nat}
+  SShowCtrU32{t: Tm, m: Maybe<&2, U32>, p: U32, bnd: List<&2, String>, n: Nat}
+  SShowCtr{t: Tm, p: U32, bnd: List<&2, String>, n: Nat}
 
-def show.arms(t, bnd, n):
-  match t:
-    case Mat{k, h, m, s}:
-      (k ++ ": " ++ term_show.go(h, 2, bnd, n)) <> show.arms(m, bnd, n)
-    case Efq{s}:
-      Nil{}
-    case other:
-      [term_show.go(other, 2, bnd, n)]
+def ShSel.ty(k: ShSel) -> Type:
+  match k:
+    case STermShowGo{t, p, bnd, n}:
+      String
+    case SShowArgs{bnd, n, xs, p}:
+      List<&2, String>
+    case SShowArr{t, bnd, n}:
+      Maybe<&2, List<&2, String>>
+    case SShowTyp{g, bnd, n}:
+      String
+    case SShowArms{t, bnd, n}:
+      List<&2, String>
+    case SShowAppGo{r, p, bnd, n}:
+      String
+    case SShowApp{t, p, bnd, n}:
+      String
+    case SShowRwtInner{es, pr, k1, b, f, bnd, n}:
+      String
+    case SShowRwtGo{es, pr, f, bnd, n}:
+      String
+    case SShowRwt{e, pr, f, bnd, n}:
+      String
+    case SShowCtrPlain{t, bnd, n}:
+      String
+    case SShowCtrArr{t, m, bnd, n}:
+      String
+    case SShowCtrTup{t, r, p, bnd, n}:
+      String
+    case SShowCtrLst{t, r, p, bnd, n}:
+      String
+    case SShowCtrStr{t, m, p, bnd, n}:
+      String
+    case SShowCtrChr{t, m, p, bnd, n}:
+      String
+    case SShowCtrSucc{t, r, p, bnd, n}:
+      String
+    case SShowCtrNat{t, m, p, bnd, n}:
+      String
+    case SShowCtrF32{t, m, p, bnd, n}:
+      String
+    case SShowCtrU32{t, m, p, bnd, n}:
+      String
+    case SShowCtr{t, p, bnd, n}:
+      String
 
-def show.app.go(r: Tm & List<&2, Tm>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
-  (h, xs) = r
-  match h xs:
-    case Ref{"Exists", s, b} a <> Lam{+k, i, f, ls, q} <> Nil{}:
-      show.paren(U32.is_gt(p, 2), "&" ++ k ++ ":" ++ term_show.go(a, 3, bnd, n) ++ " -> " ++
-        term_show.go(syn_body(f), 2, k <> bnd, 1n+n))
-    case hd args:
-      term_show.go(hd, 3, bnd, n) ++ "(" ++ show.join(show.args(bnd, n, args, 1), ", ") ++ ")"
+# Showing a term, one def: sel picks the step (term_show.go and its
+# parts). Out of fuel, a term shows as ?out of fuel.
+def show.run(fuel0: Nat, sel: ShSel) -> ShSel.ty(sel):
+  match fuel0:
+    case 0n:
+      match sel:
+        case STermShowGo{t, p, bnd, n}:
+          "?out of fuel"
+        case SShowArgs{bnd, n, xs, p}:
+          ["?out of fuel"]
+        case SShowArr{t, bnd, n}:
+          Some{["?out of fuel"]}
+        case SShowTyp{g, bnd, n}:
+          "?out of fuel"
+        case SShowArms{t, bnd, n}:
+          ["?out of fuel"]
+        case SShowAppGo{r, p, bnd, n}:
+          "?out of fuel"
+        case SShowApp{t, p, bnd, n}:
+          "?out of fuel"
+        case SShowRwtInner{es, pr, k1, b, f, bnd, n}:
+          "?out of fuel"
+        case SShowRwtGo{es, pr, f, bnd, n}:
+          "?out of fuel"
+        case SShowRwt{e, pr, f, bnd, n}:
+          "?out of fuel"
+        case SShowCtrPlain{t, bnd, n}:
+          "?out of fuel"
+        case SShowCtrArr{t, m, bnd, n}:
+          "?out of fuel"
+        case SShowCtrTup{t, r, p, bnd, n}:
+          "?out of fuel"
+        case SShowCtrLst{t, r, p, bnd, n}:
+          "?out of fuel"
+        case SShowCtrStr{t, m, p, bnd, n}:
+          "?out of fuel"
+        case SShowCtrChr{t, m, p, bnd, n}:
+          "?out of fuel"
+        case SShowCtrSucc{t, r, p, bnd, n}:
+          "?out of fuel"
+        case SShowCtrNat{t, m, p, bnd, n}:
+          "?out of fuel"
+        case SShowCtrF32{t, m, p, bnd, n}:
+          "?out of fuel"
+        case SShowCtrU32{t, m, p, bnd, n}:
+          "?out of fuel"
+        case SShowCtr{t, p, bnd, n}:
+          "?out of fuel"
+    case 1n+ +fuel:
+      match sel:
+        case STermShowGo{t, +p, +bnd, +n}:
+          match t:
+            case Var{+k, +i, s}:
+              Bool.pick(String, show.bound_at(bnd, n, k, i), k, k ++ "^" ++ U32.show(i))
+            case Ref{+k, s, b}:
+              Bool.pick(String, Str.has(bnd, k), k ++ "^", k) ++ Bool.pick(String, b, "!", "")
+            case Sub{i, pt, f, s}:
+              show.run(fuel, STermShowGo{f, p, bnd, n})
+            case Let{+ks, ids, vs, f, s, qs}:
+              +vs2 = {show.run(fuel, SShowArgs{bnd, n, vs, 2}) : List<&2, String>}
+              +m = List.length(&2, String, ks)
+              +f2 = {show.run(fuel, STermShowGo{syn_body(f), 0, List.append(&2, String, List.reverse(&2, String, ks), bnd), Nat.add(n, m)}) : String}
+              show.paren(U32.is_ge(p, 1), show.join(show.let_ks(ks, qs), " ") ++ " = " ++ show.join(vs2, " ") ++
+                "; " ++ f2)
+            case Typ{g, s}:
+              show.run(fuel, SShowTyp{g, bnd, n})
+            case Qnt{s}:
+              "Quant"
+            case TQua{q, s}:
+              show.qua(q)
+            case Min{a, b, s}:
+              show.paren(U32.is_gt(p, 2), show.run(fuel, STermShowGo{a, 3, bnd, n}) ++ " <&> " ++ show.run(fuel, STermShowGo{b, 3, bnd, n}))
+            case All{q, +k, i, a, b, s}:
+              show.paren(U32.is_gt(p, 2), "@" ++ quant_show(q) ++ k ++ ":" ++ show.run(fuel, STermShowGo{a, 3, bnd, n}) ++ " -> " ++
+                show.run(fuel, STermShowGo{syn_body(b), 2, k <> bnd, 1n+n}))
+            case Lam{+k, i, f, s, q}:
+              show.paren(U32.is_gt(p, 1), quant_show(Q.def(q)) ++ k ++ " => " ++
+                show.run(fuel, STermShowGo{syn_body(f), 0, k <> bnd, 1n+n}))
+            case TApp{f, x, s}:
+              show.run(fuel, SShowApp{TApp{f, x, s}, p, bnd, n})
+            case ADT{+k, xs, s, r}:
+              +rs = show.rems(r)
+              +as = {show.run(fuel, SShowArgs{bnd, n, xs, 1}) : List<&2, String>}
+              show.paren(Bool.and(Bool.not(String.is_empty(rs)), U32.is_gt(p, 2)), k ++
+                Bool.pick(String, Bool.and(Lst.empty(&2, String, as), String.is_empty(rs)), "",
+                  "<" ++ show.join(as, ", ") ++ ">") ++ rs)
+            case Ctr{k, xs, s}:
+              show.run(fuel, SShowCtr{Ctr{k, xs, s}, p, bnd, n})
+            case Lit{LNat{v}, s}:
+              Nat.show(v) ++ "n"
+            case Lit{LStr{v}, s}:
+              "\"" ++ show.text(v) ++ "\""
+            case Mat{k, h, m, s}:
+              "\\{" ++ show.join(show.run(fuel, SShowArms{Mat{k, h, m, s}, bnd, n}), "; ") ++ "}"
+            case Efq{s}:
+              "\\{}"
+            case Eql{a, b, ty, s}:
+              "{" ++ show.run(fuel, STermShowGo{a, 2, bnd, n}) ++ " == " ++ show.run(fuel, STermShowGo{b, 2, bnd, n}) ++ " : " ++
+                show.run(fuel, STermShowGo{ty, 2, bnd, n}) ++ "}"
+            case Rfl{s}:
+              "{==}"
+            case Hol{k, s}:
+              "?" ++ k
+            case Rwt{e, pr, f, s}:
+              show.paren(U32.is_gt(p, 1), show.run(fuel, SShowRwt{e, pr, f, bnd, n}))
+            case Ann{x, ty, s}:
+              "{" ++ show.run(fuel, STermShowGo{x, 2, bnd, n}) ++ " : " ++ show.run(fuel, STermShowGo{ty, 2, bnd, n}) ++ "}"
+            case Cel{k, s, v, m}:
+              show.run(fuel, STermShowGo{v, p, bnd, n})
+            case VRf{k, i, s, r}:
+              show.run(fuel, STermShowGo{r, p, bnd, n})
+            case VPl{k, s}:
+              k
+            case other:
+              "?"
+        case SShowArgs{+bnd, +n, xs, +p}:
+          match xs:
+            case Nil{}:
+              Nil{}
+            case x <> t:
+              show.run(fuel, STermShowGo{x, p, bnd, n}) <> show.run(fuel, SShowArgs{bnd, n, t, p})
+        case SShowArr{t, +bnd, +n}:
+          match t:
+            case Ctr{"ALeaf", x <> Nil{}, s}:
+              Some{[show.run(fuel, STermShowGo{x, 1, bnd, n})]}
+            case Ctr{"ANode", l <> r <> Nil{}, s}:
+              show.arr.cat(show.run(fuel, SShowArr{l, bnd, n}), show.run(fuel, SShowArr{r, bnd, n}))
+            case other:
+              None{}
+        case SShowTyp{g, +bnd, +n}:
+          match g:
+            case TQua{QLone{}, s}:
+              "Type"
+            case TQua{QMany{}, s}:
+              "Data"
+            case other:
+              "Kind(" ++ show.run(fuel, STermShowGo{other, 1, bnd, n}) ++ ")"
+        case SShowArms{t, +bnd, +n}:
+          match t:
+            case Mat{k, h, m, s}:
+              (k ++ ": " ++ show.run(fuel, STermShowGo{h, 2, bnd, n})) <> show.run(fuel, SShowArms{m, bnd, n})
+            case Efq{s}:
+              Nil{}
+            case other:
+              [show.run(fuel, STermShowGo{other, 2, bnd, n})]
+        case SShowAppGo{r, +p, +bnd, +n}:
+          (h, xs) = r
+          match h xs:
+            case Ref{"Exists", s, b} a <> Lam{+k, i, f, ls, q} <> Nil{}:
+              show.paren(U32.is_gt(p, 2), "&" ++ k ++ ":" ++ show.run(fuel, STermShowGo{a, 3, bnd, n}) ++ " -> " ++
+                show.run(fuel, STermShowGo{syn_body(f), 2, k <> bnd, 1n+n}))
+            case hd args:
+              show.run(fuel, STermShowGo{hd, 3, bnd, n}) ++ "(" ++ show.join(show.run(fuel, SShowArgs{bnd, n, args, 1}), ", ") ++ ")"
+        case SShowApp{t, +p, +bnd, +n}:
+          show.run(fuel, SShowAppGo{term_unapply(t), p, bnd, n})
+        case SShowRwtInner{es, pr, +k1, b, f, +bnd, +n}:
+          match b:
+            case Lam{+k2, i, f2, s, q}:
+              "%" ++ Bool.pick(String, String.is_empty(k2), "", k2 ++ "@") ++ es ++ " : " ++
+                show.run(fuel, STermShowGo{syn_body(f2), 2, k2 <> k1 <> bnd, 2n+n}) ++ "; " ++ show.run(fuel, STermShowGo{f, 0, bnd, n})
+            case other:
+              "%" ++ es ++ " : " ++ show.run(fuel, STermShowGo{pr, 2, bnd, n}) ++ "; " ++ show.run(fuel, STermShowGo{f, 0, bnd, n})
+        case SShowRwtGo{es, pr, f, +bnd, +n}:
+          match pr:
+            case Lam{+k1, i, +f1, s, q}:
+              show.run(fuel, SShowRwtInner{es, Lam{k1, i, f1, s, q}, k1, term_strip(syn_body(f1)), f, bnd, n})
+            case other:
+              "%" ++ es ++ " : " ++ show.run(fuel, STermShowGo{other, 2, bnd, n}) ++ "; " ++ show.run(fuel, STermShowGo{f, 0, bnd, n})
+        case SShowRwt{e, pr, f, +bnd, +n}:
+          show.run(fuel, SShowRwtGo{show.run(fuel, STermShowGo{e, 2, bnd, n}), term_strip(pr), f, bnd, n})
+        case SShowCtrPlain{t, +bnd, +n}:
+          match t:
+            case Ctr{k, xs, s}:
+              k ++ "{" ++ show.join(show.run(fuel, SShowArgs{bnd, n, xs, 1}), ", ") ++ "}"
+            case other:
+              "?"
+        case SShowCtrArr{t, m, +bnd, +n}:
+          match m:
+            case Some{xs}:
+              "[" ++ show.join(xs, ", ") ++ "]"
+            case None{}:
+              show.run(fuel, SShowCtrPlain{t, bnd, n})
+        case SShowCtrTup{+t, r, +p, +bnd, +n}:
+          (xs, tl) = r
+          match xs:
+            case Nil{}:
+              show.run(fuel, SShowCtrArr{t, show.run(fuel, SShowArr{t, bnd, n}), bnd, n})
+            case h <> rest:
+              "(" ++ show.join(show.run(fuel, SShowArgs{bnd, n, List.append(&2, Tm, h <> rest, [tl]), 1}), ", ") ++ ")"
+        case SShowCtrLst{+t, r, +p, +bnd, +n}:
+          (xs, tl) = r
+          match xs tl:
+            case ys Ctr{"Nil", Nil{}, s}:
+              "[" ++ show.join(show.run(fuel, SShowArgs{bnd, n, ys, 1}), ", ") ++ "]"
+            case Nil{} other:
+              show.run(fuel, SShowCtrTup{t, show.chain(t, "Tuple", 2n), p, bnd, n})
+            case ys other:
+              show.paren(U32.is_gt(p, 2), show.join(show.run(fuel, SShowArgs{bnd, n, ys, 3}), " <> ") ++ " <> " ++
+                show.run(fuel, STermShowGo{other, 2, bnd, n}))
+        case SShowCtrStr{+t, m, +p, +bnd, +n}:
+          match m:
+            case Some{c}:
+              c
+            case None{}:
+              show.run(fuel, SShowCtrLst{t, show.chain(t, "Con", 2n), p, bnd, n})
+        case SShowCtrChr{+t, m, +p, +bnd, +n}:
+          match m:
+            case Some{c}:
+              "'" ++ c ++ "'"
+            case None{}:
+              show.run(fuel, SShowCtrStr{t, show.str(t), p, bnd, n})
+        case SShowCtrSucc{+t, r, +p, +bnd, +n}:
+          (xs, tl) = r
+          match xs:
+            case Nil{}:
+              show.run(fuel, SShowCtrChr{t, show.chr_term(t, 39), p, bnd, n})
+            case +h <> rest:
+              show.paren(U32.is_gt(p, 2), Nat.show(List.length(&2, Tm, h <> rest)) ++ "n+" ++
+                show.run(fuel, STermShowGo{tl, 2, bnd, n}))
+        case SShowCtrNat{+t, m, +p, +bnd, +n}:
+          match m:
+            case Some{v}:
+              Nat.show(v) ++ "n"
+            case None{}:
+              show.run(fuel, SShowCtrSucc{t, show.chain(t, "Succ", 1n), p, bnd, n})
+        case SShowCtrF32{+t, m, +p, +bnd, +n}:
+          match m:
+            case Some{v}:
+              f32_show(v)
+            case None{}:
+              show.run(fuel, SShowCtrNat{t, nat_from_term(t), p, bnd, n})
+        case SShowCtrU32{+t, m, +p, +bnd, +n}:
+          match m:
+            case Some{v}:
+              U32.show(v)
+            case None{}:
+              show.run(fuel, SShowCtrF32{t, u32_from_term(t, "F32"), p, bnd, n})
+        case SShowCtr{+t, +p, +bnd, +n}:
+          show.run(fuel, SShowCtrU32{t, u32_from_term(t, "U32"), p, bnd, n})
 
-def show.app(t, p, bnd, n):
-  show.app.go(term_unapply(t), p, bnd, n)
+def term_show.go(t: Tm, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
+  show.run(Fuel.max(), STermShowGo{t, p, bnd, n})
 
-def show.rwt.inner(es: String, pr: Tm, +k1: String, b: Tm, f: Tm, +bnd: List<&2, String>, +n: Nat) ->
-  String:
-  match b:
-    case Lam{+k2, i, f2, s, q}:
-      "%" ++ Bool.pick(String, String.is_empty(k2), "", k2 ++ "@") ++ es ++ " : " ++
-        term_show.go(syn_body(f2), 2, k2 <> k1 <> bnd, 2n+n) ++ "; " ++ term_show.go(f, 0, bnd, n)
-    case other:
-      "%" ++ es ++ " : " ++ term_show.go(pr, 2, bnd, n) ++ "; " ++ term_show.go(f, 0, bnd, n)
-
-def show.rwt.go(es: String, pr: Tm, f: Tm, +bnd: List<&2, String>, +n: Nat) -> String:
-  match pr:
-    case Lam{+k1, i, +f1, s, q}:
-      show.rwt.inner(es, Lam{k1, i, f1, s, q}, k1, term_strip(syn_body(f1)), f, bnd, n)
-    case other:
-      "%" ++ es ++ " : " ++ term_show.go(other, 2, bnd, n) ++ "; " ++ term_show.go(f, 0, bnd, n)
-
-def show.rwt(e, pr, f, bnd, n):
-  show.rwt.go(term_show.go(e, 2, bnd, n), term_strip(pr), f, bnd, n)
-
-def show.ctr.plain(t: Tm, +bnd: List<&2, String>, +n: Nat) -> String:
-  match t:
-    case Ctr{k, xs, s}:
-      k ++ "{" ++ show.join(show.args(bnd, n, xs, 1), ", ") ++ "}"
-    case other:
-      "?"
-
-def show.ctr.arr(t: Tm, m: Maybe<&2, List<&2, String>>, +bnd: List<&2, String>, +n: Nat) -> String:
-  match m:
-    case Some{xs}:
-      "[" ++ show.join(xs, ", ") ++ "]"
-    case None{}:
-      show.ctr.plain(t, bnd, n)
-
-def show.ctr.tup(+t: Tm, r: List<&2, Tm> & Tm, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
-  (xs, tl) = r
-  match xs:
-    case Nil{}:
-      show.ctr.arr(t, show.arr(t, bnd, n), bnd, n)
-    case h <> rest:
-      "(" ++ show.join(show.args(bnd, n, List.append(&2, Tm, h <> rest, [tl]), 1), ", ") ++ ")"
-
-def show.ctr.lst(+t: Tm, r: List<&2, Tm> & Tm, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
-  (xs, tl) = r
-  match xs tl:
-    case ys Ctr{"Nil", Nil{}, s}:
-      "[" ++ show.join(show.args(bnd, n, ys, 1), ", ") ++ "]"
-    case Nil{} other:
-      show.ctr.tup(t, show.chain(t, "Tuple", 2n), p, bnd, n)
-    case ys other:
-      show.paren(U32.is_gt(p, 2), show.join(show.args(bnd, n, ys, 3), " <> ") ++ " <> " ++
-        term_show.go(other, 2, bnd, n))
-
-def show.ctr.str(+t: Tm, m: Maybe<&2, String>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
-  match m:
-    case Some{c}:
-      c
-    case None{}:
-      show.ctr.lst(t, show.chain(t, "Con", 2n), p, bnd, n)
-
-def show.ctr.chr(+t: Tm, m: Maybe<&2, String>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
-  match m:
-    case Some{c}:
-      "'" ++ c ++ "'"
-    case None{}:
-      show.ctr.str(t, show.str(t), p, bnd, n)
-
-def show.ctr.succ(+t: Tm, r: List<&2, Tm> & Tm, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
-  (xs, tl) = r
-  match xs:
-    case Nil{}:
-      show.ctr.chr(t, show.chr_term(t, 39), p, bnd, n)
-    case +h <> rest:
-      show.paren(U32.is_gt(p, 2), Nat.show(List.length(&2, Tm, h <> rest)) ++ "n+" ++
-        term_show.go(tl, 2, bnd, n))
-
-def show.ctr.nat(+t: Tm, m: Maybe<&2, Nat>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
-  match m:
-    case Some{v}:
-      Nat.show(v) ++ "n"
-    case None{}:
-      show.ctr.succ(t, show.chain(t, "Succ", 1n), p, bnd, n)
-
-def show.ctr.f32(+t: Tm, m: Maybe<&2, U32>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
-  match m:
-    case Some{v}:
-      f32_show(v)
-    case None{}:
-      show.ctr.nat(t, nat_from_term(t), p, bnd, n)
-
-def show.ctr.u32(+t: Tm, m: Maybe<&2, U32>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
-  match m:
-    case Some{v}:
-      U32.show(v)
-    case None{}:
-      show.ctr.f32(t, u32_from_term(t, "F32"), p, bnd, n)
-
-def show.ctr(t, p, bnd, n):
-  show.ctr.u32(t, u32_from_term(t, "U32"), p, bnd, n)
+def term_show(t, p, bnd):
+  term_show.go(t, p, bnd, List.length(&2, String, bnd))
 
 def err.make(+book: Book, ctx: List<&2, Tm>, exp: Msg, obs: Msg, spn: Sp, dn: String) -> Err:
   Err{book, ctx, exp, obs, spn, dn, ""}
@@ -6015,18 +6073,22 @@ def tele_fill(+tel: Tm, xs: List<&2, Tm>, +ctx: List<&2, Tm>, +dn: String, +s: S
 type Dom is Data:
   Dom{q: Q, k: String, a: Tm}
 
-@unsafe
-def tele_unbind.go(+book: Book, t: Tm, +j: U32, doms: List<&2, Dom>) -> List<&2, Dom> & Tm:
-  match t:
-    case All{q, +k, i, a, b, s}:
-      tele_unbind.go(book, term_wnf(book, clo_apply(book, b, [Var{k, j, NoSp{}}])), U32.inc(j),
-        List.append(&2, Dom, doms, [Dom{q, k, a}]))
-    case other:
-      (doms, other)
+# Out of fuel, what the type returns is the hole ?out of fuel.
+def tele_unbind.go(fuel0: Nat, +book: Book, t: Tm, +j: U32, doms: List<&2, Dom>) -> List<&2, Dom> & Tm:
+  match fuel0:
+    case 0n:
+      (doms, Hol{"out of fuel", NoSp{}})
+    case 1n+fuel:
+      match t:
+        case All{q, +k, i, a, b, s}:
+          tele_unbind.go(fuel, book, term_wnf(book, clo_apply(book, b, [Var{k, j, NoSp{}}])), U32.inc(j),
+            List.append(&2, Dom, doms, [Dom{q, k, a}]))
+        case other:
+          (doms, other)
 
 # The parameters of a type, and what it returns.
 def tele_unbind(+book: Book, t: Tm) -> List<&2, Dom> & Tm:
-  tele_unbind.go(book, term_wnf(book, t), 0, Nil{})
+  tele_unbind.go(Fuel.max(), book, term_wnf(book, t), 0, Nil{})
 
 def Dom.qs(ds: List<&2, Dom>) -> List<&2, Q>:
   match ds:
@@ -6105,20 +6167,24 @@ def CtrD.names(cs: List<&2, CtrD>) -> List<&2, String>:
     case CtrD{k, n, t} <> rest:
       k <> CtrD.names(rest)
 
-@unsafe
-def book_fam.go(+book: Book, t: Tm, +d: U32, +k: String) -> String:
-  match t:
-    case All{q, +ak, i, a, b, s}:
-      book_fam.go(book, term_strip(clo_apply(book, b, [Var{ak, d, NoSp{}}])), U32.inc(d), k)
-    case ADT{ak, xs, s, r}:
-      ak
-    case other:
-      k
+# Out of fuel, the family is named ?out of fuel.
+def book_fam.go(fuel0: Nat, +book: Book, t: Tm, +d: U32, +k: String) -> String:
+  match fuel0:
+    case 0n:
+      "?out of fuel"
+    case 1n+fuel:
+      match t:
+        case All{q, +ak, i, a, b, s}:
+          book_fam.go(fuel, book, term_strip(clo_apply(book, b, [Var{ak, d, NoSp{}}])), U32.inc(d), k)
+        case ADT{ak, xs, s, r}:
+          ak
+        case other:
+          k
 
 def book_fam.ctr(+book: Book, c: Maybe<&2, CtrD>, +k: String) -> String:
   match c:
     case Some{CtrD{ck, n, t}}:
-      book_fam.go(book, term_strip(t), 0, k)
+      book_fam.go(Fuel.max(), book, term_strip(t), 0, k)
     case None{}:
       k
 
@@ -6562,68 +6628,112 @@ def CL.ext(+l: CL, +k: String, +n: Nat) -> K(CL):
         book : Book <- K.book()
         return CL{lhs_ext(book, t, k, n, Nil{}), Nat.add(m, n), dn, qs, u, z}
 
-law term_key:
-  for t: Tm
-  String
-
-@unsafe
-def term_key.list(xs: List<&2, Tm>) -> String:
-  match xs:
-    case Nil{}:
-      ""
-    case x <> t:
-      term_key(x) ++ "," ++ term_key.list(t)
-
 # A text that is equal for equal lowered terms (the official JSON key).
-@unsafe
-def term_key(t):
+# mode 1n keys t; mode 0n keys the list in t (a Let's values, an ADT's or
+# a Ctr's fields), each key followed by a comma. body: t is a binder's
+# closure, keyed by its body.
+def term_key.go(t: Tm, mode: Nat, body: Bool) -> String:
   match t:
     case Var{k, i, s}:
       "V" ++ U32.show(i)
     case Ref{k, s, b}:
       "R" ++ k ++ Bool.pick(String, b, "!", "")
     case Sub{i, p, f, s}:
-      term_key(f)
-    case Let{ks, ids, vs, f, s, qs}:
-      "L(" ++ term_key.list(vs) ++ term_key(syn_body(f)) ++ ")"
+      term_key.go(f, 1n, False{})
+    case Let{ks, ids, vs, +f, s, qs}:
+      match vs:
+        case Nil{}:
+          match mode:
+            case 0n:
+              ""
+            case 1n+m:
+              "L(" ++ term_key.go(f, 1n, True{}) ++ ")"
+        case v <> rest:
+          match mode:
+            case 0n:
+              term_key.go(v, 1n, False{}) ++ "," ++ term_key.go(Let{ks, ids, rest, f, s, qs}, 0n, False{})
+            case 1n+m:
+              "L(" ++ term_key.go(Let{ks, ids, v <> rest, f, s, qs}, m, False{}) ++ term_key.go(f, 1n, True{}) ++ ")"
     case Typ{g, s}:
-      "T(" ++ term_key(g) ++ ")"
+      "T(" ++ term_key.go(g, 1n, False{}) ++ ")"
     case Qnt{s}:
       "Q"
     case TQua{q, s}:
       "&" ++ show.qua(q)
     case Min{a, b, s}:
-      "M(" ++ term_key(a) ++ "," ++ term_key(b) ++ ")"
+      "M(" ++ term_key.go(a, 1n, False{}) ++ "," ++ term_key.go(b, 1n, False{}) ++ ")"
     case All{q, k, i, a, b, s}:
-      "A" ++ quant_show(q) ++ U32.show(i) ++ "(" ++ term_key(a) ++ "," ++ term_key(syn_body(b)) ++ ")"
+      "A" ++ quant_show(q) ++ U32.show(i) ++ "(" ++ term_key.go(a, 1n, False{}) ++ "," ++ term_key.go(b, 1n, True{}) ++ ")"
     case Lam{k, i, f, s, q}:
-      "F" ++ quant_show(q) ++ U32.show(i) ++ "(" ++ term_key(syn_body(f)) ++ ")"
+      "F" ++ quant_show(q) ++ U32.show(i) ++ "(" ++ term_key.go(f, 1n, True{}) ++ ")"
     case TApp{f, x, s}:
-      "@(" ++ term_key(f) ++ "," ++ term_key(x) ++ ")"
-    case ADT{k, xs, s, r}:
-      "D" ++ k ++ "(" ++ term_key.list(xs) ++ String.join(r, ",") ++ ")"
-    case Ctr{k, xs, s}:
-      "C" ++ k ++ "(" ++ term_key.list(xs) ++ ")"
+      "@(" ++ term_key.go(f, 1n, False{}) ++ "," ++ term_key.go(x, 1n, False{}) ++ ")"
+    case ADT{+k, xs, s, +r}:
+      match xs:
+        case Nil{}:
+          match mode:
+            case 0n:
+              ""
+            case 1n+m:
+              "D" ++ k ++ "(" ++ String.join(r, ",") ++ ")"
+        case x <> rest:
+          match mode:
+            case 0n:
+              term_key.go(x, 1n, False{}) ++ "," ++ term_key.go(ADT{k, rest, s, r}, 0n, False{})
+            case 1n+m:
+              "D" ++ k ++ "(" ++ term_key.go(ADT{k, x <> rest, s, r}, m, False{}) ++ String.join(r, ",") ++ ")"
+    case Ctr{+k, xs, s}:
+      match xs:
+        case Nil{}:
+          match mode:
+            case 0n:
+              ""
+            case 1n+m:
+              "C" ++ k ++ "()"
+        case x <> rest:
+          match mode:
+            case 0n:
+              term_key.go(x, 1n, False{}) ++ "," ++ term_key.go(Ctr{k, rest, s}, 0n, False{})
+            case 1n+m:
+              "C" ++ k ++ "(" ++ term_key.go(Ctr{k, x <> rest, s}, m, False{}) ++ ")"
     case Lit{LNat{n}, s}:
       "N" ++ Nat.show(n)
     case Lit{LStr{x}, s}:
       "S\"" ++ show.text(x) ++ "\""
     case Mat{k, h, m, s}:
-      "X" ++ k ++ "(" ++ term_key(h) ++ "," ++ term_key(m) ++ ")"
+      "X" ++ k ++ "(" ++ term_key.go(h, 1n, False{}) ++ "," ++ term_key.go(m, 1n, False{}) ++ ")"
     case Efq{s}:
       "E"
     case Eql{a, b, ty, s}:
-      "=(" ++ term_key(a) ++ "," ++ term_key(b) ++ "," ++ term_key(ty) ++ ")"
+      "=(" ++ term_key.go(a, 1n, False{}) ++ "," ++ term_key.go(b, 1n, False{}) ++ "," ++ term_key.go(ty, 1n, False{}) ++ ")"
     case Rfl{s}:
       "r"
     case Rwt{e, p, f, s}:
-      "%(" ++ term_key(e) ++ "," ++ term_key(p) ++ "," ++ term_key(f) ++ ")"
+      "%(" ++ term_key.go(e, 1n, False{}) ++ "," ++ term_key.go(p, 1n, False{}) ++ "," ++ term_key.go(f, 1n, False{}) ++ ")"
     case Hol{k, s}:
       "?" ++ k
     case Ann{x, ty, s}:
-      ":(" ++ term_key(x) ++ "," ++ term_key(ty) ++ ")"
+      ":(" ++ term_key.go(x, 1n, False{}) ++ "," ++ term_key.go(ty, 1n, False{}) ++ ")"
+    case CSyn{env, i, b}:
+      match body:
+        case True{}:
+          term_key.go(b, 1n, False{})
+        case False{}:
+          "_"
+    case CLet{env, ids, b}:
+      match body:
+        case True{}:
+          term_key.go(b, 1n, False{})
+        case False{}:
+          "_"
     case other:
       "_"
+
+def term_key(t: Tm) -> String:
+  term_key.go(t, 1n, False{})
+
+def term_key.list(xs: List<&2, Tm>) -> String:
+  term_key.go(Ctr{"", xs, NoSp{}}, 0n, False{})
 
 # The length of a lowered term as the official checker's key spells it
 # (its JSON, spans left out), which bounds how far a ~ argument may grow.
@@ -6661,56 +6771,36 @@ def jl.nums(ns: List<&2, U32>) -> Nat:
 def jl.q(q: Q) -> Nat:
   12n
 
-law jl.pat:
-  for p: Pt
-  Nat
-
-law jl.pats:
-  for ps: List<&2, Pt>
-  Nat
-
-@unsafe
-def jl.pats(ps):
-  match ps:
-    case Nil{}:
-      0n
-    case p <> t:
-      Nat.add(jl.pat(p), jl.pats(t))
-
-def jl.pat(p):
+# list: the sum over p's fields (p a PCtr) instead of p.
+def jl.pat.go(p: Pt, list: Bool) -> Nat:
   match p:
     case PVar{+k, +i, q, s}:
       jl.obj("PVar", Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("i", jl.num(i)), jl.fld("q", 12n))))
-    case PCtr{+k, +xs, s}:
-      +n = List.length(&2, Pt, xs)
-      jl.obj("PCtr", Nat.add(jl.fld("k", jl.str(k)), jl.fld("x", jl.arr(jl.pats(xs), n))))
+    case PCtr{+k, xs, s}:
+      match xs:
+        case Nil{}:
+          match list:
+            case True{}:
+              0n
+            case False{}:
+              jl.obj("PCtr", Nat.add(jl.fld("k", jl.str(k)), jl.fld("x", jl.arr(0n, 0n))))
+        case x <> +rest:
+          match list:
+            case True{}:
+              Nat.add(jl.pat.go(x, False{}), jl.pat.go(PCtr{k, rest, s}, True{}))
+            case False{}:
+              +n = {1n+List.length(&2, Pt, rest) : Nat}
+              jl.obj("PCtr", Nat.add(jl.fld("k", jl.str(k)), jl.fld("x", jl.arr(Nat.add(jl.pat.go(x, False{}),
+                jl.pat.go(PCtr{k, rest, s}, True{})), n))))
 
-law term_jlen:
-  for t: Tm
-  Nat
+def jl.pat(p: Pt) -> Nat:
+  jl.pat.go(p, False{})
 
-law term_jlen.list:
-  for xs: List<&2, Tm>
-  Nat
+def jl.two(+tag: String, +a: String, +x: Nat, +b: String, +y: Nat) -> Nat:
+  jl.obj(tag, Nat.add(jl.fld(a, x), jl.fld(b, y)))
 
-@unsafe
-def term_jlen.list(xs):
-  match xs:
-    case Nil{}:
-      0n
-    case x <> t:
-      Nat.add(term_jlen(x), term_jlen.list(t))
-
-def jl.xs(+xs: List<&2, Tm>) -> Nat:
-  jl.arr(term_jlen.list(xs), List.length(&2, Tm, xs))
-
-@unsafe
-def jl.two(+tag: String, +a: String, x: Tm, +b: String, y: Tm) -> Nat:
-  jl.obj(tag, Nat.add(jl.fld(a, term_jlen(x)), jl.fld(b, term_jlen(y))))
-
-@unsafe
-def jl.three(+tag: String, +a: String, x: Tm, +b: String, y: Tm, +c: String, z: Tm) -> Nat:
-  jl.obj(tag, Nat.add(jl.fld(a, term_jlen(x)), Nat.add(jl.fld(b, term_jlen(y)), jl.fld(c, term_jlen(z)))))
+def jl.three(+tag: String, +a: String, +x: Nat, +b: String, +y: Nat, +c: String, +z: Nat) -> Nat:
+  jl.obj(tag, Nat.add(jl.fld(a, x), Nat.add(jl.fld(b, y), jl.fld(c, z))))
 
 def jl.lam_q(q: Q) -> Nat:
   match q:
@@ -6719,64 +6809,132 @@ def jl.lam_q(q: Q) -> Nat:
     case other:
       jl.fld("q", 12n)
 
-@unsafe
-def term_jlen(t):
+# A Let, an ADT and a Ctr, given the sum and count of their list's lengths.
+def jl.let(+ks: List<&2, String>, +ids: List<&2, U32>, +sum: Nat, +m: Nat, +f: Nat) -> Nat:
+  +n = List.length(&2, String, ks)
+  jl.obj("Let", Nat.add(jl.fld("k", jl.arr(jl.strs(ks), n)), Nat.add(jl.fld("i", jl.arr(jl.nums(ids), n)),
+    Nat.add(jl.fld("q", jl.arr(Nat.mul(12n, n), n)), Nat.add(jl.fld("v", jl.arr(sum, m)), jl.fld("f", f))))))
+
+def jl.adt(+k: String, +sum: Nat, +m: Nat, +r: List<&2, String>) -> Nat:
+  jl.obj("ADT", Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("x", jl.arr(sum, m)),
+    jl.fld("r", jl.arr(jl.strs(r), List.length(&2, String, r))))))
+
+def jl.ctr(+k: String, +sum: Nat, +m: Nat) -> Nat:
+  jl.obj("Ctr", Nat.add(jl.fld("k", jl.str(k)), jl.fld("x", jl.arr(sum, m))))
+
+# mode 1n measures t; mode 0n sums the lengths of the list in t (a Let's
+# values, an ADT's or a Ctr's fields). body: t is a binder's closure,
+# measured by its body.
+def term_jlen.go(t: Tm, mode: Nat, body: Bool) -> Nat:
   match t:
     case Var{+k, +i, s}:
       jl.obj("Var", Nat.add(jl.fld("k", jl.str(k)), jl.fld("i", jl.num(i))))
     case Ref{+k, s, b}:
       jl.obj("Ref", Nat.add(jl.fld("k", jl.str(k)), Bool.pick(Nat, b, jl.fld("b", 4n), 0n)))
     case Sub{+i, pt, f, s}:
-      jl.obj("Sub", Nat.add(jl.fld("i", jl.num(i)), Nat.add(jl.fld("v", jl.pat(pt)), jl.fld("f", term_jlen(f)))))
-    case Let{+ks, +ids, +vs, f, s, +qs}:
-      +n = List.length(&2, String, ks)
-      jl.obj("Let", Nat.add(jl.fld("k", jl.arr(jl.strs(ks), n)), Nat.add(jl.fld("i", jl.arr(jl.nums(ids), n)),
-        Nat.add(jl.fld("q", jl.arr(Nat.mul(12n, n), n)), Nat.add(jl.fld("v", jl.xs(vs)), jl.fld("f", term_jlen(syn_body(f))))))))
+      jl.obj("Sub", Nat.add(jl.fld("i", jl.num(i)), Nat.add(jl.fld("v", jl.pat(pt)), jl.fld("f", term_jlen.go(f, 1n, False{})))))
+    case Let{+ks, +ids, vs, +f, s, qs}:
+      match vs:
+        case Nil{}:
+          match mode:
+            case 0n:
+              0n
+            case 1n+m:
+              jl.let(ks, ids, 0n, 0n, term_jlen.go(f, 1n, True{}))
+        case v <> +rest:
+          match mode:
+            case 0n:
+              Nat.add(term_jlen.go(v, 1n, False{}), term_jlen.go(Let{ks, ids, rest, f, s, qs}, 0n, False{}))
+            case 1n+m:
+              jl.let(ks, ids, term_jlen.go(Let{ks, ids, v <> rest, f, s, qs}, m, False{}), 1n+List.length(&2, Tm, rest),
+                term_jlen.go(f, 1n, True{}))
     case Typ{g, s}:
-      jl.obj("Typ", jl.fld("g", term_jlen(g)))
+      jl.obj("Typ", jl.fld("g", term_jlen.go(g, 1n, False{})))
     case Qnt{s}:
       jl.obj("Qnt", 0n)
     case TQua{q, s}:
       jl.obj("Qua", jl.fld("q", 12n))
     case Min{a, b, s}:
-      jl.two("Min", "a", a, "b", b)
+      jl.two("Min", "a", term_jlen.go(a, 1n, False{}), "b", term_jlen.go(b, 1n, False{}))
     case All{q, +k, +i, a, b, s}:
       jl.obj("All", Nat.add(jl.fld("q", 12n), Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("i", jl.num(i)),
-        Nat.add(jl.fld("A", term_jlen(a)), jl.fld("B", term_jlen(syn_body(b))))))))
+        Nat.add(jl.fld("A", term_jlen.go(a, 1n, False{})), jl.fld("B", term_jlen.go(b, 1n, True{})))))))
     case Lam{+k, +i, f, s, q}:
       jl.obj("Lam", Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("i", jl.num(i)),
-        Nat.add(jl.fld("f", term_jlen(syn_body(f))), jl.lam_q(q)))))
+        Nat.add(jl.fld("f", term_jlen.go(f, 1n, True{})), jl.lam_q(q)))))
     case TApp{f, x, s}:
-      jl.two("App", "f", f, "x", x)
-    case ADT{+k, +xs, s, +r}:
-      jl.obj("ADT", Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("x", jl.xs(xs)),
-        jl.fld("r", jl.arr(jl.strs(r), List.length(&2, String, r))))))
-    case Ctr{+k, +xs, s}:
-      jl.obj("Ctr", Nat.add(jl.fld("k", jl.str(k)), jl.fld("x", jl.xs(xs))))
+      jl.two("App", "f", term_jlen.go(f, 1n, False{}), "x", term_jlen.go(x, 1n, False{}))
+    case ADT{+k, xs, s, +r}:
+      match xs:
+        case Nil{}:
+          match mode:
+            case 0n:
+              0n
+            case 1n+m:
+              jl.adt(k, 0n, 0n, r)
+        case x <> +rest:
+          match mode:
+            case 0n:
+              Nat.add(term_jlen.go(x, 1n, False{}), term_jlen.go(ADT{k, rest, s, r}, 0n, False{}))
+            case 1n+m:
+              jl.adt(k, term_jlen.go(ADT{k, x <> rest, s, r}, m, False{}), 1n+List.length(&2, Tm, rest), r)
+    case Ctr{+k, xs, s}:
+      match xs:
+        case Nil{}:
+          match mode:
+            case 0n:
+              0n
+            case 1n+m:
+              jl.ctr(k, 0n, 0n)
+        case x <> +rest:
+          match mode:
+            case 0n:
+              Nat.add(term_jlen.go(x, 1n, False{}), term_jlen.go(Ctr{k, rest, s}, 0n, False{}))
+            case 1n+m:
+              jl.ctr(k, term_jlen.go(Ctr{k, x <> rest, s}, m, False{}), 1n+List.length(&2, Tm, rest))
     case Lit{LNat{+n}, s}:
       jl.obj("Lit", Nat.add(jl.fld("k", 5n), jl.fld("v", String.length(Nat.show(n)))))
     case Lit{LStr{+x}, s}:
       jl.obj("Lit", Nat.add(jl.fld("k", 8n), jl.fld("v", jl.str(x))))
     case Mat{+k, h, m, s}:
-      jl.obj("Mat", Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("h", term_jlen(h)), jl.fld("m", term_jlen(m)))))
+      jl.obj("Mat", Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("h", term_jlen.go(h, 1n, False{})),
+        jl.fld("m", term_jlen.go(m, 1n, False{})))))
     case Efq{s}:
       jl.obj("Efq", 0n)
     case Eql{a, b, ty, s}:
-      jl.three("Eql", "a", a, "b", b, "T", ty)
+      jl.three("Eql", "a", term_jlen.go(a, 1n, False{}), "b", term_jlen.go(b, 1n, False{}), "T", term_jlen.go(ty, 1n, False{}))
     case Rfl{s}:
       jl.obj("Rfl", 0n)
     case Rwt{e, p, f, s}:
-      jl.three("Rwt", "e", e, "p", p, "f", f)
+      jl.three("Rwt", "e", term_jlen.go(e, 1n, False{}), "p", term_jlen.go(p, 1n, False{}), "f", term_jlen.go(f, 1n, False{}))
     case Hol{+k, s}:
       jl.obj("Hol", jl.fld("k", jl.str(k)))
     case Ann{x, ty, s}:
-      jl.two("Ann", "x", x, "T", ty)
+      jl.two("Ann", "x", term_jlen.go(x, 1n, False{}), "T", term_jlen.go(ty, 1n, False{}))
     case Cel{k, s, v, m}:
-      term_jlen(v)
+      term_jlen.go(v, 1n, False{})
     case VRf{k, i, s, r}:
-      term_jlen(r)
+      term_jlen.go(r, 1n, False{})
+    case CSyn{env, i, b}:
+      match body:
+        case True{}:
+          term_jlen.go(b, 1n, False{})
+        case False{}:
+          0n
+    case CLet{env, ids, b}:
+      match body:
+        case True{}:
+          term_jlen.go(b, 1n, False{})
+        case False{}:
+          0n
     case other:
       0n
+
+def term_jlen(t: Tm) -> Nat:
+  term_jlen.go(t, 1n, False{})
+
+def term_jlen.list(xs: List<&2, Tm>) -> Nat:
+  term_jlen.go(Ctr{"", xs, NoSp{}}, 0n, False{})
 
 def Book.tmp(+book: Book, +key: String) -> Maybe<&2, String>:
   Book{tlds, ctrs, order, hols, open, +tmps, tcnt, files} = book
@@ -6837,13 +6995,15 @@ def CL.z(+l: CL) -> Nat:
   CL{t, n, dn, qs, u, +z} = l
   z
 
-@unsafe
-def applys(+book: Book, f: Tm, xs: List<&2, Tm>) -> Tm:
+def applys.go(xs: List<&2, Tm>, +book: Book, f: Tm) -> Tm:
   match xs:
     case Nil{}:
       f
     case x <> t:
-      applys(book, term_apply1(book, f, x), t)
+      applys.go(t, book, term_apply1(book, f, x))
+
+def applys(+book: Book, f: Tm, xs: List<&2, Tm>) -> Tm:
+  applys.go(xs, book, f)
 
 # Binds a template's ~ parameters to fresh names: the body is checked once,
 # for any arguments.
@@ -7473,13 +7633,15 @@ def Tld.imps(t: Tld) -> Maybe<&2, List<&2, String>>:
     case other:
       None{}
 
-@unsafe
-def book_set_ctrs(b: Book, cs: List<&2, CtrD>) -> Book:
+def book_set_ctrs.go(cs: List<&2, CtrD>, b: Book) -> Book:
   match cs:
     case Nil{}:
       b
     case CtrD{+ck, n, t} <> rest:
-      book_set_ctrs(book_set_ctr(b, ck, CtrD{ck, n, t}), rest)
+      book_set_ctrs.go(rest, book_set_ctr(b, ck, CtrD{ck, n, t}))
+
+def book_set_ctrs(b: Book, cs: List<&2, CtrD>) -> Book:
+  book_set_ctrs.go(cs, b)
 
 def CL.of(+k: String, u: Bool) -> CL:
   CL{Ref{k, NoSp{}, False{}}, 0n, k, Nil{}, u, 0n}
@@ -7520,9 +7682,8 @@ def valid.tip(+k: String, +n: Nat, +ck: String, +tip: Tm, +ctx: List<&2, Tm>) ->
     K.if(Unit, valid.tip.ok(book, k, n, tip), K.pure(Unit, Unit{}),
       K.err(Unit, ctx, MStr{"a telescope tipped at " ++ k ++ " applied to its own parameters"}, MTm{tip}, NoSp{}, ck))
 
-@unsafe
 def valid.fields(
-  +k: String, +n: Nat, +kind: Tm, +ck: String, tel: Tm, left: Nat, +d: U32, +ctx: List<&2, Tm>
+  left: Nat, +k: String, +n: Nat, +kind: Tm, +ck: String, tel: Tm, +d: U32, +ctx: List<&2, Tm>
 ) -> K(Unit):
   match left:
     case 1n+m:
@@ -7532,7 +7693,7 @@ def valid.fields(
         u : List<&2, Us> <- term_check(CL.of(ck, False{}), All.a(h), QNone{},
           Bool.pick(Tm, Bool.and(Nat.is_ge(U32.to_nat(d), n), Q.is_lone(q)), kind, typ(q)), ctx, d)
         book : Book <- K.book()
-        valid.fields(k, n, kind, ck, clo_apply(book, All.b(h), [Var{All.k(h), d, NoSp{}}]), m, U32.inc(d),
+        valid.fields(m, k, n, kind, ck, clo_apply(book, All.b(h), [Var{All.k(h), d, NoSp{}}]), U32.inc(d),
           ctx_bind(ctx, d, q, All.k(h), All.a(h)))
     case 0n:
       do K<Unit>:
@@ -7545,7 +7706,7 @@ def valid.ctrs(+k: String, +n: Nat, +kind: Tm, cs: List<&2, CtrD>) -> K(Unit):
       K.pure(Unit, Unit{})
     case CtrD{+ck, cn, ct} <> rest:
       do K<Unit>:
-        valid.fields(k, n, kind, ck, ct, Nat.add(n, cn), 0, Nil{})
+        valid.fields(Nat.add(n, cn), k, n, kind, ck, ct, 0, Nil{})
         valid.ctrs(k, n, kind, rest)
 
 def valid.adt(+k: String, +n: Nat, +ty: Tm, cs: List<&2, CtrD>) -> K(Unit):
@@ -7556,13 +7717,17 @@ def valid.adt(+k: String, +n: Nat, +ty: Tm, cs: List<&2, CtrD>) -> K(Unit):
     +kind : Tm <- valid.kind(k, ty, r)
     valid.ctrs(k, n, kind, cs)
 
-@unsafe
-def valid.ret(+book: Book, t: Tm, +d: U32) -> Tm:
-  match t:
-    case All{q, +k, i, a, b, s}:
-      valid.ret(book, term_strip(clo_apply(book, b, [Var{k, d, NoSp{}}])), U32.inc(d))
-    case other:
-      other
+# Out of fuel, a type returns the hole ?out of fuel (not IO).
+def valid.ret(fuel0: Nat, +book: Book, t: Tm, +d: U32) -> Tm:
+  match fuel0:
+    case 0n:
+      Hol{"out of fuel", NoSp{}}
+    case 1n+fuel:
+      match t:
+        case All{q, +k, i, a, b, s}:
+          valid.ret(fuel, book, term_strip(clo_apply(book, b, [Var{k, d, NoSp{}}])), U32.inc(d))
+        case other:
+          other
 
 def valid.io.base(t: Maybe<&2, Tld>) -> Bool:
   match t:
@@ -7586,7 +7751,7 @@ def valid.foreign(+k: String, +dd: Tld, m: Maybe<&2, List<&2, String>>) -> K(Uni
     case Some{ims}:
       do K<Unit>:
         +book : Book <- K.book()
-        +tip : Tm <- K.pure(Tm, valid.ret(book, term_strip(Tld.t(dd)), 0))
+        +tip : Tm <- K.pure(Tm, valid.ret(Fuel.max(), book, term_strip(Tld.t(dd)), 0))
         K.if(Unit, valid.io(book, term_head(tip)), K.pure(Unit, Unit{}),
           K.err(Unit, Nil{}, MStr{"a foreign definition returning base IO(...) directly (return type aliases are not unfolded)"},
             MStr{k}, Tm.span(tip), k))
@@ -7626,12 +7791,6 @@ def book_valid.go(ks: List<&2, KFin>, +full: Book) -> K(Unit):
         book_valid.one(k, Maybe.default(&2, Tld, book_tld(full, k), TADT{0n, 0n, Qnt{NoSp{}}, Nil{}, False{}}), fin)
         book_valid.go(rest, full)
 
-law book_valid.lasts:
-  for rev: List<&2, String>
-  for seen: Set()
-  for acc: List<&2, KFin>
-  List<&2, KFin>
-
 #
 # Each declaration is checked against the book as it stands before it: the
 # declarations before it, and itself. Those books cost nothing to keep (maps
@@ -7643,84 +7802,36 @@ type VJob is Data:
   VADT{k: String, n: Nat, ty: Tm, cs: List<&2, CtrD>, book: Book}
   VDef{k: String, dd: Tld, book: Book}
 
-law book_valid.jobs:
-  for ks: List<&2, KFin>
-  for +full: Book
-  for +b: Book
-  for acc: List<&2, VJob>
-  List<&2, VJob> & Book
-
-law VJob.all:
-  for js: List<&2, VJob>
-  for +n: Nat
-  Maybe<&2, List<&2, VJob>>
-
-law book_valid.redo:
-  for js: List<&2, VJob>
-  for +book: Book
-  Result<&1, &1, Err, Book>
-
-def book_valid.par.redo(r: Result<&1, &1, Err, Book>, +ks: List<&2, KFin>, +full: Book, +b0: Book) ->
-  Result<&1, &1, Err, Unit & Book>:
-  match r:
-    case Done{b}:
-      Done{(Unit{}, b)}
-    case Fail{e}:
-      book_valid.go(ks, full)(b0)
-
-@unsafe
-def book_valid.par.fin(m: Maybe<&2, List<&2, VJob>>, +ks: List<&2, KFin>, +full: Book, +b0: Book, bfin: Book) ->
-  Result<&1, &1, Err, Unit & Book>:
-  match m:
-    case Some{js}:
-      book_valid.par.redo(book_valid.redo(js, bfin), ks, full, b0)
-    case None{}:
-      book_valid.go(ks, full)(b0)
-
-@unsafe
-def book_valid.par.go(+ks: List<&2, KFin>, +full: Book, +b0: Book, r: List<&2, VJob> & Book) ->
-  Result<&1, &1, Err, Unit & Book>:
-  (js, bfin) = r
-  +js2 = js
-  book_valid.par.fin(VJob.all(js2, List.length(&2, VJob, js2)), ks, full, b0, bfin)
-
-@unsafe
-def book_valid.par(+ks: List<&2, KFin>, +full: Book, +b0: Book) -> Result<&1, &1, Err, Unit & Book>:
-  book_valid.par.go(ks, full, b0, book_valid.jobs(ks, full, b0, Nil{}))
-
-# Checks every declaration in order: each sees only the ones before it
-# (and itself, for recursion).
-@unsafe
-def book_valid(order: List<&2, String>, +full: Book) -> K(Unit):
-  +ks = book_valid.lasts(List.reverse(&2, String, order), Set.new(), Nil{})
-  b0 => book_valid.par(ks, full, b0)
-
-@unsafe
-def book_valid.jobs.def(+k: String, +t: Tld, +fin: Bool, rest: List<&2, KFin>, +full: Book, +b: Book,
-  acc: List<&2, VJob>) -> List<&2, VJob> & Book:
+def book_valid.jobs.def(+k: String, +t: Tld, +fin: Bool, +b: Book, acc: List<&2, VJob>) -> Book & List<&2, VJob>:
   +b1 = Bool.pick(Book, Bool.and(fin, Tld.is_law_open(t)), book_opened(b), b)
   +bs = book_set(b1, k, Tld.dec(t))
   +dd = Bool.pick(Tld, fin, t, Tld.dec(t))
-  book_valid.jobs(rest, full, book_set(bs, k, dd), VDef{k, dd, bs} <> acc)
+  (book_set(bs, k, dd), VDef{k, dd, bs} <> acc)
 
-@unsafe
-def book_valid.jobs.one(+k: String, tld: Tld, fin: Bool, rest: List<&2, KFin>, +full: Book, +b: Book,
-  acc: List<&2, VJob>) -> List<&2, VJob> & Book:
+# One declaration's job, and the book after it: st is the book so far and
+# the jobs before (last first).
+def book_valid.jobs.one(+k: String, tld: Tld, fin: Bool, st: Book & List<&2, VJob>) -> Book & List<&2, VJob>:
   match tld:
     case TADT{+n, g, +ty, +cs, bb}:
+      (b, acc) = st
       +b2 = book_set_ctrs(book_set(b, k, TADT{n, g, ty, cs, bb}), cs)
-      book_valid.jobs(rest, full, b2, VADT{k, n, ty, cs, b2} <> acc)
+      (b2, VADT{k, n, ty, cs, b2} <> acc)
     case TDef{n, x, ty, v, u, bb, imps}:
-      book_valid.jobs.def(k, TDef{n, x, ty, v, u, bb, imps}, fin, rest, full, b, acc)
+      (b, acc) = st
+      book_valid.jobs.def(k, TDef{n, x, ty, v, u, bb, imps}, fin, b, acc)
 
-# The checks to run, each with its book, and the book after them all.
-def book_valid.jobs(ks, full, b, acc):
+def book_valid.jobs.go(ks: List<&2, KFin>, +full: Book, st: Book & List<&2, VJob>) -> List<&2, VJob> & Book:
   match ks:
     case Nil{}:
+      (b, acc) = st
       (List.reverse(&2, VJob, acc), b)
     case KFin{+k, fin} <> rest:
-      book_valid.jobs.one(k, Maybe.default(&2, Tld, book_tld(full, k), TADT{0n, 0n, Qnt{NoSp{}}, Nil{}, False{}}), fin,
-        rest, full, b, acc)
+      book_valid.jobs.go(rest, full, book_valid.jobs.one(k, Maybe.default(&2, Tld, book_tld(full, k),
+        TADT{0n, 0n, Qnt{NoSp{}}, Nil{}, False{}}), fin, st))
+
+# The checks to run, each with its book, and the book after them all.
+def book_valid.jobs(ks: List<&2, KFin>, +full: Book, +b: Book, acc: List<&2, VJob>) -> List<&2, VJob> & Book:
+  book_valid.jobs.go(ks, full, (b, acc))
 
 def Book.ntmps(+b: Book) -> Nat:
   Book{tlds, ctrs, order, hols, open, +tmps, tcnt, files} = b
@@ -7765,41 +7876,42 @@ def VJob.join(a: Maybe<&2, List<&2, VJob>>, b: Maybe<&2, List<&2, VJob>>) -> May
     case p q:
       None{}
 
-law VJob.seq:
-  for js: List<&2, VJob>
-  Maybe<&2, List<&2, VJob>>
-
-@unsafe
-def VJob.seq.join(a: Maybe<&2, List<&2, VJob>>, t: List<&2, VJob>) -> Maybe<&2, List<&2, VJob>>:
+# Runs j after the checks that answered a; past a failure, runs nothing.
+def VJob.seq.step(a: Maybe<&2, List<&2, VJob>>, +j: VJob) -> Maybe<&2, List<&2, VJob>>:
   match a:
     case None{}:
       None{}
     case Some{x}:
-      VJob.join(Some{x}, VJob.seq(t))
+      VJob.join(Some{x}, VJob.one(j, VJob.run(j)))
 
-def VJob.seq(js):
+def VJob.seq.go(js: List<&2, VJob>, a: Maybe<&2, List<&2, VJob>>) -> Maybe<&2, List<&2, VJob>>:
   match js:
     case Nil{}:
-      Some{Nil{}}
-    case +j <> t:
-      VJob.seq.join(VJob.one(j, VJob.run(j)), t)
+      a
+    case j <> t:
+      VJob.seq.go(t, VJob.seq.step(a, j))
 
-@unsafe
-def VJob.all.split(+js: List<&2, VJob>, +n: Nat) -> Maybe<&2, List<&2, VJob>>:
-  +h = Nat.div(n, 2n)
-  a b = VJob.all(List.take(&2, VJob, js, h), h) VJob.all(List.drop(&2, VJob, js, h), Nat.sub(n, h))
-  VJob.join(a, b)
+def VJob.seq(js: List<&2, VJob>) -> Maybe<&2, List<&2, VJob>>:
+  VJob.seq.go(js, Some{Nil{}})
 
-def VJob.all.if(small: Bool, js: List<&2, VJob>, +n: Nat) -> Maybe<&2, List<&2, VJob>>:
-  match small:
-    case True{}:
-      VJob.seq(js)
-    case False{}:
-      VJob.all.split(js, n)
+# All the checks, halves in parallel. Out of fuel, a check fails (and the
+# book goes through the sequential check).
+def VJob.all.go(fuel0: Nat, +js: List<&2, VJob>, +n: Nat, small: Bool) -> Maybe<&2, List<&2, VJob>>:
+  match fuel0:
+    case 0n:
+      None{}
+    case 1n+ +fuel:
+      match small:
+        case True{}:
+          VJob.seq(js)
+        case False{}:
+          +h = Nat.div(n, 2n)
+          +m = Nat.sub(n, h)
+          a b = VJob.all.go(fuel, List.take(&2, VJob, js, h), h, Nat.is_le(h, 16n)) VJob.all.go(fuel, List.drop(&2, VJob, js, h), m, Nat.is_le(m, 16n))
+          VJob.join(a, b)
 
-# All the checks, halves in parallel.
-def VJob.all(js, n):
-  VJob.all.if(Nat.is_le(n, 16n), js, n)
+def VJob.all(+js: List<&2, VJob>, +n: Nat) -> Maybe<&2, List<&2, VJob>>:
+  VJob.all.go(Fuel.max(), js, n, Nat.is_le(n, 16n))
 
 def VJob.after(j: VJob, b: Book) -> Book:
   match j:
@@ -7808,17 +7920,6 @@ def VJob.after(j: VJob, b: Book) -> Book:
     case VDef{+k, dd, bj}:
       book_set(b, k, dd)
 
-# The checks that make instances, again, in order, on the book so far: each
-# makes its instances with the counts of the ones before it.
-@unsafe
-def book_valid.redo.next(+j: VJob, t: List<&2, VJob>, r: Result<&1, &1, Err, Unit & Book>) ->
-  Result<&1, &1, Err, Book>:
-  match r:
-    case Fail{e}:
-      Fail{e}
-    case Done{v}:
-      book_valid.redo(t, VJob.after(j, Pair.snd(Unit, Book, v)))
-
 def VJob.redo(j: VJob, +book: Book) -> Result<&1, &1, Err, Unit & Book>:
   match j:
     case VADT{+k, +n, +ty, +cs, bj}:
@@ -7826,27 +7927,84 @@ def VJob.redo(j: VJob, +book: Book) -> Result<&1, &1, Err, Unit & Book>:
     case VDef{+k, +dd, bj}:
       valid.def.check(k, dd)(book_set(book, k, Tld.dec(dd)))
 
-def book_valid.redo(js, book):
+def book_valid.redo.next(+j: VJob, r: Result<&1, &1, Err, Unit & Book>) -> Result<&1, &1, Err, Book>:
+  match r:
+    case Fail{e}:
+      Fail{e}
+    case Done{v}:
+      Done{VJob.after(j, Pair.snd(Unit, Book, v))}
+
+# Redoes j on the book so far; past a failure, redoes nothing.
+def book_valid.redo.step(r: Result<&1, &1, Err, Book>, +j: VJob) -> Result<&1, &1, Err, Book>:
+  match r:
+    case Fail{e}:
+      Fail{e}
+    case Done{book}:
+      book_valid.redo.next(j, VJob.redo(j, book))
+
+def book_valid.redo.go(js: List<&2, VJob>, r: Result<&1, &1, Err, Book>) -> Result<&1, &1, Err, Book>:
   match js:
     case Nil{}:
-      Done{book}
-    case +j <> t:
-      book_valid.redo.next(j, t, VJob.redo(j, book))
+      r
+    case j <> t:
+      book_valid.redo.go(t, book_valid.redo.step(r, j))
 
-@unsafe
-def book_valid.lasts.if(+k: String, t: List<&2, String>, r: Set() & Bool, acc: List<&2, KFin>) ->
-  List<&2, KFin>:
-  (seen, hit) = r
-  book_valid.lasts(t, Set.add(seen, k), KFin{k, Bool.not(hit)} <> acc)
+# The checks that make instances, again, in order, on the book so far: each
+# makes its instances with the counts of the ones before it.
+def book_valid.redo(js: List<&2, VJob>, +book: Book) -> Result<&1, &1, Err, Book>:
+  book_valid.redo.go(js, Done{book})
 
 # Each name of the order with whether it is its last occurrence (from the
 # reversed order, with the names seen so far: one pass, not a scan each).
-def book_valid.lasts(rev, seen, acc):
+def book_valid.lasts.hit(+k: String, r: Set() & Bool, acc: List<&2, KFin>) -> Set() & List<&2, KFin>:
+  (seen, hit) = r
+  (Set.add(seen, k), KFin{k, Bool.not(hit)} <> acc)
+
+def book_valid.lasts.one(+k: String, st: Set() & List<&2, KFin>) -> Set() & List<&2, KFin>:
+  (seen, acc) = st
+  book_valid.lasts.hit(k, Set.has(seen, k), acc)
+
+def book_valid.lasts.go(rev: List<&2, String>, st: Set() & List<&2, KFin>) -> List<&2, KFin>:
   match rev:
     case Nil{}:
+      (seen, acc) = st
       acc
     case +k <> t:
-      book_valid.lasts.if(k, t, Set.has(seen, k), acc)
+      book_valid.lasts.go(t, book_valid.lasts.one(k, st))
+
+def book_valid.lasts(rev: List<&2, String>, seen: Set(), acc: List<&2, KFin>) -> List<&2, KFin>:
+  book_valid.lasts.go(rev, (seen, acc))
+
+def book_valid.par.redo(r: Result<&1, &1, Err, Book>, +ks: List<&2, KFin>, +full: Book, +b0: Book) ->
+  Result<&1, &1, Err, Unit & Book>:
+  match r:
+    case Done{b}:
+      Done{(Unit{}, b)}
+    case Fail{e}:
+      book_valid.go(ks, full)(b0)
+
+def book_valid.par.fin(m: Maybe<&2, List<&2, VJob>>, +ks: List<&2, KFin>, +full: Book, +b0: Book, bfin: Book) ->
+  Result<&1, &1, Err, Unit & Book>:
+  match m:
+    case Some{js}:
+      book_valid.par.redo(book_valid.redo(js, bfin), ks, full, b0)
+    case None{}:
+      book_valid.go(ks, full)(b0)
+
+def book_valid.par.go(+ks: List<&2, KFin>, +full: Book, +b0: Book, r: List<&2, VJob> & Book) ->
+  Result<&1, &1, Err, Unit & Book>:
+  (js, bfin) = r
+  +js2 = js
+  book_valid.par.fin(VJob.all(js2, List.length(&2, VJob, js2)), ks, full, b0, bfin)
+
+def book_valid.par(+ks: List<&2, KFin>, +full: Book, +b0: Book) -> Result<&1, &1, Err, Unit & Book>:
+  book_valid.par.go(ks, full, b0, book_valid.jobs(ks, full, b0, Nil{}))
+
+# Checks every declaration in order: each sees only the ones before it
+# (and itself, for recursion).
+def book_valid(order: List<&2, String>, +full: Book) -> K(Unit):
+  +ks = book_valid.lasts(List.reverse(&2, String, order), Set.new(), Nil{})
+  b0 => book_valid.par(ks, full, b0)
 
 def CtrD.k(c: CtrD) -> String:
   CtrD{k, n, t} = c
@@ -7898,43 +8056,32 @@ def import.parse(ws: List<&2, String>) -> Maybe<&1, String & String>:
 type Hdr is Data:
   Hdr{lines: List<&2, String>, imps: List<&2, Imp>, err: Maybe<&2, Err>}
 
-law header.go:
-  for +src: String
-  for ls: List<&2, String>
-  for +off: Nat
-  for done: List<&2, String>
-  for imps: List<&2, Imp>
-  Hdr
-
-# The imports at the top of a file (each blanked out of its lines).
-@unsafe
-def header(+src: String) -> Hdr:
-  header.go(src, String.split(src, '\n'), 0n, Nil{}, Nil{})
+# The header read so far: its offset, lines (last first) and imports; or
+# the header, read.
+type HSt is Data:
+  HGo{off: Nat, done: List<&2, String>, imps: List<&2, Imp>}
+  HStop{h: Hdr}
 
 def header.go.rest(t: List<&2, String>, done: List<&2, String>, imps: List<&2, Imp>) -> Hdr:
   Hdr{List.append(&2, String, List.reverse(&2, String, done), t), imps, None{}}
 
-@unsafe
-def header.go.next(+src: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>) -> Hdr:
-  header.go(src, t, off, done, imps)
-
 def header.rest(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>, blank: Bool
-) -> Hdr:
+) -> HSt:
   match blank:
     case True{}:
-      header.go.next(src, t, Nat.add(off, 1n+String.length(l)), l <> done, imps)
+      HGo{Nat.add(off, 1n+String.length(l)), l <> done, imps}
     case False{}:
-      Hdr{List.append(&2, String, List.reverse(&2, String, l <> done), t), imps, None{}}
+      HStop{Hdr{List.append(&2, String, List.reverse(&2, String, l <> done), t), imps, None{}}}
 
 def header.imp.go(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>,
   v: String & String
-) -> Hdr:
+) -> HSt:
   (p, a) = v
   +pp = p
   +beg = U32.from_nat(Nat.add(off, Str.index_of(l, pp, 0n)))
-  header.go.next(src, t, Nat.add(off, 1n+String.length(l)), "" <> done, List.append(&2, Imp, imps, [Imp{pp, a, beg}]))
+  HGo{Nat.add(off, 1n+String.length(l)), "" <> done, List.append(&2, Imp, imps, [Imp{pp, a, beg}])}
 
 # Where a malformed import is reported: at its one word (import Wat), else
 # at the line.
@@ -7948,20 +8095,20 @@ def header.bad.at(+l: String, ws: List<&2, String>, +at: Nat) -> Nat:
 def header.imp(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>, +tl: String,
   m: Maybe<&1, String & String>
-) -> Hdr:
+) -> HSt:
   match m:
     case None{}:
       +at = Str.index_of(l, tl, 0n)
       +beg = U32.from_nat(Nat.add(off, header.bad.at(l, Str.until_hash(Str.words(String.drop(tl, 6n))), at)))
-      Hdr{Nil{}, Nil{}, Some{err0("an import ('import Base', or 'import <path> as <Name>')", MStr{"'" ++ tl ++ "'"},
-        Sp{src, beg, beg})}}
+      HStop{Hdr{Nil{}, Nil{}, Some{err0("an import ('import Base', or 'import <path> as <Name>')", MStr{"'" ++ tl ++ "'"},
+        Sp{src, beg, beg})}}}
     case Some{v}:
       header.imp.go(src, l, t, off, done, imps, v)
 
 def header.line.go(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>, +tl: String,
   imp: Bool, blank: Bool
-) -> Hdr:
+) -> HSt:
   match imp:
     case True{}:
       header.imp(src, l, t, off, done, imps, tl, import.parse(Str.until_hash(Str.words(String.drop(tl, 6n)))))
@@ -7970,18 +8117,30 @@ def header.line.go(
 
 def header.line(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>, +tl: String
-) -> Hdr:
+) -> HSt:
   +is_imp = Bool.or(String.eq(tl, "import"), Bool.and(String.starts_with(tl, "import"),
     is_space(Str.first(String.drop(tl, 6n)))))
   header.line.go(src, l, t, off, done, imps, tl, is_imp,
     Bool.or(String.is_empty(tl), String.starts_with(tl, "#")))
 
-def header.go(src, ls, off, done, imps):
+def header.go(+src: String, ls: List<&2, String>, st: HSt) -> Hdr:
   match ls:
     case Nil{}:
-      Hdr{List.reverse(&2, String, done), imps, None{}}
-    case +l <> t:
-      header.line(src, l, t, off, done, imps, Str.trim(l))
+      match st:
+        case HGo{off, done, imps}:
+          Hdr{List.reverse(&2, String, done), imps, None{}}
+        case HStop{h}:
+          h
+    case +l <> +t:
+      match st:
+        case HGo{off, done, imps}:
+          header.go(src, t, header.line(src, l, t, off, done, imps, Str.trim(l)))
+        case HStop{h}:
+          h
+
+# The imports at the top of a file (each blanked out of its lines).
+def header(+src: String) -> Hdr:
+  header.go(src, String.split(src, '\n'), HGo{0n, Nil{}, Nil{}})
 
 def parse_file.fin(r: Result<&1, &1, Err, Unit & PS>) -> Result<&1, &1, Err, Book>:
   match r:
@@ -8063,62 +8222,108 @@ def show_err(e: Err) -> String:
   Bool.pick(String, String.eq(nte, "!raw"), "Error: " ++ show_err.raw(exp),
     err_show(Err{bok, ctx, exp, obs, spn, dn, nte}))
 
-law refs.list:
-  for xs: List<&2, Tm>
-  for acc: List<&2, String>
-  List<&2, String>
-
-# The names a term refers to.
-@unsafe
-def term_refs(t: Tm, acc: List<&2, String>) -> List<&2, String>:
+# The names a term refers to. mode 1n walks t; mode 0n walks only the list
+# in t (a Let's values, an ADT's or a Ctr's fields, a closure's env).
+def term_refs.go(t: Tm, mode: Nat, acc: List<&2, String>) -> List<&2, String>:
   match t:
     case Ref{k, s, b}:
       k <> acc
-    case ADT{k, xs, s, r}:
-      refs.list(xs, k <> acc)
+    case ADT{+k, xs, s, r}:
+      match xs:
+        case Nil{}:
+          match mode:
+            case 0n:
+              acc
+            case 1n+m:
+              k <> acc
+        case x <> rest:
+          match mode:
+            case 0n:
+              term_refs.go(ADT{k, rest, s, r}, 0n, term_refs.go(x, 1n, acc))
+            case 1n+m:
+              term_refs.go(ADT{k, x <> rest, s, r}, m, k <> acc)
     case Cel{k, s, v, m}:
-      term_refs(v, acc)
+      term_refs.go(v, 1n, acc)
     case VRf{k, i, s, r}:
-      term_refs(r, acc)
+      term_refs.go(r, 1n, acc)
     case Sub{i, p, f, s}:
-      term_refs(f, acc)
-    case Let{ks, ids, vs, f, s, qs}:
-      term_refs(f, refs.list(vs, acc))
+      term_refs.go(f, 1n, acc)
+    case Let{ks, ids, vs, +f, s, qs}:
+      match vs:
+        case Nil{}:
+          match mode:
+            case 0n:
+              acc
+            case 1n+m:
+              term_refs.go(f, 1n, acc)
+        case v <> rest:
+          match mode:
+            case 0n:
+              term_refs.go(Let{ks, ids, rest, f, s, qs}, 0n, term_refs.go(v, 1n, acc))
+            case 1n+m:
+              term_refs.go(f, 1n, term_refs.go(Let{ks, ids, v <> rest, f, s, qs}, m, acc))
     case Typ{g, s}:
-      term_refs(g, acc)
+      term_refs.go(g, 1n, acc)
     case Min{a, b, s}:
-      term_refs(b, term_refs(a, acc))
+      term_refs.go(b, 1n, term_refs.go(a, 1n, acc))
     case All{q, k, i, a, b, s}:
-      term_refs(b, term_refs(a, acc))
+      term_refs.go(b, 1n, term_refs.go(a, 1n, acc))
     case Lam{k, i, f, s, q}:
-      term_refs(f, acc)
+      term_refs.go(f, 1n, acc)
     case TApp{f, x, s}:
-      term_refs(x, term_refs(f, acc))
+      term_refs.go(x, 1n, term_refs.go(f, 1n, acc))
     case Ctr{k, xs, s}:
-      refs.list(xs, acc)
+      match xs:
+        case Nil{}:
+          acc
+        case x <> rest:
+          term_refs.go(Ctr{k, rest, s}, 0n, term_refs.go(x, 1n, acc))
     case Mat{k, h, m, s}:
-      term_refs(m, term_refs(h, acc))
+      term_refs.go(m, 1n, term_refs.go(h, 1n, acc))
     case Eql{a, b, ty, s}:
-      term_refs(ty, term_refs(b, term_refs(a, acc)))
+      term_refs.go(ty, 1n, term_refs.go(b, 1n, term_refs.go(a, 1n, acc)))
     case Rwt{e, p, f, s}:
-      term_refs(f, term_refs(p, term_refs(e, acc)))
+      term_refs.go(f, 1n, term_refs.go(p, 1n, term_refs.go(e, 1n, acc)))
     case Ann{x, ty, s}:
-      term_refs(ty, term_refs(x, acc))
-    case CSyn{env, i, b}:
-      term_refs(b, refs.list(env, acc))
-    case CLet{env, ids, b}:
-      term_refs(b, refs.list(env, acc))
+      term_refs.go(ty, 1n, term_refs.go(x, 1n, acc))
+    case CSyn{env, +i, +b}:
+      match env:
+        case Nil{}:
+          match mode:
+            case 0n:
+              acc
+            case 1n+m:
+              term_refs.go(b, 1n, acc)
+        case e <> rest:
+          match mode:
+            case 0n:
+              term_refs.go(CSyn{rest, i, b}, 0n, term_refs.go(e, 1n, acc))
+            case 1n+m:
+              term_refs.go(b, 1n, term_refs.go(CSyn{e <> rest, i, b}, m, acc))
+    case CLet{env, +ids, +b}:
+      match env:
+        case Nil{}:
+          match mode:
+            case 0n:
+              acc
+            case 1n+m:
+              term_refs.go(b, 1n, acc)
+        case e <> rest:
+          match mode:
+            case 0n:
+              term_refs.go(CLet{rest, ids, b}, 0n, term_refs.go(e, 1n, acc))
+            case 1n+m:
+              term_refs.go(b, 1n, term_refs.go(CLet{e <> rest, ids, b}, m, acc))
     case EB{i, v}:
-      term_refs(v, acc)
+      term_refs.go(v, 1n, acc)
     case other:
       acc
 
-def refs.list(xs, acc):
-  match xs:
-    case Nil{}:
-      acc
-    case x <> t:
-      refs.list(t, term_refs(x, acc))
+def term_refs(t: Tm, acc: List<&2, String>) -> List<&2, String>:
+  term_refs.go(t, 1n, acc)
+
+def refs.list(xs: List<&2, Tm>, acc: List<&2, String>) -> List<&2, String>:
+  term_refs.go(Ctr{"", xs, NoSp{}}, 0n, acc)
 
 def CtrD.ts(cs: List<&2, CtrD>) -> List<&2, Tm>:
   match cs:
@@ -8160,85 +8365,36 @@ def report.uses(rs: List<&2, String>, +k: String, uses: List<&2, Use>) -> List<&
     case r <> t:
       report.uses(t, k, Use{r, k} <> uses)
 
-law report.walk:
-  for +b: Book
-  for q: List<&2, String>
-  for seen: Set()
-  for uses: List<&2, Use>
-  List<&2, Use>
+# What the walk has left: the names to visit, the ones seen, the uses.
+type RW is Type:
+  RW{q: List<&2, String>, seen: Set(), uses: List<&2, Use>}
 
-@unsafe
-def report.walk.one(+b: Book, +k: String, t: List<&2, String>, r: Set() & Bool, uses: List<&2, Use>) ->
-  List<&2, Use>:
+def report.walk.one(+b: Book, +k: String, t: List<&2, String>, r: Set() & Bool, uses: List<&2, Use>) -> RW:
   (seen, hit) = r
   match hit:
     case True{}:
-      report.walk(b, t, seen, uses)
+      RW{t, seen, uses}
     case False{}:
       +rs = tld_refs(book_tld(b, k))
-      report.walk(b, List.append(&2, String, rs, t), Set.add(seen, k), report.uses(rs, k, uses))
+      RW{List.append(&2, String, rs, t), Set.add(seen, k), report.uses(rs, k, uses)}
 
-# Walks the definitions reachable from q, recording who uses what.
-def report.walk(b, q, seen, uses):
-  match q:
-    case Nil{}:
-      uses
-    case +k <> t:
-      report.walk.one(b, k, t, Set.has(seen, k), uses)
+# Walks the definitions reachable from q, recording who uses what. Out of
+# fuel, None.
+def report.walk.go(fuel0: Nat, +b: Book, st: RW) -> Maybe<&2, List<&2, Use>>:
+  match fuel0:
+    case 0n:
+      None{}
+    case 1n+fuel:
+      match st:
+        case RW{q, seen, uses}:
+          match q:
+            case Nil{}:
+              Some{uses}
+            case +k <> t:
+              report.walk.go(fuel, b, report.walk.one(b, k, t, Set.has(seen, k), uses))
 
-def report.users.if(by: String, rest: List<&2, String>, hit: Bool) -> List<&2, String>:
-  match hit:
-    case True{}:
-      by <> rest
-    case False{}:
-      rest
-
-def report.users(uses: List<&2, Use>, +k: String) -> List<&2, String>:
-  match uses:
-    case Nil{}:
-      Nil{}
-    case Use{+r, by} <> t:
-      report.users.if(by, report.users(t, k), String.eq(r, k))
-
-law report.close:
-  for +uses: List<&2, Use>
-  for todo: List<&2, String>
-  for bad: List<&2, String>
-  List<&2, String>
-
-law report.close.add:
-  for +uses: List<&2, Use>
-  for todo: List<&2, String>
-  for +bad: List<&2, String>
-  for us: List<&2, String>
-  List<&2, String>
-
-# The names that rely on unsafe or foreign code: the closure of bad
-# under "is used by".
-@unsafe
-def report.close(uses, todo, bad):
-  match todo:
-    case Nil{}:
-      bad
-    case +k <> t:
-      report.close.add(uses, t, bad, report.users(uses, k))
-
-@unsafe
-def report.close.add.if(
-  +uses: List<&2, Use>, todo: List<&2, String>, +bad: List<&2, String>, +u: String, us: List<&2, String>, seen: Bool
-) -> List<&2, String>:
-  match seen:
-    case True{}:
-      report.close.add(uses, todo, bad, us)
-    case False{}:
-      report.close.add(uses, List.append(&2, String, todo, [u]), u <> bad, us)
-
-def report.close.add(uses, todo, bad, us):
-  match us:
-    case Nil{}:
-      report.close(uses, todo, bad)
-    case +u <> t:
-      report.close.add.if(uses, todo, bad, u, t, Str.has(bad, u))
+def report.walk(+b: Book, q: List<&2, String>, seen: Set(), uses: List<&2, Use>) -> Maybe<&2, List<&2, Use>>:
+  report.walk.go(Fuel.max(), b, RW{q, seen, uses})
 
 def report.bad_all(+b: Book, ks: List<&2, String>) -> List<&2, String>:
   match ks:
@@ -8271,82 +8427,86 @@ def report.umap(uses: List<&2, Use>, m: Map<&2, List<&2, String>>) -> Map<&2, Li
     case Use{+r, by} <> t:
       report.umap(t, report.umap.add(m, r, by))
 
-law report.close2:
-  for +um: Map<&2, List<&2, String>>
-  for todo: List<&2, String>
-  for bad: Set()
-  Set()
+def report.close2.two(+u: String, todo: List<&2, String>, r: Set() & Bool) -> List<&2, String> & Set():
+  (bad, seen) = r
+  match seen:
+    case True{}:
+      (todo, bad)
+    case False{}:
+      (u <> todo, Set.add(bad, u))
 
-law report.close2.add:
-  for +um: Map<&2, List<&2, String>>
-  for todo: List<&2, String>
-  for bad: Set()
-  for us: List<&2, String>
-  Set()
+def report.close2.one(+u: String, st: List<&2, String> & Set()) -> List<&2, String> & Set():
+  (todo, bad) = st
+  report.close2.two(u, todo, Set.has(bad, u))
+
+# Adds the users us to the names to visit and to bad (the new ones).
+def report.close2.add(us: List<&2, String>, st: List<&2, String> & Set()) -> List<&2, String> & Set():
+  match us:
+    case Nil{}:
+      st
+    case +u <> t:
+      report.close2.add(t, report.close2.one(u, st))
 
 # The names that rely on unsafe or foreign code: the closure of bad under
 # "is used by" (a map of users and a set, not lists: bendc.bend has
-# thousands of uses).
-@unsafe
-def report.close2(um, todo, bad):
-  match todo:
-    case Nil{}:
-      bad
-    case +k <> t:
-      report.close2.add(um, t, bad, Maybe.default(&2, List<&2, String>, Map.find(List<&2, String>, um, k), Nil{}))
+# thousands of uses). Out of fuel, None.
+def report.close2.go(fuel0: Nat, +um: Map<&2, List<&2, String>>, st: List<&2, String> & Set()) -> Maybe<&2, Set()>:
+  match fuel0:
+    case 0n:
+      None{}
+    case 1n+fuel:
+      (todo, bad) = st
+      match todo:
+        case Nil{}:
+          Some{bad}
+        case +k <> t:
+          report.close2.go(fuel, um, report.close2.add(Maybe.default(&2, List<&2, String>, Map.find(List<&2, String>, um, k), Nil{}),
+            (t, bad)))
 
-@unsafe
-def report.close2.if.go(seen: Bool, +um: Map<&2, List<&2, String>>, todo: List<&2, String>, +u: String,
-  us: List<&2, String>, bad: Set()) -> Set():
-  match seen:
-    case True{}:
-      report.close2.add(um, todo, bad, us)
-    case False{}:
-      report.close2.add(um, u <> todo, Set.add(bad, u), us)
+def report.close2(+um: Map<&2, List<&2, String>>, todo: List<&2, String>, bad: Set()) -> Maybe<&2, Set()>:
+  report.close2.go(Fuel.max(), um, (todo, bad))
 
-def report.close2.if(+um: Map<&2, List<&2, String>>, todo: List<&2, String>, +u: String, us: List<&2, String>,
-  r: Set() & Bool) -> Set():
-  (bad, seen) = r
-  report.close2.if.go(seen, um, todo, u, us, bad)
-
-def report.close2.add(um, todo, bad, us):
-  match us:
-    case Nil{}:
-      report.close2(um, todo, bad)
-    case +u <> t:
-      report.close2.if(um, todo, u, t, Set.has(bad, u))
-
-law report.keep:
-  for ks: List<&2, String>
-  for s: Set()
-  List<&2, String>
-
-@unsafe
-def report.keep.go(hit: Bool, +k: String, t: List<&2, String>, s: Set()) -> List<&2, String>:
-  match hit:
-    case True{}:
-      k <> report.keep(t, s)
-    case False{}:
-      report.keep(t, s)
-
-def report.keep.if(+k: String, t: List<&2, String>, r: Set() & Bool) -> List<&2, String>:
+def report.keep.two(+k: String, r: Set() & Bool, +acc: List<&2, String>) -> Set() & List<&2, String>:
   (s, hit) = r
-  report.keep.go(hit, k, t, s)
+  (s, Bool.pick(List<&2, String>, hit, k <> acc, acc))
 
-# The names of ks in s, in order.
-def report.keep(ks, s):
+def report.keep.one(+k: String, st: Set() & List<&2, String>) -> Set() & List<&2, String>:
+  (s, acc) = st
+  report.keep.two(k, Set.has(s, k), acc)
+
+def report.keep.go(ks: List<&2, String>, st: Set() & List<&2, String>) -> List<&2, String>:
   match ks:
     case Nil{}:
-      Nil{}
+      (s, acc) = st
+      List.reverse(&2, String, acc)
     case +k <> t:
-      report.keep.if(k, t, Set.has(s, k))
+      report.keep.go(t, report.keep.one(k, st))
+
+# The names of ks in s, in order.
+def report.keep(ks: List<&2, String>, s: Set()) -> List<&2, String>:
+  report.keep.go(ks, (s, Nil{}))
+
+# A walk or a closure out of fuel reports every name.
+def report.go.bad(+own: List<&2, String>, m: Maybe<&2, Set()>) -> List<&2, String>:
+  match m:
+    case None{}:
+      own
+    case Some{s}:
+      report.keep(own, s)
+
+def report.go.uses(+own: List<&2, String>, +bad: List<&2, String>, m: Maybe<&2, List<&2, Use>>) -> List<&2, String>:
+  match m:
+    case None{}:
+      own
+    case Some{uses}:
+      report.go.bad(own, report.close2(report.umap(uses, MTip{}), bad, Set.from_list(bad)))
 
 def report.go(+b: Book, +own: List<&2, String>, +bad: List<&2, String>, none: Bool) -> List<&2, String>:
   match none:
     case True{}:
       Nil{}
     case False{}:
-      report.keep(own, report.close2(report.umap(report.walk(b, own, Set.new(), Nil{}), MTip{}), bad, Set.from_list(bad)))
+      report.go.uses(own, bad, report.walk(b, own, Set.new(), Nil{}))
 
 def Tld.base(t: Maybe<&2, Tld>) -> Bool:
   match t:
@@ -8400,73 +8560,67 @@ def has_fun.cs(t: Maybe<&2, Tld>) -> List<&2, CtrD>:
     case other:
       Nil{}
 
-@unsafe
-def has_fun.fill(+b: Book, t: Tm, xs: List<&2, Tm>) -> Tm:
+def has_fun.fill.go(xs: List<&2, Tm>, +b: Book, t: Tm) -> Tm:
   match xs:
     case Nil{}:
       t
     case x <> rest:
-      has_fun.fill(b, clo_apply(b, All.b(term_wnf(b, t)), [x]), rest)
+      has_fun.fill.go(rest, b, clo_apply(b, All.b(term_wnf(b, t)), [x]))
 
-law has_fun.field:
-  for +b: Book
-  for t: Tm
-  for m: Nat
-  for +d: U32
-  for +seen: List<&2, String>
-  Bool
+def has_fun.fill(+b: Book, t: Tm, xs: List<&2, Tm>) -> Tm:
+  has_fun.fill.go(xs, b, t)
 
-@unsafe
-def has_fun.fields(+b: Book, t: Tm, n: Nat, +d: U32, +seen: List<&2, String>) -> Bool:
-  match n:
-    case 0n:
-      False{}
-    case 1n+m:
-      has_fun.field(b, term_wnf(b, t), m, d, seen)
-
-def has_fun.ctrs(+b: Book, +xs: List<&2, Tm>, cs: List<&2, CtrD>, +seen: List<&2, String>) -> Bool:
-  match cs:
-    case Nil{}:
-      False{}
-    case CtrD{k, +n, t} <> rest:
-      Lazy.or(has_fun.fields(b, has_fun.fill(b, t, xs), n, 0, seen), u => has_fun.ctrs(b, xs, rest, seen))
-
-def has_fun.adt.c(+b: Book, +k: String, +xs: List<&2, Tm>, +key: String, +seen: List<&2, String>, c: Bool) -> Bool:
-  match c:
-    case True{}:
-      False{}
-    case False{}:
-      has_fun.ctrs(b, xs, has_fun.cs(book_tld(b, k)), key <> seen)
-
-def has_fun.adt(+b: Book, +k: String, +xs: List<&2, Tm>, +key: String, +seen: List<&2, String>) -> Bool:
-  has_fun.adt.c(b, k, xs, key, seen, Str.has(seen, key))
-
-def has_fun.go(+b: Book, t: Tm, +seen: List<&2, String>) -> Bool:
-  match t:
-    case All{q, k, i, a, c, s}:
-      True{}
-    case ADT{+k, +xs, s, r}:
-      has_fun.adt(b, k, xs, term_key(term_lower(b, ADT{k, xs, s, r}, 0)), seen)
-    case other:
-      False{}
-
-law has_fun:
-  for +b: Book
-  for t: Tm
-  for +seen: List<&2, String>
-  Bool
+# The steps of has_fun: a type; a type in weak normal form; the constructors
+# cs (of a datatype applied to xs); n fields of a telescope t; a field.
+type HSel is Data:
+  HFun{t: Tm, seen: List<&2, String>}
+  HWnf{t: Tm, seen: List<&2, String>}
+  HCtrs{xs: List<&2, Tm>, cs: List<&2, CtrD>, seen: List<&2, String>}
+  HFields{t: Tm, n: Nat, d: U32, seen: List<&2, String>}
+  HField{t: Tm, m: Nat, d: U32, seen: List<&2, String>}
 
 # Whether values of type t may hold a function (then a value main is
-# printed by normalizing it, as the official bend does).
-def has_fun(b, t, seen):
-  has_fun.go(b, term_wnf(b, t), seen)
+# printed by normalizing it, as the official bend does). seen: the
+# datatypes on the way (by key). Out of fuel, they may.
+def has_fun.run(fuel0: Nat, +b: Book, sel: HSel) -> Bool:
+  match fuel0:
+    case 0n:
+      True{}
+    case 1n+ +fuel:
+      match sel:
+        case HFun{t, seen}:
+          has_fun.run(fuel, b, HWnf{term_wnf(b, t), seen})
+        case HWnf{t, +seen}:
+          match t:
+            case All{q, k, i, a, c, s}:
+              True{}
+            case ADT{+k, +xs, s, r}:
+              +key = term_key(term_lower(b, ADT{k, xs, s, r}, 0))
+              Lazy.and(Bool.not(Str.has(seen, key)), u => has_fun.run(fuel, b, HCtrs{xs, has_fun.cs(book_tld(b, k)), key <> seen}))
+            case other:
+              False{}
+        case HCtrs{+xs, cs, +seen}:
+          match cs:
+            case Nil{}:
+              False{}
+            case CtrD{k, +n, t} <> rest:
+              Lazy.or(has_fun.run(fuel, b, HFields{has_fun.fill(b, t, xs), n, 0, seen}), u => has_fun.run(fuel, b, HCtrs{xs, rest, seen}))
+        case HFields{t, n, d, seen}:
+          match n:
+            case 0n:
+              False{}
+            case 1n+m:
+              has_fun.run(fuel, b, HField{term_wnf(b, t), m, d, seen})
+        case HField{t, m, +d, +seen}:
+          match t:
+            case All{q, +k, i, a, c, s}:
+              Lazy.or(has_fun.run(fuel, b, HFun{a, seen}), u => has_fun.run(fuel, b, HFields{clo_apply(b, c, [Var{k, d, NoSp{}}]), m,
+                U32.inc(d), seen}))
+            case other:
+              False{}
 
-def has_fun.field(b, t, m, d, seen):
-  match t:
-    case All{q, +k, i, a, c, s}:
-      Lazy.or(has_fun(b, a, seen), u => has_fun.fields(b, clo_apply(b, c, [Var{k, d, NoSp{}}]), m, U32.inc(d), seen))
-    case other:
-      False{}
+def has_fun(+b: Book, t: Tm, +seen: List<&2, String>) -> Bool:
+  has_fun.run(Fuel.max(), b, HFun{t, seen})
 
 def main_tld(+b: Book) -> Maybe<&2, Tld>:
   book_tld(b, "main")
@@ -8492,52 +8646,64 @@ def show_main.go(+b: Book, t: Maybe<&2, Tld>) -> String:
 # main's type reaches Base's IO through aliases (def Entry() -> Type:
 # Program(Unit)), unfolded a head at a time: a full normal form would
 # unfold IO itself.
-@unsafe
-def main_io.args(+book: Book, v: Tm, xs: List<&2, Tm>) -> Tm:
-  match v xs:
-    case Lam{+k, i, f, s, q} a <> t:
-      main_io.args(book, clo_apply(book, f, [term_cell(a, k)]), t)
-    case w ys:
+def main_io.args(xs: List<&2, Tm>, +book: Book, v: Tm) -> Tm:
+  match xs v:
+    case a <> t Lam{+k, i, f, s, q}:
+      main_io.args(t, book, clo_apply(book, f, [term_cell(a, k)]))
+    case ys w:
       w
 
-law main_io.step:
-  for +book: Book
-  for t: Tm
-  for fuel: Nat
-  Bool
+# A head unfolded: IO, not IO, or the type it unfolds to.
+type MIo is Data:
+  MYes{}
+  MNo{}
+  MNext{t: Tm}
 
-@unsafe
-def main_io.tld(+book: Book, t: Maybe<&2, Tld>, xs: List<&2, Tm>, fuel: Nat) -> Bool:
+def main_io.tld(+book: Book, t: Maybe<&2, Tld>, xs: List<&2, Tm>) -> MIo:
   match t:
     case Some{TDef{n, x, ty, Some{v}, u, bb, imps}}:
-      main_io.step(book, main_io.args(book, v, xs), fuel)
+      MNext{main_io.args(xs, book, v)}
     case other:
-      False{}
+      MNo{}
 
-def main_io.ref(+book: Book, h: Tm, xs: List<&2, Tm>, fuel: Nat) -> Bool:
+def main_io.ref(+book: Book, h: Tm, xs: List<&2, Tm>) -> MIo:
   match h:
     case Ref{+k, s, b}:
-      main_io.tld(book, book_tld(book, k), xs, fuel)
+      main_io.tld(book, book_tld(book, k), xs)
     case other:
-      False{}
+      MNo{}
 
-def main_io.head(+book: Book, +h: Tm, xs: List<&2, Tm>, fuel: Nat, io: Bool) -> Bool:
+def main_io.head(+book: Book, +h: Tm, xs: List<&2, Tm>, io: Bool) -> MIo:
   match io:
     case True{}:
-      True{}
+      MYes{}
     case False{}:
-      main_io.ref(book, h, xs, fuel)
+      main_io.ref(book, h, xs)
 
-def main_io.split(+book: Book, r: Tm & List<&2, Tm>, fuel: Nat) -> Bool:
+def main_io.split(+book: Book, r: Tm & List<&2, Tm>) -> MIo:
   (+h, xs) = r
-  main_io.head(book, h, xs, fuel, valid.io(book, h))
+  main_io.head(book, h, xs, valid.io(book, h))
 
-def main_io.step(book, t, fuel):
-  match fuel:
+# fuel: the heads left to unfold.
+def main_io.run(fuel0: Nat, +book: Book, r: MIo) -> Bool:
+  match fuel0:
     case 0n:
-      False{}
+      match r:
+        case MYes{}:
+          True{}
+        case other:
+          False{}
     case 1n+p:
-      main_io.split(book, term_unapply(term_strip(t)), p)
+      match r:
+        case MYes{}:
+          True{}
+        case MNo{}:
+          False{}
+        case MNext{t}:
+          main_io.run(p, book, main_io.split(book, term_unapply(term_strip(t))))
+
+def main_io.step(+book: Book, t: Tm, fuel: Nat) -> Bool:
+  main_io.run(fuel, book, MNext{t})
 
 def main_is_io.go(+b: Book, t: Maybe<&2, Tld>) -> Bool:
   match t:
@@ -8562,20 +8728,20 @@ def fam.head(t: Tm, lam: Bool) -> Bool:
     case other:
       lam
 
-law fam.open:
-  for +book: Book
-  for v: Tm
-  for +d: U32
-  for lam: Bool
-  Bool
+# Out of fuel, main's value is printed as the checker normalizes it.
+def fam.open.go(fuel0: Nat, +book: Book, v: Tm, +d: U32, lam: Bool) -> Bool:
+  match fuel0:
+    case 0n:
+      True{}
+    case 1n+fuel:
+      match v:
+        case Lam{+k, i, f, s, q}:
+          fam.open.go(fuel, book, clo_apply(book, f, [Var{k, d, NoSp{}}]), U32.inc(d), lam)
+        case other:
+          fam.head(term_head(term_strip(other)), lam)
 
-@unsafe
-def fam.open(book, v, d, lam):
-  match v:
-    case Lam{+k, i, f, s, q}:
-      fam.open(book, clo_apply(book, f, [Var{k, d, NoSp{}}]), U32.inc(d), lam)
-    case other:
-      fam.head(term_head(term_strip(other)), lam)
+def fam.open(+book: Book, v: Tm, +d: U32, lam: Bool) -> Bool:
+  fam.open.go(Fuel.max(), book, v, d, lam)
 
 def fam.tld(+book: Book, t: Maybe<&2, Tld>) -> Bool:
   match t:
