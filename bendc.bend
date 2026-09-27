@@ -65,24 +65,13 @@ def Str.split_tab.cons(+c: U32, r: String & String) -> String & String:
   (a, b) = r
   (SCon{Chr{c}, a}, b)
 
-law Str.split_tab:
-  for s: String
-  String & String
-
-@unsafe
-def Str.split_tab.if(+c: U32, t: String, tab: Bool) -> String & String:
-  match tab:
-    case True{}:
-      ("", t)
-    case False{}:
-      Str.split_tab.cons(c, Str.split_tab(t))
-
-def Str.split_tab(s):
+def Str.split_tab(s: String) -> String & String:
   match s:
     case SNil{}:
       ("", "")
-    case SCon{Chr{+c}, t}:
-      Str.split_tab.if(c, t, U32.is_eq(c, 9))
+    case SCon{Chr{+c}, +t}:
+      Bool.pick(Unit -> String & String, U32.is_eq(c, 9), u => ("", t),
+        u => Str.split_tab.cons(c, Str.split_tab(t)))(Unit{})
 
 def Str.codes32(s: String) -> List<&2, U32>:
   match s:
@@ -130,67 +119,32 @@ def Lex.is_ids(+c: Char) -> Bool:
   Bool.or(Char.is_alpha(c), U32.is_eq(Char.to_u32(c), 95))
 
 # Spans a run of identifier chars; returns (reversed-acc result, rest).
-law Lex.id:
-  for s: String
-  for acc: String
-  String & String
-
-@unsafe
-def Lex.id.if(c: Char, t: String, acc: String, b: Bool) -> String & String:
-  match b:
-    case True{}:
-      Lex.id(t, SCon{c, acc})
-    case False{}:
-      (Str.rev(acc), SCon{c, t})
-
-def Lex.id(s, acc):
+def Lex.id(s: String, +acc: String) -> String & String:
   match s:
     case SNil{}:
       (Str.rev(acc), SNil{})
-    case SCon{+c, t}:
-      Lex.id.if(c, t, acc, Lex.is_idc(c))
+    case SCon{+c, +t}:
+      Bool.pick(Unit -> String & String, Lex.is_idc(c), u => Lex.id(t, SCon{c, acc}),
+        u => (Str.rev(acc), SCon{c, t}))(Unit{})
 
 # Spans digits, accumulating a U32 value.
-law Lex.digits:
-  for s: String
-  for acc: U32
-  U32 & String
-
-@unsafe
-def Lex.digits.if(c: Char, t: String, +acc: U32, b: Bool) -> U32 & String:
-  match b:
-    case True{}:
-      Lex.digits(t, ((acc * 10 : U32) + (Char.to_u32(c) - 48 : U32) : U32))
-    case False{}:
-      (acc, SCon{c, t})
-
-def Lex.digits(s, acc):
+def Lex.digits(s: String, +acc: U32) -> U32 & String:
   match s:
     case SNil{}:
       (acc, SNil{})
-    case SCon{+c, t}:
-      Lex.digits.if(c, t, acc, Char.is_digit(c))
+    case SCon{+c, +t}:
+      Bool.pick(Unit -> U32 & String, Char.is_digit(c),
+        u => Lex.digits(t, ((acc * 10 : U32) + (Char.to_u32(c) - 48 : U32) : U32)),
+        u => (acc, SCon{c, t}))(Unit{})
 
 # Spans digit chars as text (for float fractions).
-law Lex.dtext:
-  for s: String
-  for acc: String
-  String & String
-
-@unsafe
-def Lex.dtext.if(c: Char, t: String, acc: String, b: Bool) -> String & String:
-  match b:
-    case True{}:
-      Lex.dtext(t, SCon{c, acc})
-    case False{}:
-      (Str.rev(acc), SCon{c, t})
-
-def Lex.dtext(s, acc):
+def Lex.dtext(s: String, +acc: String) -> String & String:
   match s:
     case SNil{}:
       (Str.rev(acc), SNil{})
-    case SCon{+c, t}:
-      Lex.dtext.if(c, t, acc, Char.is_digit(c))
+    case SCon{+c, +t}:
+      Bool.pick(Unit -> String & String, Char.is_digit(c), u => Lex.dtext(t, SCon{c, acc}),
+        u => (Str.rev(acc), SCon{c, t}))(Unit{})
 
 # Escape char after a backslash.
 def Lex.esc(x: U32) -> U32:
@@ -204,26 +158,14 @@ def Lex.hex.digit(+c: U32) -> U32:
   Bool.pick(U32, U32.is_le(c, 57), (c - 48 : U32),
     Bool.pick(U32, U32.is_ge(c, 97), (c - 87 : U32), (c - 55 : U32)))
 
-law Lex.hex:
-  for s: String
-  for acc: U32
-  U32 & String
-
-@unsafe
-def Lex.hex.if(+c: U32, t: String, +acc: U32, end: Bool) -> U32 & String:
-  match end:
-    case True{}:
-      (acc, t)
-    case False{}:
-      Lex.hex(t, (acc * 16 + Lex.hex.digit(c) : U32))
-
 # The digits of a \u{hex} escape, through its '}'.
-def Lex.hex(s, acc):
+def Lex.hex(s: String, +acc: U32) -> U32 & String:
   match s:
     case SNil{}:
       (acc, SNil{})
-    case SCon{Chr{+c}, t}:
-      Lex.hex.if(c, t, acc, U32.is_eq(c, 125))
+    case SCon{Chr{+c}, +t}:
+      Bool.pick(Unit -> U32 & String, U32.is_eq(c, 125), u => (acc, t),
+        u => Lex.hex(t, (acc * 16 + Lex.hex.digit(c) : U32)))(Unit{})
 
 def Lex.esc.brace.if(+y: U32, +c: U32, t: String, brace: Bool) -> U32 & String:
   match brace:
@@ -268,30 +210,69 @@ def Lex.lit_char(s: String) -> U32 & String:
     case SCon{Chr{+x}, t}:
       Lex.lit_char.if(x, t, U32.is_eq(x, 92))
 
-# String literal body: (text, rest after closing quote).
-law Lex.str:
-  for s: String
-  for acc: String
-  String & String
+# A string literal's lexer, a char at a time (reading escapes as
+# Lex.lit_char does): its text so far (reversed), and k: 0 in the text, 1
+# after a '\', 2 after '\u', 3 in the digits of a '\u{' (v their value), 4
+# past the closing quote.
+type StrSt is Data:
+  StrSt{acc: String, k: Nat, v: U32}
 
-@unsafe
-def Lex.str.next(acc: String, r: U32 & String) -> String & String:
-  (c, t) = r
-  Lex.str(t, SCon{Chr{c}, acc})
+# A char x of the text: its closing quote, a '\', or a plain char.
+def Lex.str.text(+x: U32, +acc: String) -> StrSt:
+  Bool.pick(StrSt, U32.is_eq(x, 34), StrSt{acc, 4n, 0},
+    Bool.pick(StrSt, U32.is_eq(x, 92), StrSt{acc, 1n, 0}, StrSt{SCon{Chr{x}, acc}, 0n, 0}))
 
-def Lex.str.if(x: U32, t: String, acc: String, q: Bool) -> String & String:
-  match q:
-    case True{}:
-      (Str.rev(acc), t)
-    case False{}:
-      Lex.str.next(acc, Lex.lit_char(SCon{Chr{x}, t}))
+def Lex.str.step(+x: U32, st: StrSt) -> StrSt:
+  match st:
+    case StrSt{+acc, k, +v}:
+      match k:
+        case 0n:
+          Lex.str.text(x, acc)
+        case 1n:
+          Bool.pick(StrSt, U32.is_eq(x, 117), StrSt{acc, 2n, 0},
+            StrSt{SCon{Chr{Lex.esc(x)}, acc}, 0n, 0})
+        case 2n:
+          Bool.pick(StrSt, U32.is_eq(x, 123), StrSt{acc, 3n, 0},
+            Lex.str.text(x, SCon{Chr{117}, acc}))
+        case 3n:
+          Bool.pick(StrSt, U32.is_eq(x, 125), StrSt{SCon{Chr{v}, acc}, 0n, 0},
+            StrSt{acc, 3n, (v * 16 + Lex.hex.digit(x) : U32)})
+        case 4n+p:
+          StrSt{acc, 4n, v}
 
-def Lex.str(s, acc):
+def Lex.str.done(st: StrSt) -> Bool:
+  match st:
+    case StrSt{acc, k, v}:
+      Nat.is_eq(k, 4n)
+
+# The text, at the closing quote or the end of the line.
+def Lex.str.fin(st: StrSt) -> String:
+  match st:
+    case StrSt{acc, k, v}:
+      match k:
+        case 0n:
+          Str.rev(acc)
+        case 1n:
+          Str.rev(SCon{Chr{92}, acc})
+        case 2n:
+          Str.rev(SCon{Chr{117}, acc})
+        case 3n:
+          Str.rev(SCon{Chr{v}, acc})
+        case 4n+p:
+          Str.rev(acc)
+
+def Lex.str.go(s: String, st: StrSt) -> String & String:
   match s:
     case SNil{}:
-      (Str.rev(acc), SNil{})
-    case SCon{Chr{+x}, t}:
-      Lex.str.if(x, t, acc, U32.is_eq(x, 34))
+      (Lex.str.fin(st), SNil{})
+    case SCon{Chr{+x}, +t}:
+      +st2 = Lex.str.step(x, st)
+      Bool.pick(Unit -> String & String, Lex.str.done(st2), u => (Lex.str.fin(st2), t),
+        u => Lex.str.go(t, st2))(Unit{})
+
+# String literal body: (text, rest after closing quote).
+def Lex.str(s: String, acc: String) -> String & String:
+  Lex.str.go(s, StrSt{acc, 0n, 0})
 
 def Lex.drop1(s: String) -> String:
   match s:
@@ -314,13 +295,12 @@ def Lex.op_of.two(m: Maybe<&2, String>, s: String) -> String:
     case None{}:
       String.take(s, 1n)
 
-# Lexes one line. acc is reversed.
-law Lex.line:
-  for s: String
-  for sp: Bool
-  for +ln: U32
-  for acc: Toks()
-  Toks()
+# A step of a line's lexer: the end of its tokens, a space, or a token and
+# the text after it.
+type LxStep is Data:
+  LxEnd{}
+  LxSkip{rest: String}
+  LxTok{tok: Tok, rest: String}
 
 def Lex.class(+x: U32) -> Nat:
   # 0 space, 1 comment, 2 ident, 3 digit, 4 char, 5 string, 6 op
@@ -332,44 +312,34 @@ def Lex.class(+x: U32) -> Nat:
   Bool.pick(Nat, U32.is_eq(x, 34), 5n,
   Bool.pick(Nat, U32.is_eq(x, 13), 0n, 6n)))))))
 
-@unsafe
-def Lex.line.id(sp: Bool, +ln: U32, acc: Toks(), r: String & String) -> Toks():
+def Lex.line.id(sp: Bool, +ln: U32, r: String & String) -> LxStep:
   (name, rest) = r
-  Lex.line(rest, False{}, ln, Tok{KId{name}, sp, ln} <> acc)
+  LxTok{Tok{KId{name}, sp, ln}, rest}
 
-@unsafe
-def Lex.line.chr(sp: Bool, +ln: U32, acc: Toks(), r: U32 & String) -> Toks():
+def Lex.line.chr(sp: Bool, +ln: U32, r: U32 & String) -> LxStep:
   (c, rest) = r
-  Lex.line(Lex.drop1(rest), False{}, ln, Tok{KChr{c}, sp, ln} <> acc)
+  LxTok{Tok{KChr{c}, sp, ln}, Lex.drop1(rest)}
 
-@unsafe
-def Lex.line.str(sp: Bool, +ln: U32, acc: Toks(), r: String & String) -> Toks():
+def Lex.line.str(sp: Bool, +ln: U32, r: String & String) -> LxStep:
   (s, rest) = r
-  Lex.line(rest, False{}, ln, Tok{KStr{s}, sp, ln} <> acc)
+  LxTok{Tok{KStr{s}, sp, ln}, rest}
 
-@unsafe
-def Lex.line.op(s: String, sp: Bool, +ln: U32, acc: Toks(), +op: String) ->
-  Toks():
-  Lex.line(String.drop(s, String.length(op)), False{}, ln,
-    Tok{KSym{op}, sp, ln} <> acc)
+def Lex.line.op(s: String, sp: Bool, +ln: U32, +op: String) -> LxStep:
+  LxTok{Tok{KSym{op}, sp, ln}, String.drop(s, String.length(op))}
 
-@unsafe
-def Lex.line.nat.if(
-  sp: Bool, +ln: U32, acc: Toks(), +v: U32, x: U32, t: String, plus: Bool
-) -> Toks():
+def Lex.line.nat.if(sp: Bool, +ln: U32, +v: U32, x: U32, t: String, plus: Bool) -> LxStep:
   match plus:
     case True{}:
-      Lex.line(t, False{}, ln, Tok{KNatPlus{v}, sp, ln} <> acc)
+      LxTok{Tok{KNatPlus{v}, sp, ln}, t}
     case False{}:
-      Lex.line(SCon{Chr{x}, t}, False{}, ln, Tok{KNat{v}, sp, ln} <> acc)
+      LxTok{Tok{KNat{v}, sp, ln}, SCon{Chr{x}, t}}
 
-@unsafe
-def Lex.line.nat(sp: Bool, +ln: U32, acc: Toks(), +v: U32, t: String) -> Toks():
+def Lex.line.nat(sp: Bool, +ln: U32, +v: U32, t: String) -> LxStep:
   match t:
     case SNil{}:
-      Lex.line(SNil{}, False{}, ln, Tok{KNat{v}, sp, ln} <> acc)
+      LxTok{Tok{KNat{v}, sp, ln}, SNil{}}
     case SCon{Chr{+x}, t2}:
-      Lex.line.nat.if(sp, ln, acc, v, x, t2, U32.is_eq(x, 43))
+      Lex.line.nat.if(sp, ln, v, x, t2, U32.is_eq(x, 43))
 
 def Lex.exp.cat(+pre: String, r: String & String) -> String & String:
   (d, rest) = r
@@ -402,47 +372,40 @@ def Lex.exp(s: String) -> String & String:
     case other:
       ("", other)
 
-@unsafe
-def Lex.line.flt.e(sp: Bool, +ln: U32, acc: Toks(), +ds: String, +frac: String,
-  r: String & String) -> Toks():
+def Lex.line.flt.e(sp: Bool, +ln: U32, +ds: String, +frac: String, r: String & String) ->
+  LxStep:
   (e, rest) = r
-  Lex.line(rest, False{}, ln,
-    Tok{KFlt{ds ++ "." ++ frac ++ e}, sp, ln} <> acc)
+  LxTok{Tok{KFlt{ds ++ "." ++ frac ++ e}, sp, ln}, rest}
 
-def Lex.line.flt(sp: Bool, +ln: U32, acc: Toks(), +ds: String, r: String & String) ->
-  Toks():
+def Lex.line.flt(sp: Bool, +ln: U32, +ds: String, r: String & String) -> LxStep:
   (frac, rest) = r
-  Lex.line.flt.e(sp, ln, acc, ds, frac, Lex.exp(rest))
+  Lex.line.flt.e(sp, ln, ds, frac, Lex.exp(rest))
 
-@unsafe
-def Lex.line.num.if(
-  sp: Bool, +ln: U32, acc: Toks(), +v: U32, +ds: String, x: U32, t: String, k: Nat
-) -> Toks():
+def Lex.line.num.if(sp: Bool, +ln: U32, +v: U32, +ds: String, x: U32, t: String, k: Nat) ->
+  LxStep:
   match k:
     case 0n:
-      Lex.line(SCon{Chr{x}, t}, False{}, ln, Tok{KNum{v}, sp, ln} <> acc)
+      LxTok{Tok{KNum{v}, sp, ln}, SCon{Chr{x}, t}}
     case 1n:
-      Lex.line.nat(sp, ln, acc, v, t)
+      Lex.line.nat(sp, ln, v, t)
     case 2n+p:
-      Lex.line.flt(sp, ln, acc, ds, Lex.dtext(t, SNil{}))
+      Lex.line.flt(sp, ln, ds, Lex.dtext(t, SNil{}))
 
-@unsafe
-def Lex.line.num.go(sp: Bool, +ln: U32, acc: Toks(), +v: U32, +ds: String, rest: String) ->
-  Toks():
+def Lex.line.num.go(sp: Bool, +ln: U32, +v: U32, +ds: String, rest: String) -> LxStep:
   match rest:
     case SNil{}:
-      Lex.line(SNil{}, False{}, ln, Tok{KNum{v}, sp, ln} <> acc)
+      LxTok{Tok{KNum{v}, sp, ln}, SNil{}}
     case SCon{Chr{+x}, t}:
-      Lex.line.num.if(sp, ln, acc, v, ds, x, t,
+      Lex.line.num.if(sp, ln, v, ds, x, t,
         Bool.pick(Nat, U32.is_eq(x, 110), 1n,
           Bool.pick(Nat, U32.is_eq(x, 46), 2n, 0n)))
 
 # After digits: Nat literal (n / n+), float (.digits) or U32.
 # ds: the digits as written, less leading zeros (a float keeps them all, as
 # its integer part may pass 2^32 - 1).
-def Lex.line.num(sp: Bool, +ln: U32, acc: Toks(), +ds: String, r: U32 & String) -> Toks():
+def Lex.line.num(sp: Bool, +ln: U32, +ds: String, r: U32 & String) -> LxStep:
   (v, rest) = r
-  Lex.line.num.go(sp, ln, acc, v, ds, rest)
+  Lex.line.num.go(sp, ln, v, ds, rest)
 
 def Lex.unzero(s: String) -> String:
   match s:
@@ -462,26 +425,13 @@ def Lex.lines.put(l: Line, rest: List<&2, Line>) -> List<&2, Line>:
     case Line{i, n, h <> t}:
       Line{i, n, h <> t} <> rest
 
-law Lex.find_op:
-  for ops: List<&2, String>
-  for +s: String
-  Maybe<&2, String>
-
-@unsafe
-def Lex.find_op.if(h: String, t: List<&2, String>, +s: String, b: Bool) ->
-  Maybe<&2, String>:
-  match b:
-    case True{}:
-      Some{h}
-    case False{}:
-      Lex.find_op(t, s)
-
-def Lex.find_op(ops, s):
+def Lex.find_op(ops: List<&2, String>, +s: String) -> Maybe<&2, String>:
   match ops:
     case Nil{}:
       None{}
     case +h <> t:
-      Lex.find_op.if(h, t, s, String.starts_with(s, h))
+      Bool.pick(Unit -> Maybe<&2, String>, String.starts_with(s, h), u => Some{h},
+        u => Lex.find_op(t, s))(Unit{})
 
 def Lex.op_of.go(m: Maybe<&2, String>, +s: String) -> String:
   match m:
@@ -493,53 +443,57 @@ def Lex.op_of.go(m: Maybe<&2, String>, +s: String) -> String:
 def Lex.op_of(+s: String) -> String:
   Lex.op_of.go(Lex.find_op(Lex.ops3(), s), s)
 
-@unsafe
-def Lex.line.go(+x: U32, +t: String, sp: Bool, +ln: U32, acc: Toks(), cls: Nat) ->
-  Toks():
+def Lex.line.go(+x: U32, +t: String, sp: Bool, +ln: U32, cls: Nat) -> LxStep:
   match cls:
     case 0n:
-      Lex.line(t, True{}, ln, acc)
+      LxSkip{t}
     case 1n:
-      acc
+      LxEnd{}
     case 2n:
-      Lex.line.id(sp, ln, acc, Lex.id(SCon{Chr{x}, t}, SNil{}))
+      Lex.line.id(sp, ln, Lex.id(SCon{Chr{x}, t}, SNil{}))
     case 3n:
-      Lex.line.num(sp, ln, acc, Lex.unzero(Pair.fst(String, String, Lex.dtext(SCon{Chr{x}, t}, SNil{}))),
+      Lex.line.num(sp, ln, Lex.unzero(Pair.fst(String, String, Lex.dtext(SCon{Chr{x}, t}, SNil{}))),
         Lex.digits(SCon{Chr{x}, t}, 0))
     case 4n:
-      Lex.line.chr(sp, ln, acc, Lex.lit_char(t))
+      Lex.line.chr(sp, ln, Lex.lit_char(t))
     case 5n:
-      Lex.line.str(sp, ln, acc, Lex.str(t, SNil{}))
+      Lex.line.str(sp, ln, Lex.str(t, SNil{}))
     case 6n+p:
       +s = {SCon{Chr{x}, t} : String}
-      Lex.line.op(s, sp, ln, acc, Lex.op_of(s))
+      Lex.line.op(s, sp, ln, Lex.op_of(s))
 
-def Lex.line(s, sp, ln, acc):
+# The step at the head of s (sp: whether a space comes before it).
+def Lex.step(s: String, sp: Bool, +ln: U32) -> LxStep:
   match s:
     case SNil{}:
-      acc
+      LxEnd{}
     case SCon{Chr{+x}, t}:
-      Lex.line.go(x, t, sp, ln, acc, Lex.class(x))
+      Lex.line.go(x, t, sp, ln, Lex.class(x))
 
-law Lex.indent:
-  for s: String
-  U32
+def Lex.line.run(n: Nat, st: LxStep, +ln: U32, acc: Toks()) -> Toks():
+  match n:
+    case 0n:
+      Tok{KErr{"line " ++ U32.show(ln) ++ ": out of fuel"}, True{}, ln} <> acc
+    case 1n+p:
+      match st:
+        case LxEnd{}:
+          acc
+        case LxSkip{rest}:
+          Lex.line.run(p, Lex.step(rest, True{}, ln), ln, acc)
+        case LxTok{tok, rest}:
+          Lex.line.run(p, Lex.step(rest, False{}, ln), ln, tok <> acc)
 
-@unsafe
-def Lex.indent.if(t: String, b: Bool) -> U32:
-  match b:
-    case True{}:
-      U32.inc(Lex.indent(t))
-    case False{}:
-      0
+# Lexes one line. acc is reversed.
+def Lex.line(s: String, sp: Bool, +ln: U32, acc: Toks()) -> Toks():
+  Lex.line.run(Fuel.max(), Lex.step(s, sp, ln), ln, acc)
 
 # Leading indentation width.
-def Lex.indent(s):
+def Lex.indent(s: String) -> U32:
   match s:
     case SNil{}:
       0
     case SCon{Chr{+x}, t}:
-      Lex.indent.if(t, U32.is_eq(x, 32))
+      Bool.pick(Unit -> U32, U32.is_eq(x, 32), u => U32.inc(Lex.indent(t)), u => 0)(Unit{})
 
 def Lex.semi.if(+h: Tok, t: Toks(), semi: Bool) -> Toks():
   match semi:
@@ -605,28 +559,24 @@ def Lex.is_def(ts: List<&2, Tok>) -> Bool:
     case other:
       False{}
 
+# Statements a ';' outside brackets separates, one line each.
+def Lex.semis.go(fu: Nat, +i: U32, +ln: U32, +ts: List<&2, Tok>, +rest: List<&2, Line>) ->
+  List<&2, Line>:
+  match fu:
+    case 0n:
+      Line{i, ln, [Tok{KErr{"line " ++ U32.show(ln) ++ ": out of fuel"}, True{}, ln}]} <> rest
+    case 1n+f:
+      +n = Lex.colon(ts, 0, 0n, ";")
+      Bool.pick(Unit -> List<&2, Line>, Nat.is_gt(n, 0n),
+        u => Lex.lines.put(Line{i, ln, List.take(&2, Tok, ts, Nat.sub(n, 1n))},
+          Lex.semis.go(f, i, ln, List.drop(&2, Tok, ts, n), rest)),
+        u => Lex.lines.put(Line{i, ln, ts}, rest))(Unit{})
+
+def Lex.semis(+i: U32, +ln: U32, +ts: List<&2, Tok>, +rest: List<&2, Line>) -> List<&2, Line>:
+  Lex.semis.go(Fuel.max(), i, ln, ts, rest)
+
 # A line, or a def or case with its body on the same line (def f(): e,
 # case K{}: e) as two: the body goes one level deeper.
-law Lex.semis:
-  for +i: U32
-  for +ln: U32
-  for +ts: List<&2, Tok>
-  for +rest: List<&2, Line>
-  List<&2, Line>
-
-# Statements a ';' outside brackets separates, one line each.
-@unsafe
-def Lex.semis.at(+i: U32, +ln: U32, +ts: List<&2, Tok>, rest: List<&2, Line>, +n: Nat, hit: Bool) -> List<&2, Line>:
-  match hit:
-    case True{}:
-      Lex.lines.put(Line{i, ln, List.take(&2, Tok, ts, Nat.sub(n, 1n))}, Lex.semis(i, ln, List.drop(&2, Tok, ts, n), rest))
-    case False{}:
-      Lex.lines.put(Line{i, ln, ts}, rest)
-
-def Lex.semis(i, ln, ts, rest):
-  +n = Lex.colon(ts, 0, 0n, ";")
-  Lex.semis.at(i, ln, ts, rest, n, Nat.is_gt(n, 0n))
-
 def Lex.split(+i: U32, +ln: U32, +ts: List<&2, Tok>, +rest: List<&2, Line>) -> List<&2, Line>:
   +n = Bool.pick(Nat, Lex.is_def(ts), Lex.colon(ts, 0, 0n, ":"), 0n)
   Bool.pick(List<&2, Line>, Bool.and(Nat.is_gt(n, 0n), Nat.is_lt(n, List.length(&2, Tok, ts))),
@@ -700,14 +650,20 @@ def Lay.arms(+top: U32, stack: List<&2, U32>, +d: U32) -> U32:
       Bool.pick(U32, U32.is_eq(Lay.bd(h), d),
         Bool.pick(U32, U32.is_eq(U32.and(h, 1), 1), h, Lay.arms(top, t, d)), top)
 
-law Lay.pop:
-  for stack: List<&2, U32>
-  for +ind: U32
-  for acc: List<&2, Tok>
-  for +ln: U32
-  List<&2, U32> & List<&2, Tok>
+def Lay.tok(k: TK, +ln: U32) -> Tok:
+  Tok{k, True{}, ln}
 
-@unsafe
+# Pops levels deeper than ind, emitting KDe for each.
+def Lay.pop(stack: List<&2, U32>, +ind: U32, +acc: List<&2, Tok>, +ln: U32) ->
+  List<&2, U32> & List<&2, Tok>:
+  match stack:
+    case Nil{}:
+      (Nil{}, acc)
+    case +h <> +t:
+      Bool.pick(Unit -> List<&2, U32> & List<&2, Tok>, U32.is_gt(h, ind),
+        u => Lay.pop(t, ind, Lay.tok(KDe{}, ln) <> acc, ln),
+        u => (h <> t, acc))(Unit{})
+
 def Lay.close(stack: List<&2, U32>, acc: List<&2, Tok>, +d: U32, +ln: U32, lt: Bool) ->
   List<&2, U32> & List<&2, Tok>:
   match lt:
@@ -721,26 +677,15 @@ def Lay.toks.go(+k: TK, sp: Bool, +ln: U32, +d: U32, r: List<&2, U32> & List<&2,
   +arrow = Lay.is_sym(k, "=>")
   LS{Tok{k, sp, ln} <> acc, d, Bool.or(Lay.is_sym(k, ":"), arrow), stack, Bool.and(Lay.is_op(k), Bool.not(arrow))}
 
-law Lay.toks:
-  for ts: List<&2, Tok>
-  for st: LS
-  LS
-
-@unsafe
-def Lay.toks.at(t: List<&2, Tok>, +k: TK, sp: Bool, +ln: U32, +d: U32, r: List<&2, U32> & List<&2, Tok>) -> LS:
-  Lay.toks(t, Lay.toks.go(k, sp, ln, d, r))
-
-def Lay.toks(ts, st):
+def Lay.toks(ts: List<&2, Tok>, st: LS) -> LS:
   match ts:
     case Nil{}:
       st
-    case Tok{+k, sp, +ln} <> +t:
+    case Tok{+k, sp, +ln} <> t:
       LS{acc, depth, colon, +stack, op} = st
       +d = (depth + Lay.delta(k) : U32)
-      Lay.toks.at(t, k, sp, ln, d, Lay.close(stack, acc, d, ln, U32.is_lt(d, Lay.bd(Lay.top(stack)))))
-
-def Lay.tok(k: TK, +ln: U32) -> Tok:
-  Tok{k, True{}, ln}
+      Lay.toks(t, Lay.toks.go(k, sp, ln, d,
+        Lay.close(stack, acc, d, ln, U32.is_lt(d, Lay.bd(Lay.top(stack))))))
 
 def Lay.dedent(depth: U32, colon: Bool, +ln: U32, r: List<&2, U32> & List<&2, Tok>) ->
   LS:
@@ -763,7 +708,6 @@ def Lay.start.eq(
       LS{Lay.tok(KNL{}, ln) <> acc, depth, colon, stack, False{}}
 
 # A deeper case arm closes the blocks above the innermost block of arms.
-@unsafe
 def Lay.start.stmt(
   acc: List<&2, Tok>, +depth: U32, colon: Bool, +stack: List<&2, U32>, +ln: U32, stmt: Nat
 ) -> LS:
@@ -790,7 +734,6 @@ def Lay.start.gt(
     case False{}:
       Lay.start.stmt(acc, depth, colon, stack, ln, stmt)
 
-@unsafe
 def Lay.start.cmp(
   acc: List<&2, Tok>, +depth: U32, colon: Bool, stack: List<&2, U32>, +ind: U32, +ln: U32, c: Cmp,
   lead: Bool
@@ -906,7 +849,6 @@ def Lay.finish.go(r: List<&2, U32> & List<&2, Tok>) -> List<&2, Tok>:
   (stack2, acc2) = r
   List.reverse(&2, Tok, Lay.tok(KEof{}, 0) <> acc2)
 
-@unsafe
 def Lay.finish(st: LS) -> List<&2, Tok>:
   LS{acc, depth, colon, stack, op} = st
   Lay.finish.go(Lay.pop(stack, 0, Lay.tok(KNL{}, 0) <> acc, 0))
@@ -956,24 +898,6 @@ def Toks.show(ts: List<&2, Tok>) -> String:
       ""
     case h <> t:
       Tok.show(h) ++ Toks.show(t)
-
-@unsafe
-def Lay.pop.if(
-  h: U32, t: List<&2, U32>, +ind: U32, acc: List<&2, Tok>, +ln: U32, gt: Bool
-) -> List<&2, U32> & List<&2, Tok>:
-  match gt:
-    case True{}:
-      Lay.pop(t, ind, Lay.tok(KDe{}, ln) <> acc, ln)
-    case False{}:
-      (h <> t, acc)
-
-# Pops levels deeper than ind, emitting KDe for each.
-def Lay.pop(stack, ind, acc, ln):
-  match stack:
-    case Nil{}:
-      (Nil{}, acc)
-    case +h <> t:
-      Lay.pop.if(h, t, ind, acc, ln, U32.is_gt(h, ind))
 
 # IO helpers
 # ==========
@@ -1245,45 +1169,31 @@ def P.plist(xs: List<&2, Pat>) -> Pat:
     case h <> t:
       PCtor{"Con", [h, P.plist(t)]}
 
-law P.nls:
-  Parser(Unit)
+# A parser out of fuel (recursion over tokens takes some; no input needs
+# as much as Fuel.max gives): an error.
+def P.fuel(-A: Type, x: A) -> Parser(A):
+  do Parser<A>:
+    P.err("out of fuel")
+    return x
 
-@unsafe
-def P.nls.if(b: Bool) -> Parser(Unit):
-  match b:
-    case True{}:
-      do Parser<Unit>:
-        P.skip()
-        P.nls()
-    case False{}:
-      Parser.pure(Unit, Unit{})
+def P.nls.go(ts: Toks()) -> Unit & Toks():
+  match ts:
+    case Tok{KNL{}, sp, ln} <> t:
+      P.nls.go(t)
+    case other:
+      (Unit{}, other)
 
 # Skips newlines.
-def P.nls():
-  do Parser<Unit>:
-    t : Tok <- P.peek()
-    P.nls.if(P.is_nl(t))
-
-law P.which:
-  for +s: String
-  for xs: List<&2, String>
-  Nat
-
-@unsafe
-def P.which.if(+s: String, t: List<&2, String>, hit: Bool) -> Nat:
-  match hit:
-    case True{}:
-      0n
-    case False{}:
-      1n+P.which(s, t)
+def P.nls() -> Parser(Unit):
+  ts => P.nls.go(ts)
 
 # Index of s in xs (or length when absent).
-def P.which(s, xs):
+def P.which(+s: String, xs: List<&2, String>) -> Nat:
   match xs:
     case Nil{}:
       0n
     case h <> t:
-      P.which.if(s, t, String.eq(s, h))
+      Bool.pick(Unit -> Nat, String.eq(s, h), u => 0n, u => 1n+P.which(s, t))(Unit{})
 
 # Symbol index of a token (or 99 when not a symbol).
 def P.tok_which(t: Tok, xs: List<&2, String>) -> Nat:
@@ -1331,20 +1241,6 @@ def P.mk_bin.go(op: String, a: Expr, b: Expr, k: Nat) -> Expr:
     case 8n+p:
       EOp{op, a, b}
 
-law P.expr:
-  Parser(Expr)
-
-law P.term:
-  Parser(Expr)
-
-law P.bin:
-  for min: U32
-  Parser(Expr)
-
-@unsafe
-def P.expr():
-  P.bin(1)
-
 def P.gt.if(s: String, sp: Bool, +ln: U32, t: Toks(), k: Nat) -> Unit & Toks():
   match k:
     case 0n:
@@ -1373,56 +1269,6 @@ def P.arr.size.lit(t: Tok) -> Parser(Expr):
       do Parser<Expr>:
         P.err("expected an array size")
         return ENat{0}
-
-@unsafe
-def P.arr.size(pow: Bool, t: Tok) -> Parser(Expr):
-  match pow:
-    case True{}:
-      P.term()
-    case False{}:
-      P.arr.size.lit(t)
-
-@unsafe
-def P.arr(v: Expr) -> Parser(Expr):
-  do Parser<Expr>:
-    P.skip()
-    ty : Expr <- P.term()
-    t : Tok <- P.peek()
-    P.skip()
-    t2 : Tok <- P.peek()
-    d : Expr <- P.arr.size(P.tok_is(t, "^"), t2)
-    P.expect("]")
-    return ECall{EVar{"Array.new"}, [ETy{"", Nil{}}, d, EAnn{v, P.head(ty)}]}
-
-# '{' ... '}': reflexivity, equality type, or annotation.
-def P.brace.tail(e: Expr, k: Nat) -> Parser(Expr):
-  match k:
-    case 0n:
-      do Parser<Expr>:
-        P.skip()
-        b : Expr <- P.expr()
-        P.expect(":")
-        ty : Expr <- P.expr()
-        P.expect("}")
-        return ETy{"==", Nil{}}
-    case 1n:
-      do Parser<Expr>:
-        P.skip()
-        b : Expr <- P.expr()
-        P.expect(":")
-        ty : Expr <- P.expr()
-        P.expect("}")
-        return ETy{"", Nil{}}
-    case 2n:
-      do Parser<Expr>:
-        P.skip()
-        ty : Expr <- P.expr()
-        P.expect("}")
-        return EAnn{e, P.head(ty)}
-    case 3n+p:
-      do Parser<Expr>:
-        P.expect("}")
-        return e
 
 # Negation of a numeric literal.
 def P.neg(e: Expr) -> Expr:
@@ -1479,25 +1325,6 @@ def P.phead(ty: Expr) -> String:
     case other:
       P.head(other)
 
-# '@x: A -> B' and '&x: A -> B' (dependent types), '&1' (quantities).
-def P.dep(amp: Bool) -> Parser(Expr):
-  do Parser<Expr>:
-    e1 : Bool <- P.eat("-")
-    e2 : Bool <- P.eat("+")
-    x : String <- P.ident()
-    P.expect(":")
-    ty : Expr <- P.expr()
-    return P.dep.fin(x, ty, amp, e1)
-
-def P.amp.go(t: Tok) -> Parser(Expr):
-  match t:
-    case Tok{KNum{n}, sp, ln}:
-      do Parser<Expr>:
-        P.skip()
-        return ETy{"#q", Nil{}}
-    case other:
-      P.dep(True{})
-
 def P.mk_bin(+op: String, a: Expr, b: Expr) -> Expr:
   P.mk_bin.go(op, a, b, P.which(op, ["->", "|", "&", "<&>", "||", "&&", "<>",
     "++"]))
@@ -1513,69 +1340,13 @@ def P.gt.go(ts: Toks()) -> Unit & Toks():
 def P.gt() -> Parser(Unit):
   ts => P.gt.go(ts)
 
-def P.brace.body() -> Parser(Expr):
-  do Parser<Expr>:
-    e : Expr <- P.expr()
-    t : Tok <- P.peek()
-    P.brace.tail(e, P.tok_which(t, ["==", "!=", ":"]))
-
-def P.brace.go(refl: Bool) -> Parser(Expr):
-  match refl:
-    case True{}:
-      do Parser<Expr>:
-        P.skip()
-        P.expect("}")
-        return ETy{"", Nil{}}
-    case False{}:
-      P.brace.body()
-
-def P.brace() -> Parser(Expr):
-  do Parser<Expr>:
-    P.skip()
-    t : Tok <- P.peek()
-    P.brace.go(P.tok_is(t, "=="))
-
-law P.op_find:
-  for +s: String
-  for xs: List<&2, OpInfo>
-  OpInfo
-
-@unsafe
-def P.op_find.if(+s: String, t: List<&2, OpInfo>, h: OpInfo, hit: Bool) ->
-  OpInfo:
-  match hit:
-    case True{}:
-      h
-    case False{}:
-      P.op_find(s, t)
-
-def P.op_find(s, xs):
+def P.op_find(+s: String, xs: List<&2, OpInfo>) -> OpInfo:
   match xs:
     case Nil{}:
       OpInfo{"", 0, False{}}
     case OpInfo{+o, p, r} <> t:
-      P.op_find.if(s, t, OpInfo{o, p, r}, String.eq(s, o))
-
-law P.bin.loop:
-  for +min: U32
-  for lhs: Expr
-  Parser(Expr)
-
-@unsafe
-def P.bin.loop.go(+min: U32, lhs: Expr, o: String, +p: U32, r: Bool, ok: Bool) ->
-  Parser(Expr):
-  match ok:
-    case False{}:
-      Parser.pure(Expr, lhs)
-    case True{}:
-      do Parser<Expr>:
-        P.skip()
-        rhs : Expr <- P.bin(Bool.pick(U32, r, p, U32.inc(p)))
-        P.bin.loop(min, P.mk_bin(o, lhs, rhs))
-
-def P.bin.loop.op(+min: U32, lhs: Expr, op: OpInfo) -> Parser(Expr):
-  OpInfo{o, +p, r} = op
-  P.bin.loop.go(min, lhs, o, p, r, Bool.and(U32.is_ne(p, 0), U32.is_ge(p, min)))
+      Bool.pick(Unit -> OpInfo, String.eq(s, o), u => OpInfo{o, p, r},
+        u => P.op_find(s, t))(Unit{})
 
 # Binary operator at the head (operators need a space before them).
 def P.tok_op(t: Tok) -> OpInfo:
@@ -1585,120 +1356,51 @@ def P.tok_op(t: Tok) -> OpInfo:
     case other:
       OpInfo{"", 0, False{}}
 
-def P.bin.loop(min, lhs):
-  do Parser<Expr>:
-    t : Tok <- P.peek()
-    P.bin.loop.op(min, lhs, P.tok_op(t))
-
-@unsafe
-def P.bin(min):
-  do Parser<Expr>:
-    lhs : Expr <- P.term()
-    P.bin.loop(min, lhs)
-
-law P.list:
-  for +close: String
-  Parser(List<&2, Expr>)
-
-# Comma-separated expressions up to (and including) a closing symbol.
-@unsafe
-def P.list.more(+close: String, more: Bool) -> Parser(List<&2, Expr>):
-  match more:
-    case True{}:
-      P.list(close)
-    case False{}:
-      do Parser<List<&2, Expr>>:
-        P.expect(close)
-        return Nil{}
-
-def P.list.item(+close: String) -> Parser(List<&2, Expr>):
-  do Parser<List<&2, Expr>>:
-    e : Expr <- P.expr()
-    more : Bool <- P.eat(",")
-    rest : List<&2, Expr> <- P.list.more(close, more)
-    return e <> rest
-
-def P.list.go(+close: String, at_close: Bool) -> Parser(List<&2, Expr>):
-  match at_close:
-    case True{}:
-      do Parser<List<&2, Expr>>:
-        P.skip()
-        return Nil{}
-    case False{}:
-      P.list.item(close)
-
-def P.list.stuck(+close: String, +t: Tok, stuck: Bool) -> Parser(List<&2, Expr>):
-  match stuck:
-    case True{}:
-      do Parser<List<&2, Expr>>:
-        P.err("unterminated list")
-        return Nil{}
-    case False{}:
-      P.list.go(close, P.tok_is(t, close))
-
-def P.list(close):
-  do Parser<List<&2, Expr>>:
-    +t : Tok <- P.peek()
-    P.list.stuck(close, t, P.stuck(P.tok_kind(t)))
-
-# '(' ... ')': unit, tuple, annotation or parens.
-law P.skip_ann:
-  Parser(Unit)
-
-law P.lscan:
-  for ts: Toks()
-  for +depth: U32
-  Bool
-
-@unsafe
-def P.lscan.sym(t: Toks(), +depth: U32, k: Nat) -> Bool:
+# The depth after the symbol of P.lscan's index k: 1 to 3 open a bracket,
+# 4 to 6 close one.
+def P.lscan.depth(+depth: U32, k: Nat) -> U32:
   match k:
     case 0n:
-      U32.is_zero(depth)
+      depth
     case 1n:
-      P.lscan(t, U32.inc(depth))
+      U32.inc(depth)
     case 2n:
-      P.lscan(t, U32.inc(depth))
+      U32.inc(depth)
     case 3n:
-      P.lscan(t, U32.inc(depth))
+      U32.inc(depth)
     case 4n:
-      P.lscan.close(t, depth, U32.is_zero(depth))
+      (depth - 1 : U32)
     case 5n:
-      P.lscan.close(t, depth, U32.is_zero(depth))
+      (depth - 1 : U32)
     case 6n:
-      P.lscan.close(t, depth, U32.is_zero(depth))
-    case 7n:
-      P.lscan.stop(t, depth, U32.is_zero(depth))
-    case 8n:
-      P.lscan.stop(t, depth, U32.is_zero(depth))
-    case 9n:
-      P.lscan.stop(t, depth, U32.is_zero(depth))
-    case 10n+p:
-      P.lscan(t, depth)
+      (depth - 1 : U32)
+    case 7n+p:
+      depth
 
-@unsafe
-def P.lscan.close(t: Toks(), +depth: U32, top: Bool) -> Bool:
-  match top:
-    case True{}:
+# Whether the symbol of index k ends the scan: an '=' does, and at depth 0
+# a closing bracket, ';', ',' or '=>'.
+def P.lscan.end(+depth: U32, k: Nat) -> Bool:
+  match k:
+    case 0n:
+      True{}
+    case 1n:
       False{}
-    case False{}:
-      P.lscan(t, (depth - 1 : U32))
-
-@unsafe
-def P.lscan.stop(t: Toks(), +depth: U32, top: Bool) -> Bool:
-  match top:
-    case True{}:
+    case 2n:
       False{}
-    case False{}:
-      P.lscan(t, depth)
+    case 3n:
+      False{}
+    case 4n+p:
+      Bool.and(U32.is_zero(depth), Nat.is_lt(p, 6n))
 
 # Whether an expression opens with 'pat = value;' (an '=' at depth 0
 # before any ';', ',', '=>' or closing bracket on the line).
-def P.lscan(ts, depth):
+def P.lscan(ts: Toks(), +depth: U32) -> Bool:
   match ts:
     case Tok{KSym{+s}, sp, ln} <> t:
-      P.lscan.sym(t, depth, P.which(s, ["=", "(", "[", "{", ")", "]", "}", ";", ",",
-        "=>"]))
+      +k = P.which(s, ["=", "(", "[", "{", ")", "]", "}", ";", ",", "=>"])
+      Bool.pick(Unit -> Bool, P.lscan.end(depth, k),
+        u => Bool.and(Nat.is_eq(k, 0n), U32.is_zero(depth)),
+        u => P.lscan(t, P.lscan.depth(depth, k)))(Unit{})
     case Tok{KId{s}, sp, ln} <> t:
       P.lscan(t, depth)
     case Tok{KNL{}, sp, ln} <> t:
@@ -1717,145 +1419,6 @@ def P.lscan(ts, depth):
 def P.lscan.ret(+ts: Toks()) -> Bool & Toks():
   (P.lscan(ts, 0), ts)
 
-law P.iexpr:
-  Parser(Expr)
-
-@unsafe
-def P.ilet() -> Parser(Expr):
-  do Parser<Expr>:
-    e1 : Bool <- P.eat("-")
-    e2 : Bool <- P.eat("+")
-    p : Pat <- P.pat()
-    P.skip_ann()
-    P.expect("=")
-    v : Expr <- P.expr()
-    P.expect(";")
-    b : Expr <- P.iexpr()
-    return ELet{p, v, b}
-
-def P.iexpr.go(lets: Bool) -> Parser(Expr):
-  match lets:
-    case True{}:
-      P.ilet()
-    case False{}:
-      P.expr()
-
-# An expression that may open with lets: x = a; y : T = b; e.
-def P.iexpr():
-  do Parser<Expr>:
-    lets : Bool <- ts => P.lscan.ret(ts)
-    P.iexpr.go(lets)
-
-law P.paren.items:
-  Parser(List<&2, Expr>)
-
-@unsafe
-def P.paren.item(e: Expr, k: Nat) -> Parser(List<&2, Expr>):
-  match k:
-    case 0n:
-      do Parser<List<&2, Expr>>:
-        P.skip()
-        rest : List<&2, Expr> <- P.paren.items()
-        return e <> rest
-    case 1n:
-      do Parser<List<&2, Expr>>:
-        P.skip()
-        ty : Expr <- P.expr()
-        P.expect(")")
-        return [EAnn{e, P.head(ty)}]
-    case 2n+p:
-      do Parser<List<&2, Expr>>:
-        P.expect(")")
-        return [e]
-
-# A tuple's elements after its first ',': (a, b, c : T) annotates c alone.
-def P.paren.items.go(close: Bool) -> Parser(List<&2, Expr>):
-  match close:
-    case True{}:
-      do Parser<List<&2, Expr>>:
-        P.skip()
-        return Nil{}
-    case False{}:
-      do Parser<List<&2, Expr>>:
-        e : Expr <- P.iexpr()
-        t : Tok <- P.peek()
-        P.paren.item(e, P.tok_which(t, [",", ":"]))
-
-def P.paren.items():
-  do Parser<List<&2, Expr>>:
-    t : Tok <- P.peek()
-    P.paren.items.go(P.tok_is(t, ")"))
-
-def P.paren.tail(e: Expr, k: Nat) -> Parser(Expr):
-  match k:
-    case 0n:
-      do Parser<Expr>:
-        P.skip()
-        rest : List<&2, Expr> <- P.paren.items()
-        return P.tuple(e <> rest)
-    case 1n:
-      do Parser<Expr>:
-        P.skip()
-        ty : Expr <- P.expr()
-        P.expect(")")
-        return EAnn{e, P.head(ty)}
-    case 2n+p:
-      do Parser<Expr>:
-        P.expect(")")
-        return e
-
-def P.paren.body() -> Parser(Expr):
-  do Parser<Expr>:
-    e : Expr <- P.iexpr()
-    t : Tok <- P.peek()
-    P.paren.tail(e, P.tok_which(t, [",", ":"]))
-
-def P.paren.go(unit: Bool) -> Parser(Expr):
-  match unit:
-    case True{}:
-      do Parser<Expr>:
-        P.skip()
-        return ECtor{"Unit", Nil{}}
-    case False{}:
-      P.paren.body()
-
-def P.paren() -> Parser(Expr):
-  do Parser<Expr>:
-    P.skip()
-    t : Tok <- P.peek()
-    P.paren.go(P.tok_is(t, ")"))
-
-def P.brack.tail(e: Expr, arr: Bool) -> Parser(Expr):
-  match arr:
-    case True{}:
-      P.arr(e)
-    case False{}:
-      do Parser<Expr>:
-        _e : Bool <- P.eat(",")
-        rest : List<&2, Expr> <- P.list("]")
-        return P.elist(e <> rest)
-
-def P.brack.body() -> Parser(Expr):
-  do Parser<Expr>:
-    e : Expr <- P.expr()
-    t : Tok <- P.peek()
-    P.brack.tail(e, P.tok_is(t, ":"))
-
-def P.brack.go(empty: Bool) -> Parser(Expr):
-  match empty:
-    case True{}:
-      do Parser<Expr>:
-        P.skip()
-        return ECtor{"Nil", Nil{}}
-    case False{}:
-      P.brack.body()
-
-def P.brack() -> Parser(Expr):
-  do Parser<Expr>:
-    P.skip()
-    t : Tok <- P.peek()
-    P.brack.go(P.tok_is(t, "]"))
-
 # What a lambda-match's next arm is: 0 the closing }, 1 K: h, 2 a default.
 def P.lmat.kind(ts: Toks()) -> Nat:
   match ts:
@@ -1869,177 +1432,6 @@ def P.lmat.kind(ts: Toks()) -> Nat:
 def P.lmat.peek(+ts: Toks()) -> Nat & Toks():
   (P.lmat.kind(ts), ts)
 
-law P.lmat:
-  Parser(Expr)
-
-@unsafe
-def P.lmat.go(k: Nat) -> Parser(Expr):
-  match k:
-    case 0n:
-      do Parser<Expr>:
-        P.skip()
-        return ECtor{"%efq", Nil{}}
-    case 1n:
-      do Parser<Expr>:
-        +c : String <- P.ident()
-        P.expect(":")
-        h : Expr <- P.expr()
-        _s : Bool <- P.eat(";")
-        m : Expr <- P.lmat()
-        return ECtor{"%mat", [ECtor{c, Nil{}}, h, m]}
-    case 2n+p:
-      do Parser<Expr>:
-        e : Expr <- P.expr()
-        _s : Bool <- P.eat(";")
-        P.expect("}")
-        return e
-
-# The arms of \{K: h; ...; m} after its {: K's fields go to h, any other
-# value to m; \{} (no m) matches nothing. LM.expr unfolds it once the
-# constructors' arities are known.
-def P.lmat():
-  do Parser<Expr>:
-    P.nls()
-    k : Nat <- ts => P.lmat.peek(ts)
-    P.lmat.go(k)
-
-# A rewrite %e@E : P; f (or %E : P; f) is its tail f: the equation is
-# erased evidence. On its own line the tail is the next statement.
-@unsafe
-def P.rw.eq(first: Expr, at: Bool) -> Parser(Expr):
-  match at:
-    case True{}:
-      do Parser<Expr>:
-        P.skip()
-        P.term()
-    case False{}:
-      Parser.pure(Expr, first)
-
-def P.rw.tail(semi: Bool) -> Parser(Expr):
-  match semi:
-    case True{}:
-      do Parser<Expr>:
-        P.skip()
-        P.iexpr()
-    case False{}:
-      Parser.pure(Expr, ECtor{"Unit", Nil{}})
-
-@unsafe
-def P.rw() -> Parser(Expr):
-  do Parser<Expr>:
-    P.skip()
-    first : Expr <- P.term()
-    t : Tok <- P.peek()
-    e : Expr <- P.rw.eq(first, P.tok_is(t, "@"))
-    P.expect(":")
-    ty : Expr <- P.expr()
-    t2 : Tok <- P.peek()
-    P.rw.tail(P.tok_is(t2, ";"))
-
-@unsafe
-def P.primary.sym(k: Nat) -> Parser(Expr):
-  match k:
-    case 0n:
-      P.paren()
-    case 1n:
-      P.brack()
-    case 2n:
-      P.brace()
-    case 3n:
-      do Parser<Expr>:
-        P.skip()
-        P.term()
-    case 4n:
-      do Parser<Expr>:
-        P.skip()
-        P.term()
-    case 5n:
-      do Parser<Expr>:
-        P.skip()
-        e : Expr <- P.term()
-        return P.neg(e)
-    case 6n:
-      do Parser<Expr>:
-        P.skip()
-        P.dep(False{})
-    case 7n:
-      do Parser<Expr>:
-        P.skip()
-        t : Tok <- P.peek()
-        P.amp.go(t)
-    case 8n:
-      do Parser<Expr>:
-        P.skip()
-        x : String <- P.ident()
-        return ETy{"", Nil{}}
-    case 9n:
-      do Parser<Expr>:
-        P.skip()
-        P.expect("{")
-        P.lmat()
-    case 10n:
-      P.rw()
-    case 11n+p:
-      do Parser<Expr>:
-        P.err("unexpected symbol")
-        return EErr{""}
-
-law P.tyargs:
-  Parser(List<&2, Expr>)
-
-@unsafe
-def P.tyargs.more(more: Bool) -> Parser(List<&2, Expr>):
-  match more:
-    case True{}:
-      P.tyargs()
-    case False{}:
-      do Parser<List<&2, Expr>>:
-        P.gt()
-        return Nil{}
-
-def P.tyargs.item() -> Parser(List<&2, Expr>):
-  do Parser<List<&2, Expr>>:
-    e : Expr <- P.expr()
-    more : Bool <- P.eat(",")
-    rest : List<&2, Expr> <- P.tyargs.more(more)
-    return e <> rest
-
-def P.tyargs.close(close: Bool) -> Parser(List<&2, Expr>):
-  match close:
-    case True{}:
-      do Parser<List<&2, Expr>>:
-        P.gt()
-        return Nil{}
-    case False{}:
-      P.tyargs.item()
-
-def P.tyargs.go(+t: Tok, stuck: Bool) -> Parser(List<&2, Expr>):
-  match stuck:
-    case True{}:
-      Parser.pure(List<&2, Expr>, Nil{})
-    case False{}:
-      P.tyargs.close(P.is_gt(t))
-
-def P.tyargs():
-  do Parser<List<&2, Expr>>:
-    +t : Tok <- P.peek()
-    P.tyargs.go(t, P.stuck(P.tok_kind(t)))
-
-def P.after_id.k(+name: String, k: Nat) -> Parser(Expr):
-  match k:
-    case 0n:
-      do Parser<Expr>:
-        P.skip()
-        args : List<&2, Expr> <- P.list("}")
-        return ECtor{name, args}
-    case 1n:
-      do Parser<Expr>:
-        P.skip()
-        args : List<&2, Expr> <- P.tyargs()
-        return ETy{name, args}
-    case 2n+p:
-      Parser.pure(Expr, EVar{name})
-
 def P.is_in(t: Tok) -> Bool:
   match t:
     case Tok{KIn{}, sp, ln}:
@@ -2047,148 +1439,9 @@ def P.is_in(t: Tok) -> Bool:
     case other:
       False{}
 
-law P.body:
-  Parser(Expr)
-
-# A lambda's body: an expression, or a block on the lines below its '=>'.
-@unsafe
-def P.lam.body(blk: Bool) -> Parser(Expr):
-  match blk:
-    case True{}:
-      P.body()
-    case False{}:
-      P.iexpr()
-
-def P.after_id.go(+name: String, k: Nat, lam: Bool) -> Parser(Expr):
-  match lam:
-    case True{}:
-      do Parser<Expr>:
-        P.skip()
-        t : Tok <- P.peek()
-        body : Expr <- P.lam.body(P.is_in(t))
-        return ELam{PVar{name}, body}
-    case False{}:
-      P.after_id.k(name, k)
-
 def P.tok_sp(t: Tok) -> Bool:
   Tok{k, sp, ln} = t
   sp
-
-# After an identifier: lambda, constructor, type application or variable.
-def P.after_id(+name: String, +t: Tok) -> Parser(Expr):
-  P.after_id.go(name, Bool.pick(Nat, P.tok_sp(t), 3n, P.tok_which(t, ["{", "<"])),
-    P.tok_is(t, "=>"))
-
-law P.do:
-  Parser(Expr)
-
-# A name, or a do block as a term.
-@unsafe
-def P.primary.id(+name: String, is_do: Bool) -> Parser(Expr):
-  match is_do:
-    case True{}:
-      P.do()
-    case False{}:
-      do Parser<Expr>:
-        P.skip()
-        t : Tok <- P.peek()
-        P.after_id(name, t)
-
-@unsafe
-def P.primary.k(k: TK) -> Parser(Expr):
-  match k:
-    case KId{+name}:
-      P.primary.id(name, Str.eq(name, "do"))
-    case KNum{n}:
-      do Parser<Expr>:
-        P.skip()
-        return ENum{n}
-    case KNat{n}:
-      do Parser<Expr>:
-        P.skip()
-        return ENat{n}
-    case KNatPlus{n}:
-      do Parser<Expr>:
-        P.skip()
-        e : Expr <- P.term()
-        return ESucc{n, e}
-    case KFlt{s}:
-      do Parser<Expr>:
-        P.skip()
-        return EFlt{s}
-    case KChr{n}:
-      do Parser<Expr>:
-        P.skip()
-        return ECtor{"Chr", [ENum{n}]}
-    case KStr{s}:
-      do Parser<Expr>:
-        P.skip()
-        return EStr{s}
-    case KSym{s}:
-      P.primary.sym(P.which(s, ["(", "[", "{", "~", "+", "-", "@", "&", "?", "\\", "%"]))
-    case other:
-      do Parser<Expr>:
-        P.err("expected an expression")
-        return EErr{""}
-
-def P.primary() -> Parser(Expr):
-  do Parser<Expr>:
-    t : Tok <- P.peek()
-    P.primary.k(P.tok_kind(t))
-
-law P.postfix:
-  for e: Expr
-  Parser(Expr)
-
-# a[i], or the write a[i] <- v (the written array).
-@unsafe
-def P.postfix.set(e: Expr, i: Expr, set: Bool) -> Parser(Expr):
-  match set:
-    case True{}:
-      do Parser<Expr>:
-        P.skip()
-        v : Expr <- P.expr()
-        return ECall{EVar{"Array.set"}, [ETy{"U32", Nil{}}, e, i, v]}
-    case False{}:
-      P.postfix(ECall{EVar{"Array.get"}, [ETy{"U32", Nil{}}, e, i]})
-
-# Postfix: calls f(..), f!(..), and indexing a[i].
-@unsafe
-def P.postfix.k(e: Expr, k: Nat) -> Parser(Expr):
-  match k:
-    case 0n:
-      do Parser<Expr>:
-        P.skip()
-        args : List<&2, Expr> <- P.list(")")
-        P.postfix(ECall{e, args})
-    case 1n:
-      do Parser<Expr>:
-        P.skip()
-        P.expect("(")
-        args : List<&2, Expr> <- P.list(")")
-        P.postfix(ECall{EVar{"%gpu"}, e <> args})
-    case 2n:
-      do Parser<Expr>:
-        P.skip()
-        i : Expr <- P.expr()
-        P.expect("]")
-        t : Tok <- P.peek()
-        P.postfix.set(e, i, P.tok_is(t, "<-"))
-    case 3n+p:
-      Parser.pure(Expr, e)
-
-def P.postfix.t(e: Expr, +t: Tok) -> Parser(Expr):
-  P.postfix.k(e, Bool.pick(Nat, P.tok_sp(t), 9n, P.tok_which(t, ["(", "!", "["])))
-
-def P.postfix(e):
-  do Parser<Expr>:
-    t : Tok <- P.peek()
-    P.postfix.t(e, t)
-
-def P.term():
-  do Parser<Expr>:
-    e : Expr <- P.primary()
-    P.postfix(e)
 
 # Patterns
 # ========
@@ -2196,126 +1449,6 @@ def P.term():
 def P.pat_seq.stop(+stops: List<&2, String>, +t: Tok) -> Bool:
   Bool.or(P.stuck(P.tok_kind(t)), Bool.or(P.is_nl(t),
     Nat.is_lt(P.tok_which(t, stops), List.length(&2, String, stops))))
-
-law P.pat:
-  Parser(Pat)
-
-@unsafe
-def P.pat.cons(p: Pat, cons: Bool) -> Parser(Pat):
-  match cons:
-    case True{}:
-      do Parser<Pat>:
-        P.skip()
-        rest : Pat <- P.pat()
-        return PCtor{"Con", [p, rest]}
-    case False{}:
-      Parser.pure(Pat, p)
-
-law P.pat_seq:
-  for +stops: List<&2, String>
-  Parser(List<&2, Pat>)
-
-# Space-separated patterns up to (not including) one of the stop symbols.
-@unsafe
-def P.pat_seq.go(+stops: List<&2, String>, +t: Tok, stop: Bool) ->
-  Parser(List<&2, Pat>):
-  match stop:
-    case True{}:
-      Parser.pure(List<&2, Pat>, Nil{})
-    case False{}:
-      do Parser<List<&2, Pat>>:
-        p : Pat <- P.pat()
-        _c : Bool <- P.eat(",")
-        rest : List<&2, Pat> <- P.pat_seq(stops)
-        return p <> rest
-
-def P.pat_seq(stops):
-  do Parser<List<&2, Pat>>:
-    +t : Tok <- P.peek()
-    P.pat_seq.go(stops, t, P.pat_seq.stop(stops, t))
-
-law P.pats:
-  for +close: String
-  Parser(List<&2, Pat>)
-
-@unsafe
-def P.pats.more(+close: String, more: Bool) -> Parser(List<&2, Pat>):
-  match more:
-    case True{}:
-      P.pats(close)
-    case False{}:
-      do Parser<List<&2, Pat>>:
-        P.expect(close)
-        return Nil{}
-
-@unsafe
-def P.pats.item(+close: String) -> Parser(List<&2, Pat>):
-  do Parser<List<&2, Pat>>:
-    p : Pat <- P.pat()
-    more : Bool <- P.eat(",")
-    rest : List<&2, Pat> <- P.pats.more(close, more)
-    return p <> rest
-
-def P.pats.close(+close: String, at: Bool) -> Parser(List<&2, Pat>):
-  match at:
-    case True{}:
-      do Parser<List<&2, Pat>>:
-        P.skip()
-        return Nil{}
-    case False{}:
-      P.pats.item(close)
-
-def P.pats.go(+close: String, +t: Tok, stuck: Bool) -> Parser(List<&2, Pat>):
-  match stuck:
-    case True{}:
-      Parser.pure(List<&2, Pat>, Nil{})
-    case False{}:
-      P.pats.close(close, P.tok_is(t, close))
-
-# Comma-separated patterns up to (and including) a closing symbol.
-def P.pats(close):
-  do Parser<List<&2, Pat>>:
-    +t : Tok <- P.peek()
-    P.pats.go(close, t, P.stuck(P.tok_kind(t)))
-
-def P.pat.id(+name: String, ctor: Bool) -> Parser(Pat):
-  match ctor:
-    case True{}:
-      do Parser<Pat>:
-        P.skip()
-        args : List<&2, Pat> <- P.pats("}")
-        return PCtor{name, args}
-    case False{}:
-      Parser.pure(Pat, PVar{name})
-
-law P.pat1:
-  Parser(Pat)
-
-@unsafe
-def P.pat.sym(k: Nat) -> Parser(Pat):
-  match k:
-    case 0n:
-      do Parser<Pat>:
-        P.skip()
-        P.pat1()
-    case 1n:
-      do Parser<Pat>:
-        P.skip()
-        P.pat1()
-    case 2n:
-      do Parser<Pat>:
-        P.skip()
-        ps : List<&2, Pat> <- P.pats(")")
-        return P.ptuple(ps)
-    case 3n:
-      do Parser<Pat>:
-        P.skip()
-        ps : List<&2, Pat> <- P.pats("]")
-        return P.plist(ps)
-    case 4n+p:
-      do Parser<Pat>:
-        P.err("expected a pattern")
-        return PVar{"_"}
 
 # A string literal pattern: a chain of SCon cells.
 def P.pstr(s: String) -> Pat:
@@ -2325,111 +1458,226 @@ def P.pstr(s: String) -> Pat:
     case SCon{Chr{c}, t}:
       PCtor{"SCon", [PCtor{"Chr", [PNum{c}]}, P.pstr(t)]}
 
-@unsafe
-def P.pat1.k(k: TK) -> Parser(Pat):
+# The pattern parsers, which call each other, as one def (P.pat.go) that a
+# selector switches between: each constructor is one parser, with its
+# arguments.
+type PsP is Data:
+  PsPat{}
+  PsPatCons{p: Pat, cons: Bool}
+  PsPat1{}
+  PsPat1K{k: TK}
+  PsPatSym{k: Nat}
+  PsPatId{name: String, ctor: Bool}
+  PsPats{close: String}
+  PsPatsGo{close: String, t: Tok, stuck: Bool}
+  PsPatsClose{close: String, at: Bool}
+  PsPatsItem{close: String}
+  PsPatsMore{close: String, more: Bool}
+
+# What a selected parser parses.
+def PsP.ty(k: PsP) -> Type:
   match k:
-    case KId{name}:
-      do Parser<Pat>:
-        P.skip()
+    case PsPat{}:
+      Pat
+    case PsPatCons{p, cons}:
+      Pat
+    case PsPat1{}:
+      Pat
+    case PsPat1K{t}:
+      Pat
+    case PsPatSym{n}:
+      Pat
+    case PsPatId{name, ctor}:
+      Pat
+    case PsPats{close}:
+      List<&2, Pat>
+    case PsPatsGo{close, t, stuck}:
+      List<&2, Pat>
+    case PsPatsClose{close, at}:
+      List<&2, Pat>
+    case PsPatsItem{close}:
+      List<&2, Pat>
+    case PsPatsMore{close, more}:
+      List<&2, Pat>
+
+def P.pat.none(k: PsP) -> Parser(PsP.ty(k)):
+  match k:
+    case PsPat{}:
+      P.fuel(Pat, PVar{"_"})
+    case PsPatCons{p, cons}:
+      P.fuel(Pat, PVar{"_"})
+    case PsPat1{}:
+      P.fuel(Pat, PVar{"_"})
+    case PsPat1K{t}:
+      P.fuel(Pat, PVar{"_"})
+    case PsPatSym{n}:
+      P.fuel(Pat, PVar{"_"})
+    case PsPatId{name, ctor}:
+      P.fuel(Pat, PVar{"_"})
+    case PsPats{close}:
+      P.fuel(List<&2, Pat>, Nil{})
+    case PsPatsGo{close, t, stuck}:
+      P.fuel(List<&2, Pat>, Nil{})
+    case PsPatsClose{close, at}:
+      P.fuel(List<&2, Pat>, Nil{})
+    case PsPatsItem{close}:
+      P.fuel(List<&2, Pat>, Nil{})
+    case PsPatsMore{close, more}:
+      P.fuel(List<&2, Pat>, Nil{})
+
+def P.pat.go(+fuel: Nat, k: PsP) -> Parser(PsP.ty(k)):
+  match fuel:
+    case 0n:
+      P.pat.none(k)
+    case 1n+fl:
+      match k:
+        case PsPat{}:
+          do Parser<Pat>:
+            p : Pat <- P.pat.go(fl, PsPat1{})
+            t : Tok <- P.peek()
+            P.pat.go(fl, PsPatCons{p, P.tok_is(t, "<>")})
+        case PsPatCons{p, cons}:
+          match cons:
+            case True{}:
+              do Parser<Pat>:
+                P.skip()
+                rest : Pat <- P.pat.go(fl, PsPat{})
+                return PCtor{"Con", [p, rest]}
+            case False{}:
+              Parser.pure(Pat, p)
+        case PsPat1{}:
+          do Parser<Pat>:
+            t : Tok <- P.peek()
+            P.pat.go(fl, PsPat1K{P.tok_kind(t)})
+        case PsPat1K{k1}:
+          match k1:
+            case KId{name}:
+              do Parser<Pat>:
+                P.skip()
+                +t : Tok <- P.peek()
+                P.pat.go(fl, PsPatId{name, Bool.and(P.tok_is(t, "{"), Bool.not(P.tok_sp(t)))})
+            case KNat{n}:
+              do Parser<Pat>:
+                P.skip()
+                return PNat{n}
+            case KNatPlus{n}:
+              do Parser<Pat>:
+                P.skip()
+                p : Pat <- P.pat.go(fl, PsPat1{})
+                return PSucc{n, p}
+            case KNum{n}:
+              do Parser<Pat>:
+                P.skip()
+                return PNum{n}
+            case KFlt{s}:
+              do Parser<Pat>:
+                P.skip()
+                return PFlt{s}
+            case KChr{n}:
+              do Parser<Pat>:
+                P.skip()
+                return PCtor{"Chr", [PNum{n}]}
+            case KStr{s}:
+              do Parser<Pat>:
+                P.skip()
+                return P.pstr(s)
+            case KSym{s}:
+              P.pat.go(fl, PsPatSym{P.which(s, ["+", "-", "(", "["])})
+            case other:
+              do Parser<Pat>:
+                P.err("expected a pattern")
+                return PVar{"_"}
+        case PsPatSym{n}:
+          match n:
+            case 0n:
+              do Parser<Pat>:
+                P.skip()
+                P.pat.go(fl, PsPat1{})
+            case 1n:
+              do Parser<Pat>:
+                P.skip()
+                P.pat.go(fl, PsPat1{})
+            case 2n:
+              do Parser<Pat>:
+                P.skip()
+                ps : List<&2, Pat> <- P.pat.go(fl, PsPats{")"})
+                return P.ptuple(ps)
+            case 3n:
+              do Parser<Pat>:
+                P.skip()
+                ps : List<&2, Pat> <- P.pat.go(fl, PsPats{"]"})
+                return P.plist(ps)
+            case 4n+p:
+              do Parser<Pat>:
+                P.err("expected a pattern")
+                return PVar{"_"}
+        case PsPatId{+name, ctor}:
+          match ctor:
+            case True{}:
+              do Parser<Pat>:
+                P.skip()
+                args : List<&2, Pat> <- P.pat.go(fl, PsPats{"}"})
+                return PCtor{name, args}
+            case False{}:
+              Parser.pure(Pat, PVar{name})
+        # Comma-separated patterns up to (and including) a closing symbol.
+        case PsPats{+close}:
+          do Parser<List<&2, Pat>>:
+            +t : Tok <- P.peek()
+            P.pat.go(fl, PsPatsGo{close, t, P.stuck(P.tok_kind(t))})
+        case PsPatsGo{+close, +t, stuck}:
+          match stuck:
+            case True{}:
+              Parser.pure(List<&2, Pat>, Nil{})
+            case False{}:
+              P.pat.go(fl, PsPatsClose{close, P.tok_is(t, close)})
+        case PsPatsClose{+close, at}:
+          match at:
+            case True{}:
+              do Parser<List<&2, Pat>>:
+                P.skip()
+                return Nil{}
+            case False{}:
+              P.pat.go(fl, PsPatsItem{close})
+        case PsPatsItem{+close}:
+          do Parser<List<&2, Pat>>:
+            p : Pat <- P.pat.go(fl, PsPat{})
+            more : Bool <- P.eat(",")
+            rest : List<&2, Pat> <- P.pat.go(fl, PsPatsMore{close, more})
+            return p <> rest
+        case PsPatsMore{+close, more}:
+          match more:
+            case True{}:
+              P.pat.go(fl, PsPats{close})
+            case False{}:
+              do Parser<List<&2, Pat>>:
+                P.expect(close)
+                return Nil{}
+
+def P.pat() -> Parser(Pat):
+  P.pat.go(Fuel.max(), PsPat{})
+
+# Space-separated patterns up to (not including) one of the stop symbols.
+def P.pat_seq.go(fuel: Nat, +stops: List<&2, String>) -> Parser(List<&2, Pat>):
+  match fuel:
+    case 0n:
+      P.fuel(List<&2, Pat>, Nil{})
+    case 1n+fl:
+      do Parser<List<&2, Pat>>:
         +t : Tok <- P.peek()
-        P.pat.id(name, Bool.and(P.tok_is(t, "{"), Bool.not(P.tok_sp(t))))
-    case KNat{n}:
-      do Parser<Pat>:
-        P.skip()
-        return PNat{n}
-    case KNatPlus{n}:
-      do Parser<Pat>:
-        P.skip()
-        p : Pat <- P.pat1()
-        return PSucc{n, p}
-    case KNum{n}:
-      do Parser<Pat>:
-        P.skip()
-        return PNum{n}
-    case KFlt{s}:
-      do Parser<Pat>:
-        P.skip()
-        return PFlt{s}
-    case KChr{n}:
-      do Parser<Pat>:
-        P.skip()
-        return PCtor{"Chr", [PNum{n}]}
-    case KStr{s}:
-      do Parser<Pat>:
-        P.skip()
-        return P.pstr(s)
-    case KSym{s}:
-      P.pat.sym(P.which(s, ["+", "-", "(", "["]))
-    case other:
-      do Parser<Pat>:
-        P.err("expected a pattern")
-        return PVar{"_"}
+        Bool.pick(Unit -> Parser(List<&2, Pat>), P.pat_seq.stop(stops, t),
+          u => Parser.pure(List<&2, Pat>, Nil{}),
+          u => do Parser<List<&2, Pat>>:
+            p : Pat <- P.pat()
+            _c : Bool <- P.eat(",")
+            rest : List<&2, Pat> <- P.pat_seq.go(fl, stops)
+            return p <> rest)(Unit{})
 
-def P.pat1():
-  do Parser<Pat>:
-    t : Tok <- P.peek()
-    P.pat1.k(P.tok_kind(t))
-
-def P.pat():
-  do Parser<Pat>:
-    p : Pat <- P.pat1()
-    t : Tok <- P.peek()
-    P.pat.cons(p, P.tok_is(t, "<>"))
+def P.pat_seq(+stops: List<&2, String>) -> Parser(List<&2, Pat>):
+  P.pat_seq.go(Fuel.max(), stops)
 
 # Statements
 # ==========
-
-def P.skip_ann.go(ann: Bool) -> Parser(Unit):
-  match ann:
-    case True{}:
-      do Parser<Unit>:
-        P.skip()
-        ty : Expr <- P.expr()
-        return Unit{}
-    case False{}:
-      Parser.pure(Unit, Unit{})
-
-# Skips an optional ': Type' annotation.
-def P.skip_ann():
-  do Parser<Unit>:
-    t : Tok <- P.peek()
-    P.skip_ann.go(P.tok_is(t, ":"))
-
-# Array write 'a[i] <- v' or monadic bind 'x : T <- v' / 'x <- v'.
-def P.bind.arr(+name: String, arr: Bool) -> Parser(List<&2, Stmt>):
-  match arr:
-    case True{}:
-      do Parser<List<&2, Stmt>>:
-        P.skip()
-        i : Expr <- P.expr()
-        P.expect("]")
-        P.expect("<-")
-        v : Expr <- P.expr()
-        return [SLet{PVar{name}, ECall{EVar{"Array.set"}, [ETy{"U32", Nil{}}, EVar{name}, i, v]}}]
-    case False{}:
-      do Parser<List<&2, Stmt>>:
-        P.skip_ann()
-        P.expect("<-")
-        v : Expr <- P.expr()
-        return [SBind{name, v}]
-
-def P.bind_stmt() -> Parser(List<&2, Stmt>):
-  do Parser<List<&2, Stmt>>:
-    e1 : Bool <- P.eat("+")
-    name : String <- P.ident()
-    +t : Tok <- P.peek()
-    P.bind.arr(name, Bool.and(P.tok_is(t, "["), Bool.not(P.tok_sp(t))))
-
-# Values of a parallel let: one expression per pattern.
-def P.exprs_n(n: Nat) -> Parser(List<&2, Expr>):
-  match n:
-    case 0n:
-      Parser.pure(List<&2, Expr>, Nil{})
-    case 1n+p:
-      do Parser<List<&2, Expr>>:
-        e : Expr <- P.expr()
-        rest : List<&2, Expr> <- P.exprs_n(p)
-        return e <> rest
 
 def P.lets(ps: List<&2, Pat>, vs: List<&2, Expr>) -> List<&2, Stmt>:
   match ps vs:
@@ -2437,9 +1685,6 @@ def P.lets(ps: List<&2, Pat>, vs: List<&2, Expr>) -> List<&2, Stmt>:
       SLet{p, v} <> P.lets(pt, vt)
     case pl vl:
       Nil{}
-
-law P.stmts:
-  Parser(List<&2, Stmt>)
 
 def P.is_de(t: Tok) -> Bool:
   match t:
@@ -2534,109 +1779,50 @@ def P.expect_in() -> Parser(Unit):
     t : Tok <- P.peek()
     P.expect_in.go(P.is_in(t))
 
-@unsafe
-def P.do():
-  do Parser<Expr>:
-    P.skip()
-    m : String <- P.ident()
-    P.expect("<")
-    +args : List<&2, Expr> <- P.tyargs()
-    P.expect(":")
-    P.expect_in()
-    ss : List<&2, Stmt> <- P.stmts()
-    return Fold.do(m, P.init(args), P.last(args), ss)
-
-# A block body: an indented statement list, folded.
-@unsafe
-def P.body():
-  do Parser<Expr>:
-    P.expect_in()
-    ss : List<&2, Stmt> <- P.stmts()
-    return Fold.plain(ss)
-
 # A parallel let (two names or more) keeps its values together, as one let
 # of a %par pattern: its values may run in parallel.
 def P.lets.par(+ps: List<&2, Pat>, +vs: List<&2, Expr>) -> List<&2, Stmt>:
   Bool.pick(List<&2, Stmt>, Nat.is_gt(List.length(&2, Pat, ps), 1n),
     [SLet{PCtor{"%par", ps}, ECtor{"%par", vs}}], P.lets(ps, vs))
 
-def P.let_stmt() -> Parser(List<&2, Stmt>):
-  do Parser<List<&2, Stmt>>:
-    +ps : List<&2, Pat> <- P.pat_seq(["=", ":"])
-    P.skip_ann()
-    P.expect("=")
-    +vs : List<&2, Expr> <- P.exprs_n(List.length(&2, Pat, ps))
-    return P.lets.par(ps, vs)
-
-def P.stmt.scan.go(k: Nat) -> Parser(List<&2, Stmt>):
+# The depth after the symbol of P.scan.go's index k: 2 to 4 open a
+# bracket, 5 to 7 close one.
+def P.scan.depth(+depth: U32, k: Nat) -> U32:
   match k:
     case 0n:
-      do Parser<List<&2, Stmt>>:
-        e : Expr <- P.expr()
-        return [SExp{e}]
+      depth
     case 1n:
-      P.let_stmt()
-    case 2n+p:
-      P.bind_stmt()
-
-def P.stmt.scan(k: U32) -> Parser(List<&2, Stmt>):
-  P.stmt.scan.go(U32.to_nat(k))
-
-law P.scan.go:
-  for ts: Toks()
-  for +depth: U32
-  U32
-
-@unsafe
-def P.scan.end(t: Toks(), +depth: U32, top: Bool) -> U32:
-  match top:
-    case True{}:
-      0
-    case False{}:
-      P.scan.go(t, depth)
-
-@unsafe
-def P.scan.top(t: Toks(), +depth: U32, +r: U32, top: Bool) -> U32:
-  match top:
-    case True{}:
-      r
-    case False{}:
-      P.scan.go(t, depth)
-
-@unsafe
-def P.scan.sym(t: Toks(), +depth: U32, k: Nat) -> U32:
-  match k:
-    case 0n:
-      P.scan.top(t, depth, 1, U32.is_zero(depth))
-    case 1n:
-      P.scan.top(t, depth, 2, U32.is_zero(depth))
+      depth
     case 2n:
-      P.scan.go(t, U32.inc(depth))
+      U32.inc(depth)
     case 3n:
-      P.scan.go(t, U32.inc(depth))
+      U32.inc(depth)
     case 4n:
-      P.scan.go(t, U32.inc(depth))
+      U32.inc(depth)
     case 5n:
-      P.scan.go(t, (depth - 1 : U32))
+      (depth - 1 : U32)
     case 6n:
-      P.scan.go(t, (depth - 1 : U32))
+      (depth - 1 : U32)
     case 7n:
-      P.scan.go(t, (depth - 1 : U32))
+      (depth - 1 : U32)
     case 8n+p:
-      P.scan.go(t, depth)
+      depth
 
 # Finds the first '=' or '<-' at depth 0 on the current line:
 # 0 none, 1 '=', 2 '<-'.
-def P.scan.go(ts, depth):
+def P.scan.go(ts: Toks(), +depth: U32) -> U32:
   match ts:
     case Nil{}:
       0
     case Tok{KSym{+s}, sp, ln} <> t:
-      P.scan.sym(t, depth, P.which(s, ["=", "<-", "(", "[", "{", ")", "]", "}"]))
+      +k = P.which(s, ["=", "<-", "(", "[", "{", ")", "]", "}"])
+      Bool.pick(Unit -> U32, Bool.and(Nat.is_lt(k, 2n), U32.is_zero(depth)),
+        u => Bool.pick(U32, Nat.is_eq(k, 0n), 1, 2),
+        u => P.scan.go(t, P.scan.depth(depth, k)))(Unit{})
     case Tok{KId{s}, sp, ln} <> t:
       P.scan.go(t, depth)
     case Tok{KNL{}, sp, ln} <> t:
-      P.scan.end(t, depth, U32.is_zero(depth))
+      Bool.pick(Unit -> U32, U32.is_zero(depth), u => 0, u => P.scan.go(t, depth))(Unit{})
     case Tok{KIn{}, sp, ln} <> t:
       0
     case Tok{KDe{}, sp, ln} <> t:
@@ -2663,13 +1849,22 @@ def P.scan.ret(+ts: Toks()) -> U32 & Toks():
 def P.scan() -> Parser(U32):
   ts => P.scan.ret(ts)
 
-law P.skip_block.go:
-  for ts: Toks()
-  for +depth: U32
-  Toks()
+# Skips tokens until the matching dedent (consumed).
+def P.skip_block.go(ts: Toks(), +depth: U32) -> Toks():
+  match ts:
+    case Nil{}:
+      Nil{}
+    case Tok{KIn{}, sp, ln} <> t:
+      P.skip_block.go(t, U32.inc(depth))
+    case Tok{KDe{}, sp, ln} <> +t:
+      Bool.pick(Unit -> Toks(), U32.is_eq(depth, 1), u => t,
+        u => P.skip_block.go(t, (depth - 1 : U32)))(Unit{})
+    case Tok{KEof{}, sp, ln} <> t:
+      Tok{KEof{}, sp, ln} <> t
+    case h <> t:
+      P.skip_block.go(t, depth)
 
 # Skips the rest of the line (up to, not including, the newline).
-@unsafe
 def P.skip_line.go(ts: Toks()) -> Toks():
   match ts:
     case Nil{}:
@@ -2687,48 +1882,8 @@ def P.skip_line.go(ts: Toks()) -> Toks():
     case h <> t:
       P.skip_line.go(t)
 
-@unsafe
-def P.skip_block.de(t: Toks(), +depth: U32, last: Bool) -> Toks():
-  match last:
-    case True{}:
-      t
-    case False{}:
-      P.skip_block.go(t, (depth - 1 : U32))
-
-# Skips tokens until the matching dedent (consumed).
-def P.skip_block.go(ts, depth):
-  match ts:
-    case Nil{}:
-      Nil{}
-    case Tok{KIn{}, sp, ln} <> t:
-      P.skip_block.go(t, U32.inc(depth))
-    case Tok{KDe{}, sp, ln} <> t:
-      P.skip_block.de(t, depth, U32.is_eq(depth, 1))
-    case Tok{KEof{}, sp, ln} <> t:
-      Tok{KEof{}, sp, ln} <> t
-    case h <> t:
-      P.skip_block.go(t, depth)
-
 def P.skip_line() -> Parser(Unit):
   ts => (Unit{}, P.skip_line.go(ts))
-
-law P.cases:
-  Parser(List<&2, Expr>)
-
-# A 'case' list of a match.
-@unsafe
-def P.cases.go(k: Nat) -> Parser(List<&2, Expr>):
-  match k:
-    case 0n:
-      do Parser<List<&2, Expr>>:
-        P.skip()
-        ps : List<&2, Pat> <- P.pat_seq([":"])
-        P.expect(":")
-        body : Expr <- P.body()
-        rest : List<&2, Expr> <- P.cases()
-        return ECase{ps, body} <> rest
-    case 1n+p:
-      Parser.pure(List<&2, Expr>, Nil{})
 
 def P.tok_which_id(t: Tok, xs: List<&2, String>) -> Nat:
   match t:
@@ -2737,117 +1892,854 @@ def P.tok_which_id(t: Tok, xs: List<&2, String>) -> Nat:
     case other:
       99n
 
-def P.cases.de(de: Bool) -> Parser(List<&2, Expr>):
-  match de:
-    case True{}:
-      do Parser<List<&2, Expr>>:
-        P.skip()
-        return Nil{}
-    case False{}:
-      do Parser<List<&2, Expr>>:
-        +t : Tok <- P.peek()
-        P.cases.go(P.tok_which_id(t, ["case"]))
+# The expression and statement parsers, which call each other, as one def
+# (P.go) that a selector switches between: each constructor is one parser,
+# with its arguments, grouped by what the parser parses.
+type PsSelE is Data:
+  PsExpr{}
+  PsArrSize{pow: Bool, t: Tok}
+  PsArr{v: Expr}
+  PsBraceTail{e: Expr, k: Nat}
+  PsDep{amp: Bool}
+  PsAmpGo{t: Tok}
+  PsBraceBody{}
+  PsBraceGo{refl: Bool}
+  PsBrace{}
+  PsBinLoopGo{min: U32, lhs: Expr, o: String, p: U32, r: Bool, ok: Bool}
+  PsBinLoopOp{min: U32, lhs: Expr, op: OpInfo}
+  PsBinLoop{min: U32, lhs: Expr}
+  PsBin{min: U32}
+  PsIlet{}
+  PsIexprGo{lets: Bool}
+  PsIexpr{}
+  PsParenTail{e: Expr, k: Nat}
+  PsParenBody{}
+  PsParenGo{unit: Bool}
+  PsParen{}
+  PsBrackTail{e: Expr, arr: Bool}
+  PsBrackBody{}
+  PsBrackGo{empty: Bool}
+  PsBrack{}
+  PsLmatGo{k: Nat}
+  PsLmat{}
+  PsRwEq{first: Expr, at: Bool}
+  PsRwTail{semi: Bool}
+  PsRw{}
+  PsPrimarySym{k: Nat}
+  PsAfterIdK{name: String, k: Nat}
+  PsLamBody{blk: Bool}
+  PsAfterIdGo{name: String, k: Nat, lam: Bool}
+  PsAfterId{name: String, t: Tok}
+  PsPrimaryId{name: String, is_do: Bool}
+  PsPrimaryK{k: TK}
+  PsPrimary{}
+  PsPostfixSet{e: Expr, i: Expr, set: Bool}
+  PsPostfixK{e: Expr, k: Nat}
+  PsPostfixT{e: Expr, t: Tok}
+  PsPostfix{e: Expr}
+  PsTerm{}
+  PsDo{}
+  PsBody{}
+  PsMatch{}
 
-def P.cases():
-  do Parser<List<&2, Expr>>:
-    P.nls()
-    t : Tok <- P.peek()
-    P.cases.de(P.is_de(t))
+type PsSelL is Data:
+  PsListMore{close: String, more: Bool}
+  PsListItem{close: String}
+  PsListGo{close: String, at_close: Bool}
+  PsListStuck{close: String, t: Tok, stuck: Bool}
+  PsList{close: String}
+  PsParenItem{e: Expr, k: Nat}
+  PsParenItemsGo{close: Bool}
+  PsParenItems{}
+  PsTyargsMore{more: Bool}
+  PsTyargsItem{}
+  PsTyargsClose{close: Bool}
+  PsTyargsGo{t: Tok, stuck: Bool}
+  PsTyargs{}
+  PsExprsN{n: Nat}
+  PsCasesGo{k: Nat}
+  PsCasesDe{de: Bool}
+  PsCases{}
+  PsMatchBody{has: Bool}
+  PsScrsGo{t: Tok, stop: Bool}
+  PsScrs{}
 
-def P.match.body(has: Bool) -> Parser(List<&2, Expr>):
-  match has:
-    case True{}:
-      do Parser<List<&2, Expr>>:
-        P.skip()
-        P.cases()
-    case False{}:
-      Parser.pure(List<&2, Expr>, Nil{})
+type PsSelS is Data:
+  PsBindArr{name: String, arr: Bool}
+  PsBindStmt{}
+  PsLetStmt{}
+  PsStmtScanGo{k: Nat}
+  PsStmtScan{k: U32}
+  PsStmtId{k: Nat}
+  PsStmtGo{t: Tok, rw: Bool}
+  PsStmt{}
+  PsStmtsGo{t: Tok, k: Nat}
+  PsStmts{}
 
-law P.scrs:
-  Parser(List<&2, Expr>)
+type PsSelU is Data:
+  PsSkipAnnGo{ann: Bool}
+  PsSkipAnn{}
 
-@unsafe
-def P.scrs.go(+t: Tok, stop: Bool) -> Parser(List<&2, Expr>):
-  match stop:
-    case True{}:
-      Parser.pure(List<&2, Expr>, Nil{})
-    case False{}:
-      do Parser<List<&2, Expr>>:
-        e : Expr <- P.expr()
-        _c : Bool <- P.eat(",")
-        rest : List<&2, Expr> <- P.scrs()
-        return e <> rest
+type PsSel is Data:
+  PsE{s: PsSelE}
+  PsL{s: PsSelL}
+  PsS{s: PsSelS}
+  PsU{s: PsSelU}
 
-def P.scrs():
-  do Parser<List<&2, Expr>>:
-    +t : Tok <- P.peek()
-    P.scrs.go(t, Bool.or(P.tok_is(t, ":"), P.stuck(P.tok_kind(t))))
-
-def P.match() -> Parser(Expr):
-  do Parser<Expr>:
-    P.skip()
-    scrs : List<&2, Expr> <- P.scrs()
-    P.expect(":")
-    t : Tok <- P.peek()
-    cases : List<&2, Expr> <- P.match.body(P.is_in(t))
-    return EMatch{scrs, cases}
-
-def P.stmt.id(k: Nat) -> Parser(List<&2, Stmt>):
+# What a selected parser parses.
+def PsSel.ty(k: PsSel) -> Type:
   match k:
-    case 0n:
-      do Parser<List<&2, Stmt>>:
-        e : Expr <- P.match()
-        return [SExp{e}]
-    case 1n:
-      do Parser<List<&2, Stmt>>:
-        P.skip()
-        e : Expr <- P.expr()
-        return [SRet{e}]
-    case 2n:
-      do Parser<List<&2, Stmt>>:
-        e : Expr <- P.do()
-        return [SExp{e}]
-    case 3n+p:
-      do Parser<List<&2, Stmt>>:
-        k : U32 <- P.scan()
-        P.stmt.scan(k)
+    case PsE{s}:
+      Expr
+    case PsL{s}:
+      List<&2, Expr>
+    case PsS{s}:
+      List<&2, Stmt>
+    case PsU{s}:
+      Unit
 
-def P.stmt.go(+t: Tok, rw: Bool) -> Parser(List<&2, Stmt>):
-  match rw:
-    case True{}:
-      do Parser<List<&2, Stmt>>:
-        P.skip_line()
-        return [SSkip{}]
-    case False{}:
-      P.stmt.id(P.tok_which_id(t, ["match", "return", "do"]))
-
-def P.stmt() -> Parser(List<&2, Stmt>):
-  do Parser<List<&2, Stmt>>:
-    +t : Tok <- P.peek()
-    P.stmt.go(t, P.tok_is(t, "%"))
-
-@unsafe
-def P.stmts.go(+t: Tok, k: Nat) -> Parser(List<&2, Stmt>):
+def P.none(k: PsSel) -> Parser(PsSel.ty(k)):
   match k:
-    case 0n:
-      do Parser<List<&2, Stmt>>:
-        P.skip()
-        return Nil{}
-    case 1n:
-      Parser.pure(List<&2, Stmt>, Nil{})
-    case 2n+p:
-      do Parser<List<&2, Stmt>>:
-        s : List<&2, Stmt> <- P.stmt()
-        rest : List<&2, Stmt> <- P.stmts()
-        return List.append(&2, Stmt, s, rest)
+    case PsE{s}:
+      P.fuel(Expr, EErr{""})
+    case PsL{s}:
+      P.fuel(List<&2, Expr>, Nil{})
+    case PsS{s}:
+      P.fuel(List<&2, Stmt>, Nil{})
+    case PsU{s}:
+      P.fuel(Unit, Unit{})
 
-# Statements up to (and including) the block's dedent.
-def P.stmts():
-  do Parser<List<&2, Stmt>>:
-    P.nls()
-    +t : Tok <- P.peek()
-    P.stmts.go(t, Bool.pick(Nat, P.is_de(t), 0n,
-      Bool.pick(Nat, P.stuck(P.tok_kind(t)), 1n, 2n)))
+def P.go(+fuel: Nat, sel: PsSel) -> Parser(PsSel.ty(sel)):
+  match fuel:
+    case 0n:
+      P.none(sel)
+    case 1n+fl:
+      match sel:
+        case PsE{q}:
+          match q:
+            case PsExpr{}:
+              P.go(fl, PsE{PsBin{1}})
+            case PsArrSize{pow, t}:
+              match pow:
+                case True{}:
+                  P.go(fl, PsE{PsTerm{}})
+                case False{}:
+                  P.arr.size.lit(t)
+            case PsArr{v}:
+              do Parser<Expr>:
+                P.skip()
+                ty : Expr <- P.go(fl, PsE{PsTerm{}})
+                t : Tok <- P.peek()
+                P.skip()
+                t2 : Tok <- P.peek()
+                d : Expr <- P.go(fl, PsE{PsArrSize{P.tok_is(t, "^"), t2}})
+                P.expect("]")
+                return ECall{EVar{"Array.new"}, [ETy{"", Nil{}}, d, EAnn{v, P.head(ty)}]}
+            # '{' ... '}': reflexivity, equality type, or annotation.
+            case PsBraceTail{e, k}:
+              match k:
+                case 0n:
+                  do Parser<Expr>:
+                    P.skip()
+                    b : Expr <- P.go(fl, PsE{PsExpr{}})
+                    P.expect(":")
+                    ty : Expr <- P.go(fl, PsE{PsExpr{}})
+                    P.expect("}")
+                    return ETy{"==", Nil{}}
+                case 1n:
+                  do Parser<Expr>:
+                    P.skip()
+                    b : Expr <- P.go(fl, PsE{PsExpr{}})
+                    P.expect(":")
+                    ty : Expr <- P.go(fl, PsE{PsExpr{}})
+                    P.expect("}")
+                    return ETy{"", Nil{}}
+                case 2n:
+                  do Parser<Expr>:
+                    P.skip()
+                    ty : Expr <- P.go(fl, PsE{PsExpr{}})
+                    P.expect("}")
+                    return EAnn{e, P.head(ty)}
+                case 3n+p:
+                  do Parser<Expr>:
+                    P.expect("}")
+                    return e
+            # '@x: A -> B' and '&x: A -> B' (dependent types), '&1' (quantities).
+            case PsDep{amp}:
+              do Parser<Expr>:
+                e1 : Bool <- P.eat("-")
+                e2 : Bool <- P.eat("+")
+                x : String <- P.ident()
+                P.expect(":")
+                ty : Expr <- P.go(fl, PsE{PsExpr{}})
+                return P.dep.fin(x, ty, amp, e1)
+            case PsAmpGo{t}:
+              match t:
+                case Tok{KNum{n}, sp, ln}:
+                  do Parser<Expr>:
+                    P.skip()
+                    return ETy{"#q", Nil{}}
+                case other:
+                  P.go(fl, PsE{PsDep{True{}}})
+            case PsBraceBody{}:
+              do Parser<Expr>:
+                e : Expr <- P.go(fl, PsE{PsExpr{}})
+                t : Tok <- P.peek()
+                P.go(fl, PsE{PsBraceTail{e, P.tok_which(t, ["==", "!=", ":"])}})
+            case PsBraceGo{refl}:
+              match refl:
+                case True{}:
+                  do Parser<Expr>:
+                    P.skip()
+                    P.expect("}")
+                    return ETy{"", Nil{}}
+                case False{}:
+                  P.go(fl, PsE{PsBraceBody{}})
+            case PsBrace{}:
+              do Parser<Expr>:
+                P.skip()
+                t : Tok <- P.peek()
+                P.go(fl, PsE{PsBraceGo{P.tok_is(t, "==")}})
+            case PsBinLoopGo{+min, lhs, o, +p, r, ok}:
+              match ok:
+                case False{}:
+                  Parser.pure(Expr, lhs)
+                case True{}:
+                  do Parser<Expr>:
+                    P.skip()
+                    rhs : Expr <- P.go(fl, PsE{PsBin{Bool.pick(U32, r, p, U32.inc(p))}})
+                    P.go(fl, PsE{PsBinLoop{min, P.mk_bin(o, lhs, rhs)}})
+            case PsBinLoopOp{+min, lhs, op}:
+              OpInfo{o, +p, r} = op
+              P.go(fl, PsE{PsBinLoopGo{min, lhs, o, p, r, Bool.and(U32.is_ne(p, 0), U32.is_ge(p, min))}})
+            case PsBinLoop{+min, lhs}:
+              do Parser<Expr>:
+                t : Tok <- P.peek()
+                P.go(fl, PsE{PsBinLoopOp{min, lhs, P.tok_op(t)}})
+            case PsBin{min}:
+              do Parser<Expr>:
+                lhs : Expr <- P.go(fl, PsE{PsTerm{}})
+                P.go(fl, PsE{PsBinLoop{min, lhs}})
+            case PsIlet{}:
+              do Parser<Expr>:
+                e1 : Bool <- P.eat("-")
+                e2 : Bool <- P.eat("+")
+                p : Pat <- P.pat()
+                P.go(fl, PsU{PsSkipAnn{}})
+                P.expect("=")
+                v : Expr <- P.go(fl, PsE{PsExpr{}})
+                P.expect(";")
+                b : Expr <- P.go(fl, PsE{PsIexpr{}})
+                return ELet{p, v, b}
+            case PsIexprGo{lets}:
+              match lets:
+                case True{}:
+                  P.go(fl, PsE{PsIlet{}})
+                case False{}:
+                  P.go(fl, PsE{PsExpr{}})
+            # An expression that may open with lets: x = a; y : T = b; e.
+            case PsIexpr{}:
+              do Parser<Expr>:
+                lets : Bool <- ts => P.lscan.ret(ts)
+                P.go(fl, PsE{PsIexprGo{lets}})
+            case PsParenTail{e, k}:
+              match k:
+                case 0n:
+                  do Parser<Expr>:
+                    P.skip()
+                    rest : List<&2, Expr> <- P.go(fl, PsL{PsParenItems{}})
+                    return P.tuple(e <> rest)
+                case 1n:
+                  do Parser<Expr>:
+                    P.skip()
+                    ty : Expr <- P.go(fl, PsE{PsExpr{}})
+                    P.expect(")")
+                    return EAnn{e, P.head(ty)}
+                case 2n+p:
+                  do Parser<Expr>:
+                    P.expect(")")
+                    return e
+            case PsParenBody{}:
+              do Parser<Expr>:
+                e : Expr <- P.go(fl, PsE{PsIexpr{}})
+                t : Tok <- P.peek()
+                P.go(fl, PsE{PsParenTail{e, P.tok_which(t, [",", ":"])}})
+            case PsParenGo{unit}:
+              match unit:
+                case True{}:
+                  do Parser<Expr>:
+                    P.skip()
+                    return ECtor{"Unit", Nil{}}
+                case False{}:
+                  P.go(fl, PsE{PsParenBody{}})
+            # '(' ... ')': unit, tuple, annotation or parens.
+            case PsParen{}:
+              do Parser<Expr>:
+                P.skip()
+                t : Tok <- P.peek()
+                P.go(fl, PsE{PsParenGo{P.tok_is(t, ")")}})
+            case PsBrackTail{e, arr}:
+              match arr:
+                case True{}:
+                  P.go(fl, PsE{PsArr{e}})
+                case False{}:
+                  do Parser<Expr>:
+                    _e : Bool <- P.eat(",")
+                    rest : List<&2, Expr> <- P.go(fl, PsL{PsList{"]"}})
+                    return P.elist(e <> rest)
+            case PsBrackBody{}:
+              do Parser<Expr>:
+                e : Expr <- P.go(fl, PsE{PsExpr{}})
+                t : Tok <- P.peek()
+                P.go(fl, PsE{PsBrackTail{e, P.tok_is(t, ":")}})
+            case PsBrackGo{empty}:
+              match empty:
+                case True{}:
+                  do Parser<Expr>:
+                    P.skip()
+                    return ECtor{"Nil", Nil{}}
+                case False{}:
+                  P.go(fl, PsE{PsBrackBody{}})
+            case PsBrack{}:
+              do Parser<Expr>:
+                P.skip()
+                t : Tok <- P.peek()
+                P.go(fl, PsE{PsBrackGo{P.tok_is(t, "]")}})
+            case PsLmatGo{k}:
+              match k:
+                case 0n:
+                  do Parser<Expr>:
+                    P.skip()
+                    return ECtor{"%efq", Nil{}}
+                case 1n:
+                  do Parser<Expr>:
+                    +c : String <- P.ident()
+                    P.expect(":")
+                    h : Expr <- P.go(fl, PsE{PsExpr{}})
+                    _s : Bool <- P.eat(";")
+                    m : Expr <- P.go(fl, PsE{PsLmat{}})
+                    return ECtor{"%mat", [ECtor{c, Nil{}}, h, m]}
+                case 2n+p:
+                  do Parser<Expr>:
+                    e : Expr <- P.go(fl, PsE{PsExpr{}})
+                    _s : Bool <- P.eat(";")
+                    P.expect("}")
+                    return e
+            # The arms of \{K: h; ...; m} after its {: K's fields go to h, any other
+            # value to m; \{} (no m) matches nothing. LM.expr unfolds it once the
+            # constructors' arities are known.
+            case PsLmat{}:
+              do Parser<Expr>:
+                P.nls()
+                k : Nat <- ts => P.lmat.peek(ts)
+                P.go(fl, PsE{PsLmatGo{k}})
+            # A rewrite %e@E : P; f (or %E : P; f) is its tail f: the equation is
+            # erased evidence. On its own line the tail is the next statement.
+            case PsRwEq{first, at}:
+              match at:
+                case True{}:
+                  do Parser<Expr>:
+                    P.skip()
+                    P.go(fl, PsE{PsTerm{}})
+                case False{}:
+                  Parser.pure(Expr, first)
+            case PsRwTail{semi}:
+              match semi:
+                case True{}:
+                  do Parser<Expr>:
+                    P.skip()
+                    P.go(fl, PsE{PsIexpr{}})
+                case False{}:
+                  Parser.pure(Expr, ECtor{"Unit", Nil{}})
+            case PsRw{}:
+              do Parser<Expr>:
+                P.skip()
+                first : Expr <- P.go(fl, PsE{PsTerm{}})
+                t : Tok <- P.peek()
+                e : Expr <- P.go(fl, PsE{PsRwEq{first, P.tok_is(t, "@")}})
+                P.expect(":")
+                ty : Expr <- P.go(fl, PsE{PsExpr{}})
+                t2 : Tok <- P.peek()
+                P.go(fl, PsE{PsRwTail{P.tok_is(t2, ";")}})
+            case PsPrimarySym{k}:
+              match k:
+                case 0n:
+                  P.go(fl, PsE{PsParen{}})
+                case 1n:
+                  P.go(fl, PsE{PsBrack{}})
+                case 2n:
+                  P.go(fl, PsE{PsBrace{}})
+                case 3n:
+                  do Parser<Expr>:
+                    P.skip()
+                    P.go(fl, PsE{PsTerm{}})
+                case 4n:
+                  do Parser<Expr>:
+                    P.skip()
+                    P.go(fl, PsE{PsTerm{}})
+                case 5n:
+                  do Parser<Expr>:
+                    P.skip()
+                    e : Expr <- P.go(fl, PsE{PsTerm{}})
+                    return P.neg(e)
+                case 6n:
+                  do Parser<Expr>:
+                    P.skip()
+                    P.go(fl, PsE{PsDep{False{}}})
+                case 7n:
+                  do Parser<Expr>:
+                    P.skip()
+                    t : Tok <- P.peek()
+                    P.go(fl, PsE{PsAmpGo{t}})
+                case 8n:
+                  do Parser<Expr>:
+                    P.skip()
+                    x : String <- P.ident()
+                    return ETy{"", Nil{}}
+                case 9n:
+                  do Parser<Expr>:
+                    P.skip()
+                    P.expect("{")
+                    P.go(fl, PsE{PsLmat{}})
+                case 10n:
+                  P.go(fl, PsE{PsRw{}})
+                case 11n+p:
+                  do Parser<Expr>:
+                    P.err("unexpected symbol")
+                    return EErr{""}
+            case PsAfterIdK{+name, k}:
+              match k:
+                case 0n:
+                  do Parser<Expr>:
+                    P.skip()
+                    args : List<&2, Expr> <- P.go(fl, PsL{PsList{"}"}})
+                    return ECtor{name, args}
+                case 1n:
+                  do Parser<Expr>:
+                    P.skip()
+                    args : List<&2, Expr> <- P.go(fl, PsL{PsTyargs{}})
+                    return ETy{name, args}
+                case 2n+p:
+                  Parser.pure(Expr, EVar{name})
+            # A lambda's body: an expression, or a block on the lines below its '=>'.
+            case PsLamBody{blk}:
+              match blk:
+                case True{}:
+                  P.go(fl, PsE{PsBody{}})
+                case False{}:
+                  P.go(fl, PsE{PsIexpr{}})
+            case PsAfterIdGo{+name, k, lam}:
+              match lam:
+                case True{}:
+                  do Parser<Expr>:
+                    P.skip()
+                    t : Tok <- P.peek()
+                    body : Expr <- P.go(fl, PsE{PsLamBody{P.is_in(t)}})
+                    return ELam{PVar{name}, body}
+                case False{}:
+                  P.go(fl, PsE{PsAfterIdK{name, k}})
+            # After an identifier: lambda, constructor, type application or variable.
+            case PsAfterId{+name, +t}:
+              P.go(fl, PsE{PsAfterIdGo{name, Bool.pick(Nat, P.tok_sp(t), 3n, P.tok_which(t, ["{", "<"])),
+                P.tok_is(t, "=>")}})
+            # A name, or a do block as a term.
+            case PsPrimaryId{+name, is_do}:
+              match is_do:
+                case True{}:
+                  P.go(fl, PsE{PsDo{}})
+                case False{}:
+                  do Parser<Expr>:
+                    P.skip()
+                    t : Tok <- P.peek()
+                    P.go(fl, PsE{PsAfterId{name, t}})
+            case PsPrimaryK{k}:
+              match k:
+                case KId{+name}:
+                  P.go(fl, PsE{PsPrimaryId{name, Str.eq(name, "do")}})
+                case KNum{n}:
+                  do Parser<Expr>:
+                    P.skip()
+                    return ENum{n}
+                case KNat{n}:
+                  do Parser<Expr>:
+                    P.skip()
+                    return ENat{n}
+                case KNatPlus{n}:
+                  do Parser<Expr>:
+                    P.skip()
+                    e : Expr <- P.go(fl, PsE{PsTerm{}})
+                    return ESucc{n, e}
+                case KFlt{s}:
+                  do Parser<Expr>:
+                    P.skip()
+                    return EFlt{s}
+                case KChr{n}:
+                  do Parser<Expr>:
+                    P.skip()
+                    return ECtor{"Chr", [ENum{n}]}
+                case KStr{s}:
+                  do Parser<Expr>:
+                    P.skip()
+                    return EStr{s}
+                case KSym{s}:
+                  P.go(fl, PsE{PsPrimarySym{P.which(s, ["(", "[", "{", "~", "+", "-", "@", "&", "?", "\\", "%"])}})
+                case other:
+                  do Parser<Expr>:
+                    P.err("expected an expression")
+                    return EErr{""}
+            case PsPrimary{}:
+              do Parser<Expr>:
+                t : Tok <- P.peek()
+                P.go(fl, PsE{PsPrimaryK{P.tok_kind(t)}})
+            # a[i], or the write a[i] <- v (the written array).
+            case PsPostfixSet{e, i, set}:
+              match set:
+                case True{}:
+                  do Parser<Expr>:
+                    P.skip()
+                    v : Expr <- P.go(fl, PsE{PsExpr{}})
+                    return ECall{EVar{"Array.set"}, [ETy{"U32", Nil{}}, e, i, v]}
+                case False{}:
+                  P.go(fl, PsE{PsPostfix{ECall{EVar{"Array.get"}, [ETy{"U32", Nil{}}, e, i]}}})
+            # Postfix: calls f(..), f!(..), and indexing a[i].
+            case PsPostfixK{e, k}:
+              match k:
+                case 0n:
+                  do Parser<Expr>:
+                    P.skip()
+                    args : List<&2, Expr> <- P.go(fl, PsL{PsList{")"}})
+                    P.go(fl, PsE{PsPostfix{ECall{e, args}}})
+                case 1n:
+                  do Parser<Expr>:
+                    P.skip()
+                    P.expect("(")
+                    args : List<&2, Expr> <- P.go(fl, PsL{PsList{")"}})
+                    P.go(fl, PsE{PsPostfix{ECall{EVar{"%gpu"}, e <> args}}})
+                case 2n:
+                  do Parser<Expr>:
+                    P.skip()
+                    i : Expr <- P.go(fl, PsE{PsExpr{}})
+                    P.expect("]")
+                    t : Tok <- P.peek()
+                    P.go(fl, PsE{PsPostfixSet{e, i, P.tok_is(t, "<-")}})
+                case 3n+p:
+                  Parser.pure(Expr, e)
+            case PsPostfixT{e, +t}:
+              P.go(fl, PsE{PsPostfixK{e, Bool.pick(Nat, P.tok_sp(t), 9n, P.tok_which(t, ["(", "!", "["]))}})
+            case PsPostfix{e}:
+              do Parser<Expr>:
+                t : Tok <- P.peek()
+                P.go(fl, PsE{PsPostfixT{e, t}})
+            case PsTerm{}:
+              do Parser<Expr>:
+                e : Expr <- P.go(fl, PsE{PsPrimary{}})
+                P.go(fl, PsE{PsPostfix{e}})
+            case PsDo{}:
+              do Parser<Expr>:
+                P.skip()
+                m : String <- P.ident()
+                P.expect("<")
+                +args : List<&2, Expr> <- P.go(fl, PsL{PsTyargs{}})
+                P.expect(":")
+                P.expect_in()
+                ss : List<&2, Stmt> <- P.go(fl, PsS{PsStmts{}})
+                return Fold.do(m, P.init(args), P.last(args), ss)
+            # A block body: an indented statement list, folded.
+            case PsBody{}:
+              do Parser<Expr>:
+                P.expect_in()
+                ss : List<&2, Stmt> <- P.go(fl, PsS{PsStmts{}})
+                return Fold.plain(ss)
+            case PsMatch{}:
+              do Parser<Expr>:
+                P.skip()
+                scrs : List<&2, Expr> <- P.go(fl, PsL{PsScrs{}})
+                P.expect(":")
+                t : Tok <- P.peek()
+                cases : List<&2, Expr> <- P.go(fl, PsL{PsMatchBody{P.is_in(t)}})
+                return EMatch{scrs, cases}
+        case PsL{q}:
+          match q:
+            # Comma-separated expressions up to (and including) a closing symbol.
+            case PsListMore{+close, more}:
+              match more:
+                case True{}:
+                  P.go(fl, PsL{PsList{close}})
+                case False{}:
+                  do Parser<List<&2, Expr>>:
+                    P.expect(close)
+                    return Nil{}
+            case PsListItem{+close}:
+              do Parser<List<&2, Expr>>:
+                e : Expr <- P.go(fl, PsE{PsExpr{}})
+                more : Bool <- P.eat(",")
+                rest : List<&2, Expr> <- P.go(fl, PsL{PsListMore{close, more}})
+                return e <> rest
+            case PsListGo{+close, at_close}:
+              match at_close:
+                case True{}:
+                  do Parser<List<&2, Expr>>:
+                    P.skip()
+                    return Nil{}
+                case False{}:
+                  P.go(fl, PsL{PsListItem{close}})
+            case PsListStuck{+close, +t, stuck}:
+              match stuck:
+                case True{}:
+                  do Parser<List<&2, Expr>>:
+                    P.err("unterminated list")
+                    return Nil{}
+                case False{}:
+                  P.go(fl, PsL{PsListGo{close, P.tok_is(t, close)}})
+            case PsList{+close}:
+              do Parser<List<&2, Expr>>:
+                +t : Tok <- P.peek()
+                P.go(fl, PsL{PsListStuck{close, t, P.stuck(P.tok_kind(t))}})
+            case PsParenItem{e, k}:
+              match k:
+                case 0n:
+                  do Parser<List<&2, Expr>>:
+                    P.skip()
+                    rest : List<&2, Expr> <- P.go(fl, PsL{PsParenItems{}})
+                    return e <> rest
+                case 1n:
+                  do Parser<List<&2, Expr>>:
+                    P.skip()
+                    ty : Expr <- P.go(fl, PsE{PsExpr{}})
+                    P.expect(")")
+                    return [EAnn{e, P.head(ty)}]
+                case 2n+p:
+                  do Parser<List<&2, Expr>>:
+                    P.expect(")")
+                    return [e]
+            # A tuple's elements after its first ',': (a, b, c : T) annotates c alone.
+            case PsParenItemsGo{close}:
+              match close:
+                case True{}:
+                  do Parser<List<&2, Expr>>:
+                    P.skip()
+                    return Nil{}
+                case False{}:
+                  do Parser<List<&2, Expr>>:
+                    e : Expr <- P.go(fl, PsE{PsIexpr{}})
+                    t : Tok <- P.peek()
+                    P.go(fl, PsL{PsParenItem{e, P.tok_which(t, [",", ":"])}})
+            case PsParenItems{}:
+              do Parser<List<&2, Expr>>:
+                t : Tok <- P.peek()
+                P.go(fl, PsL{PsParenItemsGo{P.tok_is(t, ")")}})
+            case PsTyargsMore{more}:
+              match more:
+                case True{}:
+                  P.go(fl, PsL{PsTyargs{}})
+                case False{}:
+                  do Parser<List<&2, Expr>>:
+                    P.gt()
+                    return Nil{}
+            case PsTyargsItem{}:
+              do Parser<List<&2, Expr>>:
+                e : Expr <- P.go(fl, PsE{PsExpr{}})
+                more : Bool <- P.eat(",")
+                rest : List<&2, Expr> <- P.go(fl, PsL{PsTyargsMore{more}})
+                return e <> rest
+            case PsTyargsClose{close}:
+              match close:
+                case True{}:
+                  do Parser<List<&2, Expr>>:
+                    P.gt()
+                    return Nil{}
+                case False{}:
+                  P.go(fl, PsL{PsTyargsItem{}})
+            case PsTyargsGo{+t, stuck}:
+              match stuck:
+                case True{}:
+                  Parser.pure(List<&2, Expr>, Nil{})
+                case False{}:
+                  P.go(fl, PsL{PsTyargsClose{P.is_gt(t)}})
+            case PsTyargs{}:
+              do Parser<List<&2, Expr>>:
+                +t : Tok <- P.peek()
+                P.go(fl, PsL{PsTyargsGo{t, P.stuck(P.tok_kind(t))}})
+            # Values of a parallel let: one expression per pattern.
+            case PsExprsN{n}:
+              match n:
+                case 0n:
+                  Parser.pure(List<&2, Expr>, Nil{})
+                case 1n+p:
+                  do Parser<List<&2, Expr>>:
+                    e : Expr <- P.go(fl, PsE{PsExpr{}})
+                    rest : List<&2, Expr> <- P.go(fl, PsL{PsExprsN{p}})
+                    return e <> rest
+            # A 'case' list of a match.
+            case PsCasesGo{k}:
+              match k:
+                case 0n:
+                  do Parser<List<&2, Expr>>:
+                    P.skip()
+                    ps : List<&2, Pat> <- P.pat_seq([":"])
+                    P.expect(":")
+                    body : Expr <- P.go(fl, PsE{PsBody{}})
+                    rest : List<&2, Expr> <- P.go(fl, PsL{PsCases{}})
+                    return ECase{ps, body} <> rest
+                case 1n+p:
+                  Parser.pure(List<&2, Expr>, Nil{})
+            case PsCasesDe{de}:
+              match de:
+                case True{}:
+                  do Parser<List<&2, Expr>>:
+                    P.skip()
+                    return Nil{}
+                case False{}:
+                  do Parser<List<&2, Expr>>:
+                    +t : Tok <- P.peek()
+                    P.go(fl, PsL{PsCasesGo{P.tok_which_id(t, ["case"])}})
+            case PsCases{}:
+              do Parser<List<&2, Expr>>:
+                P.nls()
+                t : Tok <- P.peek()
+                P.go(fl, PsL{PsCasesDe{P.is_de(t)}})
+            case PsMatchBody{has}:
+              match has:
+                case True{}:
+                  do Parser<List<&2, Expr>>:
+                    P.skip()
+                    P.go(fl, PsL{PsCases{}})
+                case False{}:
+                  Parser.pure(List<&2, Expr>, Nil{})
+            case PsScrsGo{+t, stop}:
+              match stop:
+                case True{}:
+                  Parser.pure(List<&2, Expr>, Nil{})
+                case False{}:
+                  do Parser<List<&2, Expr>>:
+                    e : Expr <- P.go(fl, PsE{PsExpr{}})
+                    _c : Bool <- P.eat(",")
+                    rest : List<&2, Expr> <- P.go(fl, PsL{PsScrs{}})
+                    return e <> rest
+            case PsScrs{}:
+              do Parser<List<&2, Expr>>:
+                +t : Tok <- P.peek()
+                P.go(fl, PsL{PsScrsGo{t, Bool.or(P.tok_is(t, ":"), P.stuck(P.tok_kind(t)))}})
+        case PsS{q}:
+          match q:
+            # Array write 'a[i] <- v' or monadic bind 'x : T <- v' / 'x <- v'.
+            case PsBindArr{+name, arr}:
+              match arr:
+                case True{}:
+                  do Parser<List<&2, Stmt>>:
+                    P.skip()
+                    i : Expr <- P.go(fl, PsE{PsExpr{}})
+                    P.expect("]")
+                    P.expect("<-")
+                    v : Expr <- P.go(fl, PsE{PsExpr{}})
+                    return [SLet{PVar{name}, ECall{EVar{"Array.set"}, [ETy{"U32", Nil{}}, EVar{name}, i, v]}}]
+                case False{}:
+                  do Parser<List<&2, Stmt>>:
+                    P.go(fl, PsU{PsSkipAnn{}})
+                    P.expect("<-")
+                    v : Expr <- P.go(fl, PsE{PsExpr{}})
+                    return [SBind{name, v}]
+            case PsBindStmt{}:
+              do Parser<List<&2, Stmt>>:
+                e1 : Bool <- P.eat("+")
+                name : String <- P.ident()
+                +t : Tok <- P.peek()
+                P.go(fl, PsS{PsBindArr{name, Bool.and(P.tok_is(t, "["), Bool.not(P.tok_sp(t)))}})
+            case PsLetStmt{}:
+              do Parser<List<&2, Stmt>>:
+                +ps : List<&2, Pat> <- P.pat_seq(["=", ":"])
+                P.go(fl, PsU{PsSkipAnn{}})
+                P.expect("=")
+                +vs : List<&2, Expr> <- P.go(fl, PsL{PsExprsN{List.length(&2, Pat, ps)}})
+                return P.lets.par(ps, vs)
+            case PsStmtScanGo{k}:
+              match k:
+                case 0n:
+                  do Parser<List<&2, Stmt>>:
+                    e : Expr <- P.go(fl, PsE{PsExpr{}})
+                    return [SExp{e}]
+                case 1n:
+                  P.go(fl, PsS{PsLetStmt{}})
+                case 2n+p:
+                  P.go(fl, PsS{PsBindStmt{}})
+            case PsStmtScan{k}:
+              P.go(fl, PsS{PsStmtScanGo{U32.to_nat(k)}})
+            case PsStmtId{k}:
+              match k:
+                case 0n:
+                  do Parser<List<&2, Stmt>>:
+                    e : Expr <- P.go(fl, PsE{PsMatch{}})
+                    return [SExp{e}]
+                case 1n:
+                  do Parser<List<&2, Stmt>>:
+                    P.skip()
+                    e : Expr <- P.go(fl, PsE{PsExpr{}})
+                    return [SRet{e}]
+                case 2n:
+                  do Parser<List<&2, Stmt>>:
+                    e : Expr <- P.go(fl, PsE{PsDo{}})
+                    return [SExp{e}]
+                case 3n+p:
+                  do Parser<List<&2, Stmt>>:
+                    k : U32 <- P.scan()
+                    P.go(fl, PsS{PsStmtScan{k}})
+            case PsStmtGo{+t, rw}:
+              match rw:
+                case True{}:
+                  do Parser<List<&2, Stmt>>:
+                    P.skip_line()
+                    return [SSkip{}]
+                case False{}:
+                  P.go(fl, PsS{PsStmtId{P.tok_which_id(t, ["match", "return", "do"])}})
+            case PsStmt{}:
+              do Parser<List<&2, Stmt>>:
+                +t : Tok <- P.peek()
+                P.go(fl, PsS{PsStmtGo{t, P.tok_is(t, "%")}})
+            case PsStmtsGo{+t, k}:
+              match k:
+                case 0n:
+                  do Parser<List<&2, Stmt>>:
+                    P.skip()
+                    return Nil{}
+                case 1n:
+                  Parser.pure(List<&2, Stmt>, Nil{})
+                case 2n+p:
+                  do Parser<List<&2, Stmt>>:
+                    s : List<&2, Stmt> <- P.go(fl, PsS{PsStmt{}})
+                    rest : List<&2, Stmt> <- P.go(fl, PsS{PsStmts{}})
+                    return List.append(&2, Stmt, s, rest)
+            # Statements up to (and including) the block's dedent.
+            case PsStmts{}:
+              do Parser<List<&2, Stmt>>:
+                P.nls()
+                +t : Tok <- P.peek()
+                P.go(fl, PsS{PsStmtsGo{t, Bool.pick(Nat, P.is_de(t), 0n,
+                  Bool.pick(Nat, P.stuck(P.tok_kind(t)), 1n, 2n))}})
+        case PsU{q}:
+          match q:
+            case PsSkipAnnGo{ann}:
+              match ann:
+                case True{}:
+                  do Parser<Unit>:
+                    P.skip()
+                    ty : Expr <- P.go(fl, PsE{PsExpr{}})
+                    return Unit{}
+                case False{}:
+                  Parser.pure(Unit, Unit{})
+            # Skips an optional ': Type' annotation.
+            case PsSkipAnn{}:
+              do Parser<Unit>:
+                t : Tok <- P.peek()
+                P.go(fl, PsU{PsSkipAnnGo{P.tok_is(t, ":")}})
+
+def P.expr() -> Parser(Expr):
+  P.go(Fuel.max(), PsE{PsExpr{}})
+
+def P.skip_ann() -> Parser(Unit):
+  P.go(Fuel.max(), PsU{PsSkipAnn{}})
+
+def P.stmts() -> Parser(List<&2, Stmt>):
+  P.go(Fuel.max(), PsS{PsStmts{}})
 
 # Declarations
 # ============
@@ -2961,37 +2853,47 @@ def P.import.path.cat(s: String, r: String & Toks()) -> String & Toks():
   (rest, ts) = r
   (s ++ rest, ts)
 
-law P.params:
-  Parser(List<&2, Param>)
+# The parameter-list parsers, which call each other, as one def: a
+# selector picks the parser (with its arguments).
+type PsParamsSel is Data:
+  PsParamsMore{more: Bool}
+  PsParamsGo{close: Bool}
+  PsParams{}
 
-@unsafe
-def P.params.more(more: Bool) -> Parser(List<&2, Param>):
-  match more:
-    case True{}:
-      P.params()
-    case False{}:
-      do Parser<List<&2, Param>>:
-        P.expect(")")
-        return Nil{}
+def P.params.sel(+fuel: Nat, sel: PsParamsSel) -> Parser(List<&2, Param>):
+  match fuel:
+    case 0n:
+      P.fuel(List<&2, Param>, Nil{})
+    case 1n+fl:
+      match sel:
+        case PsParamsMore{more}:
+          match more:
+            case True{}:
+              P.params.sel(fl, PsParams{})
+            case False{}:
+              do Parser<List<&2, Param>>:
+                P.expect(")")
+                return Nil{}
+        case PsParamsGo{close}:
+          match close:
+            case True{}:
+              do Parser<List<&2, Param>>:
+                P.skip()
+                return Nil{}
+            case False{}:
+              do Parser<List<&2, Param>>:
+                p : Param <- P.param()
+                more : Bool <- P.eat(",")
+                rest : List<&2, Param> <- P.params.sel(fl, PsParamsMore{more})
+                return p <> rest
+        # Parameters up to (and including) ')'.
+        case PsParams{}:
+          do Parser<List<&2, Param>>:
+            +t : Tok <- P.peek()
+            P.params.sel(fl, PsParamsGo{Bool.or(P.tok_is(t, ")"), P.stuck(P.tok_kind(t)))})
 
-def P.params.go(close: Bool) -> Parser(List<&2, Param>):
-  match close:
-    case True{}:
-      do Parser<List<&2, Param>>:
-        P.skip()
-        return Nil{}
-    case False{}:
-      do Parser<List<&2, Param>>:
-        p : Param <- P.param()
-        more : Bool <- P.eat(",")
-        rest : List<&2, Param> <- P.params.more(more)
-        return p <> rest
-
-# Parameters up to (and including) ')'.
-def P.params():
-  do Parser<List<&2, Param>>:
-    +t : Tok <- P.peek()
-    P.params.go(Bool.or(P.tok_is(t, ")"), P.stuck(P.tok_kind(t))))
+def P.params() -> Parser(List<&2, Param>):
+  P.params.sel(Fuel.max(), PsParams{})
 
 def P.def() -> Parser(Decl):
   do Parser<Decl>:
@@ -3007,60 +2909,80 @@ def P.def() -> Parser(Decl):
     t2 : Tok <- P.peek()
     P.def.body(name, params, ret, P.tok_is_id(t2, "import"))
 
-law P.fields:
-  Parser(List<&2, Field>)
+# The field-list parsers, which call each other, as one def: a selector
+# picks the parser (with its arguments).
+type PsFieldsSel is Data:
+  PsFieldsGo{close: Bool}
+  PsFields{}
 
-@unsafe
-def P.fields.go(close: Bool) -> Parser(List<&2, Field>):
-  match close:
-    case True{}:
-      do Parser<List<&2, Field>>:
-        P.skip()
-        return Nil{}
-    case False{}:
-      do Parser<List<&2, Field>>:
-        e1 : Bool <- P.eat("+")
-        e2 : Bool <- P.eat("-")
-        name : String <- P.ident()
-        P.expect(":")
-        ty : Expr <- P.expr()
-        e3 : Bool <- P.eat(",")
-        rest : List<&2, Field> <- P.fields()
-        return Field{name, ty} <> rest
-
-# Constructor fields up to (and including) '}'.
-def P.fields():
-  do Parser<List<&2, Field>>:
-    +t : Tok <- P.peek()
-    P.fields.go(Bool.or(P.tok_is(t, "}"), P.stuck(P.tok_kind(t))))
-
-law P.ctors:
-  Parser(List<&2, Ctor>)
-
-@unsafe
-def P.ctors.go(+t: Tok, k: Nat) -> Parser(List<&2, Ctor>):
-  match k:
+def P.fields.sel(+fuel: Nat, sel: PsFieldsSel) -> Parser(List<&2, Field>):
+  match fuel:
     case 0n:
-      do Parser<List<&2, Ctor>>:
-        P.skip()
-        return Nil{}
-    case 1n:
-      Parser.pure(List<&2, Ctor>, Nil{})
-    case 2n+p:
-      do Parser<List<&2, Ctor>>:
-        name : String <- P.ident()
-        P.expect("{")
-        fields : List<&2, Field> <- P.fields()
-        rest : List<&2, Ctor> <- P.ctors()
-        return Ctor{name, fields} <> rest
+      P.fuel(List<&2, Field>, Nil{})
+    case 1n+fl:
+      match sel:
+        case PsFieldsGo{close}:
+          match close:
+            case True{}:
+              do Parser<List<&2, Field>>:
+                P.skip()
+                return Nil{}
+            case False{}:
+              do Parser<List<&2, Field>>:
+                e1 : Bool <- P.eat("+")
+                e2 : Bool <- P.eat("-")
+                name : String <- P.ident()
+                P.expect(":")
+                ty : Expr <- P.expr()
+                e3 : Bool <- P.eat(",")
+                rest : List<&2, Field> <- P.fields.sel(fl, PsFields{})
+                return Field{name, ty} <> rest
+        # Constructor fields up to (and including) '}'.
+        case PsFields{}:
+          do Parser<List<&2, Field>>:
+            +t : Tok <- P.peek()
+            P.fields.sel(fl, PsFieldsGo{Bool.or(P.tok_is(t, "}"), P.stuck(P.tok_kind(t)))})
 
-# Constructor lines up to (and including) the dedent.
-def P.ctors():
-  do Parser<List<&2, Ctor>>:
-    P.nls()
-    +t : Tok <- P.peek()
-    P.ctors.go(t, Bool.pick(Nat, P.is_de(t), 0n,
-      Bool.pick(Nat, P.stuck(P.tok_kind(t)), 1n, 2n)))
+def P.fields() -> Parser(List<&2, Field>):
+  P.fields.sel(Fuel.max(), PsFields{})
+
+# The constructor-list parsers, which call each other, as one def: a
+# selector picks the parser (with its arguments).
+type PsCtorsSel is Data:
+  PsCtorsGo{t: Tok, k: Nat}
+  PsCtors{}
+
+def P.ctors.sel(+fuel: Nat, sel: PsCtorsSel) -> Parser(List<&2, Ctor>):
+  match fuel:
+    case 0n:
+      P.fuel(List<&2, Ctor>, Nil{})
+    case 1n+fl:
+      match sel:
+        case PsCtorsGo{+t, k}:
+          match k:
+            case 0n:
+              do Parser<List<&2, Ctor>>:
+                P.skip()
+                return Nil{}
+            case 1n:
+              Parser.pure(List<&2, Ctor>, Nil{})
+            case 2n+p:
+              do Parser<List<&2, Ctor>>:
+                name : String <- P.ident()
+                P.expect("{")
+                fields : List<&2, Field> <- P.fields()
+                rest : List<&2, Ctor> <- P.ctors.sel(fl, PsCtors{})
+                return Ctor{name, fields} <> rest
+        # Constructor lines up to (and including) the dedent.
+        case PsCtors{}:
+          do Parser<List<&2, Ctor>>:
+            P.nls()
+            +t : Tok <- P.peek()
+            P.ctors.sel(fl, PsCtorsGo{t, Bool.pick(Nat, P.is_de(t), 0n,
+              Bool.pick(Nat, P.stuck(P.tok_kind(t)), 1n, 2n))})
+
+def P.ctors() -> Parser(List<&2, Ctor>):
+  P.ctors.sel(Fuel.max(), PsCtors{})
 
 def P.type.body(has: Bool) -> Parser(List<&2, Ctor>):
   match has:
@@ -3071,24 +2993,12 @@ def P.type.body(has: Bool) -> Parser(List<&2, Ctor>):
     case False{}:
       Parser.pure(List<&2, Ctor>, Nil{})
 
-law P.until_is.go:
-  for ts: Toks()
-  Toks()
-
-@unsafe
-def P.until_is.if(h: Tok, t: Toks(), hit: Bool) -> Toks():
-  match hit:
-    case True{}:
-      t
-    case False{}:
-      P.until_is.go(t)
-
-def P.until_is.go(ts):
+def P.until_is.go(ts: Toks()) -> Toks():
   match ts:
     case Nil{}:
       Nil{}
-    case Tok{KId{+s}, sp, ln} <> t:
-      P.until_is.if(Tok{KId{s}, sp, ln}, t, Str.eq(s, "is"))
+    case Tok{KId{+s}, sp, ln} <> +t:
+      Bool.pick(Unit -> Toks(), Str.eq(s, "is"), u => t, u => P.until_is.go(t))(Unit{})
     case Tok{KEof{}, sp, ln} <> t:
       Tok{KEof{}, sp, ln} <> t
     case Tok{KErr{e}, sp, ln} <> t:
@@ -3100,44 +3010,52 @@ def P.until_is.go(ts):
 def P.until_is() -> Parser(Unit):
   ts => (Unit{}, P.until_is.go(ts))
 
-law P.law.go:
-  for +t: Tok
-  for k: Nat
-  Parser(List<&2, Param>)
+# The parsers of a law's 'for' lines, which call each other, as one def:
+# a selector picks the parser (with its arguments).
+type PsLawSel is Data:
+  PsLawLines{}
+  PsLawLine{k: Nat}
+  PsLawGo{t: Tok, k: Nat}
 
-# The 'for' parameters of a law, up to (and including) the dedent.
-@unsafe
+def P.law.sel(+fuel: Nat, sel: PsLawSel) -> Parser(List<&2, Param>):
+  match fuel:
+    case 0n:
+      P.fuel(List<&2, Param>, Nil{})
+    case 1n+fl:
+      match sel:
+        # The 'for' parameters of a law, up to (and including) the dedent.
+        case PsLawLines{}:
+          do Parser<List<&2, Param>>:
+            P.nls()
+            +t : Tok <- P.peek()
+            P.law.sel(fl, PsLawGo{t, Bool.pick(Nat, P.is_de(t), 0n,
+              Bool.pick(Nat, P.stuck(P.tok_kind(t)), 1n, 2n))})
+        case PsLawLine{k}:
+          match k:
+            case 0n:
+              do Parser<List<&2, Param>>:
+                P.skip()
+                p : Param <- P.param()
+                P.skip_line()
+                rest : List<&2, Param> <- P.law.sel(fl, PsLawLines{})
+                return p <> rest
+            case 1n+p:
+              do Parser<List<&2, Param>>:
+                P.skip_line()
+                P.law.sel(fl, PsLawLines{})
+        case PsLawGo{+t, k}:
+          match k:
+            case 0n:
+              do Parser<List<&2, Param>>:
+                P.skip()
+                return Nil{}
+            case 1n:
+              Parser.pure(List<&2, Param>, Nil{})
+            case 2n+p:
+              P.law.sel(fl, PsLawLine{P.tok_which_id(t, ["for"])})
+
 def P.law.lines() -> Parser(List<&2, Param>):
-  do Parser<List<&2, Param>>:
-    P.nls()
-    +t : Tok <- P.peek()
-    P.law.go(t, Bool.pick(Nat, P.is_de(t), 0n,
-      Bool.pick(Nat, P.stuck(P.tok_kind(t)), 1n, 2n)))
-
-def P.law.line(k: Nat) -> Parser(List<&2, Param>):
-  match k:
-    case 0n:
-      do Parser<List<&2, Param>>:
-        P.skip()
-        p : Param <- P.param()
-        P.skip_line()
-        rest : List<&2, Param> <- P.law.lines()
-        return p <> rest
-    case 1n+p:
-      do Parser<List<&2, Param>>:
-        P.skip_line()
-        P.law.lines()
-
-def P.law.go(t, k):
-  match k:
-    case 0n:
-      do Parser<List<&2, Param>>:
-        P.skip()
-        return Nil{}
-    case 1n:
-      Parser.pure(List<&2, Param>, Nil{})
-    case 2n+p:
-      P.law.line(P.tok_which_id(t, ["for"]))
+  P.law.sel(Fuel.max(), PsLawLines{})
 
 # The type of a def that writes none.
 def P.no_ty(e: Expr) -> Bool:
@@ -3179,48 +3097,58 @@ def P.law.ty.go(+ts: Toks()) -> Expr & Toks():
 def P.law.ty() -> Parser(Expr):
   ts => P.law.ty.go(ts)
 
-law P.law.rets:
-  Parser(Expr)
+# The parsers of a law's type, which call each other, as one def: a
+# selector picks the parser (with its arguments).
+type PsRetsSel is Data:
+  PsLawRetsLine{k: Nat}
+  PsLawRetsGo{t: Tok, k: Nat}
+  PsLawRets{}
 
-@unsafe
-def P.law.rets.line(k: Nat) -> Parser(Expr):
-  match k:
+def P.law.rets.sel(+fuel: Nat, sel: PsRetsSel) -> Parser(Expr):
+  match fuel:
     case 0n:
-      do Parser<Expr>:
-        P.skip_line()
-        P.law.rets()
-    case 1n:
-      do Parser<Expr>:
-        P.skip()
-        +x : String <- P.ident()
-        P.expect(":")
-        ty : Expr <- P.expr()
-        P.skip_line()
-        rest : Expr <- P.law.rets()
-        return ETy{"Sigma", [ETy{"#q", Nil{}}, ETy{"#q", Nil{}}, ty, ELam{PVar{x}, rest}]}
-    case 2n+p:
-      do Parser<Expr>:
-        +e : Expr <- P.law.ty()
-        P.skip_line()
-        +rest : Expr <- P.law.rets()
-        return Bool.pick(Expr, P.no_ty(rest), e, rest)
+      P.fuel(Expr, ETy{"", Nil{}})
+    case 1n+fl:
+      match sel:
+        case PsLawRetsLine{k}:
+          match k:
+            case 0n:
+              do Parser<Expr>:
+                P.skip_line()
+                P.law.rets.sel(fl, PsLawRets{})
+            case 1n:
+              do Parser<Expr>:
+                P.skip()
+                +x : String <- P.ident()
+                P.expect(":")
+                ty : Expr <- P.expr()
+                P.skip_line()
+                rest : Expr <- P.law.rets.sel(fl, PsLawRets{})
+                return ETy{"Sigma", [ETy{"#q", Nil{}}, ETy{"#q", Nil{}}, ty, ELam{PVar{x}, rest}]}
+            case 2n+p:
+              do Parser<Expr>:
+                +e : Expr <- P.law.ty()
+                P.skip_line()
+                +rest : Expr <- P.law.rets.sel(fl, PsLawRets{})
+                return Bool.pick(Expr, P.no_ty(rest), e, rest)
+        case PsLawRetsGo{+t, k}:
+          match k:
+            case 0n:
+              Parser.pure(Expr, ETy{"", Nil{}})
+            case 1n:
+              Parser.pure(Expr, ETy{"", Nil{}})
+            case 2n+p:
+              P.law.rets.sel(fl, PsLawRetsLine{P.tok_which_id(t, ["for", "exs"])})
+        # The type of a law: its last line that is not a 'for'.
+        case PsLawRets{}:
+          do Parser<Expr>:
+            P.nls()
+            +t : Tok <- P.peek()
+            P.law.rets.sel(fl, PsLawRetsGo{t, Bool.pick(Nat, P.is_de(t), 0n,
+              Bool.pick(Nat, P.stuck(P.tok_kind(t)), 1n, 2n))})
 
-def P.law.rets.go(+t: Tok, k: Nat) -> Parser(Expr):
-  match k:
-    case 0n:
-      Parser.pure(Expr, ETy{"", Nil{}})
-    case 1n:
-      Parser.pure(Expr, ETy{"", Nil{}})
-    case 2n+p:
-      P.law.rets.line(P.tok_which_id(t, ["for", "exs"]))
-
-# The type of a law: its last line that is not a 'for'.
-def P.law.rets():
-  do Parser<Expr>:
-    P.nls()
-    +t : Tok <- P.peek()
-    P.law.rets.go(t, Bool.pick(Nat, P.is_de(t), 0n,
-      Bool.pick(Nat, P.stuck(P.tok_kind(t)), 1n, 2n)))
+def P.law.rets() -> Parser(Expr):
+  P.law.rets.sel(Fuel.max(), PsLawRets{})
 
 def P.law() -> Parser(Decl):
   do Parser<Decl>:
@@ -3232,37 +3160,39 @@ def P.law() -> Parser(Decl):
     params : List<&2, Param> <- P.law.lines()
     return DLaw{name, params, ret}
 
-law P.decl:
-  Parser(Decl)
+# The type-parameter parsers, which call each other, as one def: a
+# selector picks the parser (with its arguments).
+type PsTparamsSel is Data:
+  PsTparamsMore{more: Bool}
+  PsTparams{}
 
-law P.decls:
-  Parser(List<&2, Decl>)
+def P.tparams.sel(+fuel: Nat, sel: PsTparamsSel) -> Parser(List<&2, String>):
+  match fuel:
+    case 0n:
+      P.fuel(List<&2, String>, Nil{})
+    case 1n+fl:
+      match sel:
+        case PsTparamsMore{more}:
+          match more:
+            case True{}:
+              P.tparams.sel(fl, PsTparams{})
+            case False{}:
+              do Parser<List<&2, String>>:
+                P.gt()
+                return Nil{}
+        case PsTparams{}:
+          do Parser<List<&2, String>>:
+            e1 : Bool <- P.eat("-")
+            name : String <- P.ident()
+            P.skip_ann()
+            more : Bool <- P.eat(",")
+            rest : List<&2, String> <- P.tparams.sel(fl, PsTparamsMore{more})
+            return name <> rest
 
-@unsafe
-def P.decls.go(stop: Bool) -> Parser(List<&2, Decl>):
-  match stop:
-    case True{}:
-      Parser.pure(List<&2, Decl>, Nil{})
-    case False{}:
-      do Parser<List<&2, Decl>>:
-        d : Decl <- P.decl()
-        rest : List<&2, Decl> <- P.decls()
-        return d <> rest
-
-def P.decls():
-  do Parser<List<&2, Decl>>:
-    P.nls()
-    t : Tok <- P.peek()
-    P.decls.go(P.stuck(P.tok_kind(t)))
-
-def P.file(src: String) -> List<&2, Decl> & String:
-  P.file.fin(P.decls()(Lex.all(src)))
-
-law P.tparams:
-  Parser(List<&2, String>)
+def P.tparams() -> Parser(List<&2, String>):
+  P.tparams.sel(Fuel.max(), PsTparams{})
 
 # Type parameters '<a, -A: Kind(a)>' ('<-' starts one with an erased mark).
-@unsafe
 def P.tparams.opt(k: Nat) -> Parser(List<&2, String>):
   match k:
     case 0n:
@@ -3289,43 +3219,12 @@ def P.type() -> Parser(Decl):
     ctors : List<&2, Ctor> <- P.type.body(P.is_in(t))
     return DType{name, params, ctors}
 
-@unsafe
-def P.tparams.more(more: Bool) -> Parser(List<&2, String>):
-  match more:
-    case True{}:
-      P.tparams()
-    case False{}:
-      do Parser<List<&2, String>>:
-        P.gt()
-        return Nil{}
-
-def P.tparams():
-  do Parser<List<&2, String>>:
-    e1 : Bool <- P.eat("-")
-    name : String <- P.ident()
-    P.skip_ann()
-    more : Bool <- P.eat(",")
-    rest : List<&2, String> <- P.tparams.more(more)
-    return name <> rest
-
-law P.import.path.go:
-  for ts: Toks()
-  String & Toks()
-
-@unsafe
-def P.import.path.id(+s: String, sp: Bool, +ln: U32, t: Toks(), stop: Bool) ->
-  String & Toks():
-  match stop:
-    case True{}:
-      ("", Tok{KId{s}, sp, ln} <> t)
-    case False{}:
-      P.import.path.cat(s, P.import.path.go(t))
-
 # The path: the text of the tokens up to 'as' or the end of the line.
-def P.import.path.go(ts):
+def P.import.path.go(ts: Toks()) -> String & Toks():
   match ts:
-    case Tok{KId{+s}, sp, ln} <> t:
-      P.import.path.id(s, sp, ln, t, Str.eq(s, "as"))
+    case Tok{KId{+s}, +sp, +ln} <> +t:
+      Bool.pick(Unit -> String & Toks(), Str.eq(s, "as"), u => ("", Tok{KId{s}, sp, ln} <> t),
+        u => P.import.path.cat(s, P.import.path.go(t)))(Unit{})
     case Tok{KSym{s}, sp, ln} <> t:
       P.import.path.cat(s, P.import.path.go(t))
     case Tok{KNum{n}, sp, ln} <> t:
@@ -3361,22 +3260,68 @@ def P.decl.go(k: Nat) -> Parser(Decl):
         P.err("expected a declaration")
         return DImport{"", ""}
 
-@unsafe
-def P.decl.at(at: Bool, +t: Tok) -> Parser(Decl):
-  match at:
-    case True{}:
-      do Parser<Decl>:
-        P.skip()
-        P.skip()
-        P.nls()
-        P.decl()
-    case False{}:
-      P.decl.go(P.tok_which_id(t, ["def", "type", "law", "import"]))
+# A declaration's parsers ('@' marks go before it) as one def: a selector
+# picks the parser (with its arguments).
+type PsDeclSel is Data:
+  PsDeclAt{at: Bool, t: Tok}
+  PsDecl{}
 
-def P.decl():
-  do Parser<Decl>:
-    +t : Tok <- P.peek()
-    P.decl.at(P.tok_is(t, "@"), t)
+def P.decl.sel(+fuel: Nat, sel: PsDeclSel) -> Parser(Decl):
+  match fuel:
+    case 0n:
+      P.fuel(Decl, DImport{"", ""})
+    case 1n+fl:
+      match sel:
+        case PsDeclAt{at, +t}:
+          match at:
+            case True{}:
+              do Parser<Decl>:
+                P.skip()
+                P.skip()
+                P.nls()
+                P.decl.sel(fl, PsDecl{})
+            case False{}:
+              P.decl.go(P.tok_which_id(t, ["def", "type", "law", "import"]))
+        case PsDecl{}:
+          do Parser<Decl>:
+            +t : Tok <- P.peek()
+            P.decl.sel(fl, PsDeclAt{P.tok_is(t, "@"), t})
+
+def P.decl() -> Parser(Decl):
+  P.decl.sel(Fuel.max(), PsDecl{})
+
+# The declaration-list parsers, which call each other, as one def: a
+# selector picks the parser (with its arguments).
+type PsDeclsSel is Data:
+  PsDeclsGo{stop: Bool}
+  PsDecls{}
+
+def P.decls.sel(+fuel: Nat, sel: PsDeclsSel) -> Parser(List<&2, Decl>):
+  match fuel:
+    case 0n:
+      P.fuel(List<&2, Decl>, Nil{})
+    case 1n+fl:
+      match sel:
+        case PsDeclsGo{stop}:
+          match stop:
+            case True{}:
+              Parser.pure(List<&2, Decl>, Nil{})
+            case False{}:
+              do Parser<List<&2, Decl>>:
+                d : Decl <- P.decl()
+                rest : List<&2, Decl> <- P.decls.sel(fl, PsDecls{})
+                return d <> rest
+        case PsDecls{}:
+          do Parser<List<&2, Decl>>:
+            P.nls()
+            t : Tok <- P.peek()
+            P.decls.sel(fl, PsDeclsGo{P.stuck(P.tok_kind(t))})
+
+def P.decls() -> Parser(List<&2, Decl>):
+  P.decls.sel(Fuel.max(), PsDecls{})
+
+def P.file(src: String) -> List<&2, Decl> & String:
+  P.file.fin(P.decls()(Lex.all(src)))
 
 # AST printing
 # ============
@@ -3385,34 +3330,37 @@ def Param.show(p: Param) -> String:
   Param{n, m, t} = p
   U32.show(m) ++ n ++ ":" ++ t
 
-law Pat.show:
-  for p: Pat
-  String
-
-@unsafe
-def Pats.show(xs: List<&2, Pat>) -> String:
-  match xs:
-    case Nil{}:
-      ""
-    case h <> Nil{}:
-      Pat.show(h)
-    case h <> t:
-      Pat.show(h) ++ " " ++ Pats.show(t)
-
-def Pat.show(p):
+# A pattern; with args, the fields of a PCtor (its name unused), each after
+# a space. The fields go one at a time: PCtor{n, t} is the rest of them.
+def Pat.show.go(p: Pat, +args: Bool) -> String:
   match p:
     case PVar{n}:
       n
-    case PCtor{n, args}:
-      n ++ "{" ++ Pats.show(args) ++ "}"
+    case PCtor{+n, xs}:
+      match xs:
+        case Nil{}:
+          Bool.pick(String, args, "", n ++ "{}")
+        case h <> t:
+          Bool.pick(String, args, " ", n ++ "{") ++ Pat.show.go(h, False{}) ++
+            Pat.show.go(PCtor{n, t}, True{}) ++ Bool.pick(String, args, "", "}")
     case PNat{n}:
       U32.show(n) ++ "n"
     case PSucc{k, q}:
-      U32.show(k) ++ "n+" ++ Pat.show(q)
+      U32.show(k) ++ "n+" ++ Pat.show.go(q, False{})
     case PNum{n}:
       U32.show(n)
     case PFlt{s}:
       s
+
+def Pat.show(p: Pat) -> String:
+  Pat.show.go(p, False{})
+
+def Pats.show(xs: List<&2, Pat>) -> String:
+  match xs:
+    case Nil{}:
+      ""
+    case h <> t:
+      Pat.show(h) ++ Pat.show.go(PCtor{"", t}, True{})
 
 law Expr.show:
   for e: Expr
@@ -3611,29 +3559,24 @@ def FV.var(+x: String, +bound: List<&2, String>, +acc: List<&2, String>) ->
   Bool.pick(List<&2, String>, Bool.or(Str.has(bound, x), Str.has(acc, x)), acc,
     x <> acc)
 
-law Pat.vars:
-  for p: Pat
-  for acc: List<&2, String>
-  List<&2, String>
-
-@unsafe
-def Pats.vars(ps: List<&2, Pat>, acc: List<&2, String>) -> List<&2, String>:
-  match ps:
-    case Nil{}:
-      acc
-    case h <> t:
-      Pats.vars(t, Pat.vars(h, acc))
-
-def Pat.vars(p, acc):
+# A PCtor's fields go one at a time: PCtor{n, t} is the rest of them.
+def Pat.vars(p: Pat, acc: List<&2, String>) -> List<&2, String>:
   match p:
     case PVar{x}:
       x <> acc
-    case PCtor{n, args}:
-      Pats.vars(args, acc)
+    case PCtor{+n, args}:
+      match args:
+        case Nil{}:
+          acc
+        case h <> t:
+          Pat.vars(PCtor{n, t}, Pat.vars(h, acc))
     case PSucc{k, q}:
       Pat.vars(q, acc)
     case other:
       acc
+
+def Pats.vars(ps: List<&2, Pat>, acc: List<&2, String>) -> List<&2, String>:
+  Pat.vars(PCtor{"", ps}, acc)
 
 law FV.expr:
   for e: Expr
