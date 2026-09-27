@@ -13,7 +13,7 @@ python3 - "$BENDC" "$BASE" <<'PY'
 import os, resource, subprocess, sys, tempfile, time
 bendc, base = sys.argv[1], sys.argv[2]
 
-def run(cmd, env=None):
+def run(cmd, env=None, ok=(0,)):
     """Best wall time of 3 runs and the peak memory (MB) of the last."""
     best, rss = 9e9, 0
     for _ in range(3):
@@ -22,7 +22,7 @@ def run(cmd, env=None):
         _, status, ru = os.wait4(p.pid, 0)
         best = min(best, time.perf_counter() - pid_t)
         rss = ru.ru_maxrss / (1 << 20) if sys.platform == 'darwin' else ru.ru_maxrss / 1024
-        assert status == 0, cmd
+        assert os.waitstatus_to_exitcode(status) in ok, cmd
     return best, rss
 
 def out(cmd):
@@ -47,6 +47,7 @@ print('|---|---|---|')
 for name, tb, to in builds:
     print('| build `%s.bend` (source to binary) | %.2fs | %.2fs |' % (name, tb, to))
 fresh = dict(os.environ, HOME=tempfile.mkdtemp())
-(c1, m1), (c2, m2) = run([bendc, '--check-only', base, 'bendc.bend']), run(['bend', 'bendc.bend', '--check-only'], fresh)
+# since 2.0.32 both exit 1 on bendc.bend, listing its @unsafe defs
+(c1, m1), (c2, m2) = run([bendc, '--check-only', base, 'bendc.bend'], ok=(0, 1)), run(['bend', 'bendc.bend', '--check-only'], fresh, ok=(0, 1))
 print('| type-check `bendc.bend` | %.2fs, %.0f MB | %.2fs, %.0f MB |' % (c1, m1, c2, m2))
 PY

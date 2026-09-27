@@ -255,7 +255,27 @@ static size_t gc_nroots, gc_caproots;
 static void (*gc_hooks[16])(void);
 static int gc_nhooks;
 static _Atomic int gc_stopping, gc_acks, gc_inside;
+#ifdef __TINYC__
+// tcc has no thread-local storage on every target (none in Mach-O): a
+// pthread key holds each thread's slots, and the names stay lvalues.
+typedef struct { void *self; int par_depth; } TlsSlots;
+static pthread_key_t tls_key;
+static pthread_once_t tls_once = PTHREAD_ONCE_INIT;
+static void tls_init(void) { pthread_key_create(&tls_key, NULL); }
+static TlsSlots *tls_get(void) {
+  pthread_once(&tls_once, tls_init);
+  TlsSlots *s = (TlsSlots *)pthread_getspecific(tls_key);
+  if (!s) {
+    s = (TlsSlots *)calloc(1, sizeof *s);
+    pthread_setspecific(tls_key, s);
+  }
+  return s;
+}
+#define thr_self (*(Thr **)&tls_get()->self)
+#define par_depth (tls_get()->par_depth)
+#else
 static __thread Thr *thr_self;
+#endif
 
 typedef struct { V *p; size_t n; } GcItem;
 static GcItem *gc_stk;
@@ -941,7 +961,8 @@ static void thr_register(uintptr_t top) {
   pthread_mutex_lock(&gc_lock);
   if (gc_nthr == GC_MAXTHR) bend_fail("too many threads");
   gc_thrs[gc_nthr] = t;
-  __atomic_store_n(&gc_nthr, gc_nthr + 1, __ATOMIC_RELEASE);
+  int n1 = gc_nthr + 1;  // tcc's __atomic_store_n evaluates its value twice
+  __atomic_store_n(&gc_nthr, n1, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&gc_lock);
 }
 
@@ -1467,7 +1488,9 @@ typedef struct PTask { V clo; V res; V state; V depth; } PTask;
 // The fork depth of the running code, and the frontier past which a def
 // with a sequential clone (S_name, see bendc) runs its parallel lets in
 // order: below it, forking costs more than it balances.
+#ifndef __TINYC__
 static __thread int par_depth;
+#endif
 static int par_front = 0;
 
 typedef struct PDeque {
@@ -1550,7 +1573,9 @@ static PTask *par_steal(void) {
 }
 
 static inline void cpu_relax(void) {
-#if defined(__x86_64__)
+#if defined(__TINYC__)
+  // tcc has no pause/yield: a plain spin
+#elif defined(__x86_64__)
   __builtin_ia32_pause();
 #elif defined(__aarch64__)
   __asm__ __volatile__("yield");

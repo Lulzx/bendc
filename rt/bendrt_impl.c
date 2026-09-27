@@ -97,7 +97,24 @@ size_t gc_nroots, gc_caproots;
 void (*gc_hooks[16])(void);
 int gc_nhooks;
 _Atomic int gc_stopping, gc_acks, gc_inside;
+#ifdef __TINYC__
+pthread_key_t tls_key;
+pthread_once_t tls_once = PTHREAD_ONCE_INIT;
+void tls_init(void) { pthread_key_create(&tls_key, NULL); }
+TlsSlots *tls_get(void) {
+  pthread_once(&tls_once, tls_init);
+  TlsSlots *s = (TlsSlots *)pthread_getspecific(tls_key);
+  if (!s) {
+    s = (TlsSlots *)calloc(1, sizeof *s);
+    pthread_setspecific(tls_key, s);
+  }
+  return s;
+}
+#define thr_self (*(Thr **)&tls_get()->self)
+#define par_depth (tls_get()->par_depth)
+#else
 __thread Thr *thr_self;
+#endif
 GcItem *gc_stk;
 uint8_t *gc_dirty;
 size_t gc_sp, gc_cap;
@@ -550,7 +567,8 @@ void thr_register(uintptr_t top) {
   pthread_mutex_lock(&gc_lock);
   if (gc_nthr == GC_MAXTHR) bend_fail("too many threads");
   gc_thrs[gc_nthr] = t;
-  __atomic_store_n(&gc_nthr, gc_nthr + 1, __ATOMIC_RELEASE);
+  int n1 = gc_nthr + 1;  // tcc's __atomic_store_n evaluates its value twice
+  __atomic_store_n(&gc_nthr, n1, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&gc_lock);
 }
 #define ARR_TAG ((V)0xFFF00)
@@ -747,7 +765,9 @@ V F_F32_dread(V s) {
 #define P_LOCAL 0
 #define P_QUEUED 1
 #define P_DONE 2
+#ifndef __TINYC__
 __thread int par_depth;
+#endif
 int par_front = 0;
 int par_nthreads = 1;
 #define pool_size ((u32)par_nthreads)

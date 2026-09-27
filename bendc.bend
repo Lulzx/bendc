@@ -6256,17 +6256,22 @@ law Ty.norm:
   for fuel: Nat
   Expr
 
+# tcc ignores __attribute__((constructor)), which registers the effects
+# (the official ABI's *_use functions): under tcc, main calls them first.
+def Gen.ctors.call() -> String:
+  "\n#ifdef __TINYC__\n  bend_ctors();\n#endif\n"
+
 @unsafe
 def Gen.entry.ty(+g: G, +ret: Expr, io: Bool) -> Gen(String):
   match io:
     case True{}:
       Gen.pure(String,
-        "int main(int argc, char **argv) { return bend_run(argc, argv, F_main); }\n")
+        "int main(int argc, char **argv) {" ++ Gen.ctors.call() ++ " return bend_run(argc, argv, F_main); }\n")
     case False{}:
       do Gen<String>:
         p : String <- Gen.printer(g, ret)
-        return "int main(int argc, char **argv) { return bend_run_value(argc, argv, F_main, " ++
-          p ++ "); }\n"
+        return "int main(int argc, char **argv) {" ++ Gen.ctors.call() ++
+          " return bend_run_value(argc, argv, F_main, " ++ p ++ "); }\n"
 
 @unsafe
 def Gen.entry.ret(+g: G, +ret: Expr) -> Gen(String):
@@ -6331,6 +6336,342 @@ def Gen.cids(+g: G, ds: List<&2, Decl>, +i: U32) -> String:
         Gen.cids(g, t, U32.inc(i))
     case d <> t:
       Gen.cids(g, t, i)
+
+# Implicit parallelism (see Main.auto_par). Bend is pure, so the operands of
+# one node (an operator's, a call's arguments, a constructor's fields) may
+# run in any order; where two or more of them call back into the def (a
+# tree recursion: fib(n - 1) + fib(n - 2), merge(msort(a), msort(b))),
+# they become a parallel let, as if written a b = .. ..; the fork limit
+# and a seq def's sequential clone then keep the small calls cheap. Only
+# runtime operands move: a call's erased and dead arguments stay.
+
+law Expr.mentions:
+  for e: Expr
+  for +k: String
+  Bool
+
+law Exprs.mentions:
+  for es: List<&2, Expr>
+  for +k: String
+  Bool
+
+@unsafe
+def Expr.mentions.or(b: Bool, es: List<&2, Expr>, +k: String) -> Bool:
+  match b:
+    case True{}:
+      True{}
+    case False{}:
+      Exprs.mentions(es, k)
+
+@unsafe
+def Exprs.mentions(es, k):
+  match es:
+    case Nil{}:
+      False{}
+    case e <> t:
+      Expr.mentions.or(Expr.mentions(e, k), t, k)
+
+# Whether e names k anywhere (under lambdas too).
+@unsafe
+def Expr.mentions(e, k):
+  match e:
+    case EVar{+n}:
+      Str.eq(n, k)
+    case ECall{f, args}:
+      Expr.mentions.or(Expr.mentions(f, k), args, k)
+    case ECtor{n, args}:
+      Exprs.mentions(args, k)
+    case ELam{p, b}:
+      Expr.mentions(b, k)
+    case ELet{p, v, b}:
+      Exprs.mentions([v, b], k)
+    case EMatch{scrs, cases}:
+      Exprs.mentions(List.append(&2, Expr, scrs, cases), k)
+    case ECase{ps, b}:
+      Expr.mentions(b, k)
+    case ESucc{n, x}:
+      Expr.mentions(x, k)
+    case EOp{op, a, b}:
+      Exprs.mentions([a, b], k)
+    case EAnn{x, ty}:
+      Expr.mentions(x, k)
+    case other:
+      False{}
+
+def DInfo.kind(i: DInfo) -> U32:
+  DInfo{kind, mask} = i
+  kind
+
+def Par.rec.body(d: Decl, +k: String) -> Bool:
+  match d:
+    case DDef{name, ps, body, ret}:
+      Expr.mentions(body, k)
+    case other:
+      False{}
+
+# Whether a call of f from d recurses: f is d, or a def that calls d (the
+# helper a match on a computed value needs: msort.halves of msort).
+def Par.rec(+g: G, +d: String, +f: String) -> Bool:
+  Bool.or(Str.eq(f, d), Bool.and(U32.is_zero(DInfo.kind(G.def(g, f))), Par.rec.body(G.body(g, f), d)))
+
+law Par.has:
+  for +g: G
+  for +d: String
+  for e: Expr
+  Bool
+
+law Par.has.list:
+  for +g: G
+  for +d: String
+  for es: List<&2, Expr>
+  Bool
+
+@unsafe
+def Par.has.or(b: Bool, +g: G, +d: String, es: List<&2, Expr>) -> Bool:
+  match b:
+    case True{}:
+      True{}
+    case False{}:
+      Par.has.list(g, d, es)
+
+@unsafe
+def Par.has.list(g, d, es):
+  match es:
+    case Nil{}:
+      False{}
+    case e <> t:
+      Par.has.or(Par.has(g, d, e), g, d, t)
+
+# Whether e runs a recursive call of d (outside lambdas: a lambda's body
+# runs when it is called, not where it is built).
+@unsafe
+def Par.has(g, d, e):
+  match e:
+    case ECall{EVar{+f}, args}:
+      Par.has.or(Par.rec(g, d, f), g, d, args)
+    case ECall{f, args}:
+      Par.has.or(Par.has(g, d, f), g, d, args)
+    case ECtor{n, args}:
+      Par.has.list(g, d, args)
+    case ELet{p, v, b}:
+      Par.has.list(g, d, [v, b])
+    case EMatch{scrs, cases}:
+      Par.has.list(g, d, List.append(&2, Expr, scrs, cases))
+    case ECase{ps, b}:
+      Par.has(g, d, b)
+    case ESucc{n, x}:
+      Par.has(g, d, x)
+    case EOp{op, a, b}:
+      Par.has.list(g, d, [a, b])
+    case EAnn{x, ty}:
+      Par.has(g, d, x)
+    case other:
+      False{}
+
+# The operands that may move: all of a closure's or a constructor's, a
+# def's kept ones (and any past its parameters), none of a dead def's.
+law Par.live.mask:
+  for xs: List<&2, Expr>
+  for bs: List<&2, Bool>
+  List<&2, Bool>
+
+@unsafe
+def Par.live.mask.at(bs: List<&2, Bool>, t: List<&2, Expr>) -> List<&2, Bool>:
+  match bs:
+    case Nil{}:
+      True{} <> Par.live.mask(t, Nil{})
+    case b <> mt:
+      b <> Par.live.mask(t, mt)
+
+@unsafe
+def Par.live.mask(xs, bs):
+  match xs:
+    case Nil{}:
+      Nil{}
+    case x <> t:
+      Par.live.mask.at(bs, t)
+
+def Par.all(+b: Bool, xs: List<&2, Expr>) -> List<&2, Bool>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case x <> t:
+      b <> Par.all(b, t)
+
+def Par.live.info(i: DInfo, +xs: List<&2, Expr>) -> List<&2, Bool>:
+  DInfo{+kind, mask} = i
+  Bool.pick(List<&2, Bool>, U32.is_eq(kind, 3), Par.all(False{}, xs),
+    Bool.pick(List<&2, Bool>, U32.is_eq(kind, 4), Par.all(True{}, xs), Par.live.mask(xs, mask)))
+
+def Par.live(+g: G, f: Expr, +xs: List<&2, Expr>) -> List<&2, Bool>:
+  match f:
+    case EVar{+n}:
+      Par.live.info(G.def(g, n), xs)
+    case other:
+      Par.all(True{}, xs)
+
+# Which operands move: live ones that run a recursive call.
+def Par.marks(+g: G, +d: String, live: List<&2, Bool>, xs: List<&2, Expr>) -> List<&2, Bool>:
+  match live xs:
+    case b <> lt +x <> xt:
+      Bool.and(b, Par.has(g, d, x)) <> Par.marks(g, d, lt, xt)
+    case l ys:
+      Nil{}
+
+def Par.count(ms: List<&2, Bool>) -> Nat:
+  match ms:
+    case Nil{}:
+      0n
+    case True{} <> t:
+      1n+Par.count(t)
+    case False{} <> t:
+      Par.count(t)
+
+def Par.name(+n: U32, +j: Nat) -> String:
+  "_par" ++ U32.show(n) ++ "_" ++ Nat.show(j)
+
+# The parallel let's names, values, and the operands left in place (a
+# moved one is its name).
+def Par.pats(ms: List<&2, Bool>, +n: U32, +j: Nat) -> List<&2, Pat>:
+  match ms:
+    case Nil{}:
+      Nil{}
+    case True{} <> t:
+      PVar{Par.name(n, j)} <> Par.pats(t, n, 1n+j)
+    case False{} <> t:
+      Par.pats(t, n, j)
+
+def Par.vals(ms: List<&2, Bool>, xs: List<&2, Expr>) -> List<&2, Expr>:
+  match ms xs:
+    case True{} <> mt x <> xt:
+      x <> Par.vals(mt, xt)
+    case False{} <> mt x <> xt:
+      Par.vals(mt, xt)
+    case q ys:
+      Nil{}
+
+def Par.rest(ms: List<&2, Bool>, xs: List<&2, Expr>, +n: U32, +j: Nat) -> List<&2, Expr>:
+  match ms xs:
+    case True{} <> mt x <> xt:
+      EVar{Par.name(n, j)} <> Par.rest(mt, xt, n, 1n+j)
+    case False{} <> mt x <> xt:
+      x <> Par.rest(mt, xt, n, j)
+    case q ys:
+      ys
+
+def Par.wrap.if(hit: Bool, +n: U32, +ms: List<&2, Bool>, +xs: List<&2, Expr>, k: List<&2, Expr> -> Expr) ->
+  Expr:
+  match hit:
+    case True{}:
+      ELet{PCtor{"%par", Par.pats(ms, n, 0n)}, ECtor{"%par", Par.vals(ms, xs)}, k(Par.rest(ms, xs, n, 0n))}
+    case False{}:
+      k(xs)
+
+def Par.wrap(+n: U32, +ms: List<&2, Bool>, +xs: List<&2, Expr>, k: List<&2, Expr> -> Expr) -> Expr:
+  Par.wrap.if(Nat.is_gt(Par.count(ms), 1n), n, ms, xs, k)
+
+# An annotated operator's parallel let goes outside the annotation, which
+# only types the operator: {(a + b : U32)} with a, b moved.
+def Par.ann(x: Expr, +ty: String) -> Expr:
+  match x:
+    case ELet{PCtor{+k, +ps}, +v, +b}:
+      Bool.pick(Expr, Str.eq(k, "%par"), ELet{PCtor{k, ps}, v, EAnn{b, ty}}, EAnn{ELet{PCtor{k, ps}, v, b}, ty})
+    case other:
+      EAnn{other, ty}
+
+law Par.expr:
+  for +g: G
+  for +d: String
+  for +n: U32
+  for e: Expr
+  Expr
+
+law Par.exprs:
+  for +g: G
+  for +d: String
+  for +n: U32
+  for es: List<&2, Expr>
+  List<&2, Expr>
+
+@unsafe
+def Par.exprs(g, d, n, es):
+  match es:
+    case Nil{}:
+      Nil{}
+    case e <> t:
+      Par.expr(g, d, n, e) <> Par.exprs(g, d, n, t)
+
+@unsafe
+def Par.call(+g: G, +d: String, +n: U32, +f: Expr, +xs: List<&2, Expr>) -> Expr:
+  Par.wrap(n, Par.marks(g, d, Par.live(g, f, xs), xs), xs, as => ECall{f, as})
+
+@unsafe
+def Par.ctor(+g: G, +d: String, +n: U32, +k: String, +xs: List<&2, Expr>) -> Expr:
+  Bool.pick(Expr, Str.eq(k, "%par"), ECtor{k, xs},
+    Par.wrap(n, Par.marks(g, d, Par.all(True{}, xs), xs), xs, as => ECtor{k, as}))
+
+def Par.op.k(+op: String, xs: List<&2, Expr>) -> Expr:
+  match xs:
+    case a <> b <> Nil{}:
+      EOp{op, a, b}
+    case other:
+      EErr{"auto-par: an operator of two operands"}
+
+@unsafe
+def Par.op(+g: G, +d: String, +n: U32, +op: String, a: Expr, b: Expr) -> Expr:
+  +xs = {[a, b] : List<&2, Expr>}
+  Par.wrap(n, Par.marks(g, d, Par.all(True{}, xs), xs), xs, as => Par.op.k(op, as))
+
+# e with its recursive operand groups parallel (n: the nesting depth, which
+# keeps the names of nested groups apart).
+@unsafe
+def Par.expr.go(+g: G, +d: String, +n: U32, +m: U32, e: Expr) -> Expr:
+  match e:
+    case ECall{f, args}:
+      Par.call(g, d, n, Par.expr(g, d, m, f), Par.exprs(g, d, m, args))
+    case ECtor{k, args}:
+      Par.ctor(g, d, n, k, Par.exprs(g, d, m, args))
+    case EOp{op, a, b}:
+      Par.op(g, d, n, op, Par.expr(g, d, m, a), Par.expr(g, d, m, b))
+    case ELam{p, b}:
+      ELam{p, Par.expr(g, d, m, b)}
+    case ELet{p, v, b}:
+      ELet{p, Par.expr(g, d, m, v), Par.expr(g, d, m, b)}
+    case EMatch{scrs, cases}:
+      EMatch{Par.exprs(g, d, m, scrs), Par.exprs(g, d, m, cases)}
+    case ECase{ps, b}:
+      ECase{ps, Par.expr(g, d, m, b)}
+    case ESucc{k, x}:
+      ESucc{k, Par.expr(g, d, m, x)}
+    case EAnn{x, ty}:
+      Par.ann(Par.expr(g, d, m, x), ty)
+    case other:
+      other
+
+@unsafe
+def Par.expr(g, d, n, e):
+  Par.expr.go(g, d, n, U32.inc(n), e)
+
+def Par.decl(+g: G, d: Decl) -> Decl:
+  match d:
+    case DDef{+name, ps, body, ret}:
+      DDef{name, ps, Par.expr(g, name, 0, body), ret}
+    case other:
+      other
+
+def Par.decls(+g: G, ds: List<&2, Decl>) -> List<&2, Decl>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> t:
+      Par.decl(g, d) <> Par.decls(g, t)
+
+def Par.auto(on: Bool, +ds: List<&2, Decl>) -> List<&2, Decl>:
+  match on:
+    case True{}:
+      Par.decls(G.new(ds), ds)
+    case False{}:
+      ds
 
 # Destination-passing. merge(x <> xt, ys) = x <> merge(xt, ys) builds its
 # result around a call to itself: compiled directly, each element costs a C
@@ -6418,7 +6759,8 @@ def Dps.build(+g: G, +ds: List<&2, Decl>, free: Bool) -> G:
   G.with_dps(g, Map.set(&2, DGrp, Dps.groups(g, ks, em, Dps.rev(ks, em, MTip{}), MTip{}), "%free",
     DGrp{Bool.pick(String, free, "1", "0"), 0}))
 
-def Gen.program(+ds: List<&2, Decl>, free: Bool) -> COut:
+def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool) -> COut:
+  +ds = Par.auto(par, ds0)
   +g = Dps.build(G.new(ds), ds, free)
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
@@ -7617,10 +7959,72 @@ def Main.effs(ps, ds, known, acc):
         src : String <- Main.eff.src(p)
         Main.effs(t, ds, known, acc ++ Main.ids.src(ds, known, False{}, p, src) ++ "\n")
 
+def Ctors.is_ident(+c: U32) -> Bool:
+  Bool.or(Bool.or(Bool.and(U32.is_ge(c, 97), U32.is_le(c, 122)), Bool.and(U32.is_ge(c, 65), U32.is_le(c, 90))),
+    Bool.or(Bool.and(U32.is_ge(c, 48), U32.is_le(c, 57)), U32.is_eq(c, 95)))
+
+law Ctors.ident:
+  for s: String
+  String
+
+@unsafe
+def Ctors.ident.if(hit: Bool, +c: U32, t: String) -> String:
+  match hit:
+    case True{}:
+      SCon{Chr{c}, Ctors.ident(t)}
+    case False{}:
+      ""
+
+@unsafe
+def Ctors.ident.sp(sp: Bool, +c: U32, t: String) -> String:
+  match sp:
+    case True{}:
+      Ctors.ident(t)
+    case False{}:
+      Ctors.ident.if(Ctors.is_ident(c), c, t)
+
+# The identifier s starts with (after blanks).
+@unsafe
+def Ctors.ident(s):
+  match s:
+    case SNil{}:
+      ""
+    case SCon{Chr{+c}, t}:
+      Ctors.ident.sp(U32.is_eq(c, 32), c, t)
+
+def Ctors.pat() -> String:
+  "__attribute__((constructor))"
+
+def Ctors.scan.if(hit: Bool, +t: String, rest: List<&2, String>) -> List<&2, String>:
+  match hit:
+    case True{}:
+      Ctors.ident(String.drop(t, Nat.sub(String.length(Ctors.pat()), 1n))) <> rest
+    case False{}:
+      rest
+
+# The functions a C text marks __attribute__((constructor)), in order.
+def Ctors.scan(s: String) -> List<&2, String>:
+  match s:
+    case SNil{}:
+      Nil{}
+    case SCon{+c, +t}:
+      Ctors.scan.if(String.starts_with(SCon{c, t}, Ctors.pat()), t, Ctors.scan(t))
+
+def Ctors.calls(ns: List<&2, String>) -> String:
+  match ns:
+    case Nil{}:
+      ""
+    case n <> t:
+      "  " ++ n ++ "();\n" ++ Ctors.calls(t)
+
+def Ctors.def(ns: List<&2, String>) -> String:
+  "\n#ifdef __TINYC__\n// tcc ignores __attribute__((constructor)): main calls these\nstatic void bend_ctors(void) {\n" ++
+    Ctors.calls(ns) ++ "}\n#endif\n"
+
 def Main.emit.ok(+ds: List<&2, Decl>, head: String, effs: List<&2, String>, body: String) -> IO(Unit):
   do IO<Unit>:
-    srcs : String <- Main.effs(effs, ds, Main.ids.known(ds), "")
-    IO.write(head ++ srcs ++ body)
+    +srcs : String <- Main.effs(effs, ds, Main.ids.known(ds), "")
+    IO.write(head ++ srcs ++ Ctors.def(Ctors.scan(srcs)) ++ body)
 
 def Main.emit(+ds: List<&2, Decl>, r: COut) -> IO(Unit):
   COut{head, effs, body, errs} = r
@@ -7639,13 +8043,32 @@ def Main.free(r: Result<&1, &1, U32 & String, String>) -> Bool:
     case Fail{e}:
       True{}
 
+# Implicit parallelism: BEND_AUTO_PAR=0 or 1, else on but with BEND_NO_FREE
+# (bendc's own build: its tree walks are small and called often, and
+# forking them made it slower).
+def Main.auto_par.set(e: Bool, v: String, free: Bool) -> Bool:
+  match e:
+    case True{}:
+      free
+    case False{}:
+      Bool.not(String.eq(v, "0"))
+
+def Main.auto_par(r: Result<&1, &1, U32 & String, String>, free: Bool) -> Bool:
+  match r:
+    case Done{+v}:
+      Main.auto_par.set(String.is_empty(v), v, free)
+    case Fail{e}:
+      free
+
 # C for a program: matches free what they open unless BEND_NO_FREE is set
 # (bendc builds itself so: a compiler's heap is mostly shared, short-lived
 # data, which tracing handles for less).
 def Main.emit.c(+ds: List<&2, Decl>) -> IO(Unit):
   do IO<Unit>:
     r : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
-    Main.emit(ds, Gen.program(ds, Main.free(r)))
+    r2 : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
+    ap : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_AUTO_PAR")
+    Main.emit(ds, Gen.program(ds, Main.free(r), Main.auto_par(ap, Main.free(r2))))
 
 def Main.js.path(r: String & String) -> String:
   (p, h) = r
@@ -8801,9 +9224,19 @@ def Expr.has_par(e):
     case ELet{p, v, b}:
       Exprs.has_par([v, b])
     case EMatch{scrs, cases}:
-      Exprs.has_par(cases)
+      Exprs.has_par(List.append(&2, Expr, scrs, cases))
     case ECase{ps, b}:
       Expr.has_par(b)
+    case ECall{f, args}:
+      Exprs.has_par(f <> args)
+    case ECtor{k, args}:
+      Exprs.has_par(args)
+    case EOp{op, a, b}:
+      Exprs.has_par([a, b])
+    case ESucc{k, x}:
+      Expr.has_par(x)
+    case EAnn{x, ty}:
+      Expr.has_par(x)
     case other:
       False{}
 

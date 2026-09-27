@@ -19,7 +19,7 @@ $ ./bootstrap.sh
 [stage0] bend boot.bend -o build/bendc0           # the official Bend builds bendc once
 [stage1] bendc0 -> build/stage1.c                 # bendc compiles itself
 [stage2] stage1 -> build/stage2.c                 # the result compiles itself again
-fixpoint: stage1.c == stage2.c (41622 lines)
+fixpoint: stage1.c == stage2.c (42332 lines)
 tests with stage1: 80 passed, 0 failed
 tests with stage2: 80 passed, 0 failed
 ```
@@ -169,16 +169,25 @@ flowchart LR
   Building `bendc` needs only a C compiler. `make selfcheck` verifies that the current `bendc.bend`
   still compiles to exactly this seed, and `make seed` regenerates it after the compiler changes.
 - **`make ddc`** checks the seed by diverse double-compiling ([Wheeler,
-  2009](https://dwheeler.com/trusting-trust/)): a 41,000-line generated C file can't be audited
+  2009](https://dwheeler.com/trusting-trust/)): a 42,000-line generated C file can't be audited
   by reading it, so a compiler that plants something in its own output would survive every
   fixpoint above. `tools/ddc.sh` compiles `bendc.bend` twice, once with a stage0 the official Bend
   translates to C and GCC builds, once with the seed GCC builds. Both outputs must equal
   `seed/bendc.c` byte for byte. The first path shares nothing with the seed (not its C, and not
   clang, which the official `bend -o` calls), so a tampered seed would have to be matched by the
   official Bend and GCC together. It needs GCC 15 or newer (the official C uses `musttail`).
+- **`make tcc`** builds the seed with the [Tiny C Compiler](https://repo.or.cz/tinycc.git), which
+  [bootstrappable builds](https://bootstrappable.org) reach from a few hundred bytes of hex (through
+  M2-Planet and GNU Mes), so bendc can join that chain. The tcc-built bendc must compile `bendc.bend`
+  to the seed byte for byte, and the test suite must pass with tcc building the programs and the
+  runtime (`tools/tcc.sh`; `TCC=...` picks the binary). It needs tinycc 0.9.28 (the `mob` branch):
+  0.9.27 has no `stdatomic.h`. Under tcc the runtime keeps per-thread state in a pthread key (tcc
+  has no thread-local storage in Mach-O), `main` runs the constructors itself (tcc ignores
+  `__attribute__((constructor))`), and `!`-calls have the simulator and the CPU but not Metal.
 
 CI runs the whole chain on Linux (arm64) and macOS: seed build, tests, selfcheck, full bootstrap,
-and (on macOS, with Homebrew's GCC) `make ddc`. It
+`make ddc` (on macOS, with Homebrew's GCC), and `make tcc` (on Linux, with tinycc built from a
+pinned commit). It
 pins the official Bend it tests against (`tools/install-bend.sh`, Bend 2.0.32),
 and a weekly run tries the latest release, so a new Bend shows up there before it breaks a push.
 
@@ -197,7 +206,7 @@ and a weekly run tries the latest release, so a new Bend shows up there before i
 | Effects | every Base effect but windows: printing, audio, `IO.args`, `IO.get_env`, files, TCP, UDP, `IO.now`/`sleep`/`random_u32`, concurrent `IO.fork`/`IO.join`/`IO.spawn` and channels, `IO.die` exit codes |
 | Foreign code | `def f(..) -> IO(R): import "./f.c"` and `import "./f.js"` effects, written against the official C and JS effect ABIs (Base's own `effs/*.c` and `effs/*.js` are compiled this way) |
 | Modules | `import ./file.bend as M`, and hub packages by content hash: `import 0x<hash>/main.bend as P` |
-| Parallelism | parallel lets `a b = f(x) g(y)` run on a work-stealing thread pool; `f!(x)` calls run on the GPU (Metal), parallel lets inside them as GPU tasks |
+| Parallelism | parallel lets `a b = f(x) g(y)`, written or found by the compiler, run on a work-stealing thread pool; `f!(x)` calls run on the GPU (Metal), parallel lets inside them as GPU tasks |
 | Checking | the official type checker, ported: quantities, termination, templates, laws and proofs, dependent types |
 | Output | an `IO` main runs its effects; any other main prints its value in Bend syntax |
 
@@ -257,6 +266,15 @@ Bend code are stopped with a signal while it marks their stacks. The program run
 A parallel let forks every value but the last onto a Chase-Lev work-stealing deque and joins them in
 reverse; a fork nobody stole runs inline, so fine-grained recursion stays cheap (`pow2!(26n)` from the
 guide takes 0.70s on one thread, 0.15s on eight).
+
+Parallel lets are also found. Bend is pure, so the operands of one node (an operator's, a call's
+arguments, a constructor's fields) may run in any order. Where two or more of them call back into
+the def, as in `fib(n - 1) + fib(n - 2)` or `merge(msort(a), msort(b))`, `bendc` turns them into a
+parallel let, and the fork depth above keeps the small calls cheap. An argument the callee erases or
+never reads stays where it is. The pass is on by default and `BEND_AUTO_PAR=0` turns it off. With
+`BEND_NO_FREE=1` it defaults to off (`BEND_AUTO_PAR=1` turns it back on), because a compiler's tree
+walks are small and called often, and forking them made bendc's self-build 60% slower. `fib 44`
+runs 4.5x faster on 12 cores, and `sort` in [Benchmarks](#benchmarks) 2.4x.
 
 IO follows Base's continuation-passing `IO` type. An effect call becomes a request node that an event
 loop answers, as in the official runtime: computations run their pure code up to their next effect,
@@ -329,7 +347,7 @@ compile time. On an Apple M4 Pro (12 cores, 24 GB, macOS 27):
 | `leaves 14` | 16384 leaves of a 200,000-step `F32` loop, CPU threads | **0.68s** | 1.02s | 2.8 MB | 2.7 MB |
 | `leaves_gpu 14` | the same as a `!`-call, on the GPU | **0.05s** | 0.10s | **13.1 MB** | 13.2 MB |
 | `leaves_gpu 16` | the same with 65536 leaves | **0.08s** | 0.15s | 13.1 MB | 13.1 MB |
-| `sort 1000000` | build, merge sort and sum a million `U32`s (one thread, allocation-heavy) | **0.36s** | 1.10s | **30.4 MB** | 32.4 MB |
+| `sort 1000000` | build, merge sort and sum a million `U32`s (allocation-heavy; bendc sorts the halves in parallel, see [How it works](#how-it-works)) | **0.14s** | 1.10s | 72.9 MB | **32.4 MB** |
 
 | task | bendc | official bend |
 |---|---|---|
@@ -350,6 +368,9 @@ Where the time goes:
   defs run in their own small kernel (`bend_kq`), a whole SIMD group at a time. A `Nat` is a
   plain word, so a `1n+p` match is one compare. With a bignum check in it, `iter`'s loop was no
   longer a counted loop to Metal, and ran 2.4x slower.
+- **Implicit forks.** `msort(a)` and `msort(b)`, the arguments of one `merge`, become a parallel
+  let (see [How it works](#how-it-works)): `sort` takes 0.14s where it took 0.33s on one thread,
+  for 73 MB where it took 30 (the halves are live at once).
 - **Float loops on the CPU.** `iter`'s step, `x * x * 0.5 + c`, is a chain of three float operations,
   each waiting on the last. `bendc` emits `a * k + b` with a literal `k` as `F32_mulk_add`, one
   `fma` when `k` is a power of two and `a * k` a normal float: the product is then exact, so the
@@ -421,7 +442,7 @@ Bend 2 is a proof language, and its checker is strict about code that runs. It s
 - **Affine variables.** A variable is used at most once unless it is marked `+`, which requires a
   copyable `Data` type. Every AST type is `Data`, and `+` appears where values are reused.
 - **Totality.** A recursive call must shrink its first changing argument. The compiler's recursion
-  over tokens isn't structural, so those defs are `@unsafe`. Many of the 936 `@unsafe` defs across
+  over tokens isn't structural, so those defs are `@unsafe`. Many of the 958 `@unsafe` defs across
   the two files are there for the rule above rather than for their own recursion: a def that calls a `law`
   before the law is filled must be `@unsafe`, so a mutually recursive walk over the AST is unsafe
   even though it is structural.
@@ -496,6 +517,7 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`tests/`](tests) | test programs and the official `bend`'s output for each |
 | [`bootstrap.sh`](bootstrap.sh), [`run_tests.sh`](run_tests.sh), [`Makefile`](Makefile) | bootstrap and fixpoint check, test runner, build entry points |
 | [`tools/ddc.sh`](tools/ddc.sh) | diverse double-compiling: the seed, reproduced by two toolchains that share no C compiler |
+| [`tools/tcc.sh`](tools/tcc.sh) | the seed built by tcc reproduces itself, and the tests pass with tcc |
 | [`tools/order.py`](tools/order.py) | dev tool: section-aware dependency sort, with automatic `law` forward declarations for cycles |
 | [`tools/upstream.py`](tools/upstream.py) | dev tool: runs the official repository's tests through a `bendc` (see [Testing](#testing)) |
 | [`tools/embed.py`](tools/embed.py) | dev tool: embeds `rt/bendrt.js`, `rt/chan.c` and `rt/gpu.h` (`rt/rtjs.bend`, `rt/rtchan.bend`, `rt/gpu_src.h`) |

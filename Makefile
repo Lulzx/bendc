@@ -3,6 +3,8 @@
 #   make            build build/bendc from the committed C seed (needs only a C compiler)
 #   make test       run the test suite with build/bendc
 #   make selfcheck  compile bendc.bend with build/bendc and check it reproduces the seed
+#   make ddc        diverse double-compiling: the seed from two toolchains without clang
+#   make tcc        tcc builds bendc, which reproduces the seed, and the tests pass (TCC=...)
 #   make bootstrap  full bootstrap from the official `bend` (stage0 -> stage1 -> stage2)
 #   make seed       regenerate seed/bendc.c from bendc.bend
 #
@@ -13,6 +15,7 @@ CC = clang
 endif
 CFLAGS    ?= -O2 -w
 BEND_BASE ?= $(HOME)/.bend/bend2/base.bend
+TCC       ?= tcc
 export CC BEND_BASE
 
 all: build/bendc build/bendrt.o
@@ -42,6 +45,10 @@ selfcheck: build/bendc
 ddc:
 	./tools/ddc.sh
 
+# tcc builds bendc and the test programs (tools/tcc.sh)
+tcc:
+	./tools/tcc.sh $(TCC)
+
 bootstrap:
 	./bootstrap.sh
 
@@ -51,4 +58,4 @@ seed: build/bendc
 clean:
 	rm -rf build
 
-.PHONY: all test selfcheck ddc bootstrap seed clean
+.PHONY: all test selfcheck ddc tcc bootstrap seed clean

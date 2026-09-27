@@ -68,7 +68,15 @@ static long gpu_env(const char *name, long dflt) {
 // Metal, through the Objective-C runtime
 // --------------------------------------
 
-#ifdef __APPLE__
+// tcc cannot pass the linker Metal (nor weak imports): its programs have
+// the simulator and the CPU.
+#if defined(__APPLE__) && !defined(__TINYC__)
+#define BEND_METAL 1
+#else
+#define BEND_METAL 0
+#endif
+
+#if BEND_METAL
 // Metal is linked (weakly, so a Mac without it still runs the program): the
 // loader maps it with the program for less memory than dlopen at the first
 // call (15 MB against 18).
@@ -292,7 +300,10 @@ static int gpu_setup(const GpuProg *prog) {
   gpu_log = getenv("BEND_GPU_LOG") != NULL;
   if (!bend_gpu || (m && strcmp(m, "off") == 0)) return GPU_OFF;
   int sim = m && strcmp(m, "sim") == 0;
-#ifndef __APPLE__
+#if !BEND_METAL
+#ifdef __APPLE__
+  if (!sim) gpu_note("%s", "no Metal");
+#endif
   if (!sim) return GPU_OFF;
 #endif
   // The arena starts small (a dispatch's first use of a buffer costs with its
@@ -312,7 +323,7 @@ static int gpu_setup(const GpuProg *prog) {
   gc_hook(gpu_hook);
   pthread_mutex_unlock(&gc_lock);
   if (sim) return GPU_SIM;
-#ifdef __APPLE__
+#if BEND_METAL
   if (g_init(prog)) return GPU_METAL;
 #endif
   return GPU_OFF;
@@ -453,7 +464,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
     if (gpu_mode == GPU_SIM) {
       for (KW l = 0; l < gpu_lanes; l++) prog->sim(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
     }
-#ifdef __APPLE__
+#if BEND_METAL
     else if (!g_heap() || !g_dispatch(&P, g_pso)) {
       return 0;
     }
@@ -468,7 +479,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
       if (gpu_mode == GPU_SIM) {
         for (KW l = 0; l < gpu_lanes; l++) prog->sim_kq(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
       }
-#ifdef __APPLE__
+#if BEND_METAL
       else if (!g_dispatch(&P, g_pso_kq)) {
         return 0;
       }
@@ -500,7 +511,7 @@ static int gpu_grow(void) {
   size_t n = gpu_Hn * 4 > gpu_Hmax ? gpu_Hmax : gpu_Hn * 4;
   KW *h = mmap(NULL, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
   if (h == MAP_FAILED) return 0;
-#ifdef __APPLE__
+#if BEND_METAL
   if (gpu_mode == GPU_METAL) {
     GId b = g_nocopy(h, n);
     if (!b) { munmap(h, n); return 0; }

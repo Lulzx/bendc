@@ -75,3 +75,31 @@ jobs:
 
       - name: Two toolchains, one seed
         run: make ddc
+
+  # The Tiny C Compiler, which bootstrappable builds reach from a hex seed:
+  # it builds bendc, which compiles bendc.bend to the seed, and the test
+  # programs with the runtime (tools/tcc.sh). tinycc's mob branch, pinned:
+  # 0.9.27, the last release, has no stdatomic.h.
+  tcc:
+    name: tcc
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install the official Bend (for base.bend)
+        run: |
+          case "${{ github.event_name }}" in
+            schedule|workflow_dispatch) BEND_NO_TELEMETRY=1 tools/install-bend.sh latest;;
+            *) tools/install-bend.sh;;
+          esac
+          echo "$HOME/.bend/bin" >> "$GITHUB_PATH"
+
+      - name: Build tinycc
+        run: |
+          git clone https://repo.or.cz/tinycc.git /tmp/tinycc
+          cd /tmp/tinycc && git checkout 9db1105c32afd3dcf0c28b8186f08e63c761b2b5
+          ./configure --prefix="$HOME/tcc" && make -j4 && make install
+          echo "$HOME/tcc/bin" >> "$GITHUB_PATH"
+
+      - name: tcc builds bendc, and the tests pass
+        run: make tcc
