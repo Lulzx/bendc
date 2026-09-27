@@ -8071,12 +8071,21 @@ def Mod.names(ds: List<&2, Decl>, acc: List<&2, String>) -> List<&2, String>:
     case DImport{p, a} <> t:
       Mod.names(t, acc)
 
+# The names a module defines, as a set: a qualified module renames every
+# variable it reads, and check.bend defines thousands.
 type Qual is Data:
-  Qual{alias: String, names: List<&2, String>}
+  Qual{alias: String, names: Set()}
 
 def Mod.q(+q: Qual, +x: String) -> String:
   Qual{+alias, +names} = q
-  Bool.pick(String, Str.has(names, x), alias ++ "." ++ x, x)
+  Bool.pick(String, Pair.snd(Set(), Bool, Set.has(names, x)), alias ++ "." ++ x, x)
+
+def Mod.set(xs: List<&2, String>, s: Set()) -> Set():
+  match xs:
+    case Nil{}:
+      s
+    case x <> t:
+      Mod.set(t, Set.add(s, x))
 
 def Mod.param_names(ps: List<&2, Param>) -> List<&2, String>:
   match ps:
@@ -8202,7 +8211,7 @@ def Mod.decls(+q: Qual, ds: List<&2, Decl>) -> List<&2, Decl>:
       Mod.decl(q, d) <> Mod.decls(q, t)
 
 def Mod.qualify(+alias: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
-  Mod.decls(Qual{alias, Mod.names(ds, Nil{})}, ds)
+  Mod.decls(Qual{alias, Mod.set(Mod.names(ds, Nil{}), Set.new())}, ds)
 
 def Mod.dir.go(s: String) -> String:
   match s:
