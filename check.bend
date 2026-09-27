@@ -6203,23 +6203,6 @@ def ctx_dead(+book: Book, ctx: List<&2, Tm>) -> Bool:
 def descend.lit(+a: Tm, +p: Tm) -> Tm:
   Bool.pick(Tm, Bool.and(Tm.is_lit(a), Tm.is_ctr(p)), lit_step(a), a)
 
-law descend.go:
-  for +book: Book
-  for +a: Tm
-  for p: Tm
-  U32
-
-#
-# How an argument of a self-call compares with the parameter's column: 0
-# the same, 1 smaller (a part of it), 2 not known to be smaller.
-@unsafe
-def term_descend(+book: Book, q: Q, arg: Tm, +col: Tm) -> U32:
-  match q:
-    case QNone{}:
-      0
-    case other:
-      descend.go(book, descend.lit(term_strip(arg), term_strip(col)), term_strip(col))
-
 def descend.var(a: Tm, +i: U32) -> U32:
   match a:
     case Var{k, j, s}:
@@ -6241,114 +6224,142 @@ def Ctr.xs(t: Tm) -> List<&2, Tm>:
     case other:
       Nil{}
 
-law descend.sub:
-  for +book: Book
-  for +a: Tm
-  for ps: List<&2, Tm>
-  for +bad: U32
-  for +j: U32
-  U32
+type DSel is Type:
+  STermDescend{book: Book, q: Q, arg: Tm, col: Tm}
+  SDescendSubIf{book: Book, a: Tm, ps: List<&2, Tm>, bad: U32, j: U32, gt: Bool}
+  SDescendSubSkip{book: Book, a: Tm, p: Tm, t: List<&2, Tm>, bad: U32, j: U32, skip: Bool}
+  SDescendSub{book: Book, a: Tm, ps: List<&2, Tm>, bad: U32, j: U32}
+  SDescendCtrFields{book: Book, a: Tm, xs: List<&2, Tm>, r: U32 & U32}
+  SDescendCtr{book: Book, a: Tm, k: String, xs: List<&2, Tm>, same: Bool}
+  SDescendGo{book: Book, a: Tm, p: Tm}
+  SDescendFieldsNext{book: Book, as: List<&2, Tm>, ps: List<&2, Tm>, ord: U32, j: U32, stop: Bool}
+  SDescendFieldsStep{book: Book, as: List<&2, Tm>, ps: List<&2, Tm>, ord: U32, j: U32, fld: U32}
+  SDescendFields{book: Book, as: List<&2, Tm>, ps: List<&2, Tm>, ord: U32, j: U32}
 
-@unsafe
-def descend.sub.if(+book: Book, +a: Tm, ps: List<&2, Tm>, +bad: U32, +j: U32, gt: Bool) -> U32:
-  match gt:
-    case True{}:
-      descend.sub(book, a, ps, bad, j)
-    case False{}:
-      1
+def DSel.ty(k: DSel) -> Type:
+  match k:
+    case STermDescend{book, q, arg, col}:
+      U32
+    case SDescendSubIf{book, a, ps, bad, j, gt}:
+      U32
+    case SDescendSubSkip{book, a, p, t, bad, j, skip}:
+      U32
+    case SDescendSub{book, a, ps, bad, j}:
+      U32
+    case SDescendCtrFields{book, a, xs, r}:
+      U32
+    case SDescendCtr{book, a, k, xs, same}:
+      U32
+    case SDescendGo{book, a, p}:
+      U32
+    case SDescendFieldsNext{book, as, ps, ord, j, stop}:
+      U32 & U32
+    case SDescendFieldsStep{book, as, ps, ord, j, fld}:
+      U32 & U32
+    case SDescendFields{book, as, ps, ord, j}:
+      U32 & U32
 
-@unsafe
-def descend.sub.skip(+book: Book, +a: Tm, p: Tm, t: List<&2, Tm>, +bad: U32, +j: U32, skip: Bool) -> U32:
-  match skip:
-    case True{}:
-      descend.sub(book, a, t, bad, U32.inc(j))
-    case False{}:
-      descend.sub.if(book, a, t, bad, U32.inc(j), U32.is_eq(term_descend(book, QLone{}, a, p), 2))
+# The descent check, one def: sel picks the step. Out of fuel, an
+# argument is not known to be smaller.
+def descend.run(fuel0: Nat, sel: DSel) -> DSel.ty(sel):
+  match fuel0:
+    case 0n:
+      match sel:
+        case STermDescend{book, q, arg, col}:
+          2
+        case SDescendSubIf{book, a, ps, bad, j, gt}:
+          2
+        case SDescendSubSkip{book, a, p, t, bad, j, skip}:
+          2
+        case SDescendSub{book, a, ps, bad, j}:
+          2
+        case SDescendCtrFields{book, a, xs, r}:
+          2
+        case SDescendCtr{book, a, k, xs, same}:
+          2
+        case SDescendGo{book, a, p}:
+          2
+        case SDescendFieldsNext{book, as, ps, ord, j, stop}:
+          (2, 4294967295)
+        case SDescendFieldsStep{book, as, ps, ord, j, fld}:
+          (2, 4294967295)
+        case SDescendFields{book, as, ps, ord, j}:
+          (2, 4294967295)
+    case 1n+ +fuel:
+      match sel:
+        # How an argument of a self-call compares with the parameter's column: 0
+        # the same, 1 smaller (a part of it), 2 not known to be smaller.
+        case STermDescend{+book, q, arg, +col}:
+          match q:
+            case QNone{}:
+              0
+            case other:
+              descend.run(fuel, SDescendGo{book, descend.lit(term_strip(arg), term_strip(col)), term_strip(col)})
+        case SDescendSubIf{+book, +a, ps, +bad, +j, gt}:
+          match gt:
+            case True{}:
+              descend.run(fuel, SDescendSub{book, a, ps, bad, j})
+            case False{}:
+              1
+        case SDescendSubSkip{+book, +a, p, t, +bad, +j, skip}:
+          match skip:
+            case True{}:
+              descend.run(fuel, SDescendSub{book, a, t, bad, U32.inc(j)})
+            case False{}:
+              descend.run(fuel, SDescendSubIf{book, a, t, bad, U32.inc(j), U32.is_eq(descend.run(fuel, STermDescend{book, QLone{}, a, p}), 2)})
+        # Whether a is (within) one of the fields ps: then it is smaller. Field bad
+        # (the one a same-constructor comparison missed on) is skipped: it already
+        # missed, and searching it again made a descent on a Nat literal 2^n.
+        case SDescendSub{+book, +a, ps, +bad, +j}:
+          match ps:
+            case Nil{}:
+              2
+            case p <> t:
+              descend.run(fuel, SDescendSubSkip{book, a, p, t, bad, j, U32.is_eq(j, bad)})
+        case SDescendCtrFields{+book, +a, +xs, r}:
+          (+ord, +bad) = r
+          Bool.pick(U32, U32.is_eq(ord, 2), descend.run(fuel, SDescendSub{book, a, xs, bad, 0}), ord)
+        case SDescendCtr{+book, +a, +k, +xs, same}:
+          match same:
+            case True{}:
+              descend.run(fuel, SDescendCtrFields{book, a, xs, descend.run(fuel, SDescendFields{book, Ctr.xs(a), xs, 0, 0})})
+            case False{}:
+              descend.run(fuel, SDescendSub{book, a, xs, 4294967295, 0})
+        case SDescendGo{+book, +a, p}:
+          match p:
+            case Var{k, +i, s}:
+              descend.var(a, i)
+            case Ctr{+k, +xs, s}:
+              descend.run(fuel, SDescendCtr{book, a, k, xs, descend.same(a, k, xs)})
+            case other:
+              2
+        case SDescendFieldsNext{+book, as, ps, +ord, +j, stop}:
+          match stop:
+            case True{}:
+              (2, j)
+            case False{}:
+              descend.run(fuel, SDescendFields{book, as, ps, ord, U32.inc(j)})
+        case SDescendFieldsStep{+book, as, ps, +ord, +j, +fld}:
+          descend.run(fuel, SDescendFieldsNext{book, as, ps, Bool.pick(U32, U32.is_eq(fld, 0), ord, fld), j, U32.is_eq(fld, 2)})
+        # The fields compared in order: the order, and the field that missed (if any).
+        case SDescendFields{+book, as, ps, +ord, +j}:
+          match as ps:
+            case a <> at p <> pt:
+              descend.run(fuel, SDescendFieldsStep{book, at, pt, ord, j, descend.run(fuel, STermDescend{book, QLone{}, a, p})})
+            case x y:
+              (ord, 4294967295)
 
-# Whether a is (within) one of the fields ps: then it is smaller. Field bad
-# (the one a same-constructor comparison missed on) is skipped: it already
-# missed, and searching it again made a descent on a Nat literal 2^n.
-def descend.sub(book, a, ps, bad, j):
-  match ps:
-    case Nil{}:
-      2
-    case p <> t:
-      descend.sub.skip(book, a, p, t, bad, j, U32.is_eq(j, bad))
-
-def descend.ctr.fields(+book: Book, +a: Tm, +xs: List<&2, Tm>, r: U32 & U32) -> U32:
-  (+ord, +bad) = r
-  Bool.pick(U32, U32.is_eq(ord, 2), descend.sub(book, a, xs, bad, 0), ord)
-
-law descend.fields:
-  for +book: Book
-  for as: List<&2, Tm>
-  for ps: List<&2, Tm>
-  for +ord: U32
-  for +j: U32
-  U32 & U32
-
-@unsafe
-def descend.ctr(+book: Book, +a: Tm, +k: String, +xs: List<&2, Tm>, same: Bool) -> U32:
-  match same:
-    case True{}:
-      descend.ctr.fields(book, a, xs, descend.fields(book, Ctr.xs(a), xs, 0, 0))
-    case False{}:
-      descend.sub(book, a, xs, 4294967295, 0)
-
-def descend.go(book, a, p):
-  match p:
-    case Var{k, +i, s}:
-      descend.var(a, i)
-    case Ctr{+k, +xs, s}:
-      descend.ctr(book, a, k, xs, descend.same(a, k, xs))
-    case other:
-      2
-
-@unsafe
-def descend.fields.next(+book: Book, as: List<&2, Tm>, ps: List<&2, Tm>, +ord: U32, +j: U32, stop: Bool) -> U32 & U32:
-  match stop:
-    case True{}:
-      (2, j)
-    case False{}:
-      descend.fields(book, as, ps, ord, U32.inc(j))
-
-def descend.fields.step(+book: Book, as: List<&2, Tm>, ps: List<&2, Tm>, +ord: U32, +j: U32, +fld: U32) -> U32 & U32:
-  descend.fields.next(book, as, ps, Bool.pick(U32, U32.is_eq(fld, 0), ord, fld), j, U32.is_eq(fld, 2))
-
-# The fields compared in order: the order, and the field that missed (if any).
-def descend.fields(book, as, ps, ord, j):
-  match as ps:
-    case a <> at p <> pt:
-      descend.fields.step(book, at, pt, ord, j, term_descend(book, QLone{}, a, p))
-    case x y:
-      (ord, 4294967295)
+def term_descend(+book: Book, q: Q, arg: Tm, +col: Tm) -> U32:
+  descend.run(Fuel.max(), STermDescend{book, q, arg, col})
 
 def cl.cols(t: Tm) -> List<&2, Tm>:
   term_args(t)
 
-law descend.args:
-  for +book: Book
-  for qs: List<&2, Q>
-  for sp: List<&2, Tm>
-  for cols: List<&2, Tm>
-  for +ord: U32
-  U32
-
-@unsafe
-def descend.args.if(+book: Book, qs: List<&2, Q>, sp: List<&2, Tm>, cols: List<&2, Tm>, +ord: U32, +o: U32, eq: Bool) -> U32:
-  match eq:
-    case True{}:
-      descend.args(book, qs, sp, cols, ord)
-    case False{}:
-      o
-
-def descend.args.step(+book: Book, qs: List<&2, Q>, sp: List<&2, Tm>, cols: List<&2, Tm>, +ord: U32, +o: U32) -> U32:
-  descend.args.if(book, qs, sp, cols, ord, o, U32.is_eq(o, 0))
-
-def descend.args(book, qs, sp, cols, ord):
+def descend.args(+book: Book, qs: List<&2, Q>, sp: List<&2, Tm>, cols: List<&2, Tm>, +ord: U32) -> U32:
   match qs sp cols:
     case q <> qt x <> xt c <> ct:
-      descend.args.step(book, qt, xt, ct, ord, term_descend(book, q, x, c))
+      +o = term_descend(book, q, x, c)
+      Bool.pick(Unit -> U32, U32.is_eq(o, 0), u => descend.args(book, qt, xt, ct, ord), u => o)(Unit{})
     case a b c:
       ord
 
