@@ -4,6 +4,7 @@
 
 import Base
 import ./check.bend as Chk
+import ./core.bend as Core
 import ./rt/rtjs.bend as RtJs
 import ./rt/rtchan.bend as RtChan
 
@@ -3721,19 +3722,16 @@ type DGrp is Data:
 type G is Data:
   G{ctors: Map<&2, CInfo>, defs: Map<&2, DInfo>, bodies: Map<&2, Decl>, dps: Map<&2, DGrp>}
 
-def G.opt_ctors(m: Map<&2, CInfo>) -> Map<&2, Maybe<&2, CInfo>>:
-  match m:
-    case MTip{}:
-      MTip{}
-    case MLeaf{k, v}:
-      MLeaf{k, Some{v}}
-    case MNode{p, lo, hi}:
-      MNode{p, G.opt_ctors(lo), G.opt_ctors(hi)}
+def G.ctor.if(+m: Map<&2, CInfo>, +name: String, has: Bool) -> Maybe<&2, CInfo>:
+  match has:
+    case True{}:
+      Some{Pair.snd(Map<&2, CInfo>, CInfo, Map.get(CInfo, CInfo{0, 0, 4, False{}}, m, name))}
+    case False{}:
+      None{}
 
 def G.ctor(+g: G, +name: String) -> Maybe<&2, CInfo>:
-  G{ctors, defs, bodies, dps} = g
-  Pair.snd(Map<&2, Maybe<&2, CInfo>>, Maybe<&2, CInfo>,
-    Map.get(Maybe<&2, CInfo>, None{}, G.opt_ctors(ctors), name))
+  G{+ctors, defs, bodies, dps} = g
+  G.ctor.if(ctors, name, Pair.snd(Map<&2, CInfo>, Bool, Map.has(&2, CInfo, ctors, name)))
 
 def G.get(-V: Data, +d: V, +m: Map<&2, V>, +key: String) -> V:
   Pair.snd(Map<&2, V>, V, Map.get(V, d, m, key))
@@ -12772,6 +12770,899 @@ def Gen.gpu.tail(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> String:
     case +t <> +rest:
       Gen.gpu.emit(g, t <> rest, K.program(g, t <> rest, clos))
 
+# Core IR
+# =======
+#
+# The C back end's input goes through the core IR (core.bend): Lo lowers a
+# def to it, marking each argument of a call of a global def relevant or
+# erased by the def's parameter mask; Core.Tm.erase boxes the erased ones
+# and the types left in the body (PROOF.bend proves that this preserves the
+# IR's semantics); Up raises the result back to an Expr.
+
+def Lo.pt.push(a: Core.Pt, p: Core.Pt) -> Core.Pt:
+  match p:
+    case Core.PtCtr{k, ps}:
+      Core.PtCtr{k, a <> ps}
+    case other:
+      other
+
+def Lo.pat(p: Pat) -> Core.Pt:
+  match p:
+    case PVar{x}:
+      Core.PtVar{x}
+    case PCtor{n, ps}:
+      match ps:
+        case Nil{}:
+          Core.PtCtr{n, Nil{}}
+        case a <> t:
+          Lo.pt.push(Lo.pat(a), Lo.pat(PCtor{n, t}))
+    case PNat{n}:
+      Core.PtNat{n}
+    case PSucc{k, q}:
+      Core.PtSuc{k, Lo.pat(q)}
+    case PNum{n}:
+      Core.PtNum{n}
+    case PFlt{s}:
+      Core.PtFlt{s}
+
+def Lo.pats(ps: List<&2, Pat>) -> List<&2, Core.Pt>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      Lo.pat(p) <> Lo.pats(t)
+
+def Lo.rel(m: List<&2, Bool>) -> Core.Rel:
+  match m:
+    case False{} <> t:
+      Core.Era{}
+    case other:
+      Core.Run{}
+
+def Lo.tail(m: List<&2, Bool>) -> List<&2, Bool>:
+  match m:
+    case Nil{}:
+      Nil{}
+    case h <> t:
+      t
+
+# Whether f names a global def (not a local of bound).
+def Lo.bound(+bound: Set(), +n: String) -> Bool:
+  Pair.snd(Set(), Bool, Set.has(bound, n))
+
+def Lo.bind(xs: List<&2, String>, s: Set()) -> Set():
+  match xs:
+    case Nil{}:
+      s
+    case x <> t:
+      Lo.bind(t, Set.add(s, x))
+
+def Lo.global(+bound: Set(), f: Expr) -> Bool:
+  match f:
+    case EVar{+n}:
+      Bool.not(Lo.bound(bound, n))
+    case other:
+      False{}
+
+def Lo.fname(f: Expr) -> String:
+  match f:
+    case EVar{n}:
+      n
+    case other:
+      ""
+
+# The mask of a call's arguments: the callee's (top: e is the call itself),
+# else what the walk has left of it (a list field is walked as its head and
+# the node rebuilt with the rest).
+def Lo.mask(top: Bool, +g: G, +f: Expr, mask: List<&2, Bool>) -> List<&2, Bool>:
+  match top:
+    case True{}:
+      DInfo.mask(G.def(g, Lo.fname(f)))
+    case False{}:
+      mask
+
+def Lo.arg(+m: List<&2, Bool>, a: Core.Tm, rest: Core.Tm) -> Core.Tm:
+  Core.Tm.push.call(Core.Arg{Lo.rel(m), a}, rest)
+
+def Lo.go(e: Expr, +g: G, +bound: Set(), +top: Bool, +mask: List<&2, Bool>) -> Core.Tm:
+  match e:
+    case EVar{+n}:
+      Bool.pick(Core.Tm, Lo.bound(bound, n), Core.CVar{n}, Core.CRef{n})
+    case ENum{n}:
+      Core.CLit{Core.LNum{n}}
+    case ENat{n}:
+      Core.CLit{Core.LNat{n}}
+    case EFlt{s}:
+      Core.CLit{Core.LFlt{s}}
+    case EStr{s}:
+      Core.CLit{Core.LStr{s}}
+    case ECall{+f, args}:
+      match args:
+        case Nil{}:
+          Bool.pick(Unit -> Core.Tm, Lo.global(bound, f), u => Core.CCall{Lo.fname(f), Nil{}},
+            u => Core.CApp{Lo.go(f, g, bound, True{}, Nil{}), Nil{}})(Unit{})
+        case +a <> +t:
+          Bool.pick(Unit -> Core.Tm, Lo.global(bound, f),
+            u => Lo.arg(Lo.mask(top, g, f, mask), Lo.go(a, g, bound, True{}, Nil{}),
+              Lo.go(ECall{f, t}, g, bound, False{}, Lo.tail(Lo.mask(top, g, f, mask)))),
+            u => Core.Tm.push(Lo.go(a, g, bound, True{}, Nil{}), Lo.go(ECall{f, t}, g, bound, False{}, Nil{})))(Unit{})
+    case ECtor{+n, args}:
+      match args:
+        case Nil{}:
+          Core.CCtr{n, Nil{}}
+        case a <> t:
+          Core.Tm.push(Lo.go(a, g, bound, True{}, Nil{}), Lo.go(ECtor{n, t}, g, bound, False{}, Nil{}))
+    case ELam{+p, b}:
+      Core.CLam{Lo.pat(p), Lo.go(b, g, Lo.bind(Pat.vars(p, Nil{}), bound), True{}, Nil{})}
+    case ELet{+p, v, b}:
+      Core.CLet{Lo.pat(p), Lo.go(v, g, bound, True{}, Nil{}), Lo.go(b, g, Lo.bind(Pat.vars(p, Nil{}), bound), True{}, Nil{})}
+    case EMatch{scrs, +cases}:
+      match scrs:
+        case a <> t:
+          Core.Tm.push(Lo.go(a, g, bound, True{}, Nil{}), Lo.go(EMatch{t, cases}, g, bound, False{}, Nil{}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.CMat{Nil{}, Nil{}}
+            case c <> t:
+              Core.Tm.push.case(Lo.go(c, g, bound, True{}, Nil{}), Lo.go(EMatch{Nil{}, t}, g, bound, False{}, Nil{}))
+    case ECase{+ps, b}:
+      Core.CCse{Lo.pats(ps), Lo.go(b, g, Lo.bind(Pats.vars(ps, Nil{}), bound), True{}, Nil{})}
+    case ESucc{k, x}:
+      Core.CSuc{k, Lo.go(x, g, bound, True{}, Nil{})}
+    case EOp{op, a, b}:
+      Core.COp{op, Lo.go(a, g, bound, True{}, Nil{}), Lo.go(b, g, bound, True{}, Nil{})}
+    case EAnn{x, ty}:
+      Core.CAnn{Lo.go(x, g, bound, True{}, Nil{}), ty}
+    case ETy{+n, args}:
+      match args:
+        case Nil{}:
+          Core.CTyp{n, Nil{}}
+        case a <> t:
+          Core.Tm.push(Lo.go(a, g, bound, True{}, Nil{}), Lo.go(ETy{n, t}, g, bound, False{}, Nil{}))
+    case EErr{m}:
+      Core.CErr{m}
+
+def Lo.params(ps: List<&2, Param>, +mask: List<&2, Bool>) -> List<&2, Core.Par>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Param{x, m, t} <> r:
+      Core.Par{x, Lo.rel(mask), m, t} <> Lo.params(r, Lo.tail(mask))
+
+def Lo.def(+g: G, +name: String, +ps: List<&2, Param>, body: Expr, ret: Expr) -> Core.Def:
+  +bound = Lo.bind(Mod.param_names(ps), Set.new())
+  Core.Def{name, Lo.params(ps, DInfo.mask(G.def(g, name))), Lo.go(body, g, bound, True{}, Nil{}),
+    Lo.go(ret, g, bound, True{}, Nil{})}
+
+def Up.pt.push(a: Pat, p: Pat) -> Pat:
+  match p:
+    case PCtor{k, ps}:
+      PCtor{k, a <> ps}
+    case other:
+      other
+
+def Up.pat(p: Core.Pt) -> Pat:
+  match p:
+    case Core.PtVar{x}:
+      PVar{x}
+    case Core.PtCtr{n, ps}:
+      match ps:
+        case Nil{}:
+          PCtor{n, Nil{}}
+        case a <> t:
+          Up.pt.push(Up.pat(a), Up.pat(Core.PtCtr{n, t}))
+    case Core.PtNat{n}:
+      PNat{n}
+    case Core.PtSuc{k, q}:
+      PSucc{k, Up.pat(q)}
+    case Core.PtNum{n}:
+      PNum{n}
+    case Core.PtFlt{s}:
+      PFlt{s}
+
+def Up.pats(ps: List<&2, Core.Pt>) -> List<&2, Pat>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      Up.pat(p) <> Up.pats(t)
+
+def Up.lit(l: Core.Lit) -> Expr:
+  match l:
+    case Core.LNum{n}:
+      ENum{n}
+    case Core.LNat{n}:
+      ENat{n}
+    case Core.LFlt{s}:
+      EFlt{s}
+    case Core.LStr{s}:
+      EStr{s}
+
+def Up.go(t: Core.Tm) -> Expr:
+  match t:
+    case Core.CVar{x}:
+      EVar{x}
+    case Core.CLit{l}:
+      Up.lit(l)
+    case Core.CRef{f}:
+      EVar{f}
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          ECall{EVar{f}, Nil{}}
+        case a <> r:
+          match a:
+            case Core.Arg{rel, e}:
+              Expr.push(Up.go(e), Up.go(Core.CCall{f, r}))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          ECall{Up.go(f), Nil{}}
+        case a <> r:
+          Expr.push(Up.go(a), Up.go(Core.CApp{f, r}))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          ECtor{k, Nil{}}
+        case a <> r:
+          Expr.push(Up.go(a), Up.go(Core.CCtr{k, r}))
+    case Core.CLam{p, b}:
+      ELam{Up.pat(p), Up.go(b)}
+    case Core.CLet{p, v, b}:
+      ELet{Up.pat(p), Up.go(v), Up.go(b)}
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> r:
+          Expr.push(Up.go(a), Up.go(Core.CMat{r, cases}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              EMatch{Nil{}, Nil{}}
+            case c <> r:
+              Expr.push.case(Up.go(c), Up.go(Core.CMat{Nil{}, r}))
+    case Core.CCse{ps, b}:
+      ECase{Up.pats(ps), Up.go(b)}
+    case Core.CSuc{k, e}:
+      ESucc{k, Up.go(e)}
+    case Core.COp{op, a, b}:
+      EOp{op, Up.go(a), Up.go(b)}
+    case Core.CAnn{e, ty}:
+      EAnn{Up.go(e), ty}
+    case Core.CTyp{n, as}:
+      match as:
+        case Nil{}:
+          ETy{n, Nil{}}
+        case a <> r:
+          Expr.push(Up.go(a), Up.go(Core.CTyp{n, r}))
+    case Core.CBox{}:
+      ETy{"", Nil{}}
+    case Core.CErr{m}:
+      EErr{m}
+
+def Up.params(ps: List<&2, Core.Par>) -> List<&2, Param>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Par{x, rel, m, t} <> r:
+      Param{x, m, t} <> Up.params(r)
+
+def Up.def(d: Core.Def) -> Decl:
+  match d:
+    case Core.Def{name, ps, body, ret}:
+      DDef{name, Up.params(ps), Up.go(body), Up.go(ret)}
+
+# Inlining of monadic bind and pure
+# ---------------------------------
+#
+# A do block is a chain of M.bind(m, x => ..) calls ending in M.pure(e); for
+# a state monad (Parser, Gen, KM; P and K in check.bend) each bind builds a
+# closure for the step and another for the continuation. Inl expands full
+# calls of M.bind, M.pure and the M. defs they call (M.go, M.go.done): the
+# callee's body, renamed apart and inlined in turn, takes each argument in
+# place of its parameter when that moves no work into a lambda (else a let
+# binds it), and each place an argument lands is reduced: an applied lambda
+# becomes a let, and a let or a match of a known constructor takes its case.
+# A do block becomes one closure. The callee's names are fresh (a suffix
+# per depth), so no substitution captures, and each expansion walks only
+# the callee's body: the pass is linear in the program.
+
+# An argument for a parameter x used n times, top of them outside a lambda.
+type IB is Data:
+  IB{x: String, e: Core.Tm, n: U32, top: U32}
+
+# The walk's modes: IAll does the children, then the node; IKids the
+# children (a list field as its head and the node rebuilt with the rest);
+# INode the rules at the node; IFin{top} them when top; ISub{x, v, top}
+# puts v for x and reduces where it lands; IPlan{ps, as, s} and IBinds{bs}
+# give an expanded body its arguments.
+type IM is Data:
+  IAll{}
+  IKids{}
+  INode{}
+  IFin{top: Bool}
+  ISub{x: String, v: Core.Tm, top: Bool}
+  IPlan{ps: List<&2, Core.Par>, as: List<&2, Core.Arg>, s: String}
+  IBinds{bs: List<&2, IB>}
+
+# The variables of p.
+def Inl.pvars(p: Core.Pt, +acc: List<&2, String>) -> List<&2, String>:
+  match p:
+    case Core.PtVar{x}:
+      x <> acc
+    case Core.PtCtr{k, ps}:
+      match ps:
+        case Nil{}:
+          acc
+        case q <> t:
+          Inl.pvars(Core.PtCtr{k, t}, Inl.pvars(q, acc))
+    case Core.PtSuc{k, q}:
+      Inl.pvars(q, acc)
+    case other:
+      acc
+
+def Inl.ppvars(ps: List<&2, Core.Pt>, acc: List<&2, String>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      acc
+    case p <> t:
+      Inl.ppvars(t, Inl.pvars(p, acc))
+
+# The names in t: sel 0 the variables it reads, 1 those it binds, 2 those
+# it reads outside a lambda, 3 the defs it calls or refers to (each on acc,
+# maybe twice).
+def Inl.names(t: Core.Tm, +sel: U32, +acc: List<&2, String>) -> List<&2, String>:
+  match t:
+    case Core.CVar{x}:
+      Bool.pick(List<&2, String>, Bool.or(U32.is_zero(sel), U32.is_eq(sel, 2)), x <> acc, acc)
+    case Core.CRef{f}:
+      Bool.pick(List<&2, String>, U32.is_eq(sel, 3), f <> acc, acc)
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          Bool.pick(List<&2, String>, U32.is_eq(sel, 3), f <> acc, acc)
+        case Core.Arg{r, e} <> t2:
+          Inl.names(Core.CCall{f, t2}, sel, Inl.names(e, sel, acc))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Inl.names(f, sel, acc)
+        case a <> t2:
+          Inl.names(Core.CApp{f, t2}, sel, Inl.names(a, sel, acc))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          acc
+        case a <> t2:
+          Inl.names(Core.CCtr{k, t2}, sel, Inl.names(a, sel, acc))
+    case Core.CLam{p, b}:
+      Bool.pick(Unit -> List<&2, String>, U32.is_eq(sel, 2), u => acc,
+        u => Inl.names(b, sel, Bool.pick(List<&2, String>, U32.is_eq(sel, 1), Inl.pvars(p, acc), acc)))(Unit{})
+    case Core.CLet{p, v, b}:
+      Inl.names(b, sel, Inl.names(v, sel, Bool.pick(List<&2, String>, U32.is_eq(sel, 1), Inl.pvars(p, acc), acc)))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          Inl.names(Core.CMat{t2, cases}, sel, Inl.names(a, sel, acc))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              acc
+            case c <> t2:
+              Inl.names(Core.CMat{Nil{}, t2}, sel, Inl.names(c, sel, acc))
+    case Core.CCse{ps, b}:
+      Inl.names(b, sel, Bool.pick(List<&2, String>, U32.is_eq(sel, 1), Inl.ppvars(ps, acc), acc))
+    case Core.CSuc{k, e}:
+      Inl.names(e, sel, acc)
+    case Core.COp{op, a, b}:
+      Inl.names(b, sel, Inl.names(a, sel, acc))
+    case Core.CAnn{e, ty}:
+      Inl.names(e, sel, acc)
+    case Core.CTyp{n, as}:
+      match as:
+        case Nil{}:
+          acc
+        case a <> t2:
+          Inl.names(Core.CTyp{n, t2}, sel, Inl.names(a, sel, acc))
+    case other:
+      acc
+
+def Inl.count(xs: List<&2, String>, +x: String, +n: U32) -> U32:
+  match xs:
+    case Nil{}:
+      n
+    case +y <> t:
+      Inl.count(t, x, Bool.pick(U32, String.eq(y, x), U32.inc(n), n))
+
+def Inl.uses(+t: Core.Tm, +sel: U32, +x: String) -> U32:
+  Inl.count(Inl.names(t, sel, Nil{}), x, 0)
+
+# Whether no name of xs is in ys.
+def Inl.apart(xs: List<&2, String>, +ys: List<&2, String>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case +x <> t:
+      Bool.pick(Unit -> Bool, Str.has(ys, x), u => False{}, u => Inl.apart(t, ys))(Unit{})
+
+def Inl.rn(+s: String, +x: String) -> String:
+  Bool.pick(String, String.eq(x, "_"), x, x ++ s)
+
+def Inl.rpat(p: Core.Pt, +s: String) -> Core.Pt:
+  match p:
+    case Core.PtVar{x}:
+      Core.PtVar{Inl.rn(s, x)}
+    case Core.PtCtr{k, ps}:
+      match ps:
+        case Nil{}:
+          Core.PtCtr{k, Nil{}}
+        case q <> t:
+          Lo.pt.push(Inl.rpat(q, s), Inl.rpat(Core.PtCtr{k, t}, s))
+    case Core.PtSuc{k, q}:
+      Core.PtSuc{k, Inl.rpat(q, s)}
+    case other:
+      other
+
+def Inl.rpats(ps: List<&2, Core.Pt>, +s: String) -> List<&2, Core.Pt>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      Inl.rpat(p, s) <> Inl.rpats(t, s)
+
+# t with every variable x renamed x ++ s (a def's body: its only free
+# variables are its parameters).
+def Inl.ren(t: Core.Tm, +s: String) -> Core.Tm:
+  match t:
+    case Core.CVar{x}:
+      Core.CVar{Inl.rn(s, x)}
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          Core.CCall{f, Nil{}}
+        case Core.Arg{r, e} <> t2:
+          Core.Tm.push.call(Core.Arg{r, Inl.ren(e, s)}, Inl.ren(Core.CCall{f, t2}, s))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Core.CApp{Inl.ren(f, s), Nil{}}
+        case a <> t2:
+          Core.Tm.push(Inl.ren(a, s), Inl.ren(Core.CApp{f, t2}, s))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          Core.CCtr{k, Nil{}}
+        case a <> t2:
+          Core.Tm.push(Inl.ren(a, s), Inl.ren(Core.CCtr{k, t2}, s))
+    case Core.CLam{p, b}:
+      Core.CLam{Inl.rpat(p, s), Inl.ren(b, s)}
+    case Core.CLet{p, v, b}:
+      Core.CLet{Inl.rpat(p, s), Inl.ren(v, s), Inl.ren(b, s)}
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          Core.Tm.push(Inl.ren(a, s), Inl.ren(Core.CMat{t2, cases}, s))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.CMat{Nil{}, Nil{}}
+            case c <> t2:
+              Core.Tm.push.case(Inl.ren(c, s), Inl.ren(Core.CMat{Nil{}, t2}, s))
+    case Core.CCse{ps, b}:
+      Core.CCse{Inl.rpats(ps, s), Inl.ren(b, s)}
+    case Core.CSuc{k, e}:
+      Core.CSuc{k, Inl.ren(e, s)}
+    case Core.COp{op, a, b}:
+      Core.COp{op, Inl.ren(a, s), Inl.ren(b, s)}
+    case Core.CAnn{e, ty}:
+      Core.CAnn{Inl.ren(e, s), ty}
+    case Core.CTyp{n, as}:
+      match as:
+        case Nil{}:
+          Core.CTyp{n, Nil{}}
+        case a <> t2:
+          Core.Tm.push(Inl.ren(a, s), Inl.ren(Core.CTyp{n, t2}, s))
+    case other:
+      other
+
+def Inl.binds(+x: String, p: Core.Pt) -> Bool:
+  Str.has(Inl.pvars(p, Nil{}), x)
+
+def Inl.binds.any(+x: String, ps: List<&2, Core.Pt>) -> Bool:
+  Str.has(Inl.ppvars(ps, Nil{}), x)
+
+# Whether t is a value: evaluating it builds or reads, and never loops.
+def Inl.value(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CVar{x}:
+      True{}
+    case Core.CLit{l}:
+      True{}
+    case Core.CLam{p, b}:
+      True{}
+    case Core.CBox{}:
+      True{}
+    case Core.CTyp{n, as}:
+      True{}
+    case Core.CCtr{k, as}:
+      List.is_empty(&2, Core.Tm, as)
+    case other:
+      False{}
+
+# Whether t is a lambda or a constructor (moved, it can make a redex).
+def Inl.shape(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CLam{p, b}:
+      True{}
+    case Core.CCtr{k, as}:
+      True{}
+    case other:
+      False{}
+
+def Inl.tms.len(ts: List<&2, Core.Tm>) -> Nat:
+  match ts:
+    case Nil{}:
+      0n
+    case t <> r:
+      1n+Inl.tms.len(r)
+
+def Inl.pts.len(ps: List<&2, Core.Pt>) -> Nat:
+  match ps:
+    case Nil{}:
+      0n
+    case p <> r:
+      1n+Inl.pts.len(r)
+
+def Inl.args.len(as: List<&2, Core.Arg>) -> Nat:
+  match as:
+    case Nil{}:
+      0n
+    case a <> r:
+      1n+Inl.args.len(r)
+
+def Inl.pars.len(ps: List<&2, Core.Par>) -> Nat:
+  match ps:
+    case Nil{}:
+      0n
+    case p <> r:
+      1n+Inl.pars.len(r)
+
+# Lets binding each pattern to its term, around b.
+def Inl.lets(ps: List<&2, Core.Pt>, ts: List<&2, Core.Tm>, b: Core.Tm) -> Core.Tm:
+  match ps:
+    case Nil{}:
+      b
+    case p <> pr:
+      match ts:
+        case Nil{}:
+          b
+        case t <> tr:
+          Core.CLet{p, t, Inl.lets(pr, tr, b)}
+
+def Inl.hit(+d: Core.Def, +f: String, +as: List<&2, Core.Arg>) -> Bool:
+  match d:
+    case Core.Def{+name, ps, b, ret}:
+      Bool.and(String.eq(name, f), Nat.is_eq(Inl.pars.len(ps), Inl.args.len(as)))
+
+def Inl.pars(d: Core.Def) -> List<&2, Core.Par>:
+  match d:
+    case Core.Def{name, ps, b, ret}:
+      ps
+
+def Inl.body(d: Core.Def) -> Core.Tm:
+  match d:
+    case Core.Def{name, ps, b, ret}:
+      b
+
+def Inl.plan(ps: List<&2, Core.Par>, as: List<&2, Core.Arg>, +b: Core.Tm, +s: String) -> List<&2, IB>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Par{x, rel, m, ty} <> pr:
+      match as:
+        case Nil{}:
+          Nil{}
+        case Core.Arg{r, e} <> ar:
+          +y = Inl.rn(s, x)
+          IB{y, e, Inl.uses(b, 0, y), Inl.uses(b, 2, y)} <> Inl.plan(pr, ar, b, s)
+
+def Inl.app(f: Core.Tm, as: List<&2, Core.Tm>) -> Core.Tm:
+  match as:
+    case Nil{}:
+      f
+    case a <> t:
+      Core.CApp{f, a <> t}
+
+# The case of a match on K{as} (the first case whose pattern is K's, or a
+# variable), as lets; t itself when a case needs more than that.
+def Inl.known(+k: String, +as: List<&2, Core.Tm>, cases: List<&2, Core.Tm>, +t: Core.Tm) -> Core.Tm:
+  match cases:
+    case Nil{}:
+      t
+    case c <> r:
+      match c:
+        case Core.CCse{ps, b}:
+          match ps:
+            case p <> pr:
+              match p:
+                case Core.PtVar{x}:
+                  Core.CLet{Core.PtVar{x}, Core.CCtr{k, as}, b}
+                case Core.PtCtr{+k2, +qs}:
+                  Bool.pick(Unit -> Core.Tm, String.eq(k, k2),
+                    u => Bool.pick(Core.Tm, Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as)), Inl.lets(qs, as, b), t),
+                    u => Inl.known(k, as, r, t))(Unit{})
+                case other:
+                  t
+            case other:
+              t
+        case other:
+          t
+
+def Inl.miss(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CErr{m}:
+      String.eq(m, "%miss")
+    case other:
+      False{}
+
+# A match on a constructor, resolved (CErr{"%miss"} when it is not one).
+def Inl.mat(scrs: List<&2, Core.Tm>, +cases: List<&2, Core.Tm>) -> Core.Tm:
+  match scrs:
+    case s <> r:
+      match s:
+        case Core.CCtr{+k, +as}:
+          Bool.pick(Core.Tm, List.is_empty(&2, Core.Tm, r), Inl.known(k, as, cases, Core.CErr{"%miss"}), Core.CErr{"%miss"})
+        case other:
+          Core.CErr{"%miss"}
+    case Nil{}:
+      Core.CErr{"%miss"}
+
+def Inl.fsuf(n: Nat) -> String:
+  "@i" ++ U32.show(U32.from_nat(n))
+
+# The walk (see IM). Fuel bounds its depth.
+def Inl.go(+n: Nat, +c: Map<&2, Core.Def>, mode: IM, +t: Core.Tm) -> Core.Tm:
+  match n:
+    case 0n:
+      t
+    case 1n+p:
+      match mode:
+        case IAll{}:
+          Inl.go(p, c, INode{}, Inl.go(p, c, IKids{}, t))
+        case IFin{top}:
+          Bool.pick(Unit -> Core.Tm, top, u => Inl.go(p, c, INode{}, t), u => t)(Unit{})
+        case IPlan{ps, as, s}:
+          Inl.go(p, c, IBinds{Inl.plan(ps, as, t, s)}, t)
+        case IBinds{bs}:
+          match bs:
+            case Nil{}:
+              t
+            case IB{+x, +e, +k, +top} <> +r:
+              Bool.pick(Unit -> Core.Tm, Bool.and(U32.is_zero(k), Inl.value(e)), u => Inl.go(p, c, IBinds{r}, t),
+                u => Bool.pick(Unit -> Core.Tm, Bool.or(Bool.and(Inl.value(e), Bool.not(Inl.shape(e))), Bool.and(U32.is_eq(k, 1), Bool.or(U32.is_eq(top, 1), Inl.shape(e)))),
+                  u2 => Inl.go(p, c, IBinds{r}, Inl.go(p, c, ISub{x, e, True{}}, t)),
+                  u2 => Core.CLet{Core.PtVar{x}, e, Inl.go(p, c, IBinds{r}, t)})(Unit{}))(Unit{})
+        case ISub{+x, +v, top}:
+          match t:
+            case Core.CVar{+y}:
+              Bool.pick(Core.Tm, String.eq(x, y), v, Core.CVar{y})
+            case Core.CCall{f, as}:
+              match as:
+                case Nil{}:
+                  Core.CCall{f, Nil{}}
+                case Core.Arg{r, e} <> t2:
+                  Inl.go(p, c, IFin{top}, Core.Tm.push.call(Core.Arg{r, Inl.go(p, c, ISub{x, v, True{}}, e)},
+                    Inl.go(p, c, ISub{x, v, False{}}, Core.CCall{f, t2})))
+            case Core.CApp{f, as}:
+              match as:
+                case Nil{}:
+                  Inl.go(p, c, IFin{top}, Core.CApp{Inl.go(p, c, ISub{x, v, True{}}, f), Nil{}})
+                case a <> t2:
+                  Inl.go(p, c, IFin{top}, Core.Tm.push(Inl.go(p, c, ISub{x, v, True{}}, a),
+                    Inl.go(p, c, ISub{x, v, False{}}, Core.CApp{f, t2})))
+            case Core.CCtr{k, as}:
+              match as:
+                case Nil{}:
+                  Core.CCtr{k, Nil{}}
+                case a <> t2:
+                  Core.Tm.push(Inl.go(p, c, ISub{x, v, True{}}, a), Inl.go(p, c, ISub{x, v, False{}}, Core.CCtr{k, t2}))
+            case Core.CLam{+pt, +b}:
+              Bool.pick(Unit -> Core.Tm, Inl.binds(x, pt), u => Core.CLam{pt, b},
+                u => Core.CLam{pt, Inl.go(p, c, ISub{x, v, True{}}, b)})(Unit{})
+            case Core.CLet{+pt, v2, +b}:
+              Inl.go(p, c, IFin{top}, Core.CLet{pt, Inl.go(p, c, ISub{x, v, True{}}, v2),
+                Bool.pick(Unit -> Core.Tm, Inl.binds(x, pt), u => b, u => Inl.go(p, c, ISub{x, v, True{}}, b))(Unit{})})
+            case Core.CMat{scrs, cases}:
+              match scrs:
+                case a <> t2:
+                  Inl.go(p, c, IFin{top}, Core.Tm.push(Inl.go(p, c, ISub{x, v, True{}}, a),
+                    Inl.go(p, c, ISub{x, v, False{}}, Core.CMat{t2, cases})))
+                case Nil{}:
+                  match cases:
+                    case Nil{}:
+                      Core.CMat{Nil{}, Nil{}}
+                    case cs <> t2:
+                      Core.Tm.push.case(Inl.go(p, c, ISub{x, v, True{}}, cs), Inl.go(p, c, ISub{x, v, False{}}, Core.CMat{Nil{}, t2}))
+            case Core.CCse{+ps, +b}:
+              Bool.pick(Unit -> Core.Tm, Inl.binds.any(x, ps), u => Core.CCse{ps, b},
+                u => Core.CCse{ps, Inl.go(p, c, ISub{x, v, True{}}, b)})(Unit{})
+            case Core.CSuc{k, e}:
+              Core.CSuc{k, Inl.go(p, c, ISub{x, v, True{}}, e)}
+            case Core.COp{op, a, b}:
+              Core.COp{op, Inl.go(p, c, ISub{x, v, True{}}, a), Inl.go(p, c, ISub{x, v, True{}}, b)}
+            case Core.CAnn{e, ty}:
+              Core.CAnn{Inl.go(p, c, ISub{x, v, True{}}, e), ty}
+            case other:
+              other
+        case IKids{}:
+          match t:
+            case Core.CCall{f, as}:
+              match as:
+                case Nil{}:
+                  Core.CCall{f, Nil{}}
+                case Core.Arg{r, e} <> t2:
+                  Core.Tm.push.call(Core.Arg{r, Inl.go(p, c, IAll{}, e)}, Inl.go(p, c, IKids{}, Core.CCall{f, t2}))
+            case Core.CApp{f, as}:
+              match as:
+                case Nil{}:
+                  Core.CApp{Inl.go(p, c, IAll{}, f), Nil{}}
+                case a <> t2:
+                  Core.Tm.push(Inl.go(p, c, IAll{}, a), Inl.go(p, c, IKids{}, Core.CApp{f, t2}))
+            case Core.CCtr{k, as}:
+              match as:
+                case Nil{}:
+                  Core.CCtr{k, Nil{}}
+                case a <> t2:
+                  Core.Tm.push(Inl.go(p, c, IAll{}, a), Inl.go(p, c, IKids{}, Core.CCtr{k, t2}))
+            case Core.CLam{pt, b}:
+              Core.CLam{pt, Inl.go(p, c, IAll{}, b)}
+            case Core.CLet{pt, v, b}:
+              Core.CLet{pt, Inl.go(p, c, IAll{}, v), Inl.go(p, c, IAll{}, b)}
+            case Core.CMat{scrs, cases}:
+              match scrs:
+                case a <> t2:
+                  Core.Tm.push(Inl.go(p, c, IAll{}, a), Inl.go(p, c, IKids{}, Core.CMat{t2, cases}))
+                case Nil{}:
+                  match cases:
+                    case Nil{}:
+                      Core.CMat{Nil{}, Nil{}}
+                    case cs <> t2:
+                      Core.Tm.push.case(Inl.go(p, c, IAll{}, cs), Inl.go(p, c, IKids{}, Core.CMat{Nil{}, t2}))
+            case Core.CCse{ps, b}:
+              Core.CCse{ps, Inl.go(p, c, IAll{}, b)}
+            case Core.CSuc{k, e}:
+              Core.CSuc{k, Inl.go(p, c, IAll{}, e)}
+            case Core.COp{op, a, b}:
+              Core.COp{op, Inl.go(p, c, IAll{}, a), Inl.go(p, c, IAll{}, b)}
+            case Core.CAnn{e, ty}:
+              Core.CAnn{Inl.go(p, c, IAll{}, e), ty}
+            case other:
+              other
+        case INode{}:
+          match t:
+            case Core.CCall{+f, +as}:
+              +d = Pair.snd(Map<&2, Core.Def>, Core.Def, Map.get(Core.Def, Core.Def{"", Nil{}, Core.CBox{}, Core.CBox{}}, c, f))
+              Bool.pick(Unit -> Core.Tm, Inl.hit(d, f, as),
+                u => Inl.go(p, c, IPlan{Inl.pars(d), as, Inl.fsuf(p)}, Inl.go(p, c, IAll{}, Inl.ren(Inl.body(d), Inl.fsuf(p)))),
+                u => Core.CCall{f, as})(Unit{})
+            case Core.CApp{+f, +as}:
+              match f:
+                case Core.CLam{+pt, +b}:
+                  match as:
+                    case Nil{}:
+                      Core.CApp{Core.CLam{pt, b}, Nil{}}
+                    case +a <> +r:
+                      Bool.pick(Unit -> Core.Tm, Inl.apart(Inl.pvars(pt, Nil{}), Inl.names(Core.CCtr{"", r}, 0, Nil{})),
+                        u => Inl.go(p, c, INode{}, Core.CLet{pt, a, Inl.go(p, c, INode{}, Inl.app(b, r))}),
+                        u => Core.CApp{Core.CLam{pt, b}, a <> r})(Unit{})
+                case Core.CLet{+pt, +v, +b}:
+                  Bool.pick(Unit -> Core.Tm, Inl.apart(Inl.pvars(pt, Nil{}), Inl.names(Core.CCtr{"", as}, 0, Nil{})),
+                    u => Core.CLet{pt, v, Inl.go(p, c, INode{}, Inl.app(b, as))},
+                    u => Core.CApp{Core.CLet{pt, v, b}, as})(Unit{})
+                case other:
+                  Core.CApp{other, as}
+            case Core.CLet{+pt, +v, +b}:
+              match pt:
+                case Core.PtCtr{+k, +qs}:
+                  match v:
+                    case Core.CCtr{+k2, +as}:
+                      Bool.pick(Unit -> Core.Tm, Bool.and(String.eq(k, k2), Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as))),
+                        u => Inl.lets(qs, as, b),
+                        u => Core.CLet{Core.PtCtr{k, qs}, Core.CCtr{k2, as}, b})(Unit{})
+                    case other:
+                      Core.CLet{Core.PtCtr{k, qs}, other, b}
+                case other:
+                  Core.CLet{other, v, b}
+            case Core.CMat{+scrs, +cases}:
+              Bool.pick(Unit -> Core.Tm, Inl.miss(Inl.mat(scrs, cases)), u => Core.CMat{scrs, cases},
+                u => Inl.mat(scrs, cases))(Unit{})
+            case other:
+              other
+
+# The monad a def is part of: X for X.bind, X.pure, X.go and X.go.done
+# ("" for any other def).
+def Inl.cut(+n: String, +suf: String) -> String:
+  Bool.pick(String, String.ends_with(n, suf), String.take(n, Nat.sub(String.length(n), String.length(suf))), "")
+
+def Inl.monad(+n: String) -> String:
+  +a = Inl.cut(n, ".bind")
+  +b = Inl.cut(n, ".pure")
+  +c = Inl.cut(n, ".go")
+  +d = Inl.cut(n, ".go.done")
+  a ++ b ++ c ++ d
+
+# Whether d is inlined: a non-recursive def of a monad (not IO: its bind
+# is the runtime's) that has both a bind and a pure.
+def Inl.pick(+names: Set(), +name: String) -> Bool:
+  +x = Inl.monad(name)
+  Bool.pick(Unit -> Bool, Bool.or(String.is_empty(x), String.eq(x, "IO")), u => False{},
+    u => Bool.and(Lo.bound(names, x ++ ".bind"), Lo.bound(names, x ++ ".pure")))(Unit{})
+
+def Inl.add(+name: String, +d: Core.Def, +m: Map<&2, Core.Def>) -> Map<&2, Core.Def>:
+  match d:
+    case Core.Def{n, ps, +body, ret}:
+      Bool.pick(Map<&2, Core.Def>, Str.has(Inl.names(body, 3, Nil{}), name), m, Map.set(&2, Core.Def, m, name, d))
+
+def Inl.ctx(+g: G, +names: Set(), ds: List<&2, Decl>, +m: Map<&2, Core.Def>) -> Map<&2, Core.Def>:
+  match ds:
+    case Nil{}:
+      m
+    case d <> t:
+      match d:
+        case DDef{+name, +ps, body, ret}:
+          Inl.ctx(g, names, t, Bool.pick(Unit -> Map<&2, Core.Def>, Inl.pick(names, name),
+            u => Inl.add(name, Core.Def.erase(Lo.def(g, name, ps, body, ret)), m), u => m)(Unit{}))
+        case other:
+          Inl.ctx(g, names, t, m)
+
+def Inl.names.defs(ds: List<&2, Decl>, s: Set()) -> Set():
+  match ds:
+    case Nil{}:
+      s
+    case d <> t:
+      match d:
+        case DDef{name, ps, body, ret}:
+          Inl.names.defs(t, Set.add(s, name))
+        case other:
+          Inl.names.defs(t, s)
+
+def Inl.any(xs: List<&2, String>, +c: Map<&2, Core.Def>) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case +x <> t:
+      Bool.pick(Unit -> Bool, Pair.snd(Map<&2, Core.Def>, Bool, Map.has(&2, Core.Def, c, x)), u => True{},
+        u => Inl.any(t, c))(Unit{})
+
+# d with its calls of c inlined (a def that makes none is left as it is).
+def Inl.def(+c: Map<&2, Core.Def>, d: Core.Def) -> Core.Def:
+  match d:
+    case Core.Def{name, ps, +body, ret}:
+      Core.Def{name, ps, Bool.pick(Unit -> Core.Tm, Inl.any(Inl.names(body, 3, Nil{}), c),
+        u => Inl.go(Fuel.max(), c, IAll{}, body), u => body)(Unit{}), ret}
+
+# The program through the core IR: each def lowered, erased, with monadic
+# binds inlined, and raised; a type-level def (a Type, Data, Quant or Kind)
+# keeps its body, which the printers unfold.
+def Lo.pass(+g: G, +c: Map<&2, Core.Def>, d: Decl) -> Decl:
+  match d:
+    case DDef{+name, +ps, +body, +ret}:
+      Bool.pick(Unit -> Decl, G.erased_ty(Ty.head(ret)), u => DDef{name, ps, body, ret},
+        u => Up.def(Inl.def(c, Core.Def.erase(Lo.def(g, name, ps, body, ret)))))(Unit{})
+    case other:
+      other
+
+def Lo.passes(+g: G, +c: Map<&2, Core.Def>, ds: List<&2, Decl>) -> List<&2, Decl>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Lo.pass(g, c, d) <> Lo.passes(g, c, r)
+
+def Lo.program(+ds: List<&2, Decl>) -> List<&2, Decl>:
+  +g = G.new(ds)
+  Lo.passes(g, Inl.ctx(g, Inl.names.defs(ds, Set.new()), ds, Map.new(&2, Core.Def)), ds)
+
 def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
@@ -12811,7 +13702,7 @@ def Gen.program.m(+g: G) -> Gen(String):
     Gen.entry(g, G.body(g, "main"))
 
 def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool) -> COut:
-  +ds = Par.auto(par, Pick.decls(ds0))
+  +ds = Par.auto(par, Lo.program(Pick.decls(ds0)))
   +g = Dps.build(G.new(ds), ds, free)
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
