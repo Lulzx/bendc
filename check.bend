@@ -876,13 +876,23 @@ def SB.find(xs: List<&2, SB>, +k: String) -> Maybe<&2, U32>:
 def P.lookup(+k: String) -> P(Maybe<&2, U32>):
   +ps => Done{(SB.find(PS.stk(ps), k), ps)}
 
-law Map.find.go:
-  for -V: Data
-  for m: Map<&2, V>
-  for +k: String
-  Maybe<&2, V>
+def Map.find.leaf(-V: Data, v: V, hit: Bool) -> Maybe<&2, V>:
+  match hit:
+    case True{}:
+      Some{v}
+    case False{}:
+      None{}
 
-@unsafe
+def Map.find.go(-V: Data, m: Map<&2, V>, +k: String) -> Maybe<&2, V>:
+  match m:
+    case MTip{}:
+      None{}
+    case MLeaf{+key, v}:
+      Map.find.leaf(V, v, String.eq(key, k))
+    case MNode{+pos, lo, hi}:
+      Bool.pick(Unit -> Maybe<&2, V>, Pair.snd(String, Bool, Map.bit(k, pos)),
+        u => Map.find.go(V, hi, k), u => Map.find.go(V, lo, k))(Unit{})
+
 def Map.find(-V: Data, +m: Map<&2, V>, +k: String) -> Maybe<&2, V>:
   Map.find.go(V, m, k)
 
@@ -1742,11 +1752,22 @@ def P.infix(+out: Tm, +lvl: U32, m: Maybe<&2, Op>, arrow: Bool) -> P(Tm):
     case Some{Op{+sym, +prec, +right, +name}}:
       P.if(Tm, Bool.or(U32.is_lt(prec, lvl), arrow), P.pure(Tm, out), P.infix.go(out, lvl, sym, prec, right, name))
 
-law op.find:
-  for ops: List<&2, Op>
-  for +r: String
-  for +prev: U32
-  Maybe<&2, Op>
+def op.ok(+sym: String, +r: String, +prev: U32) -> Bool:
+  +nx = Str.first(String.drop(r, String.length(sym)))
+  +c0 = Str.first(sym)
+  Bool.and(Str.prefix(r, sym), Bool.and(
+    Bool.not(Bool.and(Bool.or(String.eq(sym, "-"), String.eq(sym, "+")), Bool.or(U32.is_eq(nx, 62), is_head(nx)))),
+    Bool.and(Bool.not(Bool.and(U32.is_eq(c0, 62), Bool.not(Bool.or(is_space(prev), U32.is_zero(prev))))),
+      Bool.not(Bool.and(String.eq(sym, "%"), Bool.not(is_space(nx)))))))
+
+# The operator at the head of r (prev: the character before it).
+def op.find(ops: List<&2, Op>, +r: String, +prev: U32) -> Maybe<&2, Op>:
+  match ops:
+    case Nil{}:
+      None{}
+    case Op{+sym, +prec, +right, +name} <> t:
+      Bool.pick(Unit -> Maybe<&2, Op>, op.ok(sym, r, prev), u => Some{Op{sym, prec, right, name}},
+        u => op.find(t, r, prev))(Unit{})
 
 law P.lt:
   for +out: Tm
@@ -2571,9 +2592,13 @@ def P.flt.go(+txt: String, m: Maybe<&2, F32>, +s: Sp, +beg: U32) -> P(Tm):
     case None{}:
       P.fail.at(Tm, "a float literal with a finite f32 value (got " ++ txt ++ ")", beg)
 
-law digits.span:
-  for s: String
-  Nat
+# The number of leading digits.
+def digits.span(s: String) -> Nat:
+  match s:
+    case SNil{}:
+      0n
+    case SCon{Chr{+c}, t}:
+      Bool.pick(Unit -> Nat, is_digit(c), u => 1n+digits.span(t), u => 0n)(Unit{})
 
 @unsafe
 def flt.exp(+s: String) -> String:
@@ -3106,10 +3131,15 @@ def Tm.strip_subs(t: Tm) -> Tm:
     case other:
       other
 
-law vars.find:
-  for vars: List<&2, Pt>
-  for +i: U32
-  Maybe<&2, Pt>
+def vars.find(vars: List<&2, Pt>, +i: U32) -> Maybe<&2, Pt>:
+  match vars:
+    case Nil{}:
+      None{}
+    case PVar{+k, +j, +q, +s} <> t:
+      Bool.pick(Unit -> Maybe<&2, Pt>, U32.is_eq(i, j), u => Some{PVar{k, j, q, s}},
+        u => vars.find(t, i))(Unit{})
+    case p <> t:
+      vars.find(t, i)
 
 @unsafe
 def P.mf.vars(+e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, +s: Sp, vars: List<&2, Pt>) -> P(Tm):
@@ -3155,11 +3185,70 @@ def P.mf.skip(+e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, +s: Sp, x: Pt, xt:
     t : Tm <- P.match_flatten(e <> et, rows, s, xt)
     return flatten.lams([x], t)
 
-law body_sub:
-  for b: Body
-  for +i: U32
-  for +v: Pt
-  Body
+def Tm.ctr_cons(x: Tm, t: Tm) -> Tm:
+  match t:
+    case Ctr{k, xs, s}:
+      Ctr{k, x <> xs, s}
+    case other:
+      other
+
+# A pattern as a term; a constructor's fields one at a time, each step
+# on the same constructor with fewer fields.
+def patt_term(p: Pt, +s: Sp) -> Tm:
+  match p:
+    case PVar{k, i, q, ps}:
+      Var{k, i, Sp.or(s, ps)}
+    case PCtr{k, xs, ps}:
+      match xs:
+        case Nil{}:
+          Ctr{k, Nil{}, Sp.or(s, ps)}
+        case h <> t:
+          Tm.ctr_cons(patt_term(h, s), patt_term(PCtr{k, t, ps}, s))
+
+def patt_terms(ps: List<&2, Pt>, +s: Sp) -> List<&2, Tm>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      patt_term(p, s) <> patt_terms(t, s)
+
+# The Sub-substitution of a body: a variable scrutinee i becomes pattern v.
+def body_sub.scrut(+i: U32, +v: Pt, e: Tm) -> Tm:
+  match e:
+    case Var{+k, +j, +s}:
+      Bool.pick(Tm, U32.is_eq(i, j), patt_term(v, s), Var{k, j, s})
+    case other:
+      Sub{i, v, other, NoSp{}}
+
+def body_sub.scruts(+i: U32, +v: Pt, es: List<&2, Tm>) -> List<&2, Tm>:
+  match es:
+    case Nil{}:
+      Nil{}
+    case e <> t:
+      body_sub.scrut(i, v, e) <> body_sub.scruts(i, v, t)
+
+def Body.row_cons(r: Body, b: Body) -> Body:
+  match b:
+    case BMatch{es, rows, s}:
+      BMatch{es, r <> rows, s}
+    case other:
+      other
+
+# A match's rows one at a time, each step on the same match with fewer rows.
+def body_sub(b: Body, +i: U32, +v: Pt) -> Body:
+  match b:
+    case BMatch{es, rows, s}:
+      match rows:
+        case Nil{}:
+          BMatch{body_sub.scruts(i, v, es), Nil{}, s}
+        case r <> t:
+          Body.row_cons(body_sub(r, i, v), body_sub(BMatch{es, t, s}, i, v))
+    case BLocal{ks, q, vs, f}:
+      BLocal{ks, q, body_sub.scruts(i, v, vs), body_sub(f, i, v)}
+    case BReply{x, s}:
+      BReply{Sub{i, v, x, NoSp{}}, s}
+    case Row{ps, f}:
+      Row{ps, body_sub(f, i, v)}
 
 @unsafe
 def P.mf.varrows(rows: List<&2, Body>, +w: Pt) -> P(List<&2, Body>):
@@ -3189,15 +3278,17 @@ def quant_join(a: Q, b: Q) -> Q:
 #
 # A body becomes a term: lets become Let, and a match on the parameters
 # becomes a tree of Mat eliminators (the official match_flatten).
-@unsafe
-def patt_mark(+q: Q, rows: List<&2, Body>) -> Q:
+def patt_mark.go(rows: List<&2, Body>, +q: Q) -> Q:
   match rows:
     case Nil{}:
       q
     case Row{PVar{k, i, pq, s} <> rest, f} <> t:
-      patt_mark(quant_join(q, pq), t)
+      patt_mark.go(t, quant_join(q, pq))
     case r <> t:
-      patt_mark(q, t)
+      patt_mark.go(t, q)
+
+def patt_mark(+q: Q, rows: List<&2, Body>) -> Q:
+  patt_mark.go(rows, q)
 
 def Pt.var_q(p: Pt) -> Q:
   match p:
@@ -3246,19 +3337,6 @@ def P.mf.fields(ps: List<&2, Pt>, +xq: Q) -> P(List<&2, Pt>):
         +i : U32 <- P.fresh_id()
         rest : List<&2, Pt> <- P.mf.fields(t, xq)
         return PVar{"_" ++ U32.show(i), i, xq, Pt.s(p)} <> rest
-
-law patt_term:
-  for p: Pt
-  for +s: Sp
-  Tm
-
-@unsafe
-def patt_terms(ps: List<&2, Pt>, +s: Sp) -> List<&2, Tm>:
-  match ps:
-    case Nil{}:
-      Nil{}
-    case p <> t:
-      patt_term(p, s) <> patt_terms(t, s)
 
 @unsafe
 def mf.rows.ctr(
@@ -3877,39 +3955,6 @@ def P.decl():
 # Misc
 # ====
 
-# (A match, not Bool.pick: that would count every digit to the end.)
-@unsafe
-def digits.span.if(d: Bool, t: String) -> Nat:
-  match d:
-    case True{}:
-      1n+digits.span(t)
-    case False{}:
-      0n
-
-def digits.span(s):
-  match s:
-    case SNil{}:
-      0n
-    case SCon{Chr{+c}, t}:
-      digits.span.if(is_digit(c), t)
-
-@unsafe
-def vars.find.if(v: Pt, t: List<&2, Pt>, +i: U32, hit: Bool) -> Maybe<&2, Pt>:
-  match hit:
-    case True{}:
-      Some{v}
-    case False{}:
-      vars.find(t, i)
-
-def vars.find(vars, i):
-  match vars:
-    case Nil{}:
-      None{}
-    case PVar{+k, +j, +q, +s} <> t:
-      vars.find.if(PVar{k, j, q, s}, t, i, U32.is_eq(i, j))
-    case p <> t:
-      vars.find(t, i)
-
 type Us is Data:
   Us{i: U32, q: Q}
 
@@ -3952,26 +3997,13 @@ def quant_add(a: Q, b: Q) -> Q:
     case x y:
       QMany{}
 
-law uses_get:
-  for u: List<&2, Us>
-  for +i: U32
-  Q
-
-@unsafe
-def uses_get.if(q: Q, t: List<&2, Us>, +i: U32, hit: Bool) -> Q:
-  match hit:
-    case True{}:
-      q
-    case False{}:
-      uses_get(t, i)
-
 # Uses: how many times each variable (by depth) was consumed.
-def uses_get(u, i):
+def uses_get(u: List<&2, Us>, +i: U32) -> Q:
   match u:
     case Nil{}:
       QNone{}
     case Us{+j, q} <> t:
-      uses_get.if(q, t, i, U32.is_eq(i, j))
+      Bool.pick(Unit -> Q, U32.is_eq(i, j), x => q, x => uses_get(t, i))(Unit{})
 
 def uses_one(+i: U32, q: Q) -> List<&2, Us>:
   [Us{i, q}]
@@ -3984,43 +4016,30 @@ def Us.q(u: Us) -> Q:
   Us{i, q} = u
   q
 
-law uses_put:
-  for +f: U32
-  for +x: Us
-  for a: List<&2, Us>
-  List<&2, Us>
-
-@unsafe
-def uses_put.if(+f: U32, +x: Us, +j: U32, +q: Q, t: List<&2, Us>, same: Bool) -> List<&2, Us>:
-  match same:
-    case True{}:
-      Us{j, Bool.pick(Q, U32.is_zero(f), quant_add(q, Us.q(x)), quant_join(q, Us.q(x)))} <> t
-    case False{}:
-      Us{j, q} <> uses_put(f, x, t)
-
 # The uses of b merged into a, combining a variable's two entries with f
 # (0: quant_add, 1: quant_join).
-def uses_put(f, x, a):
+def uses_put(+f: U32, +x: Us, a: List<&2, Us>) -> List<&2, Us>:
   match a:
     case Nil{}:
       [x]
-    case Us{+j, +q} <> t:
-      uses_put.if(f, x, j, q, t, U32.is_eq(Us.i(x), j))
+    case Us{+j, +q} <> +t:
+      Bool.pick(Unit -> List<&2, Us>, U32.is_eq(Us.i(x), j),
+        u => Us{j, Bool.pick(Q, U32.is_zero(f), quant_add(q, Us.q(x)), quant_join(q, Us.q(x)))} <> t,
+        u => Us{j, q} <> uses_put(f, x, t))(Unit{})
 
-@unsafe
-def uses_merge(+f: U32, a: List<&2, Us>, b: List<&2, Us>) -> List<&2, Us>:
+def uses_merge(+f: U32, b: List<&2, Us>, a: List<&2, Us>) -> List<&2, Us>:
   match b:
     case Nil{}:
       a
     case x <> t:
-      uses_merge(f, uses_put(f, x, a), t)
+      uses_merge(f, t, uses_put(f, x, a))
 
 def uses_add(a: List<&2, Us>, b: List<&2, Us>) -> List<&2, Us>:
-  uses_merge(0, a, b)
+  uses_merge(0, b, a)
 
 # A variable used in only one branch keeps its use (quant_join).
 def uses_join(a: List<&2, Us>, b: List<&2, Us>) -> List<&2, Us>:
-  uses_merge(1, a, b)
+  uses_merge(1, b, a)
 
 def uses_del.if(x: Us, rest: List<&2, Us>, drop: Bool) -> List<&2, Us>:
   match drop:
@@ -4036,63 +4055,31 @@ def uses_del(u: List<&2, Us>, +i: U32) -> List<&2, Us>:
     case Us{+j, q} <> t:
       uses_del.if(Us{j, q}, uses_del(t, i), U32.is_eq(i, j))
 
-law env_get:
-  for env: List<&2, Tm>
-  for +i: U32
-  Maybe<&2, Tm>
-
-@unsafe
-def env_get.if(v: Tm, t: List<&2, Tm>, +i: U32, hit: Bool) -> Maybe<&2, Tm>:
-  match hit:
-    case True{}:
-      Some{v}
-    case False{}:
-      env_get(t, i)
-
-def env_get(env, i):
+def env_get(env: List<&2, Tm>, +i: U32) -> Maybe<&2, Tm>:
   match env:
     case Nil{}:
       None{}
     case EB{+j, v} <> t:
-      env_get.if(v, t, i, U32.is_eq(i, j))
+      Bool.pick(Unit -> Maybe<&2, Tm>, U32.is_eq(i, j), u => Some{v}, u => env_get(t, i))(Unit{})
     case x <> t:
       env_get(t, i)
 
 def env_set(env: List<&2, Tm>, i: U32, v: Tm) -> List<&2, Tm>:
   EB{i, v} <> env
 
-@unsafe
-def env_sets(env: List<&2, Tm>, ids: List<&2, U32>, vs: List<&2, Tm>) -> List<&2, Tm>:
-  match ids vs:
-    case i <> it v <> vt:
-      env_sets(env_set(env, i, v), it, vt)
-    case a b:
+def env_sets.go(ids: List<&2, U32>, vs: List<&2, Tm>, env: List<&2, Tm>) -> List<&2, Tm>:
+  match ids:
+    case i <> it:
+      match vs:
+        case v <> vt:
+          env_sets.go(it, vt, env_set(env, i, v))
+        case Nil{}:
+          env
+    case Nil{}:
       env
 
-def Map.find.leaf(-V: Data, v: V, hit: Bool) -> Maybe<&2, V>:
-  match hit:
-    case True{}:
-      Some{v}
-    case False{}:
-      None{}
-
-@unsafe
-def Map.find.node(-V: Data, lo: Map<&2, V>, hi: Map<&2, V>, +k: String, bit: Bool) ->
-  Maybe<&2, V>:
-  match bit:
-    case True{}:
-      Map.find.go(V, hi, k)
-    case False{}:
-      Map.find.go(V, lo, k)
-
-def Map.find.go(V, m, k):
-  match m:
-    case MTip{}:
-      None{}
-    case MLeaf{+key, v}:
-      Map.find.leaf(V, v, String.eq(key, k))
-    case MNode{+pos, lo, hi}:
-      Map.find.node(V, lo, hi, k, Pair.snd(String, Bool, Map.bit(k, pos)))
+def env_sets(env: List<&2, Tm>, ids: List<&2, U32>, vs: List<&2, Tm>) -> List<&2, Tm>:
+  env_sets.go(ids, vs, env)
 
 def book_opened(book: Book) -> Book:
   Book{tlds, ctrs, order, hols, open, tmps, tcnt, files} = book
@@ -4129,21 +4116,50 @@ def is_ctr(+t: Tm, +k: String, n: Nat) -> Bool:
     case other:
       False{}
 
-law term_strip:
-  for t: Tm
-  Tm
+# The term under its cells, variable refs and annotations.
+def term_strip(t: Tm) -> Tm:
+  match t:
+    case Cel{k, s, v, m}:
+      term_strip(v)
+    case VRf{k, i, s, r}:
+      term_strip(r)
+    case Ann{x, ty, s}:
+      term_strip(x)
+    case other:
+      other
 
-law u32_bits:
-  for w: Tm
-  for +i: U32
-  for +n: U32
-  Maybe<&2, U32>
+# A bit's value (0 or 1), or 2 when it is not a Bool constructor.
+def u32_bits.bit(b: Tm) -> U32:
+  match b:
+    case Ctr{"True", Nil{}, s}:
+      1
+    case Ctr{"False", Nil{}, s}:
+      0
+    case other:
+      2
 
-@unsafe
+# The number the word w holds from bit i up, with bits n below i.
+def u32_bits(w: Tm, +i: U32, +n: U32) -> Maybe<&2, U32>:
+  match w:
+    case Cel{k, s, v, m}:
+      u32_bits(v, i, n)
+    case VRf{k, j, s, r}:
+      u32_bits(r, i, n)
+    case Ann{x, ty, s}:
+      u32_bits(x, i, n)
+    case Ctr{"WCon", b <> rest <> Nil{}, s}:
+      +bit = u32_bits.bit(term_strip(b))
+      Bool.pick(Unit -> Maybe<&2, U32>, Bool.or(U32.is_eq(bit, 2), U32.is_ge(i, 32)), u => None{},
+        u => u32_bits(rest, U32.inc(i), (n .|. (bit << U32.to_nat(i) : U32) : U32)))(Unit{})
+    case Ctr{"WNil", Nil{}, s}:
+      Bool.pick(Maybe<&2, U32>, U32.is_eq(i, 32), Some{n}, None{})
+    case other:
+      None{}
+
 def u32_from_term.if(w: Tm, ok: Bool) -> Maybe<&2, U32>:
   match ok:
     case True{}:
-      u32_bits(term_strip(w), 0, 0)
+      u32_bits(w, 0, 0)
     case False{}:
       None{}
 
@@ -4155,32 +4171,8 @@ def u32_from_term.go(t: Tm, +k: String) -> Maybe<&2, U32>:
       None{}
 
 # The number a U32 (or F32, when k is "F32") constructor holds.
-@unsafe
 def u32_from_term(t: Tm, +k: String) -> Maybe<&2, U32>:
   u32_from_term.go(term_strip(t), k)
-
-@unsafe
-def u32_bits.next(rest: Tm, +i: U32, +n: U32) -> Maybe<&2, U32>:
-  Bool.pick(Maybe<&2, U32>, U32.is_ge(i, 32), None{}, u32_bits(term_strip(rest), U32.inc(i), n))
-
-def u32_bits.bit(b: Tm, rest: Tm, +i: U32, +n: U32) -> Maybe<&2, U32>:
-  match b:
-    case Ctr{"True", Nil{}, s}:
-      u32_bits.next(rest, i, (n .|. (1 << U32.to_nat(i) : U32) : U32))
-    case Ctr{"False", Nil{}, s}:
-      u32_bits.next(rest, i, n)
-    case other:
-      None{}
-
-@unsafe
-def u32_bits(w, i, n):
-  match w:
-    case Ctr{"WCon", b <> rest <> Nil{}, s}:
-      u32_bits.bit(term_strip(b), rest, i, n)
-    case Ctr{"WNil", Nil{}, s}:
-      Bool.pick(Maybe<&2, U32>, U32.is_eq(i, 32), Some{n}, None{})
-    case other:
-      None{}
 
 def term_force(t: Tm) -> Tm:
   match t:
@@ -4190,17 +4182,6 @@ def term_force(t: Tm) -> Tm:
       term_force(r)
     case other:
       other
-
-@unsafe
-def term_strip.go(t: Tm) -> Tm:
-  match t:
-    case Ann{x, ty, s}:
-      term_strip(x)
-    case other:
-      other
-
-def term_strip(t):
-  term_strip.go(term_force(t))
 
 # A cell's memo: bendc runs these natively, over an array of the cell's
 # term and its value (shared by every copy of the cell); as Bend they
@@ -4421,13 +4402,6 @@ def higher(book, tm, env):
       Ann{higher(book, x, env), higher(book, ty, env), s}
     case other:
       other
-
-def patt_term(p, s):
-  match p:
-    case PVar{k, i, q, ps}:
-      Var{k, i, Sp.or(s, ps)}
-    case PCtr{k, xs, ps}:
-      Ctr{k, patt_terms(xs, s), Sp.or(s, ps)}
 
 law lowers:
   for +book: Book
@@ -5601,70 +5575,12 @@ def PS.frs(+ps: PS) -> U32:
   PS{cur, stk, stn, +frs, book, src, ns, dir, al} = ps
   frs
 
-def op.ok(+sym: String, +r: String, +prev: U32) -> Bool:
-  +nx = Str.first(String.drop(r, String.length(sym)))
-  +c0 = Str.first(sym)
-  Bool.and(Str.prefix(r, sym), Bool.and(
-    Bool.not(Bool.and(Bool.or(String.eq(sym, "-"), String.eq(sym, "+")), Bool.or(U32.is_eq(nx, 62), is_head(nx)))),
-    Bool.and(Bool.not(Bool.and(U32.is_eq(c0, 62), Bool.not(Bool.or(is_space(prev), U32.is_zero(prev))))),
-      Bool.not(Bool.and(String.eq(sym, "%"), Bool.not(is_space(nx)))))))
-
-@unsafe
-def op.find.if(t: List<&2, Op>, +r: String, +prev: U32, o: Op, hit: Bool) -> Maybe<&2, Op>:
-  match hit:
-    case True{}:
-      Some{o}
-    case False{}:
-      op.find(t, r, prev)
-
-# The operator at the head of r (prev: the character before it).
-def op.find(ops, r, prev):
-  match ops:
-    case Nil{}:
-      None{}
-    case Op{+sym, +prec, +right, +name} <> t:
-      op.find.if(t, r, prev, Op{sym, prec, right, name}, op.ok(sym, r, prev))
-
 def Pt.is_var(+p: Pt) -> Bool:
   match p:
     case PVar{k, i, q, s}:
       True{}
     case other:
       False{}
-
-# The Sub-substitution of a body: a variable scrutinee i becomes pattern v.
-def body_sub.scrut(+i: U32, +v: Pt, e: Tm) -> Tm:
-  match e:
-    case Var{+k, +j, +s}:
-      Bool.pick(Tm, U32.is_eq(i, j), patt_term(v, s), Var{k, j, s})
-    case other:
-      Sub{i, v, other, NoSp{}}
-
-def body_sub.scruts(+i: U32, +v: Pt, es: List<&2, Tm>) -> List<&2, Tm>:
-  match es:
-    case Nil{}:
-      Nil{}
-    case e <> t:
-      body_sub.scrut(i, v, e) <> body_sub.scruts(i, v, t)
-
-@unsafe
-def body_sub.rows(rows: List<&2, Body>, +i: U32, +v: Pt) -> List<&2, Body>:
-  match rows:
-    case Nil{}:
-      Nil{}
-    case r <> t:
-      body_sub(r, i, v) <> body_sub.rows(t, i, v)
-
-def body_sub(b, i, v):
-  match b:
-    case BMatch{es, rows, s}:
-      BMatch{body_sub.scruts(i, v, es), body_sub.rows(rows, i, v), s}
-    case BLocal{ks, q, vs, f}:
-      BLocal{ks, q, body_sub.scruts(i, v, vs), body_sub(f, i, v)}
-    case BReply{x, s}:
-      BReply{Sub{i, v, x, NoSp{}}, s}
-    case Row{ps, f}:
-      Row{ps, body_sub(f, i, v)}
 
 def Row.first(r: Body) -> Pt:
   match r:
