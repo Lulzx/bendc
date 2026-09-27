@@ -2483,40 +2483,44 @@ def P.arms.go(acc):
     close : Bool <- P.take("}")
     P.if(List<&2, Tm> & Tm, close, P.pure(List<&2, Tm> & Tm, (acc, Efq{NoSp{}})), P.arms.item(acc))
 
-def P.rwt.named(+e0: Tm) -> P(String & Tm):
-  do P<String & Tm>:
+# A rewrite's binder name and its equality.
+type KT is Data:
+  KT{k: String, e: Tm}
+
+def P.rwt.named(+e0: Tm) -> P(KT):
+  do P<KT>:
     e : Tm <- P.term0()
-    return (Tm.name(e0), e)
+    return KT{Tm.name(e0), e}
 
 # %e : P; f   and   %k@e : P; f
-def P.rwt.name(+e0: Tm, at: Bool) -> P(String & Tm):
+def P.rwt.name(+e0: Tm, at: Bool) -> P(KT):
   match at:
     case True{}:
-      P.if(String & Tm, Tm.is_var(e0), P.rwt.named(e0),
-        P.fail(String & Tm, "a name before @ (a rewrite binder is one name: %e@E : P)"))
+      P.if(KT, Tm.is_var(e0), P.rwt.named(e0),
+        P.fail(KT, "a name before @ (a rewrite binder is one name: %e@E : P)"))
     case False{}:
-      P.pure(String & Tm, ("", e0))
+      P.pure(KT, KT{"", e0})
 
 def P.push_scope(b: SB) -> P(Unit):
   ps => Done{(Unit{}, PS.push(ps, b))}
 
-def P.rwt.go(+beg: U32, +e0: Tm, r: String & Tm) -> P(Tm):
-  (k, e) = r
-  +kk = k
-  do P<Tm>:
-    P.eat(":")
-    +n0 : Nat <- P.stn()
-    +xi : U32 <- P.fresh_id()
-    P.push_scope(SB{"_", xi})
-    +ei : U32 <- P.open(kk)
-    pr : Tm <- P.term0()
-    P.close(n0)
-    P.skip()
-    semi : Bool <- P.take(";")
-    f : Tm <- P.block()
-    +s : Sp <- P.span(beg)
-    return Rwt{e, Lam{"_", xi, CSyn{Nil{}, xi, Lam{kk, ei, CSyn{Nil{}, ei, pr}, Tm.span(e0), QUnd{}}}, s, QUnd{}},
-      f, s}
+def P.rwt.go(+beg: U32, +e0: Tm, r: KT) -> P(Tm):
+  match r:
+    case KT{+kk, e}:
+      do P<Tm>:
+        P.eat(":")
+        +n0 : Nat <- P.stn()
+        +xi : U32 <- P.fresh_id()
+        P.push_scope(SB{"_", xi})
+        +ei : U32 <- P.open(kk)
+        pr : Tm <- P.term0()
+        P.close(n0)
+        P.skip()
+        semi : Bool <- P.take(";")
+        f : Tm <- P.block()
+        +s : Sp <- P.span(beg)
+        return Rwt{e, Lam{"_", xi, CSyn{Nil{}, xi, Lam{kk, ei, CSyn{Nil{}, ei, pr}, Tm.span(e0), QUnd{}}}, s, QUnd{}},
+          f, s}
 
 def P.rwt(beg):
   do P<Tm>:
@@ -2524,7 +2528,7 @@ def P.rwt(beg):
     +e0 : Tm <- P.term0()
     P.skip()
     at : Bool <- P.take("@")
-    r : String & Tm <- P.rwt.name(e0, at)
+    r : KT <- P.rwt.name(e0, at)
     P.rwt.go(beg, e0, r)
 
 def all.build(exi: Bool, q: Q, +k: String, +i: U32, a: Tm, b: Tm, +s: Sp) -> Tm:
@@ -2829,13 +2833,20 @@ def P.ns.ref(+k: String, +s: Sp, b: Bool, +xs: List<&2, Tm>, +ty: Tm, op: Bool, 
     case False{} False{}:
       P.pure(Tm, apps(Ref{k, s, b}, xs, sp))
 
-def P.ns.app(r: Tm & List<&2, Tm>, ty: Tm, +sp: Sp) -> P(Tm):
+# A term as its head and arguments.
+type TmApp is Data:
+  TmApp{f: Tm, xs: List<&2, Tm>}
+
+def TmApp.of(r: Tm & List<&2, Tm>) -> TmApp:
   (f, xs) = r
-  match f:
-    case Ref{+k, +s, b}:
+  TmApp{f, xs}
+
+def P.ns.app(r: TmApp, ty: Tm, +sp: Sp) -> P(Tm):
+  match r:
+    case TmApp{Ref{+k, +s, b}, xs}:
       P.ns.ref(k, s, b, xs, ty, Nat.is_eq(Str.last_dot(k), 0n),
         Str.has(["Bool.and", "Bool.or", "String.append"], k), sp)
-    case other:
+    case TmApp{other, xs}:
       P.pure(Tm, apps(other, xs, sp))
 
 # Operators without a type (".add") take the namespace of the ': T' that
@@ -2848,7 +2859,7 @@ def P.ns(tm, ty):
         b : Tm <- P.ns(syn_body(f), ty)
         return Let{ks, ids, vs, CLet{Nil{}, ids, b}, s, qs}
     case +other:
-      P.ns.app(term_unapply(other), ty, Tm.span(other))
+      P.ns.app(TmApp.of(term_unapply(other)), ty, Tm.span(other))
 
 @unsafe
 def P.args.one(+close: String) -> P(List<&2, Tm>):
