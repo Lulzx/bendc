@@ -15,25 +15,12 @@ def Str.eq(+a: String, +b: String) -> Bool:
 def Str.chr(c: U32) -> String:
   SCon{Chr{c}, SNil{}}
 
-law Str.has:
-  for xs: List<&2, String>
-  for +x: String
-  Bool
-
-@unsafe
-def Str.has.if(t: List<&2, String>, +x: String, hit: Bool) -> Bool:
-  match hit:
-    case True{}:
-      True{}
-    case False{}:
-      Str.has(t, x)
-
-def Str.has(xs, x):
+def Str.has(xs: List<&2, String>, +x: String) -> Bool:
   match xs:
     case Nil{}:
       False{}
     case +h <> t:
-      Str.has.if(t, x, String.eq(h, x))
+      Bool.pick(Unit -> Bool, String.eq(h, x), u => True{}, u => Str.has(t, x))(Unit{})
 
 def Str.pad(+s: String, n: Nat) -> String:
   +m = String.length(s)
@@ -54,24 +41,12 @@ def Str.last_dot(s: String) -> Nat:
   Str.last_dot.go(s, 0n, 999999n)
 
 # The index of the first dot, or the length.
-law Str.first_dot:
-  for s: String
-  Nat
-
-@unsafe
-def Str.first_dot.if(dot: Bool, t: String) -> Nat:
-  match dot:
-    case True{}:
-      0n
-    case False{}:
-      1n+Str.first_dot(t)
-
-def Str.first_dot(s):
+def Str.first_dot(s: String) -> Nat:
   match s:
     case SNil{}:
       0n
     case SCon{Chr{+c}, t}:
-      Str.first_dot.if(U32.is_eq(c, 46), t)
+      Bool.pick(Unit -> Nat, U32.is_eq(c, 46), u => 0n, u => 1n+Str.first_dot(t))(Unit{})
 
 def Str.has_dot(s: String) -> Bool:
   match s:
@@ -158,18 +133,6 @@ def Str.from_codes(cs: List<&2, U32>) -> String:
     case c <> t:
       SCon{Chr{c}, Str.from_codes(t)}
 
-law Str.word_at:
-  for s: String
-  String
-
-@unsafe
-def Str.word_at.if(+c: U32, t: String, ok: Bool) -> String:
-  match ok:
-    case True{}:
-      SCon{Chr{c}, Str.word_at(t)}
-    case False{}:
-      ""
-
 def is_head(+c: U32) -> Bool:
   Bool.or(Bool.or(Bool.and(U32.is_ge(c, 65), U32.is_le(c, 90)), Bool.and(U32.is_ge(c, 97), U32.is_le(c, 122))),
     U32.is_eq(c, 95))
@@ -180,106 +143,54 @@ def is_digit(+c: U32) -> Bool:
 def is_name(+c: U32) -> Bool:
   Bool.or(Bool.or(is_head(c), is_digit(c)), U32.is_eq(c, 46))
 
-def Str.word_at(s):
+def Str.word_at(s: String) -> String:
   match s:
     case SCon{Chr{+c}, t}:
-      Str.word_at.if(c, t, Bool.or(is_name(c), U32.is_eq(c, 46)))
+      Bool.pick(Unit -> String, Bool.or(is_name(c), U32.is_eq(c, 46)), u => SCon{Chr{c}, Str.word_at(t)}, u => "")(Unit{})
     case SNil{}:
       ""
-
-law Str.words.go:
-  for s: String
-  for +cur: String
-  for acc: List<&2, String>
-  List<&2, String>
-
-@unsafe
-def Str.words(s: String) -> List<&2, String>:
-  Str.words.go(s, "", Nil{})
 
 def Str.words.push(+cur: String, +acc: List<&2, String>) -> List<&2, String>:
   Bool.pick(List<&2, String>, String.is_empty(cur), acc, cur <> acc)
 
-@unsafe
-def Str.words.chr(t: String, +c: U32, +cur: String, acc: List<&2, String>, sp: Bool) -> List<&2, String>:
-  match sp:
-    case True{}:
-      Str.words.go(t, "", Str.words.push(cur, acc))
-    case False{}:
-      Str.words.go(t, cur ++ Str.chr(c), acc)
-
 def is_space(+c: U32) -> Bool:
   Bool.or(Bool.or(U32.is_eq(c, 32), U32.is_eq(c, 10)), Bool.or(U32.is_eq(c, 13), U32.is_eq(c, 9)))
 
-def Str.words.go(s, cur, acc):
+def Str.words.go(s: String, +cur: String, +acc: List<&2, String>) -> List<&2, String>:
   match s:
     case SNil{}:
       List.reverse(&2, String, Str.words.push(cur, acc))
-    case SCon{Chr{+c}, t}:
-      Str.words.chr(t, c, cur, acc, is_space(c))
+    case SCon{Chr{+c}, +t}:
+      Bool.pick(Unit -> List<&2, String>, is_space(c), u => Str.words.go(t, "", Str.words.push(cur, acc)),
+        u => Str.words.go(t, cur ++ Str.chr(c), acc))(Unit{})
 
-law Str.until_hash:
-  for ws: List<&2, String>
-  List<&2, String>
+def Str.words(s: String) -> List<&2, String>:
+  Str.words.go(s, "", Nil{})
 
-@unsafe
-def Str.until_hash.if(hash: Bool, w: String, t: List<&2, String>) -> List<&2, String>:
-  match hash:
-    case True{}:
-      Nil{}
-    case False{}:
-      w <> Str.until_hash(t)
-
-def Str.until_hash(ws):
+def Str.until_hash(ws: List<&2, String>) -> List<&2, String>:
   match ws:
     case Nil{}:
       Nil{}
     case +w <> t:
-      Str.until_hash.if(String.starts_with(w, "#"), w, t)
+      Bool.pick(Unit -> List<&2, String>, String.starts_with(w, "#"), u => Nil{}, u => w <> Str.until_hash(t))(Unit{})
 
 def Str.trim(s: String) -> String:
   String.trim(s)
 
-law Str.index_of:
-  for s: String
-  for +p: String
-  for +i: Nat
-  Nat
-
-@unsafe
-def Str.index_of.if(t: String, +p: String, +i: Nat, hit: Bool) -> Nat:
-  match hit:
-    case True{}:
-      i
-    case False{}:
-      Str.index_of(t, p, 1n+i)
-
-def Str.index_of(s, p, i):
+def Str.index_of(s: String, +p: String, +i: Nat) -> Nat:
   match s:
     case SNil{}:
       0n
     case SCon{h, +t}:
-      Str.index_of.if(t, p, i, String.starts_with(SCon{h, t}, p))
+      Bool.pick(Unit -> Nat, String.starts_with(SCon{h, t}, p), u => i, u => Str.index_of(t, p, 1n+i))(Unit{})
 
-law Str.unique:
-  for xs: List<&2, String>
-  for +seen: List<&2, String>
-  List<&2, String>
-
-@unsafe
-def Str.unique.if(+x: String, t: List<&2, String>, +seen: List<&2, String>, dup: Bool) -> List<&2, String>:
-  match dup:
-    case True{}:
-      Str.unique(t, seen)
-    case False{}:
-      x <> Str.unique(t, x <> seen)
-
-def Str.unique(xs, seen):
+def Str.unique(xs: List<&2, String>, +seen: List<&2, String>) -> List<&2, String>:
   match xs:
     case Nil{}:
       Nil{}
-    case +x <> t:
-      Str.unique.if(x, t, seen, Str.has(seen, x))
+    case +x <> +t:
+      Bool.pick(Unit -> List<&2, String>, Str.has(seen, x), u => Str.unique(t, seen),
+        u => x <> Str.unique(t, x <> seen))(Unit{})
 
 def Str.filter_in.if(x: String, rest: List<&2, String>, keep: Bool) -> List<&2, String>:
   match keep:
@@ -421,14 +332,6 @@ def PS.set_cur(ps: PS, c: Cur) -> PS:
   PS{cur, stk, stn, frs, book, src, ns, dir, al} = ps
   PS{c, stk, stn, frs, book, src, ns, dir, al}
 
-law Cur.skip:
-  for +c: Cur
-  Cur
-
-@unsafe
-def P.skip() -> P(Unit):
-  +ps => Done{(Unit{}, PS.set_cur(ps, Cur.skip(PS.cur(ps))))}
-
 def P.pure(-A: Type, x: A) -> P(A):
   ps => Done{(x, ps)}
 
@@ -452,6 +355,10 @@ def P.go(-A: Type, -B: Type, r: Result<&1, &1, Err, A & PS>, f: A -> P(B)) ->
 
 def P.throw(-A: Type, e: Err) -> P(A):
   ps => Fail{e}
+
+# A parser out of fuel (no input nests this deep).
+def P.fuel(-A: Type) -> P(A):
+  P.throw(A, err0("less nesting (the parser ran out of fuel)", MNone{}, NoSp{}))
 
 def Cur.pos(+c: Cur) -> U32:
   Cur{rest, +pos, col, nl, prev} = c
@@ -518,18 +425,34 @@ def Cur.step(c: Cur) -> Cur:
   Cur{rest, +pos, +col, nl, prev} = c
   Cur.step.go(rest, pos, col, nl)
 
-@unsafe
-def Cur.steps(c: Cur, n: Nat) -> Cur:
+def Cur.steps(n: Nat, c: Cur) -> Cur:
   match n:
     case 0n:
       c
     case 1n+m:
-      Cur.steps(Cur.step(c), m)
+      Cur.steps(m, Cur.step(c))
+
+# Skips spaces and # comments (in a comment when line). r is the cursor's
+# rest: each step drops its first character.
+def Cur.skip.go(r: String, +c: Cur, +line: Bool) -> Cur:
+  match r:
+    case SNil{}:
+      c
+    case SCon{Chr{+x}, t}:
+      Bool.pick(Unit -> Cur, Bool.pick(Bool, line, Bool.not(U32.is_zero(x)), Bool.or(is_space(x), U32.is_eq(x, 35))),
+        u => Cur.skip.go(t, Cur.step(c), Bool.pick(Bool, line, Bool.not(U32.is_eq(x, 10)), U32.is_eq(x, 35))),
+        u => c)(Unit{})
+
+def Cur.skip(+c: Cur) -> Cur:
+  Cur.skip.go(Cur.rest(c), c, False{})
+
+def P.skip() -> P(Unit):
+  +ps => Done{(Unit{}, PS.set_cur(ps, Cur.skip(PS.cur(ps))))}
 
 def P.take.if(+s: String, ok: Bool) -> P(Bool):
   match ok:
     case True{}:
-      +ps => Done{(True{}, PS.set_cur(ps, Cur.steps(PS.cur(ps), String.length(s))))}
+      +ps => Done{(True{}, PS.set_cur(ps, Cur.steps(String.length(s), PS.cur(ps))))}
     case False{}:
       P.pure(Bool, False{})
 
@@ -666,16 +589,19 @@ def P.brack.log2.go(+s: Sp, n: Nat, m: Maybe<&2, Nat>) -> P(Tm):
     case Some{k}:
       P.pure(Tm, Lit{LNat{k}, s})
 
-law Nat.log2_exact.go:
-  for +n: Nat
-  for +k: Nat
-  for +p: Nat
-  Maybe<&2, Nat>
+# p is 2^k; f starts at n, and p < n leaves f > 0 (k < 2^k < n), so f = 0
+# only when n = 0, which is not a power of two.
+def Nat.log2_exact.go(f: Nat, +n: Nat, +k: Nat, +p: Nat) -> Maybe<&2, Nat>:
+  match f:
+    case 0n:
+      None{}
+    case 1n+g:
+      Bool.pick(Unit -> Maybe<&2, Nat>, Nat.is_lt(p, n), u => Nat.log2_exact.go(g, n, 1n+k, Nat.double(p)),
+        u => Bool.pick(Maybe<&2, Nat>, Nat.is_eq(p, n), Some{k}, None{}))(Unit{})
 
 # log2(n) when n is a power of two.
-@unsafe
 def Nat.log2_exact(+n: Nat) -> Maybe<&2, Nat>:
-  Nat.log2_exact.go(n, 0n, 1n)
+  Nat.log2_exact.go(n, n, 0n, 1n)
 
 def P.brack.log2(+s: Sp, m: Maybe<&2, Nat>) -> P(Tm):
   match m:
@@ -901,10 +827,18 @@ def P.lexeme.fin(r: String & Cur, +beg: U32) -> P(String):
     P.set_cur(c)
     P.lexeme.dot(k, beg)
 
-law Cur.name:
-  for +c: Cur
-  for acc: String
-  String & Cur
+# The name at the cursor (acc holds its characters so far, reversed). r is
+# the cursor's rest.
+def Cur.name.go(r: String, +c: Cur, +acc: String) -> String & Cur:
+  match r:
+    case SNil{}:
+      (String.reverse(acc), c)
+    case SCon{Chr{+x}, t}:
+      Bool.pick(Unit -> String & Cur, is_name(x), u => Cur.name.go(t, Cur.step(c), SCon{Chr{x}, acc}),
+        u => (String.reverse(acc), c))(Unit{})
+
+def Cur.name(+c: Cur, acc: String) -> String & Cur:
+  Cur.name.go(Cur.rest(c), c, acc)
 
 @unsafe
 def P.lexeme.go(+c: Cur) -> P(String):
@@ -931,10 +865,12 @@ def PS.stk(+ps: PS) -> List<&2, SB>:
   PS{cur, +stk, stn, frs, book, src, ns, dir, al} = ps
   stk
 
-law SB.find:
-  for xs: List<&2, SB>
-  for +k: String
-  Maybe<&2, U32>
+def SB.find(xs: List<&2, SB>, +k: String) -> Maybe<&2, U32>:
+  match xs:
+    case Nil{}:
+      None{}
+    case SB{+k2, +i} <> t:
+      Bool.pick(Unit -> Maybe<&2, U32>, String.eq(k, k2), u => Some{i}, u => SB.find(t, k))(Unit{})
 
 @unsafe
 def P.lookup(+k: String) -> P(Maybe<&2, U32>):
@@ -983,10 +919,12 @@ def PS.reso.alias(q: String, m: Maybe<&2, String>, rest: String, dot: Bool) -> S
     case x d:
       q
 
-law SB2.find:
-  for xs: List<&2, SB2>
-  for +k: String
-  Maybe<&2, String>
+def SB2.find(xs: List<&2, SB2>, +k: String) -> Maybe<&2, String>:
+  match xs:
+    case Nil{}:
+      None{}
+    case SB2{+k2, v} <> t:
+      Bool.pick(Unit -> Maybe<&2, String>, String.eq(k, k2), u => Some{v}, u => SB2.find(t, k))(Unit{})
 
 # The name k resolves to: qualified by the namespace (or an alias) when
 # such a name exists, else k itself.
@@ -1280,13 +1218,25 @@ def P.char.plain() -> P(U32):
     +c : U32 <- P.peek()
     P.if(U32, U32.is_zero(c), P.fail(U32, "a character"), P.char.take(c))
 
-law uesc.hex:
-  for s: String
-  for +acc: U32
-  for +n: Nat
-  Maybe<&1, U32 & Nat>
+def is_hex(+c: U32) -> Bool:
+  Bool.or(is_digit(c), Bool.or(Bool.and(U32.is_ge(c, 97), U32.is_le(c, 102)),
+    Bool.and(U32.is_ge(c, 65), U32.is_le(c, 70))))
 
-@unsafe
+def hex_val(+c: U32) -> U32:
+  Bool.pick(U32, is_digit(c), (c - 48 : U32), Bool.pick(U32, U32.is_ge(c, 97), (c - 87 : U32), (c - 55 : U32)))
+
+# The hex digits of a \u{..} escape up to its }: the value and length.
+def uesc.hex(s: String, +acc: U32, +n: Nat) -> Maybe<&1, U32 & Nat>:
+  match s:
+    case SCon{Chr{+c}, t}:
+      Bool.pick(Unit -> Maybe<&1, U32 & Nat>, is_hex(c),
+        u => Bool.pick(Unit -> Maybe<&1, U32 & Nat>, Nat.is_ge(n, 8n), v => None{},
+          v => uesc.hex(t, ((acc * 16 : U32) + hex_val(c) : U32), 1n+n))(Unit{}),
+        u => Bool.pick(Maybe<&1, U32 & Nat>, U32.is_eq(c, 125),
+          Bool.pick(Maybe<&1, U32 & Nat>, Nat.is_eq(n, 0n), None{}, Some{(acc, Nat.add(n, 3n))}), None{}))(Unit{})
+    case SNil{}:
+      None{}
+
 def uesc.if(t: String, ok: Bool) -> Maybe<&1, U32 & Nat>:
   match ok:
     case True{}:
@@ -1308,7 +1258,7 @@ def ESCAPES() -> List<&2, U32>:
 def P.escape.u.go(v: U32 & Nat) -> P(U32):
   (x, n) = v
   +xx = x
-  +ps => Done{(xx, PS.set_cur(ps, Cur.steps(PS.cur(ps), n)))}
+  +ps => Done{(xx, PS.set_cur(ps, Cur.steps(n, PS.cur(ps))))}
 
 def P.escape.named(m: Maybe<&2, U32>) -> P(U32):
   match m:
@@ -1317,10 +1267,12 @@ def P.escape.named(m: Maybe<&2, U32>) -> P(U32):
     case None{}:
       P.fail(U32, "an escape (\\n \\t \\r \\0 \\\\ \\' \\\" \\u{1F600})")
 
-law escape.find:
-  for e: List<&2, U32>
-  for +c: U32
-  Maybe<&2, U32>
+def escape.find(e: List<&2, U32>, +c: U32) -> Maybe<&2, U32>:
+  match e:
+    case +k <> v <> t:
+      Bool.pick(Unit -> Maybe<&2, U32>, U32.is_eq(k, c), u => Some{v}, u => escape.find(t, c))(Unit{})
+    case other:
+      None{}
 
 @unsafe
 def P.escape.u(m: Maybe<&1, U32 & Nat>) -> P(U32):
@@ -1372,15 +1324,23 @@ def codes.plain(cs: List<&2, U32>) -> Bool:
 def lit_of(+cs: List<&2, U32>, +s: Sp) -> Tm:
   Bool.pick(Tm, codes.plain(cs), Lit{LStr{Str.from_codes(cs)}, s}, lit_chain(cs, s))
 
-law P.str.go:
-  for +acc: List<&2, U32>
-  P(List<&2, U32>)
+# The characters of a string literal up to its closing quote.
+def P.str.go(n: Nat, +acc: List<&2, U32>) -> P(List<&2, U32>):
+  match n:
+    case 0n:
+      P.fuel(List<&2, U32>)
+    case 1n+p:
+      do P<List<&2, U32>>:
+        done : Bool <- P.take("\"")
+        +c : U32 <- P.peek()
+        P.if(List<&2, U32>, done, P.pure(List<&2, U32>, List.reverse(&2, U32, acc)),
+          P.if(List<&2, U32>, U32.is_zero(c), P.fail(List<&2, U32>, "a closing \""),
+            P.bind(U32, List<&2, U32>, P.char(), x => P.str.go(p, x <> acc))))
 
-@unsafe
 def P.str_lit(+beg: U32) -> P(Tm):
   do P<Tm>:
     P.bump()
-    +cs : List<&2, U32> <- P.str.go(Nil{})
+    +cs : List<&2, U32> <- P.str.go(Fuel.max(), Nil{})
     s : Sp <- P.span(beg)
     return lit_of(cs, s)
 
@@ -2525,19 +2485,6 @@ def P.rwt(beg):
     r : String & Tm <- P.rwt.name(e0, at)
     P.rwt.go(beg, e0, r)
 
-@unsafe
-def P.str.more(acc: List<&2, U32>) -> P(List<&2, U32>):
-  do P<List<&2, U32>>:
-    c : U32 <- P.char()
-    P.str.go(c <> acc)
-
-def P.str.go(acc):
-  do P<List<&2, U32>>:
-    done : Bool <- P.take("\"")
-    +c : U32 <- P.peek()
-    P.if(List<&2, U32>, done, P.pure(List<&2, U32>, List.reverse(&2, U32, acc)),
-      P.if(List<&2, U32>, U32.is_zero(c), P.fail(List<&2, U32>, "a closing \""), P.str.more(acc)))
-
 def all.build(exi: Bool, q: Q, +k: String, +i: U32, a: Tm, b: Tm, +s: Sp) -> Tm:
   match exi:
     case True{}:
@@ -2610,7 +2557,7 @@ def P.tup(beg):
     P.if(Tm, comma, P.tup.more(beg, b), P.tup.end(b))
 
 def P.steps(n: Nat) -> P(Unit):
-  +ps => Done{(Unit{}, PS.set_cur(ps, Cur.steps(PS.cur(ps), n)))}
+  +ps => Done{(Unit{}, PS.set_cur(ps, Cur.steps(n, PS.cur(ps))))}
 
 def F32.is_finite(+f: F32) -> Bool:
   +b = F32.bits(f)
@@ -3544,9 +3491,48 @@ def P.def.value(+k: String, tele: List<&2, TC>) -> P(Unit):
     P.set_book(book_set(b, k, Tld.with_v(book_tld(b, k),
       higher0(b, term_lower(b, higher0(b, flat), 0)))))
 
-law P.imports:
-  for +acc: List<&2, String>
-  P(List<&2, String>)
+def PS.dir(+ps: PS) -> String:
+  PS{cur, stk, stn, frs, book, src, ns, dir, al} = ps
+  dir
+
+def P.dir() -> P(String):
+  +ps => Done{(PS.dir(ps), ps)}
+
+# The text up to a quote (or the end).
+def P.until_quote(n: Nat, +acc: String) -> P(String):
+  match n:
+    case 0n:
+      P.fuel(String)
+    case 1n+p:
+      do P<String>:
+        +c : U32 <- P.peek()
+        P.if(String, Bool.or(U32.is_eq(c, 34), U32.is_zero(c)), P.pure(String, String.reverse(acc)),
+          P.bind(Unit, String, P.bump(), u => P.until_quote(p, SCon{Chr{c}, acc})))
+
+# The import "path" lines of a foreign def; one reads a line (after the
+# word import).
+def P.imports.go(n: Nat, +one: Bool, +acc: List<&2, String>) -> P(List<&2, String>):
+  match n:
+    case 0n:
+      P.fuel(List<&2, String>)
+    case 1n+ +p:
+      match one:
+        case True{}:
+          do P<List<&2, String>>:
+            P.eat("\"")
+            +eff : String <- P.until_quote(Fuel.max(), "")
+            P.eat("\"")
+            P.if(Unit, Bool.or(String.ends_with(eff, ".c"), String.ends_with(eff, ".js")), P.pure(Unit, Unit{}),
+              P.fail(Unit, "a .c or .js path"))
+            +dir : String <- P.dir()
+            P.imports.go(p, False{}, List.append(&2, String, acc, [dir ++ eff]))
+        case False{}:
+          do P<List<&2, String>>:
+            w : Bool <- P.word("import")
+            P.if(List<&2, String>, w, P.imports.go(p, True{}, acc), P.pure(List<&2, String>, acc))
+
+def P.imports(+acc: List<&2, String>) -> P(List<&2, String>):
+  P.imports.go(Fuel.max(), False{}, acc)
 
 def Tld.law_x(t: Maybe<&2, Tld>) -> Nat:
   match t:
@@ -3664,45 +3650,6 @@ def P.def(u: Bool) -> P(Unit):
     r : List<&2, TC> & Nat <- P.tele(")", Nil{}, 0n)
     P.skip()
     P.def.go(Bool.or(u, qm), k, lw, n0, r)
-
-def PS.dir(+ps: PS) -> String:
-  PS{cur, stk, stn, frs, book, src, ns, +dir, al} = ps
-  dir
-
-def P.dir() -> P(String):
-  +ps => Done{(PS.dir(ps), ps)}
-
-law P.until_quote:
-  for +acc: String
-  P(String)
-
-@unsafe
-def P.import1(acc: List<&2, String>) -> P(List<&2, String>):
-  do P<List<&2, String>>:
-    P.eat("\"")
-    +eff : String <- P.until_quote("")
-    P.eat("\"")
-    P.if(Unit, Bool.or(String.ends_with(eff, ".c"), String.ends_with(eff, ".js")), P.pure(Unit, Unit{}),
-      P.fail(Unit, "a .c or .js path"))
-    +dir : String <- P.dir()
-    P.imports(List.append(&2, String, acc, [dir ++ eff]))
-
-def P.imports(acc):
-  do P<List<&2, String>>:
-    w : Bool <- P.word("import")
-    P.if(List<&2, String>, w, P.import1(acc), P.pure(List<&2, String>, acc))
-
-@unsafe
-def P.until_quote.more(+c: U32, acc: String) -> P(String):
-  do P<String>:
-    P.bump()
-    P.until_quote(SCon{Chr{c}, acc})
-
-def P.until_quote(acc):
-  do P<String>:
-    +c : U32 <- P.peek()
-    P.if(String, Bool.or(U32.is_eq(c, 34), U32.is_zero(c)), P.pure(String, String.reverse(acc)),
-      P.until_quote.more(c, acc))
 
 law P.ctor:
   for +k: String
@@ -5650,142 +5597,9 @@ def err_show(e: Err) -> String:
     Bool.pick(String, Bool.and(String.is_empty(df), String.is_empty(sp)), "", "\nLocation:" ++ df ++ sp) ++
     Bool.pick(String, String.is_empty(nte), "", "\n" ++ nte)
 
-law Cur.line:
-  for +c: Cur
-  Cur
-
-@unsafe
-def Cur.skip.c(c: Cur, k: Nat) -> Cur:
-  match k:
-    case 0n:
-      c
-    case 1n:
-      Cur.skip(Cur.step(c))
-    case 2n+p:
-      Cur.skip(Cur.line(c))
-
-def Cur.skip.go(+x: U32, c: Cur) -> Cur:
-  Cur.skip.c(c, Bool.pick(Nat, is_space(x), 1n, Bool.pick(Nat, U32.is_eq(x, 35), 2n, 0n)))
-
-# Skips spaces and # comments.
-def Cur.skip(c):
-  Cur.skip.go(Cur.peek(c), c)
-
-@unsafe
-def Cur.line.c(c: Cur, stop: Bool) -> Cur:
-  match stop:
-    case True{}:
-      c
-    case False{}:
-      Cur.line(Cur.step(c))
-
-def Cur.line.go(+x: U32, c: Cur) -> Cur:
-  Cur.line.c(c, Bool.or(U32.is_eq(x, 10), U32.is_zero(x)))
-
-# Moves to the end of the line (before its newline).
-def Cur.line(c):
-  Cur.line.go(Cur.peek(c), c)
-
-@unsafe
-def Cur.name.c(+x: U32, c: Cur, acc: String, ok: Bool) -> String & Cur:
-  match ok:
-    case True{}:
-      Cur.name(Cur.step(c), SCon{Chr{x}, acc})
-    case False{}:
-      (String.reverse(acc), c)
-
-def Cur.name.go(+x: U32, c: Cur, acc: String) -> String & Cur:
-  Cur.name.c(x, c, acc, is_name(x))
-
-def Cur.name(c, acc):
-  Cur.name.go(Cur.peek(c), c, acc)
-
 def PS.frs(+ps: PS) -> U32:
   PS{cur, stk, stn, +frs, book, src, ns, dir, al} = ps
   frs
-
-@unsafe
-def SB.find.if(t: List<&2, SB>, +k: String, +i: U32, hit: Bool) -> Maybe<&2, U32>:
-  match hit:
-    case True{}:
-      Some{i}
-    case False{}:
-      SB.find(t, k)
-
-def SB.find(xs, k):
-  match xs:
-    case Nil{}:
-      None{}
-    case SB{+k2, +i} <> t:
-      SB.find.if(t, k, i, String.eq(k, k2))
-
-@unsafe
-def SB2.find.if(t: List<&2, SB2>, +k: String, v: String, hit: Bool) -> Maybe<&2, String>:
-  match hit:
-    case True{}:
-      Some{v}
-    case False{}:
-      SB2.find(t, k)
-
-def SB2.find(xs, k):
-  match xs:
-    case Nil{}:
-      None{}
-    case SB2{+k2, v} <> t:
-      SB2.find.if(t, k, v, String.eq(k, k2))
-
-@unsafe
-def escape.find.if(t: List<&2, U32>, +c: U32, v: U32, hit: Bool) -> Maybe<&2, U32>:
-  match hit:
-    case True{}:
-      Some{v}
-    case False{}:
-      escape.find(t, c)
-
-def escape.find(e, c):
-  match e:
-    case +k <> v <> t:
-      escape.find.if(t, c, v, U32.is_eq(k, c))
-    case other:
-      None{}
-
-def is_hex(+c: U32) -> Bool:
-  Bool.or(is_digit(c), Bool.or(Bool.and(U32.is_ge(c, 97), U32.is_le(c, 102)),
-    Bool.and(U32.is_ge(c, 65), U32.is_le(c, 70))))
-
-def hex_val(+c: U32) -> U32:
-  Bool.pick(U32, is_digit(c), (c - 48 : U32), Bool.pick(U32, U32.is_ge(c, 97), (c - 87 : U32), (c - 55 : U32)))
-
-@unsafe
-def uesc.hex.if(t: String, +c: U32, +acc: U32, +n: Nat, hex: Bool, close: Bool) -> Maybe<&1, U32 & Nat>:
-  match hex close:
-    case True{} x:
-      Bool.pick(Maybe<&1, U32 & Nat>, Nat.is_ge(n, 8n), None{},
-        uesc.hex(t, ((acc * 16 : U32) + hex_val(c) : U32), 1n+n))
-    case False{} True{}:
-      Bool.pick(Maybe<&1, U32 & Nat>, Nat.is_eq(n, 0n), None{}, Some{(acc, Nat.add(n, 3n))})
-    case False{} False{}:
-      None{}
-
-def uesc.hex(s, acc, n):
-  match s:
-    case SCon{Chr{+c}, t}:
-      uesc.hex.if(t, c, acc, n, is_hex(c), U32.is_eq(c, 125))
-    case SNil{}:
-      None{}
-
-@unsafe
-def Nat.log2_exact.cmp(+n: Nat, +k: Nat, +p: Nat, c: Cmp) -> Maybe<&2, Nat>:
-  match c:
-    case LT{}:
-      Nat.log2_exact.go(n, 1n+k, Nat.double(p))
-    case EQ{}:
-      Some{k}
-    case GT{}:
-      None{}
-
-def Nat.log2_exact.go(n, k, p):
-  Nat.log2_exact.cmp(n, k, p, Nat.cmp(p, n))
 
 def op.ok(+sym: String, +r: String, +prev: U32) -> Bool:
   +nx = Str.first(String.drop(r, String.length(sym)))
