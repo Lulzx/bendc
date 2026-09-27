@@ -4908,57 +4908,9 @@ def Tm.lam_k(a: Tm, b: Tm) -> String:
     case x y:
       "_"
 
-law cmp.wnf:
-  for le: Bool
-  for +book: Book
-  for +a: Tm
-  for +b: Tm
-  for +dep: U32
-  Bool
-
-@unsafe
-def term_compare(le: Bool, +book: Book, lhs: Tm, rhs: Tm, +dep: U32) -> Bool:
-  cmp.wnf(le, book, term_wnf(book, lhs), term_wnf(book, rhs), dep)
-
 # A literal compared with a constructor takes one step.
 def cmp.lit(+a: Tm, +b: Tm) -> Tm:
   Bool.pick(Tm, Bool.and(Tm.is_lit(a), Tm.is_ctr(b)), lit_step(a), a)
-
-law cmp.go:
-  for +le: Bool
-  for +book: Book
-  for a: Tm
-  for b: Tm
-  for +dep: U32
-  Bool
-
-@unsafe
-def cmp.lam(le: Bool, +book: Book, +a: Tm, +b: Tm, +dep: U32, lam: Bool) -> Bool:
-  match lam:
-    case True{}:
-      +x = {Var{Tm.lam_k(a, b), dep, NoSp{}} : Tm}
-      term_compare(le, book, term_apply1(book, a, x), term_apply1(book, b, x), U32.inc(dep))
-    case False{}:
-      cmp.go(le, book, cmp.lit(a, b), cmp.lit(b, a), dep)
-
-def cmp.wnf(le, book, a, b, dep):
-  cmp.lam(le, book, a, b, dep, Bool.or(Tm.is_lam(a), Tm.is_lam(b)))
-
-law cmps:
-  for xs: List<&2, Tm>
-  for ys: List<&2, Tm>
-  for +book: Book
-  for +dep: U32
-  Bool
-
-def cmps(xs, ys, book, dep):
-  match xs ys:
-    case x <> xt y <> yt:
-      Lazy.and(term_compare(False{}, book, x, y, dep), u => cmps(xt, yt, book, dep))
-    case Nil{} Nil{}:
-      True{}
-    case p q:
-      False{}
 
 def Tm.is_many(t: Tm) -> Bool:
   match t:
@@ -4983,37 +4935,6 @@ def Lazy.or(a: Bool, f: Unit -> Bool) -> Bool:
     case False{}:
       f(Unit{})
 
-def cmp.kind.rmin(+book: Book, +g: Tm, h: Tm, +dep: U32) -> Bool:
-  match h:
-    case Min{a, b, s}:
-      Lazy.or(term_compare(True{}, book, Typ{g, NoSp{}}, Typ{a, NoSp{}}, dep), u => term_compare(True{}, book, Typ{g, NoSp{}}, Typ{b, NoSp{}}, dep))
-    case other:
-      term_compare(True{}, book, g, other, dep)
-
-def cmp.kind.min(+book: Book, g: Tm, +h: Tm, +dep: U32) -> Bool:
-  match g:
-    case Min{a, b, s}:
-      Lazy.and(term_compare(True{}, book, Typ{a, NoSp{}}, Typ{h, NoSp{}}, dep), u => term_compare(True{}, book, Typ{b, NoSp{}}, Typ{h, NoSp{}}, dep))
-    case other:
-      cmp.kind.rmin(book, other, h, dep)
-
-def cmp.kind.go(+book: Book, g: Tm, h: Tm, +dep: U32, done: Bool) -> Bool:
-  match done:
-    case True{}:
-      True{}
-    case False{}:
-      cmp.kind.min(book, g, h, dep)
-
-def cmp.kind(+book: Book, +g: Tm, +h: Tm, +dep: U32) -> Bool:
-  cmp.kind.go(book, g, h, dep, Bool.or(Tm.is_many(g), Tm.is_qua_not_many(h)))
-
-def cmp.typ(le: Bool, +book: Book, g: Tm, h: Tm, +dep: U32) -> Bool:
-  match le:
-    case False{}:
-      term_compare(False{}, book, g, h, dep)
-    case True{}:
-      cmp.kind(book, term_wnf(book, g), term_wnf(book, h), dep)
-
 def Tld.arity(t: Maybe<&2, Tld>) -> Nat:
   match t:
     case Some{TDef{n, x, t, v, u, b, imps}}:
@@ -5031,62 +4952,154 @@ def cmp.fresh(n: Nat, f: Tm, +dep: U32) -> Tm:
     case 1n+m:
       cmp.fresh(m, TApp{f, Var{"_", dep, NoSp{}}, NoSp{}}, U32.inc(dep))
 
-# A bare def is under-applied, so a function: two defs convert when they
-# agree on fresh arguments (eta, as for a lambda; #1028).
-def cmp.ref(+book: Book, +k: String, +k2: String, a: Tm, b: Tm, +dep: U32) -> Bool:
-  +n = Nat.max(Tld.arity(book_tld(book, k)), Tld.arity(book_tld(book, k2)))
-  Lazy.or(String.eq(k, k2), u => Lazy.and(Bool.not(Nat.is_eq(n, 0n)),
-    u => term_compare(False{}, book, cmp.fresh(n, a, dep), cmp.fresh(n, b, dep), U32.add(dep, U32.from_nat(n)))))
+type CmpSel is Data:
+  STermCompare{le: Bool, book: Book, lhs: Tm, rhs: Tm, dep: U32}
+  SCmpLam{le: Bool, book: Book, a: Tm, b: Tm, dep: U32, lam: Bool}
+  SCmpWnf{le: Bool, book: Book, a: Tm, b: Tm, dep: U32}
+  SCmps{xs: List<&2, Tm>, ys: List<&2, Tm>, book: Book, dep: U32}
+  SCmpKindRmin{book: Book, g: Tm, h: Tm, dep: U32}
+  SCmpKindMin{book: Book, g: Tm, h: Tm, dep: U32}
+  SCmpKindGo{book: Book, g: Tm, h: Tm, dep: U32, done: Bool}
+  SCmpKind{book: Book, g: Tm, h: Tm, dep: U32}
+  SCmpTyp{le: Bool, book: Book, g: Tm, h: Tm, dep: U32}
+  SCmpRef{book: Book, k: String, k2: String, a: Tm, b: Tm, dep: U32}
+  SCmpHead{book: Book, f1: Tm, f2: Tm, dep: U32}
+  SCmpGo{le: Bool, book: Book, a: Tm, b: Tm, dep: U32}
 
-# A stuck call is canonical: its head def compares by name, not by eta.
-def cmp.head(+book: Book, f1: Tm, f2: Tm, +dep: U32) -> Bool:
-  match f1 f2:
-    case Ref{k, s, x} Ref{k2, s2, y}:
-      String.eq(k, k2)
-    case x y:
-      term_compare(False{}, book, x, y, dep)
+# The conversion check, one def: sel picks the step. Out of fuel, terms
+# are not equal.
+def cmp.run(fuel0: Nat, sel: CmpSel) -> Bool:
+  match fuel0:
+    case 0n:
+      match sel:
+        case STermCompare{le, book, lhs, rhs, dep}:
+          False{}
+        case SCmpLam{le, book, a, b, dep, lam}:
+          False{}
+        case SCmpWnf{le, book, a, b, dep}:
+          False{}
+        case SCmps{xs, ys, book, dep}:
+          False{}
+        case SCmpKindRmin{book, g, h, dep}:
+          False{}
+        case SCmpKindMin{book, g, h, dep}:
+          False{}
+        case SCmpKindGo{book, g, h, dep, done}:
+          False{}
+        case SCmpKind{book, g, h, dep}:
+          False{}
+        case SCmpTyp{le, book, g, h, dep}:
+          False{}
+        case SCmpRef{book, k, k2, a, b, dep}:
+          False{}
+        case SCmpHead{book, f1, f2, dep}:
+          False{}
+        case SCmpGo{le, book, a, b, dep}:
+          False{}
+    case 1n+ +fuel:
+      match sel:
+        case STermCompare{le, +book, lhs, rhs, +dep}:
+          cmp.run(fuel, SCmpWnf{le, book, term_wnf(book, lhs), term_wnf(book, rhs), dep})
+        case SCmpLam{le, +book, +a, +b, +dep, lam}:
+          match lam:
+            case True{}:
+              +x = {Var{Tm.lam_k(a, b), dep, NoSp{}} : Tm}
+              cmp.run(fuel, STermCompare{le, book, term_apply1(book, a, x), term_apply1(book, b, x), U32.inc(dep)})
+            case False{}:
+              cmp.run(fuel, SCmpGo{le, book, cmp.lit(a, b), cmp.lit(b, a), dep})
+        case SCmpWnf{le, +book, +a, +b, +dep}:
+          cmp.run(fuel, SCmpLam{le, book, a, b, dep, Bool.or(Tm.is_lam(a), Tm.is_lam(b))})
+        case SCmps{xs, ys, +book, +dep}:
+          match xs ys:
+            case x <> xt y <> yt:
+              Lazy.and(cmp.run(fuel, STermCompare{False{}, book, x, y, dep}), u => cmp.run(fuel, SCmps{xt, yt, book, dep}))
+            case Nil{} Nil{}:
+              True{}
+            case p q:
+              False{}
+        case SCmpKindRmin{+book, +g, h, +dep}:
+          match h:
+            case Min{a, b, s}:
+              Lazy.or(cmp.run(fuel, STermCompare{True{}, book, Typ{g, NoSp{}}, Typ{a, NoSp{}}, dep}), u => cmp.run(fuel, STermCompare{True{}, book, Typ{g, NoSp{}}, Typ{b, NoSp{}}, dep}))
+            case other:
+              cmp.run(fuel, STermCompare{True{}, book, g, other, dep})
+        case SCmpKindMin{+book, g, +h, +dep}:
+          match g:
+            case Min{a, b, s}:
+              Lazy.and(cmp.run(fuel, STermCompare{True{}, book, Typ{a, NoSp{}}, Typ{h, NoSp{}}, dep}), u => cmp.run(fuel, STermCompare{True{}, book, Typ{b, NoSp{}}, Typ{h, NoSp{}}, dep}))
+            case other:
+              cmp.run(fuel, SCmpKindRmin{book, other, h, dep})
+        case SCmpKindGo{+book, g, h, +dep, done}:
+          match done:
+            case True{}:
+              True{}
+            case False{}:
+              cmp.run(fuel, SCmpKindMin{book, g, h, dep})
+        case SCmpKind{+book, +g, +h, +dep}:
+          cmp.run(fuel, SCmpKindGo{book, g, h, dep, Bool.or(Tm.is_many(g), Tm.is_qua_not_many(h))})
+        case SCmpTyp{le, +book, g, h, +dep}:
+          match le:
+            case False{}:
+              cmp.run(fuel, STermCompare{False{}, book, g, h, dep})
+            case True{}:
+              cmp.run(fuel, SCmpKind{book, term_wnf(book, g), term_wnf(book, h), dep})
+        # A bare def is under-applied, so a function: two defs convert when they
+        # agree on fresh arguments (eta, as for a lambda; #1028).
+        case SCmpRef{+book, +k, +k2, a, b, +dep}:
+          +n = Nat.max(Tld.arity(book_tld(book, k)), Tld.arity(book_tld(book, k2)))
+          Lazy.or(String.eq(k, k2), u => Lazy.and(Bool.not(Nat.is_eq(n, 0n)),
+            u => cmp.run(fuel, STermCompare{False{}, book, cmp.fresh(n, a, dep), cmp.fresh(n, b, dep), U32.add(dep, U32.from_nat(n))})))
+        # A stuck call is canonical: its head def compares by name, not by eta.
+        case SCmpHead{+book, f1, f2, +dep}:
+          match f1 f2:
+            case Ref{k, s, x} Ref{k2, s2, y}:
+              String.eq(k, k2)
+            case x y:
+              cmp.run(fuel, STermCompare{False{}, book, x, y, dep})
+        case SCmpGo{+le, +book, a, b, +dep}:
+          match a b:
+            case Var{k, i, s} Var{k2, j, s2}:
+              U32.is_eq(i, j)
+            case Ref{+k, +s, x} Ref{+k2, +s2, y}:
+              cmp.run(fuel, SCmpRef{book, k, k2, Ref{k, s, x}, Ref{k2, s2, y}, dep})
+            case Typ{g, s} Typ{h, s2}:
+              cmp.run(fuel, SCmpTyp{le, book, g, h, dep})
+            case Qnt{s} Qnt{s2}:
+              True{}
+            case TQua{q, s} TQua{q2, s2}:
+              Q.eq(q, q2)
+            case Min{a1, b1, s} Min{a2, b2, s2}:
+              Lazy.and(cmp.run(fuel, STermCompare{False{}, book, a1, a2, dep}), u => cmp.run(fuel, STermCompare{False{}, book, b1, b2, dep}))
+            case All{+q, +k, i, a1, b1, s} All{q2, k2, j, a2, b2, s2}:
+              +x = {Var{k, dep, NoSp{}} : Tm}
+              Lazy.and(Q.eq(q, q2), u => Lazy.and(cmp.run(fuel, STermCompare{le, book, a2, a1, dep}), u => cmp.run(fuel, STermCompare{le, book, clo_apply(book, b1, [x]), clo_apply(book, b2, [x]), U32.inc(dep)})))
+            case TApp{f1, x1, s} TApp{f2, x2, s2}:
+              Lazy.and(cmp.run(fuel, SCmpHead{book, f1, f2, dep}), u => cmp.run(fuel, STermCompare{False{}, book, x1, x2, dep}))
+            case ADT{+k, +xs, s, +r} ADT{+k2, +ys, s2, +r2}:
+              Lazy.and(Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), List.length(&2, Tm, ys))), u => Lazy.and(Bool.or(le, Nat.is_eq(List.length(&2, String, r), List.length(&2, String, r2))), u => Lazy.and(Str.subset(r2, r), u => cmp.run(fuel, SCmps{xs, ys, book, dep}))))
+            case Ctr{+k, +xs, s} Ctr{+k2, +ys, s2}:
+              Lazy.and(Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), List.length(&2, Tm, ys))), u => cmp.run(fuel, SCmps{xs, ys, book, dep}))
+            case Lit{LNat{n}, s} Lit{LNat{m}, s2}:
+              Nat.is_eq(n, m)
+            case Lit{LStr{x}, s} Lit{LStr{y}, s2}:
+              String.eq(x, y)
+            case Mat{k, h1, m1, s} Mat{k2, h2, m2, s2}:
+              Lazy.and(String.eq(k, k2), u => Lazy.and(cmp.run(fuel, STermCompare{False{}, book, h1, h2, dep}), u => cmp.run(fuel, STermCompare{False{}, book, m1, m2, dep})))
+            case Efq{s} Efq{s2}:
+              True{}
+            case Eql{a1, b1, t1, s} Eql{a2, b2, t2, s2}:
+              Lazy.and(cmp.run(fuel, STermCompare{False{}, book, a1, a2, dep}), u => Lazy.and(cmp.run(fuel, STermCompare{False{}, book, b1, b2, dep}), u => cmp.run(fuel, STermCompare{False{}, book, t1, t2, dep})))
+            case Rfl{s} Rfl{s2}:
+              True{}
+            case Hol{k, s} Hol{k2, s2}:
+              String.eq(k, k2)
+            case Rwt{e1, p1, f1, s} Rwt{e2, p2, f2, s2}:
+              Lazy.and(cmp.run(fuel, STermCompare{False{}, book, e1, e2, dep}), u => Lazy.and(cmp.run(fuel, STermCompare{False{}, book, p1, p2, dep}), u => cmp.run(fuel, STermCompare{False{}, book, f1, f2, dep})))
+            case x y:
+              False{}
 
-def cmp.go(le, book, a, b, dep):
-  match a b:
-    case Var{k, i, s} Var{k2, j, s2}:
-      U32.is_eq(i, j)
-    case Ref{+k, +s, x} Ref{+k2, +s2, y}:
-      cmp.ref(book, k, k2, Ref{k, s, x}, Ref{k2, s2, y}, dep)
-    case Typ{g, s} Typ{h, s2}:
-      cmp.typ(le, book, g, h, dep)
-    case Qnt{s} Qnt{s2}:
-      True{}
-    case TQua{q, s} TQua{q2, s2}:
-      Q.eq(q, q2)
-    case Min{a1, b1, s} Min{a2, b2, s2}:
-      Lazy.and(term_compare(False{}, book, a1, a2, dep), u => term_compare(False{}, book, b1, b2, dep))
-    case All{+q, +k, i, a1, b1, s} All{q2, k2, j, a2, b2, s2}:
-      +x = {Var{k, dep, NoSp{}} : Tm}
-      Lazy.and(Q.eq(q, q2), u => Lazy.and(term_compare(le, book, a2, a1, dep), u => term_compare(le, book, clo_apply(book, b1, [x]), clo_apply(book, b2, [x]), U32.inc(dep))))
-    case TApp{f1, x1, s} TApp{f2, x2, s2}:
-      Lazy.and(cmp.head(book, f1, f2, dep), u => term_compare(False{}, book, x1, x2, dep))
-    case ADT{+k, +xs, s, +r} ADT{+k2, +ys, s2, +r2}:
-      Lazy.and(Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), List.length(&2, Tm, ys))), u => Lazy.and(Bool.or(le, Nat.is_eq(List.length(&2, String, r), List.length(&2, String, r2))), u => Lazy.and(Str.subset(r2, r), u => cmps(xs, ys, book, dep))))
-    case Ctr{+k, +xs, s} Ctr{+k2, +ys, s2}:
-      Lazy.and(Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), List.length(&2, Tm, ys))), u => cmps(xs, ys, book, dep))
-    case Lit{LNat{n}, s} Lit{LNat{m}, s2}:
-      Nat.is_eq(n, m)
-    case Lit{LStr{x}, s} Lit{LStr{y}, s2}:
-      String.eq(x, y)
-    case Mat{k, h1, m1, s} Mat{k2, h2, m2, s2}:
-      Lazy.and(String.eq(k, k2), u => Lazy.and(term_compare(False{}, book, h1, h2, dep), u => term_compare(False{}, book, m1, m2, dep)))
-    case Efq{s} Efq{s2}:
-      True{}
-    case Eql{a1, b1, t1, s} Eql{a2, b2, t2, s2}:
-      Lazy.and(term_compare(False{}, book, a1, a2, dep), u => Lazy.and(term_compare(False{}, book, b1, b2, dep), u => term_compare(False{}, book, t1, t2, dep)))
-    case Rfl{s} Rfl{s2}:
-      True{}
-    case Hol{k, s} Hol{k2, s2}:
-      String.eq(k, k2)
-    case Rwt{e1, p1, f1, s} Rwt{e2, p2, f2, s2}:
-      Lazy.and(term_compare(False{}, book, e1, e2, dep), u => Lazy.and(term_compare(False{}, book, p1, p2, dep), u => term_compare(False{}, book, f1, f2, dep)))
-    case x y:
-      False{}
+def term_compare(le: Bool, +book: Book, lhs: Tm, rhs: Tm, +dep: U32) -> Bool:
+  cmp.run(Fuel.max(), STermCompare{le, book, lhs, rhs, dep})
 
 def show.chain.cons(x: Tm, r: List<&2, Tm> & Tm) -> List<&2, Tm> & Tm:
   (xs, t) = r
