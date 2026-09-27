@@ -3534,9 +3534,69 @@ def P.check_ops.c(c: Maybe<&2, Tm>) -> P(Unit):
     case Some{r}:
       P.throw(Unit, ops.err(r))
 
-law ops.bare:
-  for t: Tm
-  Maybe<&2, Tm>
+def ops.first(a: Maybe<&2, Tm>, b: Maybe<&2, Tm>) -> Maybe<&2, Tm>:
+  match a:
+    case Some{x}:
+      Some{x}
+    case None{}:
+      b
+
+# The first bare operator in t. body: t is a binder's body, so a closure
+# stands for the term it holds. A list of fields goes one at a time, each
+# step on the same constructor with fewer fields.
+def ops.bare.go(t: Tm, body: Bool) -> Maybe<&2, Tm>:
+  match t:
+    case Ref{+k, +s, b}:
+      Bool.pick(Maybe<&2, Tm>, Nat.is_eq(Str.last_dot(k), 0n), Some{Ref{k, s, b}}, None{})
+    case Sub{i, p, f, s}:
+      ops.bare.go(f, False{})
+    case Let{ks, ids, vs, f, s, qs}:
+      match vs:
+        case Nil{}:
+          ops.bare.go(f, True{})
+        case h <> vt:
+          ops.first(ops.bare.go(h, False{}), ops.bare.go(Let{ks, ids, vt, f, s, qs}, False{}))
+    case Typ{g, s}:
+      ops.bare.go(g, False{})
+    case Min{a, b, s}:
+      ops.first(ops.bare.go(a, False{}), ops.bare.go(b, False{}))
+    case All{q, k, i, a, b, s}:
+      ops.first(ops.bare.go(a, False{}), ops.bare.go(b, True{}))
+    case Lam{k, i, f, s, q}:
+      ops.bare.go(f, True{})
+    case TApp{f, x, s}:
+      ops.first(ops.bare.go(f, False{}), ops.bare.go(x, False{}))
+    case ADT{k, xs, s, r}:
+      match xs:
+        case Nil{}:
+          None{}
+        case h <> xt:
+          ops.first(ops.bare.go(h, False{}), ops.bare.go(ADT{k, xt, s, r}, False{}))
+    case Ctr{k, xs, s}:
+      match xs:
+        case Nil{}:
+          None{}
+        case h <> xt:
+          ops.first(ops.bare.go(h, False{}), ops.bare.go(Ctr{k, xt, s}, False{}))
+    case Mat{k, h, m, s}:
+      ops.first(ops.bare.go(h, False{}), ops.bare.go(m, False{}))
+    case Eql{a, b, ty, s}:
+      ops.first(ops.bare.go(a, False{}), ops.first(ops.bare.go(b, False{}), ops.bare.go(ty, False{})))
+    case Rwt{e, p, f, s}:
+      ops.first(ops.bare.go(e, False{}), ops.first(ops.bare.go(p, False{}), ops.bare.go(f, False{})))
+    case Ann{x, ty, s}:
+      ops.first(ops.bare.go(x, False{}), ops.bare.go(ty, False{}))
+    case VRf{k, i, s, r}:
+      ops.bare.go(r, False{})
+    case CSyn{env, i, b}:
+      Bool.pick(Unit -> Maybe<&2, Tm>, body, u => ops.bare.go(b, False{}), u => None{})(Unit{})
+    case CLet{env, ids, b}:
+      Bool.pick(Unit -> Maybe<&2, Tm>, body, u => ops.bare.go(b, False{}), u => None{})(Unit{})
+    case other:
+      None{}
+
+def ops.bare(t: Tm) -> Maybe<&2, Tm>:
+  ops.bare.go(t, False{})
 
 # A bare operator (".add") names no type: the official checker rejects it.
 @unsafe
@@ -5599,57 +5659,6 @@ def Row.first(r: Body) -> Pt:
       p
     case other:
       PVar{"_", 0, QLone{}, NoSp{}}
-
-def ops.first(a: Maybe<&2, Tm>, b: Maybe<&2, Tm>) -> Maybe<&2, Tm>:
-  match a:
-    case Some{x}:
-      Some{x}
-    case None{}:
-      b
-
-@unsafe
-def ops.bares(xs: List<&2, Tm>) -> Maybe<&2, Tm>:
-  match xs:
-    case Nil{}:
-      None{}
-    case x <> t:
-      ops.first(ops.bare(x), ops.bares(t))
-
-@unsafe
-def ops.bare(t):
-  match t:
-    case Ref{+k, +s, b}:
-      Bool.pick(Maybe<&2, Tm>, Nat.is_eq(Str.last_dot(k), 0n), Some{Ref{k, s, b}}, None{})
-    case Sub{i, p, f, s}:
-      ops.bare(f)
-    case Let{ks, ids, vs, f, s, qs}:
-      ops.first(ops.bares(vs), ops.bare(syn_body(f)))
-    case Typ{g, s}:
-      ops.bare(g)
-    case Min{a, b, s}:
-      ops.first(ops.bare(a), ops.bare(b))
-    case All{q, k, i, a, b, s}:
-      ops.first(ops.bare(a), ops.bare(syn_body(b)))
-    case Lam{k, i, f, s, q}:
-      ops.bare(syn_body(f))
-    case TApp{f, x, s}:
-      ops.first(ops.bare(f), ops.bare(x))
-    case ADT{k, xs, s, r}:
-      ops.bares(xs)
-    case Ctr{k, xs, s}:
-      ops.bares(xs)
-    case Mat{k, h, m, s}:
-      ops.first(ops.bare(h), ops.bare(m))
-    case Eql{a, b, ty, s}:
-      ops.first(ops.bare(a), ops.first(ops.bare(b), ops.bare(ty)))
-    case Rwt{e, p, f, s}:
-      ops.first(ops.bare(e), ops.first(ops.bare(p), ops.bare(f)))
-    case Ann{x, ty, s}:
-      ops.first(ops.bare(x), ops.bare(ty))
-    case VRf{k, i, s, r}:
-      ops.bare(r)
-    case other:
-      None{}
 
 #
 # K(A): a check that may fail with an Err and may add template instances to
