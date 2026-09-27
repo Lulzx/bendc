@@ -813,17 +813,16 @@ def SB2.find(xs: List<&2, SB2>, +k: String) -> Maybe<&2, String>:
     case SB2{+k2, v} <> t:
       Bool.pick(Unit -> Maybe<&2, String>, String.eq(k, k2), u => Some{v}, u => SB2.find(t, k))(Unit{})
 
-# The name k resolves to: qualified by the namespace (or an alias) when
-# such a name exists, else k itself.
+def PS.has(+ps: PS, +k: String) -> Bool:
+  Bool.or(book_has(PS.book(ps), k), Maybe.is_some(&2, CtrD, book_ctr(PS.book(ps), k)))
+
+# The name k resolves to: qualified by the namespace (or an alias), unless
+# only k itself is declared (so far: a name declared later is qualified).
 def PS.reso(+ps: PS, +k: String) -> String:
   +dot = Str.first_dot(k)
   +q = PS.reso.alias(PS.qual(ps, k), SB2.find(PS.al(ps), String.take(k, dot)), String.drop(k, dot),
     Nat.is_lt(dot, String.length(k)))
-  Bool.pick(String, Bool.or(book_has(PS.book(ps), q), Maybe.is_some(&2, CtrD, book_ctr(PS.book(ps), q))),
-    q, k)
-
-def PS.has(+ps: PS, +k: String) -> Bool:
-  Bool.or(book_has(PS.book(ps), k), Maybe.is_some(&2, CtrD, book_ctr(PS.book(ps), k)))
+  Bool.pick(String, Bool.or(PS.has(ps, q), Bool.not(PS.has(ps, k))), q, k)
 
 # An alias may not shadow a name: A.x when A is an alias and both what the
 # alias makes of it and A.x itself are declared.

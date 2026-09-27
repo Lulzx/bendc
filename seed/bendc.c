@@ -11279,6 +11279,8 @@ static V L7070(V *a);
 static V W_Chk_dP_dreso_dok(V *a);
 static V F_Chk_dPS_dreso(V a0, V a1);
 static V W_Chk_dPS_dreso(V *a);
+static V F_Chk_dPS_dhas(V a0, V a1);
+static V W_Chk_dPS_dhas(V *a);
 static V F_Chk_dPS_dal(V a0);
 static V W_Chk_dPS_dal(V *a);
 static V F_Chk_dPS_dqual(V a0, V a1);
@@ -11292,8 +11294,6 @@ static V F_Chk_dStr_dfirst__dot(V a0);
 static V W_Chk_dStr_dfirst__dot(V *a);
 static V F_Chk_dPS_dshadows(V a0, V a1);
 static V W_Chk_dPS_dshadows(V *a);
-static V F_Chk_dPS_dhas(V a0, V a1);
-static V W_Chk_dPS_dhas(V *a);
 static V F_Chk_dlit__full(V a0);
 static V W_Chk_dlit__full(V *a);
 static V F_Chk_dnat__full(V a0, V a1);
@@ -40705,9 +40705,14 @@ static V F_Chk_dPS_dreso(V a0, V a1) {
 top:;
 V v7071 = F_Chk_dStr_dfirst__dot(a1);
 V v7072 = F_Chk_dPS_dreso_dalias(F_Chk_dPS_dqual(a0, a1), F_Chk_dSB2_dfind(F_Chk_dPS_dal(a0), F_String_dtake(a1, v7071)), F_String_ddrop(a1, v7071), F_Nat_dis__lt(v7071, F_String_dlength(a1)));
-return F_Bool_dpick(F_Bool_dor(F_Chk_dbook__has(F_Chk_dPS_dbook(a0), v7072), F_Maybe_dis__some(0, F_Chk_dbook__ctr(F_Chk_dPS_dbook(a0), v7072))), v7072, a1);
+return F_Bool_dpick(F_Bool_dor(F_Chk_dPS_dhas(a0, v7072), F_Bool_dnot(F_Chk_dPS_dhas(a0, a1))), v7072, a1);
 }
 static V W_Chk_dPS_dreso(V *a) { (void)a; return F_Chk_dPS_dreso(a[0], a[1]); }
+static V F_Chk_dPS_dhas(V a0, V a1) {
+top:;
+return F_Bool_dor(F_Chk_dbook__has(F_Chk_dPS_dbook(a0), a1), F_Maybe_dis__some(0, F_Chk_dbook__ctr(F_Chk_dPS_dbook(a0), a1)));
+}
+static V W_Chk_dPS_dhas(V *a) { (void)a; return F_Chk_dPS_dhas(a[0], a[1]); }
 static V F_Chk_dPS_dal(V a0) {
 top:;
 V v7073 = a0;
@@ -40761,11 +40766,6 @@ V v7083 = F_Chk_dPS_dreso_dalias(a1, F_Chk_dSB2_dfind(F_Chk_dPS_dal(a0), F_Strin
 return F_Bool_dand(F_Bool_dnot(F_String_deq(v7083, a1)), F_Bool_dand(F_Chk_dPS_dhas(a0, v7083), F_Chk_dPS_dhas(a0, a1)));
 }
 static V W_Chk_dPS_dshadows(V *a) { (void)a; return F_Chk_dPS_dshadows(a[0], a[1]); }
-static V F_Chk_dPS_dhas(V a0, V a1) {
-top:;
-return F_Bool_dor(F_Chk_dbook__has(F_Chk_dPS_dbook(a0), a1), F_Maybe_dis__some(0, F_Chk_dbook__ctr(F_Chk_dPS_dbook(a0), a1)));
-}
-static V W_Chk_dPS_dhas(V *a) { (void)a; return F_Chk_dPS_dhas(a[0], a[1]); }
 static V F_Chk_dlit__full(V a0) {
 top:;
 V s7084 = a0;
