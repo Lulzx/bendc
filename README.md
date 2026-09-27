@@ -19,12 +19,12 @@ $ ./bootstrap.sh
 [stage0] bend boot.bend -o build/bendc0           # the official Bend builds bendc once
 [stage1] bendc0 -> build/stage1.c                 # bendc compiles itself
 [stage2] stage1 -> build/stage2.c                 # the result compiles itself again
-fixpoint: stage1.c == stage2.c (42332 lines)
+fixpoint: stage1.c == stage2.c (44696 lines)
 tests with stage1: 80 passed, 0 failed
 tests with stage2: 80 passed, 0 failed
 ```
 
-`bendc.bend` (the compiler) and `check.bend` (the type checker) are Bend: about 21,000 lines that
+`bendc.bend` (the compiler) and `check.bend` (the type checker) are Bend: about 22,000 lines that
 `bend --check-only` accepts (since Bend 2.0.32 it exits 1 on them all the same, listing the defs
 that rely on `@unsafe` or foreign code; bendc's checker prints the same report). bendc type-checks
 a program the way the official checker does (a port of it, with the same error reports), then lexes, parses, erases, and code-generates it, including the
@@ -169,7 +169,7 @@ flowchart LR
   Building `bendc` needs only a C compiler. `make selfcheck` verifies that the current `bendc.bend`
   still compiles to exactly this seed, and `make seed` regenerates it after the compiler changes.
 - **`make ddc`** checks the seed by diverse double-compiling ([Wheeler,
-  2009](https://dwheeler.com/trusting-trust/)): a 42,000-line generated C file can't be audited
+  2009](https://dwheeler.com/trusting-trust/)): a 45,000-line generated C file can't be audited
   by reading it, so a compiler that plants something in its own output would survive every
   fixpoint above. `tools/ddc.sh` compiles `bendc.bend` twice, once with a stage0 the official Bend
   translates to C and GCC builds, once with the seed GCC builds. Both outputs must equal
@@ -431,25 +431,30 @@ the next minor collection rescans them.
 Bend 2 is a proof language, and its checker is strict about code that runs. It shaped this compiler:
 
 - **Define before use, no mutual recursion.** A parser is mutually recursive by nature. Bend allows
-  forward declaration through a `law` (a typed claim) that a later `def` fills, and that def must be
-  `@unsafe` if it doesn't provably terminate. `tools/order.py` automates this. It topologically
-  sorts the file into sections, finds each strongly connected component, and turns one def per cycle
-  into a `law` plus a filling `def`.
+  forward declaration through a `law` (a typed claim) that a later `def` fills, but a def that calls
+  a law before it is filled must be `@unsafe`. So each cycle of defs is one def instead: an extra
+  argument, a selector, says which of the old defs runs, and its constructors carry that def's
+  arguments. The return type is a type-level function of the selector (`P.go(fuel, k: PsSel) ->
+  Parser(PsSel.ty(k))`), and the old names stay as one-line wrappers.
 - **`match` only on parameters.** A match cannot inspect a computed value, and neither can
   destructuring. So each decision is a small helper def whose parameter is the thing being matched.
   The parser monad avoids most of the tuple-destructuring helpers a hand-threaded token list would
   need.
 - **Affine variables.** A variable is used at most once unless it is marked `+`, which requires a
   copyable `Data` type. Every AST type is `Data`, and `+` appears where values are reused.
-- **Totality.** A recursive call must shrink its first changing argument. The compiler's recursion
-  over tokens isn't structural, so those defs are `@unsafe`. Many of the 436 `@unsafe` defs across
-  the two files are there for the rule above rather than for their own recursion: a def that calls a `law`
-  before the law is filled must be `@unsafe`, so a mutually recursive walk over the AST is unsafe
-  even though it is structural. `tools/unsafe_min.py` keeps a file's markers minimal: it strips
-  them all and puts back one for each def the checker rejects.
+- **Totality.** A recursive call must shrink its first changing argument. Walks over a node and a
+  list of nodes recurse on the list's head, then on the node rebuilt with the list's tail (the same
+  constructor with a smaller field counts as smaller). Recursion that shrinks nothing (a parser's
+  over tokens, a selector-merged cycle, the checker's evaluation of normalized terms) counts down a
+  `Nat` fuel argument that starts at `Fuel.max()`, about 4 billion, and fails loudly if it ever
+  runs out. A branch on a computed value that recurses is `Bool.pick(T, c, u => a, u => b)(x)`:
+  the termination check sees the self-call under the lambda, and bendc compiles it as a match, with
+  no closures. `bendc.bend` has no `@unsafe` def, and `check.bend` has three, where its parser calls
+  the evaluator defined after it (`tools/unsafe_min.py` keeps the markers minimal: it strips them
+  all and puts back one for each def the checker rejects).
 
 The compiler compiles every one of these patterns in its own source. It handles its own laws, its
-own `@unsafe` defs, and its own user-defined monads (`Parser`, `Gen`), which is what makes the
+own dependent selectors, and its own user-defined monads (`Parser`, `Gen`), which is what makes the
 fixpoint meaningful.
 
 ## Testing
