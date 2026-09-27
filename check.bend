@@ -643,11 +643,6 @@ def P.brack.depth(cnt: Bool, +n: Tm) -> P(Tm):
     case False{}:
       P.pure(Tm, n)
 
-law P.ns:
-  for tm: Tm
-  for ty: Tm
-  P(Tm)
-
 law P.amp:
   for +d: U32
   for +beg: U32
@@ -1061,15 +1056,6 @@ law P.arms.go:
   for +acc: List<&2, Tm>
   P(List<&2, Tm> & Tm)
 
-@unsafe
-def P.arms(+beg: U32) -> P(Tm):
-  do P<Tm>:
-    P.bump()
-    P.eat("{")
-    r : List<&2, Tm> & Tm <- P.arms.go(Nil{})
-    s : Sp <- P.span(beg)
-    return P.arms.fin(r, s)
-
 def word_to_term.go(+n: U32, +i: Nat, out: Tm, +s: Sp) -> Tm:
   match i:
     case 0n:
@@ -1295,24 +1281,9 @@ def amp.q(k: Nat) -> Q:
     case 2n+p:
       QMany{}
 
-@unsafe
-def P.amp.go(+beg: U32, code: Nat) -> P(Tm):
-  match code:
-    case 0n:
-      P.all(True{})
-    case 1n+k:
-      do P<Tm>:
-        P.bump()
-        P.bump()
-        s : Sp <- P.span(beg)
-        return TQua{amp.q(k), s}
-
 def amp.code(+d: U32) -> Nat:
   Bool.pick(Nat, U32.is_eq(d, 48), 1n, Bool.pick(Nat, U32.is_eq(d, 49), 2n,
     Bool.pick(Nat, U32.is_eq(d, 50), 3n, 0n)))
-
-def P.amp(d, beg):
-  P.amp.go(beg, amp.code(d))
 
 type Op is Data:
   Op{sym: String, prec: U32, right: Bool, name: String}
@@ -2027,6 +1998,262 @@ def P.patt(+t: Tm) -> P(Pt):
   P.patt.go(Fuel.max(), PkPatt{t})
 
 @unsafe
+def P.body.binders(ts: List<&2, Tm>, +names: Bool) -> P(List<&2, Pt>):
+  match ts:
+    case Nil{}:
+      P.pure(List<&2, Pt>, Nil{})
+    case +x <> t:
+      do P<List<&2, Pt>>:
+        P.if(Unit, Bool.and(names, Bool.not(Tm.is_var(x))),
+          P.throw(Unit, err0("a name (a parallel or typed let binds names; destructure in its body)", MNone{},
+            Tm.span(x))), P.pure(Unit, Unit{}))
+        p : Pt <- P.patt(x)
+        ps : List<&2, Pt> <- P.body.binders(t, names)
+        return p <> ps
+
+# A rewrite's binder name and its equality.
+type KT is Data:
+  KT{k: String, e: Tm}
+
+def P.push_scope(b: SB) -> P(Unit):
+  ps => Done{(Unit{}, PS.push(ps, b))}
+
+def all.build(exi: Bool, q: Q, +k: String, +i: U32, a: Tm, b: Tm, +s: Sp) -> Tm:
+  match exi:
+    case True{}:
+      TApp{TApp{Ref{"Exists", s, False{}}, a, s}, Lam{k, i, CSyn{Nil{}, i, b}, s, QUnd{}}, s}
+    case False{}:
+      All{q, k, i, a, CSyn{Nil{}, i, b}, NoSp{}}
+
+def Body.reply_x(b: Body) -> Tm:
+  match b:
+    case BReply{x, s}:
+      x
+    case other:
+      Efq{NoSp{}}
+
+def Body.is_reply(+b: Body) -> Bool:
+  match b:
+    case BReply{x, s}:
+      True{}
+    case other:
+      False{}
+
+def P.steps(n: Nat) -> P(Unit):
+  +ps => Done{(Unit{}, PS.set_cur(ps, Cur.steps(n, PS.cur(ps))))}
+
+def F32.is_finite(+f: F32) -> Bool:
+  +b = F32.bits(f)
+  Bool.not(U32.is_eq((b .&. 2139095040 : U32), 2139095040))
+
+def P.flt.go(+txt: String, m: Maybe<&2, F32>, +s: Sp, +beg: U32) -> P(Tm):
+  match m:
+    case Some{+f}:
+      P.if(Tm, F32.is_finite(f), P.pure(Tm, Ctr{"F32", [word_to_term(F32.bits(f), s)], s}),
+        P.fail.at(Tm, "a float literal with a finite f32 value (got " ++ txt ++ ")", beg))
+    case None{}:
+      P.fail.at(Tm, "a float literal with a finite f32 value (got " ++ txt ++ ")", beg)
+
+# The number of leading digits.
+def digits.span(s: String) -> Nat:
+  match s:
+    case SNil{}:
+      0n
+    case SCon{Chr{+c}, t}:
+      Bool.pick(Unit -> Nat, is_digit(c), u => 1n+digits.span(t), u => 0n)(Unit{})
+
+@unsafe
+def flt.exp(+s: String) -> String:
+  +e = Str.first(s)
+  +sign = Bool.or(U32.is_eq(Str.second(s), 43), U32.is_eq(Str.second(s), 45))
+  +ed = digits.span(String.drop(s, Bool.pick(Nat, sign, 2n, 1n)))
+  Bool.pick(String, Bool.and(Bool.or(U32.is_eq(e, 101), U32.is_eq(e, 69)), Nat.is_gt(ed, 0n)),
+    String.take(s, Nat.add(ed, Bool.pick(Nat, sign, 2n, 1n))), "")
+
+# The fraction and exponent of a float literal.
+@unsafe
+def flt.text(+s: String) -> String:
+  +fd = digits.span(String.drop(s, 1n))
+  +rest = String.drop(s, 1n+fd)
+  String.take(s, 1n+fd) ++ flt.exp(rest)
+
+def P.flt(+beg: U32, +ds: String, +r: String) -> P(Tm):
+  +txt = flt.text(r)
+  do P<Tm>:
+    P.steps(String.length(txt))
+    s : Sp <- P.span(beg)
+    P.flt.go(ds ++ txt, F32.read(ds ++ txt), s, beg)
+
+def P.nat.lit(+beg: U32, +n: Nat) -> P(Tm):
+  do P<Tm>:
+    +c : U32 <- P.peek()
+    s : Sp <- P.span(beg)
+    P.if(Tm, is_name(c), P.fail(Tm, "a nat literal (NUMBER n)"), P.pure(Tm, Lit{LNat{n}, s}))
+
+def nat.succs(n: Nat, out: Tm, +s: Sp) -> Tm:
+  match n:
+    case 0n:
+      out
+    case 1n+m:
+      nat.succs(m, Ctr{"Succ", [out], s}, s)
+
+def nat.plus.big(+n: Nat, +out: Tm, +s: Sp) -> Tm:
+  Bool.pick(Tm, Nat.is_gt(n, 256n),
+    TApp{TApp{Ref{"Nat.add", s, False{}}, Lit{LNat{n}, s}, s}, out, s}, nat.succs(n, out, s))
+
+def nat.plus(+n: Nat, out: Tm, +s: Sp) -> Tm:
+  match out:
+    case Lit{LNat{+v}, ls}:
+      Bool.pick(Tm, Nat.is_le(Nat.add(n, v), 4294967295n), Lit{LNat{Nat.add(n, v)}, s},
+        nat.plus.big(n, Lit{LNat{v}, ls}, s))
+    case other:
+      nat.plus.big(n, other, s)
+
+def digits.val(s: String, n: Nat, +acc: Nat) -> Nat:
+  match s n:
+    case SCon{Chr{+c}, t} 1n+m:
+      digits.val(t, m, Nat.add(Nat.mul(acc, 10n), U32.to_nat((c - 48 : U32))))
+    case r k:
+      acc
+
+# 0: a U32, 1: a Nat (n), 2: an F32 (.digits)
+def num.kind(+r: String) -> Nat:
+  Bool.pick(Nat, U32.is_eq(Str.first(r), 110), 1n,
+    Bool.pick(Nat, Bool.and(U32.is_eq(Str.first(r), 46), is_digit(Str.second(r))), 2n, 0n))
+
+# A glued < whose first operand stops at a type operator is a type argument
+# that needs parens, since a comparison never types there.
+def lt.type_op(+r: String) -> Bool:
+  Bool.or(Str.prefix(r, "->"), Bool.or(Bool.and(Str.prefix(r, "&"), Bool.not(Str.prefix(r, "&&"))),
+    Bool.and(Str.prefix(r, "|"), Bool.not(Str.prefix(r, "||")))))
+
+# Rebuilds an application at the span it was written at.
+def apps.span(f: Tm, ys: List<&2, Tm>, xs: List<&2, Tm>, +sp: Sp) -> Tm:
+  apps(f, ys, sp)
+
+def term_head(t: Tm) -> Tm:
+  Pair.fst(Tm, List<&2, Tm>, term_unapply(t))
+
+# A term as its head and arguments.
+type TmApp is Data:
+  TmApp{f: Tm, xs: List<&2, Tm>}
+
+def TmApp.of(r: Tm & List<&2, Tm>) -> TmApp:
+  (f, xs) = r
+  TmApp{f, xs}
+
+# The namespace pass over a term, or over a list of terms.
+type NsK is Data:
+  NkNsArgs{xs: List<&2, Tm>, ty: Tm}
+  NkNsOpGo{k: String, hk: String, s: Sp, b: Bool, xs: List<&2, Tm>, ty: Tm, sp: Sp}
+  NkNsOp{k: String, s: Sp, b: Bool, xs: List<&2, Tm>, ty: Tm, h: Tm, sp: Sp}
+  NkNsRef{k: String, s: Sp, b: Bool, xs: List<&2, Tm>, ty: Tm, op: Bool, logic: Bool, sp: Sp}
+  NkNsApp{r: TmApp, ty: Tm, sp: Sp}
+  NkNs{tm: Tm, ty: Tm}
+
+def NsK.ty(k: NsK) -> Type:
+  match k:
+    case NkNsArgs{xs, ty}:
+      List<&2, Tm>
+    case NkNsOpGo{k, hk, s, b, xs, ty, sp}:
+      Tm
+    case NkNsOp{k, s, b, xs, ty, h, sp}:
+      Tm
+    case NkNsRef{k, s, b, xs, ty, op, logic, sp}:
+      Tm
+    case NkNsApp{r, ty, sp}:
+      Tm
+    case NkNs{tm, ty}:
+      Tm
+
+def P.ns.go(n: Nat, sel: NsK) -> P(NsK.ty(sel)):
+  match n:
+    case 0n:
+      P.fuel(NsK.ty(sel))
+    case 1n+ +fu:
+      match sel:
+        case NkNsArgs{xs, +ty}:
+          match xs:
+            case Nil{}:
+              P.pure(List<&2, Tm>, Nil{})
+            case x <> t:
+              do P<List<&2, Tm>>:
+                y : Tm <- P.ns.go(fu, NkNs{x, ty})
+                ys : List<&2, Tm> <- P.ns.go(fu, NkNsArgs{t, ty})
+                return y <> ys
+        case NkNsOpGo{+k, hk, +s, b, +xs, +ty, +sp}:
+          do P<Tm>:
+            q : String <- P.reso(hk ++ k)
+            ys : List<&2, Tm> <- P.ns.go(fu, NkNsArgs{xs, ty})
+            return apps.span(Ref{q, s, b}, ys, xs, sp)
+        case NkNsOp{+k, +s, b, xs, +ty, h, +sp}:
+          match h:
+            case Var{hk, i, hs}:
+              P.ns.go(fu, NkNsOpGo{k ++ "", hk, s, b, xs, ty, sp})
+            case VRf{hk, i, hs, r}:
+              P.ns.go(fu, NkNsOpGo{k, hk, s, b, xs, ty, sp})
+            case Ref{hk, hs, hb}:
+              P.ns.go(fu, NkNsOpGo{k, hk, s, b, xs, ty, sp})
+            case ADT{hk, hxs, hs, r}:
+              P.ns.go(fu, NkNsOpGo{k, hk, s, b, xs, ty, sp})
+            case other:
+              P.throw(Tm, err0("a type name after : (the operators' namespace)", MNone{}, Tm.span(other)))
+        case NkNsRef{+k, +s, b, +xs, +ty, op, logic, +sp}:
+          match op logic:
+            case True{} l:
+              P.ns.go(fu, NkNsOp{k, s, b, xs, ty, term_head(ty), sp})
+            case False{} True{}:
+              do P<Tm>:
+                ys : List<&2, Tm> <- P.ns.go(fu, NkNsArgs{xs, ty})
+                return apps.span(Ref{k, s, b}, ys, xs, sp)
+            case False{} False{}:
+              P.pure(Tm, apps(Ref{k, s, b}, xs, sp))
+        case NkNsApp{r, ty, +sp}:
+          match r:
+            case TmApp{Ref{+k, +s, b}, xs}:
+              P.ns.go(fu, NkNsRef{k, s, b, xs, ty, Nat.is_eq(Str.last_dot(k), 0n),
+                Str.has(["Bool.and", "Bool.or", "String.append"], k), sp})
+            case TmApp{other, xs}:
+              P.pure(Tm, apps(other, xs, sp))
+        # Operators without a type (".add") take the namespace of the ': T' that
+        # annotates them: (a + b : U32) calls U32.add.
+        case NkNs{tm, ty}:
+          match tm:
+            case Let{ks, +ids, vs, f, s, qs}:
+              do P<Tm>:
+                b : Tm <- P.ns.go(fu, NkNs{syn_body(f), ty})
+                return Let{ks, ids, vs, CLet{Nil{}, ids, b}, s, qs}
+            case +other:
+              P.ns.go(fu, NkNsApp{TmApp.of(term_unapply(other)), ty, Tm.span(other)})
+
+def P.ns(tm: Tm, ty: Tm) -> P(Tm):
+  P.ns.go(Fuel.max(), NkNs{tm, ty})
+
+@unsafe
+def P.arms(+beg: U32) -> P(Tm):
+  do P<Tm>:
+    P.bump()
+    P.eat("{")
+    r : List<&2, Tm> & Tm <- P.arms.go(Nil{})
+    s : Sp <- P.span(beg)
+    return P.arms.fin(r, s)
+
+@unsafe
+def P.amp.go(+beg: U32, code: Nat) -> P(Tm):
+  match code:
+    case 0n:
+      P.all(True{})
+    case 1n+k:
+      do P<Tm>:
+        P.bump()
+        P.bump()
+        s : Sp <- P.span(beg)
+        return TQua{amp.q(k), s}
+
+def P.amp(d, beg):
+  P.amp.go(beg, amp.code(d))
+
+@unsafe
 def P.term0() -> P(Tm):
   P.term(0)
 
@@ -2368,20 +2595,6 @@ def P.body.let.eq(+beg: U32, ty: Maybe<&2, Tm>) -> P(List<&2, Tm>):
     P.body.let.ann(beg, ty)
 
 @unsafe
-def P.body.binders(ts: List<&2, Tm>, +names: Bool) -> P(List<&2, Pt>):
-  match ts:
-    case Nil{}:
-      P.pure(List<&2, Pt>, Nil{})
-    case +x <> t:
-      do P<List<&2, Pt>>:
-        P.if(Unit, Bool.and(names, Bool.not(Tm.is_var(x))),
-          P.throw(Unit, err0("a name (a parallel or typed let binds names; destructure in its body)", MNone{},
-            Tm.span(x))), P.pure(Unit, Unit{}))
-        p : Pt <- P.patt(x)
-        ps : List<&2, Pt> <- P.body.binders(t, names)
-        return p <> ps
-
-@unsafe
 def P.body.let(+col: U32, +beg: U32, +q: Q, +ts: List<&2, Tm>, +ty: Maybe<&2, Tm>, +vs0: List<&2, Tm>) ->
   P(Body):
   do P<Body>:
@@ -2483,10 +2696,6 @@ def P.arms.go(acc):
     close : Bool <- P.take("}")
     P.if(List<&2, Tm> & Tm, close, P.pure(List<&2, Tm> & Tm, (acc, Efq{NoSp{}})), P.arms.item(acc))
 
-# A rewrite's binder name and its equality.
-type KT is Data:
-  KT{k: String, e: Tm}
-
 def P.rwt.named(+e0: Tm) -> P(KT):
   do P<KT>:
     e : Tm <- P.term0()
@@ -2500,9 +2709,6 @@ def P.rwt.name(+e0: Tm, at: Bool) -> P(KT):
         P.fail(KT, "a name before @ (a rewrite binder is one name: %e@E : P)"))
     case False{}:
       P.pure(KT, KT{"", e0})
-
-def P.push_scope(b: SB) -> P(Unit):
-  ps => Done{(Unit{}, PS.push(ps, b))}
 
 def P.rwt.go(+beg: U32, +e0: Tm, r: KT) -> P(Tm):
   match r:
@@ -2531,13 +2737,6 @@ def P.rwt(beg):
     r : KT <- P.rwt.name(e0, at)
     P.rwt.go(beg, e0, r)
 
-def all.build(exi: Bool, q: Q, +k: String, +i: U32, a: Tm, b: Tm, +s: Sp) -> Tm:
-  match exi:
-    case True{}:
-      TApp{TApp{Ref{"Exists", s, False{}}, a, s}, Lam{k, i, CSyn{Nil{}, i, b}, s, QUnd{}}, s}
-    case False{}:
-      All{q, k, i, a, CSyn{Nil{}, i, b}, NoSp{}}
-
 # @x:A -> B   @-x:A -> B   &x:A -> B (a dependent pair)
 def P.all(exi):
   do P<Tm>:
@@ -2554,13 +2753,6 @@ def P.all(exi):
     P.close(n0)
     s : Sp <- P.span(beg)
     return all.build(exi, q, k, i, a, b, s)
-
-def Body.reply_x(b: Body) -> Tm:
-  match b:
-    case BReply{x, s}:
-      x
-    case other:
-      Efq{NoSp{}}
 
 @unsafe
 def P.tup.more(+beg: U32, b: Body) -> P(Tm):
@@ -2584,13 +2776,6 @@ def P.tup.end(b: Body) -> P(Tm):
     P.eat(")")
     return out2
 
-def Body.is_reply(+b: Body) -> Bool:
-  match b:
-    case BReply{x, s}:
-      True{}
-    case other:
-      False{}
-
 # (a, b, c), or a parenthesized body with an optional ': T'.
 def P.tup(beg):
   do P<Tm>:
@@ -2601,76 +2786,6 @@ def P.tup(beg):
     +reply : Bool <- P.pure(Bool, Body.is_reply(b))
     comma : Bool <- P.if(Bool, reply, P.take(","), P.pure(Bool, False{}))
     P.if(Tm, comma, P.tup.more(beg, b), P.tup.end(b))
-
-def P.steps(n: Nat) -> P(Unit):
-  +ps => Done{(Unit{}, PS.set_cur(ps, Cur.steps(n, PS.cur(ps))))}
-
-def F32.is_finite(+f: F32) -> Bool:
-  +b = F32.bits(f)
-  Bool.not(U32.is_eq((b .&. 2139095040 : U32), 2139095040))
-
-def P.flt.go(+txt: String, m: Maybe<&2, F32>, +s: Sp, +beg: U32) -> P(Tm):
-  match m:
-    case Some{+f}:
-      P.if(Tm, F32.is_finite(f), P.pure(Tm, Ctr{"F32", [word_to_term(F32.bits(f), s)], s}),
-        P.fail.at(Tm, "a float literal with a finite f32 value (got " ++ txt ++ ")", beg))
-    case None{}:
-      P.fail.at(Tm, "a float literal with a finite f32 value (got " ++ txt ++ ")", beg)
-
-# The number of leading digits.
-def digits.span(s: String) -> Nat:
-  match s:
-    case SNil{}:
-      0n
-    case SCon{Chr{+c}, t}:
-      Bool.pick(Unit -> Nat, is_digit(c), u => 1n+digits.span(t), u => 0n)(Unit{})
-
-@unsafe
-def flt.exp(+s: String) -> String:
-  +e = Str.first(s)
-  +sign = Bool.or(U32.is_eq(Str.second(s), 43), U32.is_eq(Str.second(s), 45))
-  +ed = digits.span(String.drop(s, Bool.pick(Nat, sign, 2n, 1n)))
-  Bool.pick(String, Bool.and(Bool.or(U32.is_eq(e, 101), U32.is_eq(e, 69)), Nat.is_gt(ed, 0n)),
-    String.take(s, Nat.add(ed, Bool.pick(Nat, sign, 2n, 1n))), "")
-
-# The fraction and exponent of a float literal.
-@unsafe
-def flt.text(+s: String) -> String:
-  +fd = digits.span(String.drop(s, 1n))
-  +rest = String.drop(s, 1n+fd)
-  String.take(s, 1n+fd) ++ flt.exp(rest)
-
-def P.flt(+beg: U32, +ds: String, +r: String) -> P(Tm):
-  +txt = flt.text(r)
-  do P<Tm>:
-    P.steps(String.length(txt))
-    s : Sp <- P.span(beg)
-    P.flt.go(ds ++ txt, F32.read(ds ++ txt), s, beg)
-
-def P.nat.lit(+beg: U32, +n: Nat) -> P(Tm):
-  do P<Tm>:
-    +c : U32 <- P.peek()
-    s : Sp <- P.span(beg)
-    P.if(Tm, is_name(c), P.fail(Tm, "a nat literal (NUMBER n)"), P.pure(Tm, Lit{LNat{n}, s}))
-
-def nat.succs(n: Nat, out: Tm, +s: Sp) -> Tm:
-  match n:
-    case 0n:
-      out
-    case 1n+m:
-      nat.succs(m, Ctr{"Succ", [out], s}, s)
-
-def nat.plus.big(+n: Nat, +out: Tm, +s: Sp) -> Tm:
-  Bool.pick(Tm, Nat.is_gt(n, 256n),
-    TApp{TApp{Ref{"Nat.add", s, False{}}, Lit{LNat{n}, s}, s}, out, s}, nat.succs(n, out, s))
-
-def nat.plus(+n: Nat, out: Tm, +s: Sp) -> Tm:
-  match out:
-    case Lit{LNat{+v}, ls}:
-      Bool.pick(Tm, Nat.is_le(Nat.add(n, v), 4294967295n), Lit{LNat{Nat.add(n, v)}, s},
-        nat.plus.big(n, Lit{LNat{v}, ls}, s))
-    case other:
-      nat.plus.big(n, other, s)
 
 def P.nat.plus(+beg: U32, +n: Nat) -> P(Tm):
   do P<Tm>:
@@ -2686,13 +2801,6 @@ def P.nat.go(+beg: U32, +n: Nat) -> P(Tm):
 def P.nat(+beg: U32, +ds: String, +n: Nat) -> P(Tm):
   P.if(Tm, Nat.is_gt(n, 4294967295n), P.fail(Tm, "a nat literal up to 4294967295n (got " ++ ds ++ "n)"),
     P.nat.go(beg, n))
-
-def digits.val(s: String, n: Nat, +acc: Nat) -> Nat:
-  match s n:
-    case SCon{Chr{+c}, t} 1n+m:
-      digits.val(t, m, Nat.add(Nat.mul(acc, 10n), U32.to_nat((c - 48 : U32))))
-    case r k:
-      acc
 
 def P.num.go(+beg: U32, +ds: String, +r: String, kind: Nat) -> P(Tm):
   match kind:
@@ -2710,11 +2818,6 @@ def P.num.go(+beg: U32, +ds: String, +r: String, kind: Nat) -> P(Tm):
         P.nat(beg, ds, digits.val(ds, String.length(ds), 0n))
     case 2n+p:
       P.flt(beg, ds, r)
-
-# 0: a U32, 1: a Nat (n), 2: an F32 (.digits)
-def num.kind(+r: String) -> Nat:
-  Bool.pick(Nat, U32.is_eq(Str.first(r), 110), 1n,
-    Bool.pick(Nat, Bool.and(U32.is_eq(Str.first(r), 46), is_digit(Str.second(r))), 2n, 0n))
 
 @unsafe
 def P.num():
@@ -2761,12 +2864,6 @@ def P.lt.adt(+out: Tm, a: Tm, +s2: Sp, +lvl: U32) -> P(Tm):
   P.if(Tm, Bool.or(Tm.is_var(out), Tm.is_ref(out)), P.lt.adt.go(out, a, s2, lvl),
     P.fail(Tm, "a family name before <..> (a comparison here needs parens)"))
 
-# A glued < whose first operand stops at a type operator is a type argument
-# that needs parens, since a comparison never types there.
-def lt.type_op(+r: String) -> Bool:
-  Bool.or(Str.prefix(r, "->"), Bool.or(Bool.and(Str.prefix(r, "&"), Bool.not(Str.prefix(r, "&&"))),
-    Bool.and(Str.prefix(r, "|"), Bool.not(Str.prefix(r, "||")))))
-
 # f<A, B> (a family instance), or a < comparison.
 def P.lt(out, lvl):
   do P<Tm>:
@@ -2784,82 +2881,6 @@ def P.lt(out, lvl):
     comma : Bool <- P.at(",")
     P.if(Tm, Bool.or(gt, comma), P.lt.adt(out, a, s2, lvl),
       P.ops(TApp{TApp{Ref{".is_lt", t2, False{}}, out, s2}, a, s2}, lvl))
-
-@unsafe
-def P.ns.args(xs: List<&2, Tm>, +ty: Tm) -> P(List<&2, Tm>):
-  match xs:
-    case Nil{}:
-      P.pure(List<&2, Tm>, Nil{})
-    case x <> t:
-      do P<List<&2, Tm>>:
-        y : Tm <- P.ns(x, ty)
-        ys : List<&2, Tm> <- P.ns.args(t, ty)
-        return y <> ys
-
-# Rebuilds an application at the span it was written at.
-def apps.span(f: Tm, ys: List<&2, Tm>, xs: List<&2, Tm>, +sp: Sp) -> Tm:
-  apps(f, ys, sp)
-
-def P.ns.op.go(+k: String, hk: String, +s: Sp, b: Bool, +xs: List<&2, Tm>, +ty: Tm, +sp: Sp) -> P(Tm):
-  do P<Tm>:
-    q : String <- P.reso(hk ++ k)
-    ys : List<&2, Tm> <- P.ns.args(xs, ty)
-    return apps.span(Ref{q, s, b}, ys, xs, sp)
-
-def P.ns.op(+k: String, +s: Sp, b: Bool, xs: List<&2, Tm>, +ty: Tm, h: Tm, +sp: Sp) -> P(Tm):
-  match h:
-    case Var{hk, i, hs}:
-      P.ns.op.go(k ++ "", hk, s, b, xs, ty, sp)
-    case VRf{hk, i, hs, r}:
-      P.ns.op.go(k, hk, s, b, xs, ty, sp)
-    case Ref{hk, hs, hb}:
-      P.ns.op.go(k, hk, s, b, xs, ty, sp)
-    case ADT{hk, hxs, hs, r}:
-      P.ns.op.go(k, hk, s, b, xs, ty, sp)
-    case other:
-      P.throw(Tm, err0("a type name after : (the operators' namespace)", MNone{}, Tm.span(other)))
-
-def term_head(t: Tm) -> Tm:
-  Pair.fst(Tm, List<&2, Tm>, term_unapply(t))
-
-def P.ns.ref(+k: String, +s: Sp, b: Bool, +xs: List<&2, Tm>, +ty: Tm, op: Bool, logic: Bool, +sp: Sp) -> P(Tm):
-  match op logic:
-    case True{} l:
-      P.ns.op(k, s, b, xs, ty, term_head(ty), sp)
-    case False{} True{}:
-      do P<Tm>:
-        ys : List<&2, Tm> <- P.ns.args(xs, ty)
-        return apps.span(Ref{k, s, b}, ys, xs, sp)
-    case False{} False{}:
-      P.pure(Tm, apps(Ref{k, s, b}, xs, sp))
-
-# A term as its head and arguments.
-type TmApp is Data:
-  TmApp{f: Tm, xs: List<&2, Tm>}
-
-def TmApp.of(r: Tm & List<&2, Tm>) -> TmApp:
-  (f, xs) = r
-  TmApp{f, xs}
-
-def P.ns.app(r: TmApp, ty: Tm, +sp: Sp) -> P(Tm):
-  match r:
-    case TmApp{Ref{+k, +s, b}, xs}:
-      P.ns.ref(k, s, b, xs, ty, Nat.is_eq(Str.last_dot(k), 0n),
-        Str.has(["Bool.and", "Bool.or", "String.append"], k), sp)
-    case TmApp{other, xs}:
-      P.pure(Tm, apps(other, xs, sp))
-
-# Operators without a type (".add") take the namespace of the ': T' that
-# annotates them: (a + b : U32) calls U32.add.
-@unsafe
-def P.ns(tm, ty):
-  match tm:
-    case Let{ks, +ids, vs, f, s, qs}:
-      do P<Tm>:
-        b : Tm <- P.ns(syn_body(f), ty)
-        return Let{ks, ids, vs, CLet{Nil{}, ids, b}, s, qs}
-    case +other:
-      P.ns.app(TmApp.of(term_unapply(other)), ty, Tm.span(other))
 
 @unsafe
 def P.args.one(+close: String) -> P(List<&2, Tm>):
