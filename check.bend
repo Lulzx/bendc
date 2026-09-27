@@ -733,7 +733,6 @@ def Cur.name.go(r: String, +c: Cur, +acc: String) -> String & Cur:
 def Cur.name(+c: Cur, acc: String) -> String & Cur:
   Cur.name.go(Cur.rest(c), c, acc)
 
-@unsafe
 def P.lexeme.go(+c: Cur) -> P(String):
   P.lexeme.fin(Cur.name(c, ""), Cur.pos(c))
 
@@ -765,7 +764,6 @@ def SB.find(xs: List<&2, SB>, +k: String) -> Maybe<&2, U32>:
     case SB{+k2, +i} <> t:
       Bool.pick(Unit -> Maybe<&2, U32>, String.eq(k, k2), u => Some{i}, u => SB.find(t, k))(Unit{})
 
-@unsafe
 def P.lookup(+k: String) -> P(Maybe<&2, U32>):
   +ps => Done{(SB.find(PS.stk(ps), k), ps)}
 
@@ -831,7 +829,6 @@ def SB2.find(xs: List<&2, SB2>, +k: String) -> Maybe<&2, String>:
 
 # The name k resolves to: qualified by the namespace (or an alias) when
 # such a name exists, else k itself.
-@unsafe
 def PS.reso(+ps: PS, +k: String) -> String:
   +dot = Str.first_dot(k)
   +q = PS.reso.alias(PS.qual(ps, k), SB2.find(PS.al(ps), String.take(k, dot)), String.drop(k, dot),
@@ -844,7 +841,6 @@ def PS.has(+ps: PS, +k: String) -> Bool:
 
 # An alias may not shadow a name: A.x when A is an alias and both what the
 # alias makes of it and A.x itself are declared.
-@unsafe
 def PS.shadows(+ps: PS, +k: String) -> Bool:
   +dot = Str.first_dot(k)
   +q = PS.reso.alias(k, SB2.find(PS.al(ps), String.take(k, dot)), String.drop(k, dot),
@@ -1098,7 +1094,6 @@ def escape.find(e: List<&2, U32>, +c: U32) -> Maybe<&2, U32>:
     case other:
       None{}
 
-@unsafe
 def P.escape.u(m: Maybe<&1, U32 & Nat>) -> P(U32):
   match m:
     case Some{v}:
@@ -1856,7 +1851,6 @@ def P.patts(xs: List<&2, Tm>) -> P(List<&2, Pt>):
 def P.patt(+t: Tm) -> P(Pt):
   P.patt.go(Fuel.max(), PkPatt{t})
 
-@unsafe
 def P.body.binders(ts: List<&2, Tm>, +names: Bool) -> P(List<&2, Pt>):
   match ts:
     case Nil{}:
@@ -1921,7 +1915,6 @@ def digits.span(s: String) -> Nat:
     case SCon{Chr{+c}, t}:
       Bool.pick(Unit -> Nat, is_digit(c), u => 1n+digits.span(t), u => 0n)(Unit{})
 
-@unsafe
 def flt.exp(+s: String) -> String:
   +e = Str.first(s)
   +sign = Bool.or(U32.is_eq(Str.second(s), 43), U32.is_eq(Str.second(s), 45))
@@ -1930,7 +1923,6 @@ def flt.exp(+s: String) -> String:
     String.take(s, Nat.add(ed, Bool.pick(Nat, sign, 2n, 1n))), "")
 
 # The fraction and exponent of a float literal.
-@unsafe
 def flt.text(+s: String) -> String:
   +fd = digits.span(String.drop(s, 1n))
   +rest = String.drop(s, 1n+fd)
@@ -2327,7 +2319,6 @@ def body_sub(b: Body, +i: U32, +v: Pt) -> Body:
     case Row{ps, f}:
       Row{ps, body_sub(f, i, v)}
 
-@unsafe
 def P.mf.varrows(rows: List<&2, Body>, +w: Pt) -> P(List<&2, Body>):
   match rows:
     case Nil{}:
@@ -2406,7 +2397,6 @@ def P.mf.fields(ps: List<&2, Pt>, +xq: Q) -> P(List<&2, Pt>):
         rest : List<&2, Pt> <- P.mf.fields(t, xq)
         return PVar{"_" ++ U32.show(i), i, xq, Pt.s(p)} <> rest
 
-@unsafe
 def mf.rows.ctr(
   k: String, pxs: List<&2, Pt>, rest: List<&2, Pt>, f: Body, +ck: String, +x: Pt, +kx: Pt, +xs: List<&2, Pt>,
   hit: Bool, tail: List<&2, Body>
@@ -2418,7 +2408,6 @@ def mf.rows.ctr(
       tail
 
 # The rows that fit constructor ck, specialized to its fields.
-@unsafe
 def mf.rows(rows: List<&2, Body>, +ck: String, +x: Pt, +kx: Pt, +xs: List<&2, Pt>) -> List<&2, Body>:
   match rows:
     case Nil{}:
@@ -3704,7 +3693,6 @@ def ops.bare(t: Tm) -> Maybe<&2, Tm>:
   ops.bare.go(t, False{})
 
 # A bare operator (".add") names no type: the official checker rejects it.
-@unsafe
 def P.check_ops(t: Tm) -> P(Unit):
   P.check_ops.c(ops.bare(t))
 
@@ -3793,7 +3781,6 @@ def Tld.with_imps(t: Maybe<&2, Tld>, ims: List<&2, String>) -> Tld:
     case other:
       TDef{0n, 0n, Qnt{NoSp{}}, None{}, False{}, False{}, Some{ims}}
 
-@unsafe
 def P.def.foreign(+k: String) -> P(Unit):
   do P<Unit>:
     b : Book <- P.book()
