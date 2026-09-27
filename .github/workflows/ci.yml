@@ -50,6 +50,11 @@ jobs:
             && echo "exit 0" >> build/official.txt || echo "exit $?" >> build/official.txt
           cmp build/ours.txt build/official.txt
 
+      - name: Erasure preserves the core IR's semantics (PROOF.bend, both checkers)
+        run: |
+          BEND_NO_TELEMETRY=1 bend PROOF.bend --check-only
+          ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" PROOF.bend
+
       - name: Full bootstrap (official bend -> stage1 -> stage2 fixpoint)
         run: BEND_NO_TELEMETRY=1 ./bootstrap.sh
 

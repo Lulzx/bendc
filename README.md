@@ -213,9 +213,9 @@ and a weekly run tries the latest release, so a new Bend shows up there before i
 ## How it works
 
 ```
-source ─► lexer ─► layout ─► parser ─► operator  ─► tables & ─► codegen ─► C file ─► clang ─► binary
-          chars    INDENT/   (parser    resolution   erasure     (state          +
-          →tokens  DEDENT    monad)                              monad)       rt/bendrt.h
+source ─► lexer ─► layout ─► parser ─► operator  ─► tables ─► core IR ─► codegen ─► C file ─► clang ─► binary
+          chars    INDENT/   (parser    resolution            erasure,    (state          +
+          →tokens  DEDENT    monad)                           inlining    monad)       rt/bendrt.h
 ```
 
 1. **Lexer and layout.** Characters become tokens, and indentation becomes `NEWLINE`/`INDENT`/`DEDENT`.
@@ -231,7 +231,19 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables &
    a mask of its runtime parameters. Erased parameters (`-x`, bare quantity parameters, and
    `Type`/`Data`/`Kind`-typed ones) are dropped at each known call site. Parameters of a def that
    fills a `law` take their modes from the law.
-5. **Code generation.** A state monad threads fresh names, emitted C, references and errors through
+5. **Core IR.** Each def (but a type-level one, whose body the printers unfold) is lowered to
+   [`core.bend`](core.bend)'s IR, where every argument of a call of a global def is marked relevant
+   or erased by the callee's mask. `Core.Def.erase` replaces the erased arguments, and the types left
+   in runtime positions, with a box. [`PROOF.bend`](PROOF.bend) proves that this preserves the IR's
+   semantics, which `core.bend` gives in Bend as a fuelled machine (`Core.run`): the law
+   ([`LAWS.bend`](LAWS.bend)) says running a program and erasing the result gives what running the
+   erased program gives. Both checkers verify it in CI. Then full calls of a monad's `bind`, `pure`,
+   `go` and `go.done` (the parser's, the generator's, the checker's) are inlined. The callee is
+   renamed apart, each argument takes its parameter's place when that moves no work into a lambda,
+   and the places it lands are reduced: an applied lambda becomes a `let`, and a `let` or `match` of
+   a known constructor takes its case. A `do` block becomes one closure, and the checker, which
+   runs on these monads, runs 9% fewer instructions.
+6. **Code generation.** A state monad threads fresh names, emitted C, references and errors through
    the generator. Only defs reachable from `main` are emitted.
    - Each def becomes a C function, and self tail calls become `goto` loops.
    - Defs that build their result around a tail call (`x <> merge(xt, ys)`) are compiled
@@ -241,7 +253,7 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables &
      goes through `apply`.
    - A match becomes a first-match `if` chain over tags. A `match` or `let` in expression position
      uses a GNU statement expression.
-6. **Value printers.** For a non-`IO` main, printers are generated from main's return type and the
+7. **Value printers.** For a non-`IO` main, printers are generated from main's return type and the
    field types of each constructor, specialised per type instance (e.g. `Tree<String>`).
 
 **Runtime** (`rt/bendrt.h`, about 520 lines). Every value is one 64-bit word:
@@ -356,7 +368,7 @@ compile time. On an Apple M4 Pro (12 cores, 24 GB, macOS 27):
 | build `leaves.bend` | **0.19s** | 0.30s |
 | build `leaves_gpu.bend` | **0.31s** | 0.55s |
 | build `sort.bend` | **0.21s** | 0.32s |
-| type-check `bendc.bend` (16,000 lines with `check.bend`) | **0.88s**, 482 MB | 1.01s, 1004 MB |
+| type-check `bendc.bend` (16,000 lines with `check.bend`) | 1.30s, **590 MB** | **0.77s**, 840 MB |
 | build `bendc.bend` into a binary | **8.1s** | 70s, 9.9 GB |
 
 Where the time goes:
@@ -514,6 +526,8 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 |---|---|
 | [`check.bend`](check.bend) | the type checker, a port of the official one: parser, normalizer, conversion, quantities, termination, templates, error reports |
 | [`bendc.bend`](bendc.bend) | the compiler, organized by section: lexer, layout, parser monad, expressions, patterns, statements, declarations, operator resolution, free variables, global tables, code generation, value printers, modules, driver |
+| [`core.bend`](core.bend) | the core IR between the front end and code generation: terms with relevance-marked arguments, erasure, and a semantics |
+| [`LAWS.bend`](LAWS.bend), [`PROOF.bend`](PROOF.bend) | the law that erasure preserves the core IR's semantics, and its proof (induction on the fuel, one case per step) |
 | [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, arrays, native `Nat`, `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
 | [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the kernel cache, the simulator, copying results back |
 | [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
