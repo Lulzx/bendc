@@ -4352,171 +4352,6 @@ type Fr is Data:
   FMnb{a: Tm, s: Sp}
   FVar{m: Tm, v: Tm}
 
-law wnf.go:
-  for +book: Book
-  for tm: Tm
-  for frs: List<&2, Fr>
-  for lhs: LH
-  Tm
-
-@unsafe
-def term_wnf(+book: Book, t: Tm) -> Tm:
-  wnf.go(book, t, Nil{}, LNo{})
-
-law snf.go:
-  for +book: Book
-  for tm: Tm
-  Tm
-
-@unsafe
-def term_snf(+book: Book, term: Tm) -> Tm:
-  snf.go(book, term_wnf(book, term))
-
-law lhs_ext:
-  for +book: Book
-  for lhs: Tm
-  for +k: String
-  for n: Nat
-  for xs: List<&2, Tm>
-  Tm
-
-law mat_goal:
-  for +book: Book
-  for tel: Tm
-  for n: Nat
-  for xs: List<&2, Tm>
-  for tb: Tm
-  for +ck: String
-  for +cs: Sp
-  for +tq: Q
-  for ctx: List<&2, Tm>
-  for dn: String
-  Tm
-
-# Applies a binder's body to its arguments.
-@unsafe
-def clo_apply(+book: Book, c: Tm, +xs: List<&2, Tm>) -> Tm:
-  match c:
-    case CSyn{env, i, b}:
-      higher(book, b, env_set(env, i, Lst.head(Tm, Var{"_", 0, NoSp{}}, xs)))
-    case CLet{env, ids, b}:
-      higher(book, b, env_sets(env, ids, xs))
-    case CSnf{c2}:
-      term_snf(book, clo_apply(book, c2, xs))
-    case CExt{lhs, k, 1n+n, ys}:
-      lhs_ext(book, lhs, k, n, List.append(&2, Tm, ys, xs))
-    case CGoal{cur, n, ys, tb, ck, cs, tq, ctx, dn}:
-      mat_goal(book, clo_apply(book, cur, xs), n, List.append(&2, Tm, ys, xs), tb, ck, cs, tq, ctx, dn)
-    case CRwt{a, ty, s}:
-      All{QLone{}, "e", 0, Eql{a, Lst.head(Tm, Var{"_", 0, NoSp{}}, xs), ty, NoSp{}},
-        CConst{Typ{TQua{QLone{}, NoSp{}}, NoSp{}}}, s}
-    case CConst{t}:
-      t
-    case other:
-      other
-
-def term_apply.go(+book: Book, fn: Tm, x: Tm, s: Sp) -> Tm:
-  match fn:
-    case Lam{k, i, f, ls, q}:
-      clo_apply(book, f, [x])
-    case other:
-      TApp{other, x, s}
-
-def term_apply(+book: Book, fn: Tm, x: Tm, s: Sp) -> Tm:
-  term_apply.go(book, term_strip(fn), x, s)
-
-def term_apply1(+book: Book, fn: Tm, x: Tm) -> Tm:
-  term_apply(book, fn, x, NoSp{})
-
-def lhs_ext(book, lhs, k, n, xs):
-  match n:
-    case 0n:
-      term_apply(book, lhs, Ctr{k, xs, NoSp{}}, NoSp{})
-    case 1n+p:
-      Lam{"_", 0, CExt{lhs, k, 1n+p, xs}, NoSp{}, QUnd{}}
-
-@unsafe
-def higher.val(+book: Book, v: Tm, s: Sp) -> Tm:
-  match v:
-    case EPat{p, env}:
-      higher(book, patt_term(p, s), env)
-    case Cel{k, cs, x, m}:
-      Cel{k, cs, x, m}
-    case other:
-      Tm.respan(other, s)
-
-def higher.var(+book: Book, m: Maybe<&2, Tm>, d: Tm, s: Sp) -> Tm:
-  match m:
-    case None{}:
-      d
-    case Some{v}:
-      higher.val(book, v, s)
-
-def higher.app(+book: Book, f: Tm, x: Tm, s: Sp) -> Tm:
-  match f:
-    case Lam{k, i, c, ls, q}:
-      clo_apply(book, c, [x])
-    case other:
-      TApp{other, x, s}
-
-@unsafe
-def highers(+book: Book, xs: List<&2, Tm>, +env: List<&2, Tm>) -> List<&2, Tm>:
-  match xs:
-    case Nil{}:
-      Nil{}
-    case h <> t:
-      higher(book, h, env) <> highers(book, t, env)
-
-def higher(book, tm, env):
-  match tm:
-    case Var{+k, +i, +s}:
-      higher.var(book, env_get(env, i), Ref{k, s, False{}}, s)
-    case VRf{k, +i, +s, r}:
-      higher.var(book, env_get(env, i), r, s)
-    case Sub{i, p, f, s}:
-      higher(book, f, EB{i, EPat{p, env}} <> env)
-    case Let{ks, +ids, vs, f, s, qs}:
-      Let{ks, ids, highers(book, vs, env), CLet{env, ids, syn_body(f)}, s, qs}
-    case All{q, k, +i, a, b, s}:
-      All{q, k, i, higher(book, a, env), CSyn{env, i, syn_body(b)}, s}
-    case Lam{k, +i, f, s, q}:
-      Lam{k, i, CSyn{env, i, syn_body(f)}, s, q}
-    case Typ{g, s}:
-      Typ{higher(book, g, env), s}
-    case Min{a, b, s}:
-      Min{higher(book, a, env), higher(book, b, env), s}
-    case TApp{f, x, s}:
-      higher.app(book, higher(book, f, env), higher(book, x, env), s)
-    case ADT{k, xs, s, r}:
-      ADT{k, highers(book, xs, env), s, r}
-    case Ctr{k, xs, s}:
-      Ctr{k, highers(book, xs, env), s}
-    case Mat{k, h, m, s}:
-      Mat{k, higher(book, h, env), higher(book, m, env), s}
-    case Eql{a, b, ty, s}:
-      Eql{higher(book, a, env), higher(book, b, env), higher(book, ty, env), s}
-    case Rwt{e, p, f, s}:
-      Rwt{higher(book, e, env), higher(book, p, env), higher(book, f, env), s}
-    case Ann{x, ty, s}:
-      Ann{higher(book, x, env), higher(book, ty, env), s}
-    case other:
-      other
-
-law lowers:
-  for +book: Book
-  for xs: List<&2, Tm>
-  for +d: U32
-  List<&2, Tm>
-
-# term_lower: back to syntax, binders numbered by depth.
-@unsafe
-def lowers(book, xs, d):
-  match xs:
-    case Nil{}:
-      Nil{}
-    case h <> t:
-      term_lower(book, h, d) <> lowers(book, t, d)
-
 def let_vars.fresh(ks: List<&2, String>, +d: U32) -> List<&2, Tm>:
   match ks:
     case Nil{}:
@@ -4530,47 +4365,6 @@ def let_ids(ks: List<&2, String>, +d: U32) -> List<&2, U32>:
       Nil{}
     case k <> t:
       d <> let_ids(t, U32.inc(d))
-
-@unsafe
-def term_lower.go(+book: Book, term: Tm, +d: U32) -> Tm:
-  match term:
-    case Var{k, i, s}:
-      Var{k, i, s}
-    case Sub{i, p, f, s}:
-      Sub{i, p, term_lower(book, f, d), s}
-    case Let{+ks, ids, vs, f, s, qs}:
-      +n = U32.from_nat(List.length(&2, String, ks))
-      Let{ks, let_ids(ks, d), lowers(book, vs, d), CLet{Nil{}, Nil{},
-        term_lower(book, clo_apply(book, f, let_vars.fresh(ks, d)), (d + n : U32))}, s, qs}
-    case Typ{g, s}:
-      Typ{term_lower(book, g, d), s}
-    case Min{a, b, s}:
-      Min{term_lower(book, a, d), term_lower(book, b, d), s}
-    case All{q, +k, i, a, b, s}:
-      All{q, k, d, term_lower(book, a, d), CSyn{Nil{}, d,
-        term_lower(book, clo_apply(book, b, [Var{k, d, NoSp{}}]), U32.inc(d))}, s}
-    case Lam{+k, i, f, s, q}:
-      Lam{k, d, CSyn{Nil{}, d, term_lower(book, clo_apply(book, f, [Var{k, d, NoSp{}}]),
-        U32.inc(d))}, s, q}
-    case TApp{f, x, s}:
-      TApp{term_lower(book, f, d), term_lower(book, x, d), s}
-    case ADT{k, xs, s, r}:
-      ADT{k, lowers(book, xs, d), s, r}
-    case Ctr{k, xs, s}:
-      Ctr{k, lowers(book, xs, d), s}
-    case Mat{k, h, m, s}:
-      Mat{k, term_lower(book, h, d), term_lower(book, m, d), s}
-    case Eql{a, b, ty, s}:
-      Eql{term_lower(book, a, d), term_lower(book, b, d), term_lower(book, ty, d), s}
-    case Rwt{e, p, f, s}:
-      Rwt{term_lower(book, e, d), term_lower(book, p, d), term_lower(book, f, d), s}
-    case Ann{x, ty, s}:
-      Ann{term_lower(book, x, d), term_lower(book, ty, d), s}
-    case other:
-      other
-
-def term_lower(book, term, d):
-  term_lower.go(book, term_force(term), d)
 
 def tld_n(t: Tld) -> Nat:
   match t:
@@ -4589,22 +4383,6 @@ def frs_apps(frs: List<&2, Fr>, n: Nat) -> Nat:
     case fs k:
       0n
 
-def lhs_step(+book: Book, lhs: LH, x: Tm, s: Sp) -> LH:
-  match lhs:
-    case LNo{}:
-      LNo{}
-    case LH{t, 0n}:
-      LNo{}
-    case LH{t, 1n+n}:
-      LH{term_apply(book, t, x, s), n}
-
-def lhs_mat(+book: Book, lhs: LH, +k: String, +len: Nat) -> LH:
-  match lhs:
-    case LNo{}:
-      LNo{}
-    case LH{t, n}:
-      LH{lhs_ext(book, t, k, len, Nil{}), Nat.add(Nat.sub(n, 1n), len)}
-
 def lhs_or(lhs: LH, t: Tm) -> Tm:
   match lhs:
     case LNo{}:
@@ -4619,106 +4397,12 @@ def app_frames(xs: List<&2, Tm>, rest: List<&2, Fr>) -> List<&2, Fr>:
     case x <> t:
       FApp{term_cell(x, "_"), NoSp{}} <> app_frames(t, rest)
 
-law wnf.back:
-  for +book: Book
-  for tm: Tm
-  for frs: List<&2, Fr>
-  Tm
-
-@unsafe
-def wnf.lam(+book: Book, tm: Tm, frs: List<&2, Fr>, lhs: LH) -> Tm:
-  match frs:
-    case FApp{+x, +s} <> rest:
-      wnf.go(book, term_apply(book, tm, x, s), rest, lhs_step(book, lhs, x, s))
-    case other:
-      wnf.back(book, tm, other)
-
-@unsafe
-def wnf.mat(+book: Book, tm: Tm, frs: List<&2, Fr>, lhs: LH) -> Tm:
-  match frs:
-    case FApp{+x, s} <> rest:
-      wnf.go(book, x, FMat{tm, x, lhs, s} <> rest, LNo{})
-    case other:
-      wnf.back(book, tm, other)
-
-@unsafe
-def wnf.efq(+book: Book, tm: Tm, frs: List<&2, Fr>, lhs: LH) -> Tm:
-  match frs lhs:
-    case FApp{x, s} <> rest LH{t, 1n+n}:
-      wnf.back(book, t, FApp{x, s} <> rest)
-    case fs l:
-      wnf.back(book, tm, fs)
-
-@unsafe
-def wnf.rwt(+book: Book, e: Tm, tm: Tm, f: Tm, frs: List<&2, Fr>, lhs: LH) -> Tm:
-  match e:
-    case Rfl{s}:
-      wnf.go(book, f, frs, lhs)
-    case other:
-      wnf.back(book, tm, frs)
-
-@unsafe
-def wnf.ref.def(+book: Book, tm: Tm, v: Tm, n: Nat, frs: List<&2, Fr>, short: Bool) -> Tm:
-  match short:
-    case True{}:
-      wnf.back(book, tm, frs)
-    case False{}:
-      wnf.go(book, v, frs, LH{tm, n})
-
 def Tm.ref_k(t: Tm) -> String:
   match t:
     case Ref{k, s, b}:
       k
     case other:
       ""
-
-@unsafe
-def wnf.ref(+book: Book, tld: Maybe<&2, Tld>, +tm: Tm, +frs: List<&2, Fr>, lhs: LH) -> Tm:
-  match tld:
-    case Some{TADT{0n, g, ty, cs, tbase}}:
-      wnf.back(book, ADT{Tm.ref_k(tm), Nil{}, Tm.span(tm), Nil{}}, frs)
-    case Some{TDef{+n, x, ty, Some{v}, u, b, imps}}:
-      wnf.ref.def(book, tm, v, n, frs, Nat.is_lt(frs_apps(frs, n), n))
-    case other:
-      wnf.back(book, tm, frs)
-
-# A cell evaluates once: its memo keeps the value for every copy of the
-# cell, so the arms of a match a cell holds evaluate once too.
-@unsafe
-def wnf.cel(+book: Book, +v: Tm, +m: Tm, hit: Bool, frs: List<&2, Fr>) -> Tm:
-  match hit:
-    case True{}:
-      wnf.go(book, memo.get(m), frs, LNo{})
-    case False{}:
-      wnf.go(book, v, FVar{m, v} <> frs, LNo{})
-
-@unsafe
-def wnf.go(book, tm, frs, lhs):
-  match tm:
-    case Cel{k, s, +v, +m}:
-      wnf.cel(book, v, m, memo.has(m, v), frs)
-    case VRf{k, i, s, r}:
-      wnf.go(book, r, frs, LNo{})
-    case Ann{x, ty, s}:
-      wnf.go(book, x, frs, lhs)
-    case Min{a, b, s}:
-      wnf.go(book, a, FMna{b, s} <> frs, lhs)
-    case Let{ks, ids, vs, f, s, qs}:
-      wnf.go(book, clo_apply(book, f, term_cells(vs, ks)), frs, lhs)
-    case TApp{f, x, s}:
-      wnf.go(book, f, FApp{term_cell(x, "_"), s} <> frs, LNo{})
-    case Lam{k, i, f, s, q}:
-      wnf.lam(book, Lam{k, i, f, s, q}, frs, lhs)
-    case Mat{k, h, m, s}:
-      wnf.mat(book, Mat{k, h, m, s}, frs, lhs)
-    case Efq{s}:
-      wnf.efq(book, Efq{s}, frs, lhs)
-    case Rwt{+e, p, +f, s}:
-      wnf.rwt(book, term_wnf(book, e), Rwt{e, p, f, s}, f, frs, lhs)
-    case Ref{+k, +s, b}:
-      wnf.ref(book, book_tld(book, k), Ref{k, s, b}, frs, lhs)
-    case other:
-      wnf.back(book, other, frs)
 
 def Tm.is_qua(t: Tm) -> Bool:
   match t:
@@ -4745,135 +4429,573 @@ def lit.to_ctr(t: Tm) -> Tm:
     case other:
       other
 
-law wnf.walk:
-  for +book: Book
-  for +k: String
-  for +xs: List<&2, Tm>
-  for ctr: Tm
-  for w: Tm
-  for t: Tm
-  for e: Tm
-  for lhs: LH
-  for s: Sp
-  for rest: List<&2, Fr>
-  Tm
-
-@unsafe
-def wnf.matd(+book: Book, tm: Tm, +t: Tm, e: Tm, lhs: LH, s: Sp, rest: List<&2, Fr>) -> Tm:
-  match tm:
-    case Ctr{+k, +xs, cs}:
-      wnf.walk(book, k, xs, Ctr{k, xs, cs}, t, t, e, lhs, s, rest)
+def mat_goal.dem(q: Q, +tq: Q) -> Q:
+  match q:
+    case QNone{}:
+      QNone{}
+    case QLone{}:
+      tq
     case other:
-      wnf.back(book, term_apply(book, lhs_or(lhs, t), e, s), rest)
+      quant_add(tq, tq)
 
-law wnf.mna:
-  for +book: Book
-  for tm: Tm
-  for b: Tm
-  for s: Sp
-  for rest: List<&2, Fr>
-  Tm
-
-@unsafe
-def wnf.back(book, tm, frs):
-  match frs:
-    case Nil{}:
-      tm
-    case FApp{x, s} <> rest:
-      wnf.back(book, term_apply(book, tm, x, s), rest)
-    case FMna{b, s} <> rest:
-      wnf.mna(book, tm, b, s, rest)
-    case FMnb{a, s} <> rest:
-      wnf.back(book, wnf.mnb(tm, a, s), rest)
-    case FMat{t, e, lhs, s} <> rest:
-      wnf.matd(book, lit.to_ctr(tm), t, e, lhs, s, rest)
-    case FVar{m, v} <> rest:
-      wnf.go(book, memo.set(m, v, term_cellv(tm)), rest, LNo{})
-
-def wnf.mna(book, tm, b, s, rest):
-  match tm:
-    case TQua{QMany{}, qs}:
-      wnf.go(book, b, rest, LNo{})
-    case TQua{QNone{}, qs}:
-      wnf.back(book, TQua{QNone{}, qs}, rest)
-    case other:
-      wnf.go(book, b, FMnb{other, s} <> rest, LNo{})
-
-@unsafe
-def wnf.walk.mat(
-  +book: Book, +k: String, +xs: List<&2, Tm>, ctr: Tm, w: Tm, h: Tm, m: Tm, t: Tm, e: Tm, lhs: LH,
-  s: Sp, rest: List<&2, Fr>, hit: Bool
+def mat_goal.go(
+  t: Tm, m: Nat, xs: List<&2, Tm>, tb: Tm, +ck: String, +cs: Sp, +tq: Q, ctx: List<&2, Tm>, dn: String
 ) -> Tm:
-  match hit:
-    case True{}:
-      wnf.go(book, h, app_frames(xs, rest), lhs_mat(book, lhs, k, List.length(&2, Tm, xs)))
-    case False{}:
-      wnf.walk(book, k, xs, ctr, m, t, e, lhs, s, rest)
-
-def wnf.walk(book, k, xs, ctr, w, t, e, lhs, s, rest):
-  match w:
-    case Ann{x, ty, as}:
-      wnf.walk(book, k, xs, ctr, x, t, e, lhs, s, rest)
-    case Cel{ck, cs, x, cm}:
-      wnf.walk(book, k, xs, ctr, x, t, e, lhs, s, rest)
-    case Mat{+k2, +h, +m, ms}:
-      wnf.walk.mat(book, k, xs, ctr, Mat{k2, h, m, ms}, h, m, t, e, lhs, s, rest, String.eq(k, k2))
-    case Efq{es}:
-      wnf.back(book, term_apply(book, lhs_or(lhs, t), e, s), rest)
-    case other:
-      wnf.go(book, other, FApp{ctr, NoSp{}} <> rest, lhs)
-
-law snfs:
-  for +book: Book
-  for xs: List<&2, Tm>
-  List<&2, Tm>
-
-# The strong normal form: every binder's body normalized too. An applied
-# def stays a call.
-def snfs(book, xs):
-  match xs:
-    case Nil{}:
-      Nil{}
-    case h <> t:
-      term_snf(book, h) <> snfs(book, t)
-
-def snf.fun(+book: Book, f: Tm) -> Tm:
-  match f:
-    case Ref{k, s, b}:
-      Ref{k, s, b}
-    case other:
-      term_snf(book, other)
-
-def snf.go(book, tm):
-  match tm:
-    case Var{k, i, s}:
-      Var{k, i, s}
-    case Ref{k, s, b}:
-      Ref{k, s, b}
-    case Sub{i, p, f, s}:
-      Sub{i, p, term_snf(book, f), s}
-    case Typ{g, s}:
-      Typ{term_snf(book, g), s}
-    case Min{a, b, s}:
-      Min{term_snf(book, a), term_snf(book, b), s}
+  match t:
     case All{q, k, i, a, b, s}:
-      All{q, k, i, term_snf(book, a), CSnf{b}, s}
-    case Lam{k, i, f, s, q}:
-      Lam{k, i, CSnf{f}, s, QUnd{}}
-    case TApp{f, x, s}:
-      TApp{snf.fun(book, f), term_snf(book, x), s}
-    case ADT{k, xs, s, r}:
-      ADT{k, snfs(book, xs), s, r}
-    case Ctr{k, xs, s}:
-      Ctr{k, snfs(book, xs), s}
-    case Mat{k, h, m, s}:
-      Mat{k, term_snf(book, h), term_snf(book, m), s}
-    case Eql{a, b, ty, s}:
-      Eql{term_snf(book, a), term_snf(book, b), term_snf(book, ty), s}
-    case Rwt{e, p, f, s}:
-      Rwt{term_snf(book, e), term_snf(book, p), term_snf(book, f), s}
+      All{mat_goal.dem(q, tq), k, i, a, CGoal{b, m, xs, tb, ck, cs, tq, ctx, dn}, cs}
     case other:
-      other
+      Efq{cs}
+
+type WSel is Data:
+  STermWnf{book: Book, t: Tm}
+  STermSnf{book: Book, term: Tm}
+  SCloApply{book: Book, c: Tm, xs: List<&2, Tm>}
+  STermApplyGo{book: Book, fn: Tm, x: Tm, s: Sp}
+  STermApply{book: Book, fn: Tm, x: Tm, s: Sp}
+  SLhsExt{book: Book, lhs: Tm, k: String, n: Nat, xs: List<&2, Tm>}
+  SHigherVal{book: Book, v: Tm, s: Sp}
+  SHigherVar{book: Book, m: Maybe<&2, Tm>, d: Tm, s: Sp}
+  SHigherApp{book: Book, f: Tm, x: Tm, s: Sp}
+  SHighers{book: Book, xs: List<&2, Tm>, env: List<&2, Tm>}
+  SHigher{book: Book, tm: Tm, env: List<&2, Tm>}
+  SLhsStep{book: Book, lhs: LH, x: Tm, s: Sp}
+  SLhsMat{book: Book, lhs: LH, k: String, len: Nat}
+  SWnfLam{book: Book, tm: Tm, frs: List<&2, Fr>, lhs: LH}
+  SWnfMat{book: Book, tm: Tm, frs: List<&2, Fr>, lhs: LH}
+  SWnfEfq{book: Book, tm: Tm, frs: List<&2, Fr>, lhs: LH}
+  SWnfRwt{book: Book, e: Tm, tm: Tm, f: Tm, frs: List<&2, Fr>, lhs: LH}
+  SWnfRefDef{book: Book, tm: Tm, v: Tm, n: Nat, frs: List<&2, Fr>, short: Bool}
+  SWnfRef{book: Book, tld: Maybe<&2, Tld>, tm: Tm, frs: List<&2, Fr>, lhs: LH}
+  SWnfCel{book: Book, v: Tm, m: Tm, hit: Bool, frs: List<&2, Fr>}
+  SWnfGo{book: Book, tm: Tm, frs: List<&2, Fr>, lhs: LH}
+  SWnfMatd{book: Book, tm: Tm, t: Tm, e: Tm, lhs: LH, s: Sp, rest: List<&2, Fr>}
+  SWnfBack{book: Book, tm: Tm, frs: List<&2, Fr>}
+  SWnfMna{book: Book, tm: Tm, b: Tm, s: Sp, rest: List<&2, Fr>}
+  SWnfWalkMat{book: Book, k: String, xs: List<&2, Tm>, ctr: Tm, w: Tm, h: Tm, m: Tm, t: Tm, e: Tm, lhs: LH, s: Sp, rest: List<&2, Fr>, hit: Bool}
+  SWnfWalk{book: Book, k: String, xs: List<&2, Tm>, ctr: Tm, w: Tm, t: Tm, e: Tm, lhs: LH, s: Sp, rest: List<&2, Fr>}
+  SSnfs{book: Book, xs: List<&2, Tm>}
+  SSnfFun{book: Book, f: Tm}
+  SSnfGo{book: Book, tm: Tm}
+  SMatGoal{book: Book, tel: Tm, n: Nat, xs: List<&2, Tm>, tb: Tm, ck: String, cs: Sp, tq: Q, ctx: List<&2, Tm>, dn: String}
+
+def WSel.ty(k: WSel) -> Type:
+  match k:
+    case STermWnf{book, t}:
+      Tm
+    case STermSnf{book, term}:
+      Tm
+    case SCloApply{book, c, xs}:
+      Tm
+    case STermApplyGo{book, fn, x, s}:
+      Tm
+    case STermApply{book, fn, x, s}:
+      Tm
+    case SLhsExt{book, lhs, k, n, xs}:
+      Tm
+    case SHigherVal{book, v, s}:
+      Tm
+    case SHigherVar{book, m, d, s}:
+      Tm
+    case SHigherApp{book, f, x, s}:
+      Tm
+    case SHighers{book, xs, env}:
+      List<&2, Tm>
+    case SHigher{book, tm, env}:
+      Tm
+    case SLhsStep{book, lhs, x, s}:
+      LH
+    case SLhsMat{book, lhs, k, len}:
+      LH
+    case SWnfLam{book, tm, frs, lhs}:
+      Tm
+    case SWnfMat{book, tm, frs, lhs}:
+      Tm
+    case SWnfEfq{book, tm, frs, lhs}:
+      Tm
+    case SWnfRwt{book, e, tm, f, frs, lhs}:
+      Tm
+    case SWnfRefDef{book, tm, v, n, frs, short}:
+      Tm
+    case SWnfRef{book, tld, tm, frs, lhs}:
+      Tm
+    case SWnfCel{book, v, m, hit, frs}:
+      Tm
+    case SWnfGo{book, tm, frs, lhs}:
+      Tm
+    case SWnfMatd{book, tm, t, e, lhs, s, rest}:
+      Tm
+    case SWnfBack{book, tm, frs}:
+      Tm
+    case SWnfMna{book, tm, b, s, rest}:
+      Tm
+    case SWnfWalkMat{book, k, xs, ctr, w, h, m, t, e, lhs, s, rest, hit}:
+      Tm
+    case SWnfWalk{book, k, xs, ctr, w, t, e, lhs, s, rest}:
+      Tm
+    case SSnfs{book, xs}:
+      List<&2, Tm>
+    case SSnfFun{book, f}:
+      Tm
+    case SSnfGo{book, tm}:
+      Tm
+    case SMatGoal{book, tel, n, xs, tb, ck, cs, tq, ctx, dn}:
+      Tm
+
+# Evaluation, one def: sel picks the step (term_wnf, clo_apply, higher,
+# term_snf and their parts). Out of fuel, a term is the hole ?out of fuel.
+def wnf.run(fuel0: Nat, sel: WSel) -> WSel.ty(sel):
+  match fuel0:
+    case 0n:
+      match sel:
+        case STermWnf{book, t}:
+          Hol{"out of fuel", NoSp{}}
+        case STermSnf{book, term}:
+          Hol{"out of fuel", NoSp{}}
+        case SCloApply{book, c, xs}:
+          Hol{"out of fuel", NoSp{}}
+        case STermApplyGo{book, fn, x, s}:
+          Hol{"out of fuel", NoSp{}}
+        case STermApply{book, fn, x, s}:
+          Hol{"out of fuel", NoSp{}}
+        case SLhsExt{book, lhs, k, n, xs}:
+          Hol{"out of fuel", NoSp{}}
+        case SHigherVal{book, v, s}:
+          Hol{"out of fuel", NoSp{}}
+        case SHigherVar{book, m, d, s}:
+          Hol{"out of fuel", NoSp{}}
+        case SHigherApp{book, f, x, s}:
+          Hol{"out of fuel", NoSp{}}
+        case SHighers{book, xs, env}:
+          Nil{}
+        case SHigher{book, tm, env}:
+          Hol{"out of fuel", NoSp{}}
+        case SLhsStep{book, lhs, x, s}:
+          LNo{}
+        case SLhsMat{book, lhs, k, len}:
+          LNo{}
+        case SWnfLam{book, tm, frs, lhs}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfMat{book, tm, frs, lhs}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfEfq{book, tm, frs, lhs}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfRwt{book, e, tm, f, frs, lhs}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfRefDef{book, tm, v, n, frs, short}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfRef{book, tld, tm, frs, lhs}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfCel{book, v, m, hit, frs}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfGo{book, tm, frs, lhs}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfMatd{book, tm, t, e, lhs, s, rest}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfBack{book, tm, frs}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfMna{book, tm, b, s, rest}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfWalkMat{book, k, xs, ctr, w, h, m, t, e, lhs, s, rest, hit}:
+          Hol{"out of fuel", NoSp{}}
+        case SWnfWalk{book, k, xs, ctr, w, t, e, lhs, s, rest}:
+          Hol{"out of fuel", NoSp{}}
+        case SSnfs{book, xs}:
+          Nil{}
+        case SSnfFun{book, f}:
+          Hol{"out of fuel", NoSp{}}
+        case SSnfGo{book, tm}:
+          Hol{"out of fuel", NoSp{}}
+        case SMatGoal{book, tel, n, xs, tb, ck, cs, tq, ctx, dn}:
+          Hol{"out of fuel", NoSp{}}
+    case 1n+ +fuel:
+      match sel:
+        case STermWnf{+book, t}:
+          wnf.run(fuel, SWnfGo{book, t, Nil{}, LNo{}})
+        case STermSnf{+book, term}:
+          wnf.run(fuel, SSnfGo{book, wnf.run(fuel, STermWnf{book, term})})
+        # Applies a binder's body to its arguments.
+        case SCloApply{+book, c, +xs}:
+          match c:
+            case CSyn{env, i, b}:
+              wnf.run(fuel, SHigher{book, b, env_set(env, i, Lst.head(Tm, Var{"_", 0, NoSp{}}, xs))})
+            case CLet{env, ids, b}:
+              wnf.run(fuel, SHigher{book, b, env_sets(env, ids, xs)})
+            case CSnf{c2}:
+              wnf.run(fuel, STermSnf{book, wnf.run(fuel, SCloApply{book, c2, xs})})
+            case CExt{lhs, k, 1n+n, ys}:
+              wnf.run(fuel, SLhsExt{book, lhs, k, n, List.append(&2, Tm, ys, xs)})
+            case CGoal{cur, n, ys, tb, ck, cs, tq, ctx, dn}:
+              wnf.run(fuel, SMatGoal{book, wnf.run(fuel, SCloApply{book, cur, xs}), n, List.append(&2, Tm, ys, xs), tb, ck, cs, tq, ctx, dn})
+            case CRwt{a, ty, s}:
+              All{QLone{}, "e", 0, Eql{a, Lst.head(Tm, Var{"_", 0, NoSp{}}, xs), ty, NoSp{}},
+                CConst{Typ{TQua{QLone{}, NoSp{}}, NoSp{}}}, s}
+            case CConst{t}:
+              t
+            case other:
+              other
+        case STermApplyGo{+book, fn, x, s}:
+          match fn:
+            case Lam{k, i, f, ls, q}:
+              wnf.run(fuel, SCloApply{book, f, [x]})
+            case other:
+              TApp{other, x, s}
+        case STermApply{+book, fn, x, s}:
+          wnf.run(fuel, STermApplyGo{book, term_strip(fn), x, s})
+        case SLhsExt{+book, lhs, +k, n, xs}:
+          match n:
+            case 0n:
+              wnf.run(fuel, STermApply{book, lhs, Ctr{k, xs, NoSp{}}, NoSp{}})
+            case 1n+p:
+              Lam{"_", 0, CExt{lhs, k, 1n+p, xs}, NoSp{}, QUnd{}}
+        case SHigherVal{+book, v, s}:
+          match v:
+            case EPat{p, env}:
+              wnf.run(fuel, SHigher{book, patt_term(p, s), env})
+            case Cel{k, cs, x, m}:
+              Cel{k, cs, x, m}
+            case other:
+              Tm.respan(other, s)
+        case SHigherVar{+book, m, d, s}:
+          match m:
+            case None{}:
+              d
+            case Some{v}:
+              wnf.run(fuel, SHigherVal{book, v, s})
+        case SHigherApp{+book, f, x, s}:
+          match f:
+            case Lam{k, i, c, ls, q}:
+              wnf.run(fuel, SCloApply{book, c, [x]})
+            case other:
+              TApp{other, x, s}
+        case SHighers{+book, xs, +env}:
+          match xs:
+            case Nil{}:
+              Nil{}
+            case h <> t:
+              wnf.run(fuel, SHigher{book, h, env}) <> wnf.run(fuel, SHighers{book, t, env})
+        case SHigher{+book, tm, +env}:
+          match tm:
+            case Var{+k, +i, +s}:
+              wnf.run(fuel, SHigherVar{book, env_get(env, i), Ref{k, s, False{}}, s})
+            case VRf{k, +i, +s, r}:
+              wnf.run(fuel, SHigherVar{book, env_get(env, i), r, s})
+            case Sub{i, p, f, s}:
+              wnf.run(fuel, SHigher{book, f, EB{i, EPat{p, env}} <> env})
+            case Let{ks, +ids, vs, f, s, qs}:
+              Let{ks, ids, wnf.run(fuel, SHighers{book, vs, env}), CLet{env, ids, syn_body(f)}, s, qs}
+            case All{q, k, +i, a, b, s}:
+              All{q, k, i, wnf.run(fuel, SHigher{book, a, env}), CSyn{env, i, syn_body(b)}, s}
+            case Lam{k, +i, f, s, q}:
+              Lam{k, i, CSyn{env, i, syn_body(f)}, s, q}
+            case Typ{g, s}:
+              Typ{wnf.run(fuel, SHigher{book, g, env}), s}
+            case Min{a, b, s}:
+              Min{wnf.run(fuel, SHigher{book, a, env}), wnf.run(fuel, SHigher{book, b, env}), s}
+            case TApp{f, x, s}:
+              wnf.run(fuel, SHigherApp{book, wnf.run(fuel, SHigher{book, f, env}), wnf.run(fuel, SHigher{book, x, env}), s})
+            case ADT{k, xs, s, r}:
+              ADT{k, wnf.run(fuel, SHighers{book, xs, env}), s, r}
+            case Ctr{k, xs, s}:
+              Ctr{k, wnf.run(fuel, SHighers{book, xs, env}), s}
+            case Mat{k, h, m, s}:
+              Mat{k, wnf.run(fuel, SHigher{book, h, env}), wnf.run(fuel, SHigher{book, m, env}), s}
+            case Eql{a, b, ty, s}:
+              Eql{wnf.run(fuel, SHigher{book, a, env}), wnf.run(fuel, SHigher{book, b, env}), wnf.run(fuel, SHigher{book, ty, env}), s}
+            case Rwt{e, p, f, s}:
+              Rwt{wnf.run(fuel, SHigher{book, e, env}), wnf.run(fuel, SHigher{book, p, env}), wnf.run(fuel, SHigher{book, f, env}), s}
+            case Ann{x, ty, s}:
+              Ann{wnf.run(fuel, SHigher{book, x, env}), wnf.run(fuel, SHigher{book, ty, env}), s}
+            case other:
+              other
+        case SLhsStep{+book, lhs, x, s}:
+          match lhs:
+            case LNo{}:
+              LNo{}
+            case LH{t, 0n}:
+              LNo{}
+            case LH{t, 1n+n}:
+              LH{wnf.run(fuel, STermApply{book, t, x, s}), n}
+        case SLhsMat{+book, lhs, +k, +len}:
+          match lhs:
+            case LNo{}:
+              LNo{}
+            case LH{t, n}:
+              LH{wnf.run(fuel, SLhsExt{book, t, k, len, Nil{}}), Nat.add(Nat.sub(n, 1n), len)}
+        case SWnfLam{+book, tm, frs, lhs}:
+          match frs:
+            case FApp{+x, +s} <> rest:
+              wnf.run(fuel, SWnfGo{book, wnf.run(fuel, STermApply{book, tm, x, s}), rest, wnf.run(fuel, SLhsStep{book, lhs, x, s})})
+            case other:
+              wnf.run(fuel, SWnfBack{book, tm, other})
+        case SWnfMat{+book, tm, frs, lhs}:
+          match frs:
+            case FApp{+x, s} <> rest:
+              wnf.run(fuel, SWnfGo{book, x, FMat{tm, x, lhs, s} <> rest, LNo{}})
+            case other:
+              wnf.run(fuel, SWnfBack{book, tm, other})
+        case SWnfEfq{+book, tm, frs, lhs}:
+          match frs lhs:
+            case FApp{x, s} <> rest LH{t, 1n+n}:
+              wnf.run(fuel, SWnfBack{book, t, FApp{x, s} <> rest})
+            case fs l:
+              wnf.run(fuel, SWnfBack{book, tm, fs})
+        case SWnfRwt{+book, e, tm, f, frs, lhs}:
+          match e:
+            case Rfl{s}:
+              wnf.run(fuel, SWnfGo{book, f, frs, lhs})
+            case other:
+              wnf.run(fuel, SWnfBack{book, tm, frs})
+        case SWnfRefDef{+book, tm, v, n, frs, short}:
+          match short:
+            case True{}:
+              wnf.run(fuel, SWnfBack{book, tm, frs})
+            case False{}:
+              wnf.run(fuel, SWnfGo{book, v, frs, LH{tm, n}})
+        case SWnfRef{+book, tld, +tm, +frs, lhs}:
+          match tld:
+            case Some{TADT{0n, g, ty, cs, tbase}}:
+              wnf.run(fuel, SWnfBack{book, ADT{Tm.ref_k(tm), Nil{}, Tm.span(tm), Nil{}}, frs})
+            case Some{TDef{+n, x, ty, Some{v}, u, b, imps}}:
+              wnf.run(fuel, SWnfRefDef{book, tm, v, n, frs, Nat.is_lt(frs_apps(frs, n), n)})
+            case other:
+              wnf.run(fuel, SWnfBack{book, tm, frs})
+        # A cell evaluates once: its memo keeps the value for every copy of the
+        # cell, so the arms of a match a cell holds evaluate once too.
+        case SWnfCel{+book, +v, +m, hit, frs}:
+          match hit:
+            case True{}:
+              wnf.run(fuel, SWnfGo{book, memo.get(m), frs, LNo{}})
+            case False{}:
+              wnf.run(fuel, SWnfGo{book, v, FVar{m, v} <> frs, LNo{}})
+        case SWnfGo{+book, tm, frs, lhs}:
+          match tm:
+            case Cel{k, s, +v, +m}:
+              wnf.run(fuel, SWnfCel{book, v, m, memo.has(m, v), frs})
+            case VRf{k, i, s, r}:
+              wnf.run(fuel, SWnfGo{book, r, frs, LNo{}})
+            case Ann{x, ty, s}:
+              wnf.run(fuel, SWnfGo{book, x, frs, lhs})
+            case Min{a, b, s}:
+              wnf.run(fuel, SWnfGo{book, a, FMna{b, s} <> frs, lhs})
+            case Let{ks, ids, vs, f, s, qs}:
+              wnf.run(fuel, SWnfGo{book, wnf.run(fuel, SCloApply{book, f, term_cells(vs, ks)}), frs, lhs})
+            case TApp{f, x, s}:
+              wnf.run(fuel, SWnfGo{book, f, FApp{term_cell(x, "_"), s} <> frs, LNo{}})
+            case Lam{k, i, f, s, q}:
+              wnf.run(fuel, SWnfLam{book, Lam{k, i, f, s, q}, frs, lhs})
+            case Mat{k, h, m, s}:
+              wnf.run(fuel, SWnfMat{book, Mat{k, h, m, s}, frs, lhs})
+            case Efq{s}:
+              wnf.run(fuel, SWnfEfq{book, Efq{s}, frs, lhs})
+            case Rwt{+e, p, +f, s}:
+              wnf.run(fuel, SWnfRwt{book, wnf.run(fuel, STermWnf{book, e}), Rwt{e, p, f, s}, f, frs, lhs})
+            case Ref{+k, +s, b}:
+              wnf.run(fuel, SWnfRef{book, book_tld(book, k), Ref{k, s, b}, frs, lhs})
+            case other:
+              wnf.run(fuel, SWnfBack{book, other, frs})
+        case SWnfMatd{+book, tm, +t, e, lhs, s, rest}:
+          match tm:
+            case Ctr{+k, +xs, cs}:
+              wnf.run(fuel, SWnfWalk{book, k, xs, Ctr{k, xs, cs}, t, t, e, lhs, s, rest})
+            case other:
+              wnf.run(fuel, SWnfBack{book, wnf.run(fuel, STermApply{book, lhs_or(lhs, t), e, s}), rest})
+        case SWnfBack{+book, tm, frs}:
+          match frs:
+            case Nil{}:
+              tm
+            case FApp{x, s} <> rest:
+              wnf.run(fuel, SWnfBack{book, wnf.run(fuel, STermApply{book, tm, x, s}), rest})
+            case FMna{b, s} <> rest:
+              wnf.run(fuel, SWnfMna{book, tm, b, s, rest})
+            case FMnb{a, s} <> rest:
+              wnf.run(fuel, SWnfBack{book, wnf.mnb(tm, a, s), rest})
+            case FMat{t, e, lhs, s} <> rest:
+              wnf.run(fuel, SWnfMatd{book, lit.to_ctr(tm), t, e, lhs, s, rest})
+            case FVar{m, v} <> rest:
+              wnf.run(fuel, SWnfGo{book, memo.set(m, v, term_cellv(tm)), rest, LNo{}})
+        case SWnfMna{+book, tm, b, s, rest}:
+          match tm:
+            case TQua{QMany{}, qs}:
+              wnf.run(fuel, SWnfGo{book, b, rest, LNo{}})
+            case TQua{QNone{}, qs}:
+              wnf.run(fuel, SWnfBack{book, TQua{QNone{}, qs}, rest})
+            case other:
+              wnf.run(fuel, SWnfGo{book, b, FMnb{other, s} <> rest, LNo{}})
+        case SWnfWalkMat{+book, +k, +xs, ctr, w, h, m, t, e, lhs, s, rest, hit}:
+          match hit:
+            case True{}:
+              wnf.run(fuel, SWnfGo{book, h, app_frames(xs, rest), wnf.run(fuel, SLhsMat{book, lhs, k, List.length(&2, Tm, xs)})})
+            case False{}:
+              wnf.run(fuel, SWnfWalk{book, k, xs, ctr, m, t, e, lhs, s, rest})
+        case SWnfWalk{+book, +k, +xs, ctr, w, t, e, lhs, s, rest}:
+          match w:
+            case Ann{x, ty, as}:
+              wnf.run(fuel, SWnfWalk{book, k, xs, ctr, x, t, e, lhs, s, rest})
+            case Cel{ck, cs, x, cm}:
+              wnf.run(fuel, SWnfWalk{book, k, xs, ctr, x, t, e, lhs, s, rest})
+            case Mat{+k2, +h, +m, ms}:
+              wnf.run(fuel, SWnfWalkMat{book, k, xs, ctr, Mat{k2, h, m, ms}, h, m, t, e, lhs, s, rest, String.eq(k, k2)})
+            case Efq{es}:
+              wnf.run(fuel, SWnfBack{book, wnf.run(fuel, STermApply{book, lhs_or(lhs, t), e, s}), rest})
+            case other:
+              wnf.run(fuel, SWnfGo{book, other, FApp{ctr, NoSp{}} <> rest, lhs})
+        # The strong normal form: every binder's body normalized too. An applied
+        # def stays a call.
+        case SSnfs{+book, xs}:
+          match xs:
+            case Nil{}:
+              Nil{}
+            case h <> t:
+              wnf.run(fuel, STermSnf{book, h}) <> wnf.run(fuel, SSnfs{book, t})
+        case SSnfFun{+book, f}:
+          match f:
+            case Ref{k, s, b}:
+              Ref{k, s, b}
+            case other:
+              wnf.run(fuel, STermSnf{book, other})
+        case SSnfGo{+book, tm}:
+          match tm:
+            case Var{k, i, s}:
+              Var{k, i, s}
+            case Ref{k, s, b}:
+              Ref{k, s, b}
+            case Sub{i, p, f, s}:
+              Sub{i, p, wnf.run(fuel, STermSnf{book, f}), s}
+            case Typ{g, s}:
+              Typ{wnf.run(fuel, STermSnf{book, g}), s}
+            case Min{a, b, s}:
+              Min{wnf.run(fuel, STermSnf{book, a}), wnf.run(fuel, STermSnf{book, b}), s}
+            case All{q, k, i, a, b, s}:
+              All{q, k, i, wnf.run(fuel, STermSnf{book, a}), CSnf{b}, s}
+            case Lam{k, i, f, s, q}:
+              Lam{k, i, CSnf{f}, s, QUnd{}}
+            case TApp{f, x, s}:
+              TApp{wnf.run(fuel, SSnfFun{book, f}), wnf.run(fuel, STermSnf{book, x}), s}
+            case ADT{k, xs, s, r}:
+              ADT{k, wnf.run(fuel, SSnfs{book, xs}), s, r}
+            case Ctr{k, xs, s}:
+              Ctr{k, wnf.run(fuel, SSnfs{book, xs}), s}
+            case Mat{k, h, m, s}:
+              Mat{k, wnf.run(fuel, STermSnf{book, h}), wnf.run(fuel, STermSnf{book, m}), s}
+            case Eql{a, b, ty, s}:
+              Eql{wnf.run(fuel, STermSnf{book, a}), wnf.run(fuel, STermSnf{book, b}), wnf.run(fuel, STermSnf{book, ty}), s}
+            case Rwt{e, p, f, s}:
+              Rwt{wnf.run(fuel, STermSnf{book, e}), wnf.run(fuel, STermSnf{book, p}), wnf.run(fuel, STermSnf{book, f}), s}
+            case other:
+              other
+        # The goal of a match case: the motive applied to the constructor, bound
+        # over its fields (each field as live as the scrutinee).
+        case SMatGoal{+book, tel, n, xs, tb, +ck, +cs, +tq, ctx, dn}:
+          match n:
+            case 0n:
+              wnf.run(fuel, SCloApply{book, tb, [Ctr{ck, xs, cs}]})
+            case 1n+m:
+              mat_goal.go(wnf.run(fuel, STermWnf{book, tel}), m, xs, tb, ck, cs, tq, ctx, dn)
+
+def term_wnf(+book: Book, t: Tm) -> Tm:
+  wnf.run(Fuel.max(), STermWnf{book, t})
+
+def term_snf(+book: Book, term: Tm) -> Tm:
+  wnf.run(Fuel.max(), STermSnf{book, term})
+
+def clo_apply(+book: Book, c: Tm, +xs: List<&2, Tm>) -> Tm:
+  wnf.run(Fuel.max(), SCloApply{book, c, xs})
+
+def term_apply(+book: Book, fn: Tm, x: Tm, s: Sp) -> Tm:
+  wnf.run(Fuel.max(), STermApply{book, fn, x, s})
+
+def lhs_ext(+book: Book, lhs: Tm, +k: String, n: Nat, xs: List<&2, Tm>) -> Tm:
+  wnf.run(Fuel.max(), SLhsExt{book, lhs, k, n, xs})
+
+def higher(book, tm, env):
+  wnf.run(Fuel.max(), SHigher{book, tm, env})
+
+def mat_goal(+book: Book, tel: Tm, n: Nat, xs: List<&2, Tm>, tb: Tm, +ck: String, +cs: Sp, +tq: Q, ctx: List<&2, Tm>, dn: String) -> Tm:
+  wnf.run(Fuel.max(), SMatGoal{book, tel, n, xs, tb, ck, cs, tq, ctx, dn})
+
+def term_apply1(+book: Book, fn: Tm, x: Tm) -> Tm:
+  term_apply(book, fn, x, NoSp{})
+
+type LSel is Data:
+  SLowers{book: Book, xs: List<&2, Tm>, d: U32}
+  STermLowerGo{book: Book, term: Tm, d: U32}
+  STermLower{book: Book, term: Tm, d: U32}
+
+def LSel.ty(k: LSel) -> Type:
+  match k:
+    case SLowers{book, xs, d}:
+      List<&2, Tm>
+    case STermLowerGo{book, term, d}:
+      Tm
+    case STermLower{book, term, d}:
+      Tm
+
+# term_lower and its parts, one def: sel picks the step. Out of fuel, a
+# term is the hole ?out of fuel.
+def lower.run(fuel0: Nat, sel: LSel) -> LSel.ty(sel):
+  match fuel0:
+    case 0n:
+      match sel:
+        case SLowers{book, xs, d}:
+          Nil{}
+        case STermLowerGo{book, term, d}:
+          Hol{"out of fuel", NoSp{}}
+        case STermLower{book, term, d}:
+          Hol{"out of fuel", NoSp{}}
+    case 1n+ +fuel:
+      match sel:
+        # term_lower: back to syntax, binders numbered by depth.
+        case SLowers{+book, xs, +d}:
+          match xs:
+            case Nil{}:
+              Nil{}
+            case h <> t:
+              lower.run(fuel, STermLower{book, h, d}) <> lower.run(fuel, SLowers{book, t, d})
+        case STermLowerGo{+book, term, +d}:
+          match term:
+            case Var{k, i, s}:
+              Var{k, i, s}
+            case Sub{i, p, f, s}:
+              Sub{i, p, lower.run(fuel, STermLower{book, f, d}), s}
+            case Let{+ks, ids, vs, f, s, qs}:
+              +n = U32.from_nat(List.length(&2, String, ks))
+              Let{ks, let_ids(ks, d), lower.run(fuel, SLowers{book, vs, d}), CLet{Nil{}, Nil{},
+                lower.run(fuel, STermLower{book, clo_apply(book, f, let_vars.fresh(ks, d)), (d + n : U32)})}, s, qs}
+            case Typ{g, s}:
+              Typ{lower.run(fuel, STermLower{book, g, d}), s}
+            case Min{a, b, s}:
+              Min{lower.run(fuel, STermLower{book, a, d}), lower.run(fuel, STermLower{book, b, d}), s}
+            case All{q, +k, i, a, b, s}:
+              All{q, k, d, lower.run(fuel, STermLower{book, a, d}), CSyn{Nil{}, d,
+                lower.run(fuel, STermLower{book, clo_apply(book, b, [Var{k, d, NoSp{}}]), U32.inc(d)})}, s}
+            case Lam{+k, i, f, s, q}:
+              Lam{k, d, CSyn{Nil{}, d, lower.run(fuel, STermLower{book, clo_apply(book, f, [Var{k, d, NoSp{}}]),
+                U32.inc(d)})}, s, q}
+            case TApp{f, x, s}:
+              TApp{lower.run(fuel, STermLower{book, f, d}), lower.run(fuel, STermLower{book, x, d}), s}
+            case ADT{k, xs, s, r}:
+              ADT{k, lower.run(fuel, SLowers{book, xs, d}), s, r}
+            case Ctr{k, xs, s}:
+              Ctr{k, lower.run(fuel, SLowers{book, xs, d}), s}
+            case Mat{k, h, m, s}:
+              Mat{k, lower.run(fuel, STermLower{book, h, d}), lower.run(fuel, STermLower{book, m, d}), s}
+            case Eql{a, b, ty, s}:
+              Eql{lower.run(fuel, STermLower{book, a, d}), lower.run(fuel, STermLower{book, b, d}), lower.run(fuel, STermLower{book, ty, d}), s}
+            case Rwt{e, p, f, s}:
+              Rwt{lower.run(fuel, STermLower{book, e, d}), lower.run(fuel, STermLower{book, p, d}), lower.run(fuel, STermLower{book, f, d}), s}
+            case Ann{x, ty, s}:
+              Ann{lower.run(fuel, STermLower{book, x, d}), lower.run(fuel, STermLower{book, ty, d}), s}
+            case other:
+              other
+        case STermLower{+book, term, +d}:
+          lower.run(fuel, STermLowerGo{book, term_force(term), d})
+
+def lowers(+book: Book, xs: List<&2, Tm>, +d: U32) -> List<&2, Tm>:
+  lower.run(Fuel.max(), SLowers{book, xs, d})
+
+def term_lower(book, term, d):
+  lower.run(Fuel.max(), STermLower{book, term, d})
 
 #
 # le: False compares for equality ("EQ"), True for subsumption ("LE"),
@@ -5940,30 +6062,6 @@ def tele_fill.go(xs: List<&2, Tm>, +tel: Tm, +ctx: List<&2, Tm>, +dn: String, +s
 def tele_fill(+tel: Tm, xs: List<&2, Tm>, +ctx: List<&2, Tm>, +dn: String, +s: Sp) -> K(Tm):
   tele_fill.go(xs, tel, ctx, dn, s)
 
-law term_check:
-  for +l: CL
-  for tm: Tm
-  for +qt: Q
-  for +ty: Tm
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  K(List<&2, Us>)
-
-# Checks xs against the telescope tel; answers their uses and what is left.
-@unsafe
-def tele_check(
-  +l: CL, +tel: Tm, xs: List<&2, Tm>, +qt: Q, +ctx: List<&2, Tm>, +d: U32, +s: Sp, us: List<&2, Us>
-) -> K(List<&2, Us> & Tm):
-  match xs:
-    case Nil{}:
-      K.pure(List<&2, Us> & Tm, (us, tel))
-    case +x <> t:
-      do K<List<&2, Us> & Tm>:
-        +h : Tm <- tele_head(tel, ctx, CL.dn(l), s)
-        u : List<&2, Us> <- term_check(l, x, quant_dem(All.q(h), qt), All.a(h), ctx, d)
-        b : Book <- K.book()
-        tele_check(l, clo_apply(b, All.b(h), [x]), t, qt, ctx, d, s, uses_add(us, u))
-
 type Dom is Data:
   Dom{q: Q, k: String, a: Tm}
 
@@ -6352,70 +6450,6 @@ def infer.ref.self(
         MTm{Ref{k, s, b}}, s, CL.dn(l)), K.pure(Unit, Unit{}))
     infer.ref.fin(l, k, s, b, tld, ctx, x)
 
-law def_inst:
-  for +l: CL
-  for +tm: Tm
-  for +tld: Tld
-  for +sp: List<&2, Tm>
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  K(String)
-
-@unsafe
-def infer.ref.inst(
-  +l: CL, +k: String, +s: Sp, +b: Bool, +tld: Tld, +qt: Q, +ctx: List<&2, Tm>, +d: U32, +sp: List<&2, Tm>
-) -> K(IR):
-  do K<IR>:
-    +o : String <- def_inst(l, Ref{k, s, b}, tld, sp, ctx, d)
-    book : Book <- K.book()
-    +x : Nat <- K.pure(Nat, Tld.x_of(tld))
-    infer.ref.self(l, o, s, b, Maybe.default(&2, Tld, book_tld(book, o), tld), ctx, List.drop_tm(sp, x), x)
-
-def infer.ref.live(
-  +l: CL, +k: String, +s: Sp, +b: Bool, +tld: Tld, +qt: Q, +ctx: List<&2, Tm>, +d: U32, +sp: List<&2, Tm>
-) -> K(IR):
-  do K<IR>:
-    book : Book <- K.book()
-    +caller_x : Nat <- K.pure(Nat, Tld.x(book_tld(book, CL.dn(l))))
-    +gen : Bool <- K.pure(Bool, Bool.and(Nat.is_gt(Tld.x_of(tld), 0n), Nat.is_eq(0n, caller_x)))
-    +self : Bool <- K.pure(Bool, String.eq(k, CL.dn(l)))
-    K.if(Unit, Bool.and(Bool.and(Tld.is_open(tld), Bool.not(self)),
-      Bool.or(Bool.and(Bool.not(Tld.is_base(tld)), Bool.not(CL.u(l))), gen)),
-      K.err(Unit, ctx, MStr{"a filled definition (an unfilled law is a dead claim: live code cannot use it)"},
-        MTm{Ref{k, s, b}}, s, CL.dn(l)), K.pure(Unit, Unit{}))
-    K.if(IR, gen, infer.ref.inst(l, k, s, b, tld, qt, ctx, d, sp), infer.ref.self(l, k, s, b, tld, ctx, sp, 0n))
-
-def infer.ref(
-  +l: CL, +k: String, +s: Sp, +b: Bool, t: Maybe<&2, Tld>, +qt: Q, +ctx: List<&2, Tm>, +d: U32, sp: List<&2, Tm>
-) -> K(IR):
-  match t:
-    case None{}:
-      K.err(IR, ctx, MStr{"a defined name"}, MTm{Ref{k, s, b}}, s, CL.dn(l))
-    case Some{+tld}:
-      K.if(IR, Q.is_none(qt), infer.ref.fin(l, k, s, b, tld, ctx, 0n),
-        infer.ref.live(l, k, s, b, tld, qt, ctx, d, sp))
-
-law infer.app:
-  for +l: CL
-  for fi: IR
-  for +x: Tm
-  for +qt: Q
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  for +s: Sp
-  K(IR)
-
-law infer.adt:
-  for +l: CL
-  for +ad: AD
-  for +k: String
-  for +xs: List<&2, Tm>
-  for +s: Sp
-  for +qt: Q
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  K(IR)
-
 def Sp.eq(a: Sp, b: Sp) -> Bool:
   match a b:
     case NoSp{} NoSp{}:
@@ -6449,108 +6483,6 @@ def check_kind.go(r: Result<&1, &1, Err, List<&2, Us> & Book>, +kind: Tm, +k: St
     case Fail{e}:
       Fail{check_kind.err(e, kind, k, q, s)}
 
-law check_kind:
-  for +l: CL
-  for +t: Tm
-  for +k: String
-  for +q: Q
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  for +s: Sp
-  K(Unit)
-
-@unsafe
-def check_kind(l, t, k, q, ctx, d, s):
-  +kind = {Typ{TQua{lhs_kind(l, q), s}, s} : Tm}
-  b => check_kind.go(term_check(l, t, QNone{}, kind, ctx, d)(b), kind, k, q, s)
-
-law term_infer:
-  for +l: CL
-  for tm: Tm
-  for +qt: Q
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  for sp: List<&2, Tm>
-  K(IR)
-
-@unsafe
-def term_infer(l, tm, qt, ctx, d, sp):
-  match tm:
-    case Cel{k, s, v, m}:
-      term_infer(l, v, qt, ctx, d, sp)
-    case Var{+k, +i, +s}:
-      infer.var(Var{k, i, s}, i, qt, ctx, s, l)
-    case VRf{+k, +i, +s, r}:
-      infer.var(Var{k, i, s}, i, qt, ctx, s, l)
-    case Ref{+k, +s, b}:
-      do K<IR>:
-        book : Book <- K.book()
-        infer.ref(l, k, s, b, book_tld(book, k), qt, ctx, d, sp)
-    case Typ{g, s}:
-      do K<IR>:
-        u : List<&2, Us> <- term_check(l, g, QNone{}, Qnt{s}, ctx, d)
-        return IR{typ(QLone{}), Nil{}, 0n}
-    case Qnt{s}:
-      K.pure(IR, IR{typ(QLone{}), Nil{}, 0n})
-    case TQua{q, s}:
-      K.pure(IR, IR{Qnt{s}, Nil{}, 0n})
-    case Min{a, b, +s}:
-      do K<IR>:
-        ua : List<&2, Us> <- term_check(l, a, qt, Qnt{s}, ctx, d)
-        ub : List<&2, Us> <- term_check(l, b, qt, Qnt{s}, ctx, d)
-        return IR{Qnt{s}, uses_add(ua, ub), 0n}
-    case All{+q, +k, i, +a, b, +s}:
-      do K<IR>:
-        check_kind(l, a, k, q, ctx, d, Sp.or(Tm.span(a), s))
-        book : Book <- K.book()
-        ub : List<&2, Us> <- term_check(l, clo_apply(book, b, [Var{k, d, NoSp{}}]), QNone{}, typ(QLone{}),
-          ctx_bind(ctx, d, q, k, a), U32.inc(d))
-        return IR{typ(QLone{}), Nil{}, 0n}
-    case TApp{f, +x, +s}:
-      do K<IR>:
-        fi : IR <- term_infer(l, f, qt, ctx, d, x <> sp)
-        infer.app(l, fi, x, qt, ctx, d, s)
-    case ADT{+k, +xs, +s, r}:
-      do K<IR>:
-        +ad : AD <- book_adt(ADT{k, xs, s, r}, ctx, CL.dn(l))
-        infer.adt(l, ad, k, xs, s, qt, ctx, d)
-    case Eql{+a, +b, +t, s}:
-      do K<IR>:
-        ut : List<&2, Us> <- term_check(l, t, QNone{}, typ(QLone{}), ctx, d)
-        ua : List<&2, Us> <- term_check(l, a, QNone{}, t, ctx, d)
-        ub : List<&2, Us> <- term_check(l, b, QNone{}, t, ctx, d)
-        return IR{typ(QMany{}), Nil{}, 0n}
-    case Ann{x, +t, s}:
-      do K<IR>:
-        ut : List<&2, Us> <- term_check(l, t, QNone{}, typ(QLone{}), ctx, d)
-        u : List<&2, Us> <- term_check(l, x, qt, t, ctx, d)
-        return IR{t, u, 0n}
-    case other:
-      infer.fail(l, other, ctx)
-
-@unsafe
-def infer.app.go(
-  +l: CL, fw: Tm, +fty: Tm, fus: List<&2, Us>, +x: Tm, +qt: Q, +ctx: List<&2, Tm>, +d: U32, +s: Sp
-) -> K(IR):
-  match fw:
-    case All{q, k, i, a, b, as}:
-      do K<IR>:
-        ux : List<&2, Us> <- term_check(l, x, quant_dem(q, qt), a, ctx, d)
-        book : Book <- K.book()
-        return IR{clo_apply(book, b, [x]), uses_add(fus, ux), 0n}
-    case other:
-      K.err(IR, ctx, MStr{"a function type"}, MTm{fty}, s, CL.dn(l))
-
-def infer.app(l, fi, x, qt, ctx, d, s):
-  IR{+fty, fus, fx} = fi
-  match fx:
-    case 1n+m:
-      K.pure(IR, IR{fty, fus, m})
-    case 0n:
-      do K<IR>:
-        book : Book <- K.book()
-        infer.app.go(l, term_wnf(book, fty), fty, fus, x, qt, ctx, d, s)
-
 def AD.n(+a: AD) -> Nat:
   AD{+n, g, t, cs} = a
   n
@@ -6562,16 +6494,6 @@ def AD.t(+a: AD) -> Tm:
 def infer.adt.fin(r: List<&2, Us> & Tm) -> IR:
   (us, tel) = r
   IR{tel, us, 0n}
-
-def infer.adt.go(+l: CL, +ad: AD, xs: List<&2, Tm>, +s: Sp, +qt: Q, +ctx: List<&2, Tm>, +d: U32) -> K(IR):
-  do K<IR>:
-    r : List<&2, Us> & Tm <- tele_check(l, AD.t(ad), xs, qt, ctx, d, s, Nil{})
-    return infer.adt.fin(r)
-
-def infer.adt(l, ad, k, xs, s, qt, ctx, d):
-  K.if(IR, Nat.is_eq(List.length(&2, Tm, xs), AD.n(ad)), infer.adt.go(l, ad, xs, s, qt, ctx, d),
-    K.err(IR, ctx, MStr{k ++ " with " ++ Nat.show(AD.n(ad)) ++ Bool.pick(String, Nat.is_eq(AD.n(ad), 1n),
-      " parameter", " parameters")}, MTm{ADT{k, xs, s, Nil{}}}, s, CL.dn(l)))
 
 def Tld.dval(t: Tld) -> Maybe<&2, Tm>:
   match t:
@@ -6602,27 +6524,6 @@ def check.infer.cmp(+l: CL, +tm: Tm, xi: IR, +ty: Tm, +ctx: List<&2, Tm>, +d: U3
     case False{}:
       K.err(List<&2, Us>, ctx, MTm{ty}, MTm{xty}, Tm.span(tm), CL.dn(l))
 
-def check.infer(+l: CL, +tm: Tm, +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K(List<&2, Us>):
-  do K<List<&2, Us>>:
-    +xi : IR <- term_infer(l, tm, qt, ctx, d, Nil{})
-    book : Book <- K.book()
-    check.infer.cmp(l, tm, xi, ty, ctx, d, term_compare(True{}, book, IR.ty(xi), ty, d))
-
-# The values of a let, each inferred in the outer context.
-def check.lets(
-  +l: CL, ks: List<&2, String>, vs: List<&2, Tm>, qs: List<&2, Q>, +qt: Q, +ctx0: List<&2, Tm>, fctx: List<&2, Tm>,
-  +d: U32, +j: U32, us: List<&2, Us>, +s: Sp
-) -> K(List<&2, Tm> & List<&2, Us>):
-  match ks vs qs:
-    case +k <> kt v <> vt +q <> qt2:
-      do K<List<&2, Tm> & List<&2, Us>>:
-        +vi : IR <- term_infer(l, v, quant_dem(q, qt), ctx0, d, Nil{})
-        check_kind(l, IR.ty(vi), k, q, ctx0, d, s)
-        check.lets(l, kt, vt, qt2, qt, ctx0, ctx_bind(fctx, (d + j : U32), q, k, IR.ty(vi)), d, U32.inc(j),
-          uses_add(us, IR.us(vi)), s)
-    case a b c:
-      K.pure(List<&2, Tm> & List<&2, Us>, (fctx, us))
-
 def let.vars(ks: List<&2, String>, vs: List<&2, Tm>, +d: U32) -> List<&2, Tm>:
   match ks vs:
     case k <> kt v <> vt:
@@ -6641,19 +6542,6 @@ def check.let.used(
     case a b:
       K.pure(List<&2, Us>, fu)
 
-@unsafe
-def check.let.body(
-  +l: CL, +ks: List<&2, String>, vs: List<&2, Tm>, f: Tm, +s: Sp, +qs: List<&2, Q>, +qt: Q, +ty: Tm,
-  +ctx: List<&2, Tm>, +d: U32, r: List<&2, Tm> & List<&2, Us>
-) -> K(List<&2, Us>):
-  (fctx, us) = r
-  +n = U32.from_nat(List.length(&2, String, ks))
-  do K<List<&2, Us>>:
-    book : Book <- K.book()
-    fu : List<&2, Us> <- term_check(l, clo_apply(book, f, let.vars(ks, vs, d)), qt, ty, fctx, (d + n : U32))
-    fu2 : List<&2, Us> <- check.let.used(l, ks, qs, ctx, d, s, fu)
-    return uses_add(us, fu2)
-
 def check.typeless(-A: Type, +l: CL, +tm: Tm, +ty: Tm, +ctx: List<&2, Tm>, +s: Sp) -> K(A):
   +b => Fail{Err{b, ctx, MTm{ty}, MStr{"non-inferrable term"}, s, CL.dn(l), typeless.note(b, tm)}}
 
@@ -6667,158 +6555,6 @@ def check.rfl(+l: CL, +s: Sp, tw: Tm, +ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K
     case other:
       check.typeless(List<&2, Us>, l, Rfl{s}, ty, ctx, s)
 
-law check.mat:
-  for +l: CL
-  for +k: String
-  for h: Tm
-  for m: Tm
-  for +s: Sp
-  for +tall: Tm
-  for +ak: String
-  for +axs: List<&2, Tm>
-  for +r: List<&2, String>
-  for c: Maybe<&2, CtrD>
-  for last: Bool
-  for +qt: Q
-  for +ty: Tm
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  K(List<&2, Us>)
-
-@unsafe
-def check.elim.go(
-  +l: CL, tm: Tm, +s: Sp, +tall: Tm, +ak: String, +axs: List<&2, Tm>, +r: List<&2, String>, +rem: List<&2, CtrD>,
-  +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32
-) -> K(List<&2, Us>):
-  match tm:
-    case Efq{es}:
-      do K<List<&2, Us>>:
-        book : Book <- K.book()
-        K.if(List<&2, Us>, Lazy.and(Bool.not(Lst.empty(&2, CtrD, rem)), u => Bool.not(ctx_dead(book, ctx))),
-          K.err(List<&2, Us>, ctx, MStr{"cases for " ++ String.join(CtrD.names(rem), ", ")}, MTm{Efq{es}}, s, CL.dn(l)),
-          K.pure(List<&2, Us>, Nil{}))
-    case Mat{+k, h, m, ms}:
-      check.mat(l, k, h, m, s, tall, ak, axs, r, ctrs_find(rem, k), Nat.is_eq(List.length(&2, CtrD, rem), 1n), qt, ty, ctx, d)
-    case other:
-      K.pure(List<&2, Us>, Nil{})
-
-def check.elim.adt(
-  +l: CL, +tm: Tm, +s: Sp, +tall: Tm, aw: Tm, +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32
-) -> K(List<&2, Us>):
-  match aw:
-    case ADT{+ak, +axs, as, +r}:
-      do K<List<&2, Us>>:
-        +ad : AD <- book_adt(ADT{ak, axs, as, r}, ctx, CL.dn(l))
-        check.elim.go(l, tm, s, tall, ak, axs, r, AD.cs(ad), qt, ty, ctx, d)
-    case other:
-      K.err(List<&2, Us>, ctx, MStr{"a datatype"}, MTm{All.a(tall)}, s, CL.dn(l))
-
-# A match (or an empty one) checks against a function type on a datatype.
-def check.elim(+l: CL, +tm: Tm, +s: Sp, tw: Tm, +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K(List<&2, Us>):
-  match tw:
-    case All{+q, +k, +i, +a, +b, as}:
-      do K<List<&2, Us>>:
-        K.if(Unit, Bool.and(Bool.not(Q.is_none(qt)), Q.is_none(q)),
-          K.err(Unit, ctx, MStr{"a live scrutinee (a - scrutinee matches only in a dead region)"}, MNone{}, s, CL.dn(l)),
-          K.pure(Unit, Unit{}))
-        book : Book <- K.book()
-        check.elim.adt(l, tm, s, All{q, k, i, a, b, as}, term_wnf(book, a), qt, ty, ctx, d)
-    case other:
-      check.typeless(List<&2, Us>, l, tm, ty, ctx, s)
-
-law check.lam:
-  for +l: CL
-  for +k: String
-  for f: Tm
-  for +s: Sp
-  for lq: Q
-  for tw: Tm
-  for +qt: Q
-  for +ty: Tm
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  K(List<&2, Us>)
-
-law check.ctr:
-  for +l: CL
-  for +k: String
-  for +xs: List<&2, Tm>
-  for +s: Sp
-  for tw: Tm
-  for +qt: Q
-  for +ty: Tm
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  K(List<&2, Us>)
-
-law check.lit:
-  for +l: CL
-  for +lit: Tm
-  for tw: Tm
-  for +qt: Q
-  for +ty: Tm
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  K(List<&2, Us>)
-
-law check.rwt:
-  for +l: CL
-  for +e: Tm
-  for +p: Tm
-  for f: Tm
-  for +s: Sp
-  for ei: IR
-  for ew: Tm
-  for +qt: Q
-  for +ty: Tm
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  K(List<&2, Us>)
-
-@unsafe
-def term_check(l, tm, qt, ty, ctx, d):
-  match tm:
-    case Cel{k, s, v, m}:
-      term_check(l, v, qt, ty, ctx, d)
-    case Lam{+k, i, f, +s, q}:
-      do K<List<&2, Us>>:
-        book : Book <- K.book()
-        check.lam(l, k, f, s, q, term_wnf(book, ty), qt, ty, ctx, d)
-    case Let{+ks, ids, +vs, f, +s, +qs}:
-      do K<List<&2, Us>>:
-        r : List<&2, Tm> & List<&2, Us> <- check.lets(l, ks, vs, qs, qt, ctx, ctx, d, 0, Nil{}, s)
-        check.let.body(l, ks, vs, f, s, qs, qt, ty, ctx, d, r)
-    case Ctr{+k, +xs, +s}:
-      do K<List<&2, Us>>:
-        book : Book <- K.book()
-        check.ctr(l, k, xs, s, term_wnf(book, ty), qt, ty, ctx, d)
-    case Lit{+v, +s}:
-      do K<List<&2, Us>>:
-        book : Book <- K.book()
-        check.lit(l, Lit{v, s}, term_wnf(book, ty), qt, ty, ctx, d)
-    case Mat{+k, +h, +m, +s}:
-      do K<List<&2, Us>>:
-        book : Book <- K.book()
-        check.elim(l, Mat{k, h, m, s}, s, term_wnf(book, ty), qt, ty, ctx, d)
-    case Efq{+s}:
-      do K<List<&2, Us>>:
-        book : Book <- K.book()
-        check.elim(l, Efq{s}, s, term_wnf(book, ty), qt, ty, ctx, d)
-    case Rfl{+s}:
-      do K<List<&2, Us>>:
-        book : Book <- K.book()
-        check.rfl(l, s, term_wnf(book, ty), ty, ctx, d)
-    case Hol{+k, +s}:
-      K.if(List<&2, Us>, String.eq(k, "TODO"), K.pure(List<&2, Us>, Nil{}),
-        K.err(List<&2, Us>, ctx, MTm{ty}, MTm{Hol{k, s}}, s, CL.dn(l)))
-    case Rwt{+e, +p, f, +s}:
-      do K<List<&2, Us>>:
-        +ei : IR <- term_infer(l, e, qt, ctx, d, Nil{})
-        book : Book <- K.book()
-        check.rwt(l, e, p, f, s, ei, term_wnf(book, IR.ty(ei)), qt, ty, ctx, d)
-    case other:
-      check.infer(l, other, qt, ty, ctx, d)
-
 def CL.under(+l: CL, +x: Tm) -> K(CL):
   CL{+t, +n, +dn, +qs, +u, +z} = l
   match n:
@@ -6828,62 +6564,6 @@ def CL.under(+l: CL, +x: Tm) -> K(CL):
       do K<CL>:
         book : Book <- K.book()
         return CL{term_apply1(book, t, x), m, dn, qs, u, z}
-
-def check.lam(l, k, f, s, lq, tw, qt, ty, ctx, d):
-  match tw:
-    case All{+q, ak, ai, +a, b, as}:
-      +x = {Var{k, d, NoSp{}} : Tm}
-      +many = Bool.and(Q.is_many(lq), Q.is_lone(q))
-      +q2 = Bool.pick(Q, many, QMany{}, q)
-      do K<List<&2, Us>>:
-        K.if(Unit, many, check_kind(l, a, k, q2, ctx, d, s), K.pure(Unit, Unit{}))
-        fl : CL <- CL.under(l, x)
-        +book : Book <- K.book()
-        +u : List<&2, Us> <- term_check(fl, clo_apply(book, f, [x]), qt, clo_apply(book, b, [x]),
-          ctx_bind(ctx, d, q2, k, a), U32.inc(d))
-        quant_used(ctx, k, q2, uses_get(u, d), s, CL.dn(l))
-        return uses_del(u, d)
-    case other:
-      check.typeless(List<&2, Us>, l, Lam{k, 0, f, s, lq}, ty, ctx, s)
-
-def check.ctr.fields(
-  +l: CL, ct: Tm, xs: List<&2, Tm>, +s: Sp, axs: List<&2, Tm>, +qt: Q, +ctx: List<&2, Tm>, +d: U32
-) -> K(List<&2, Us>):
-  do K<List<&2, Us>>:
-    +tel : Tm <- tele_fill(ct, axs, ctx, CL.dn(l), s)
-    r : List<&2, Us> & Tm <- tele_check(l, tel, xs, qt, ctx, d, s, Nil{})
-    return Pair.fst(List<&2, Us>, Tm, r)
-
-def check.ctr.find(
-  +l: CL, +k: String, +xs: List<&2, Tm>, +s: Sp, +ak: String, +axs: List<&2, Tm>, +cs: List<&2, CtrD>,
-  c: Maybe<&2, CtrD>, +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32
-) -> K(List<&2, Us>):
-  match c:
-    case None{}:
-      do K<List<&2, Us>>:
-        +book : Book <- K.book()
-        K.if(List<&2, Us>, Maybe.is_some(&2, CtrD, book_ctr(book, k)),
-          K.err(List<&2, Us>, ctx, MTm{ty}, MTm{Ref{book_fam(book, k), s, False{}}}, s, CL.dn(l)),
-          K.err(List<&2, Us>, ctx, MStr{"a declared constructor (" ++ ak ++ " declares " ++
-            String.join(CtrD.names(cs), ", ") ++ ")"}, MTm{Ctr{k, xs, s}}, s, CL.dn(l)))
-    case Some{CtrD{ck, +n, ct}}:
-      K.if(List<&2, Us>, Nat.is_eq(n, List.length(&2, Tm, xs)), check.ctr.fields(l, ct, xs, s, axs, qt, ctx, d),
-        K.err(List<&2, Us>, ctx, MStr{k ++ " with " ++ Nat.show(n) ++ Bool.pick(String, Nat.is_eq(n, 1n), " field",
-          " fields")}, MTm{Ctr{k, xs, s}}, s, CL.dn(l)))
-
-def check.ctr(l, k, xs, s, tw, qt, ty, ctx, d):
-  match tw:
-    case ADT{+ak, +axs, as, +r}:
-      do K<List<&2, Us>>:
-        +ad : AD <- book_adt(ADT{ak, axs, as, r}, ctx, CL.dn(l))
-        book : Book <- K.book()
-        check.ctr.find(l, k, xs, s, ak, axs, AD.cs(ad), ctrs_find(AD.cs(ad), k), qt, ty, ctx, d)
-    case other:
-      do K<List<&2, Us>>:
-        +book : Book <- K.book()
-        K.if(List<&2, Us>, Maybe.is_some(&2, CtrD, book_ctr(book, k)),
-          K.err(List<&2, Us>, ctx, MTm{ty}, MTm{Ref{book_fam(book, k), s, False{}}}, s, CL.dn(l)),
-          check.typeless(List<&2, Us>, l, Ctr{k, xs, s}, ty, ctx, s))
 
 def lit.ctr(v: LV) -> String:
   match v:
@@ -6911,30 +6591,6 @@ def check.lit.base(t: Maybe<&2, Tld>, +r: List<&2, String>, +c: String) -> Bool:
     case other:
       False{}
 
-def check.lit(l, lit, tw, qt, ty, ctx, d):
-  match tw:
-    case ADT{+ak, axs, as, +r}:
-      do K<List<&2, Us>>:
-        book : Book <- K.book()
-        K.if(List<&2, Us>, check.lit.base(book_tld(book, ak), r, lit.ctr(Lit.v(lit))), K.pure(List<&2, Us>, Nil{}),
-          term_check(l, lit_step(lit), qt, ty, ctx, d))
-    case other:
-      term_check(l, lit_step(lit), qt, ty, ctx, d)
-
-def check.rwt(l, e, p, f, s, ei, ew, qt, ty, ctx, d):
-  match ew:
-    case Eql{+a, +b, +t, es}:
-      do K<List<&2, Us>>:
-        up : List<&2, Us> <- term_check(l, p, QNone{}, All{QLone{}, "_", 0, t, CRwt{a, t, s}, s}, ctx, d)
-        +book : Book <- K.book()
-        +bg : Tm <- K.pure(Tm, term_apply1(book, term_apply1(book, p, b), e))
-        K.if(Unit, term_compare(True{}, book, bg, ty, d), K.pure(Unit, Unit{}),
-          K.err(Unit, ctx, MTm{ty}, MTm{bg}, s, CL.dn(l)))
-        uf : List<&2, Us> <- term_check(l, f, qt, term_apply1(book, term_apply1(book, p, a), Rfl{s}), ctx, d)
-        return uses_add(IR.us(ei), uf)
-    case other:
-      K.err(List<&2, Us>, ctx, MStr{"an equation {a == b : T}"}, MTm{IR.ty(ei)}, Sp.or(Tm.span(e), s), CL.dn(l))
-
 def CL.ext(+l: CL, +k: String, +n: Nat) -> K(CL):
   CL{+t, +ln, +dn, +qs, +u, +z} = l
   match ln:
@@ -6944,59 +6600,6 @@ def CL.ext(+l: CL, +k: String, +n: Nat) -> K(CL):
       do K<CL>:
         book : Book <- K.book()
         return CL{lhs_ext(book, t, k, n, Nil{}), Nat.add(m, n), dn, qs, u, z}
-
-# Past a datatype's last constructor the rest of a match is dead: a default
-# there (a flattened fallback) is \{}, unvisited (#1091); a case still checks.
-def check.mat.rest(+l: CL, m: Tm, last: Bool, +qt: Q, ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K(List<&2, Us>):
-  match m:
-    case Mat{k, h, n, s}:
-      term_check(l, Mat{k, h, n, s}, qt, ty, ctx, d)
-    case other:
-      K.if(List<&2, Us>, last, K.pure(List<&2, Us>, Nil{}), term_check(l, other, qt, ty, ctx, d))
-
-@unsafe
-def check.mat(l, k, h, m, s, tall, ak, axs, r, c, last, qt, ty, ctx, d):
-  match c:
-    case None{}:
-      K.err(List<&2, Us>, ctx, MStr{"a constructor of " ++ ak ++ " (missing, or already matched)"},
-        MTm{Mat{k, h, m, s}}, s, CL.dn(l))
-    case Some{CtrD{ck, +n, ct}}:
-      do K<List<&2, Us>>:
-        +tel : Tm <- tele_fill(ct, axs, ctx, CL.dn(l), s)
-        hl : CL <- CL.ext(l, k, n)
-        book : Book <- K.book()
-        uh : List<&2, Us> <- term_check(hl, h, qt, mat_goal(book, tel, n, Nil{}, All.b(tall), k, s, All.q(tall), ctx,
-          CL.dn(l)), ctx, d)
-        um : List<&2, Us> <- check.mat.rest(l, m, last, qt, All{All.q(tall), All.k(tall), 0, ADT{ak, axs, s,
-          List.append(&2, String, r, [k])}, All.b(tall), s}, ctx, d)
-        return uses_join(uh, um)
-
-def mat_goal.dem(q: Q, +tq: Q) -> Q:
-  match q:
-    case QNone{}:
-      QNone{}
-    case QLone{}:
-      tq
-    case other:
-      quant_add(tq, tq)
-
-def mat_goal.go(
-  t: Tm, m: Nat, xs: List<&2, Tm>, tb: Tm, +ck: String, +cs: Sp, +tq: Q, ctx: List<&2, Tm>, dn: String
-) -> Tm:
-  match t:
-    case All{q, k, i, a, b, s}:
-      All{mat_goal.dem(q, tq), k, i, a, CGoal{b, m, xs, tb, ck, cs, tq, ctx, dn}, cs}
-    case other:
-      Efq{cs}
-
-# The goal of a match case: the motive applied to the constructor, bound
-# over its fields (each field as live as the scrutinee).
-def mat_goal(book, tel, n, xs, tb, ck, cs, tq, ctx, dn):
-  match n:
-    case 0n:
-      clo_apply(book, tb, [Ctr{ck, xs, cs}])
-    case 1n+m:
-      mat_goal.go(term_wnf(book, tel), m, xs, tb, ck, cs, tq, ctx, dn)
 
 law term_key:
   for t: Tm
@@ -7248,23 +6851,6 @@ def inst.closed.go(
     case Fail{e}:
       Fail{inst.closed.err(e, l, tm, ctx, d)}
 
-def inst.closed(+l: CL, +tm: Tm, +a: Tm, +ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K(List<&2, Us>):
-  b => inst.closed.go(term_check(l, a, QNone{}, ty, Nil{}, d)(b), l, tm, ctx, d)
-
-# Checks a template's ~ arguments against its telescope; answers the
-# instance's type.
-@unsafe
-def inst.args(+l: CL, +tm: Tm, +tel: Tm, xs: List<&2, Tm>, +ctx: List<&2, Tm>, +d: U32) -> K(Tm):
-  match xs:
-    case Nil{}:
-      K.pure(Tm, tel)
-    case +a <> t:
-      do K<Tm>:
-        +h : Tm <- tele_head(tel, ctx, CL.dn(l), Tm.span(tm))
-        u : List<&2, Us> <- inst.closed(l, tm, a, All.a(h), ctx, d)
-        book : Book <- K.book()
-        inst.args(l, tm, clo_apply(book, All.b(h), [a]), t, ctx, d)
-
 def List.take_tm(xs: List<&2, Tm>, n: Nat) -> List<&2, Tm>:
   match xs n:
     case y <> t 1n+m:
@@ -7316,75 +6902,577 @@ def def_check.tmpl(+k: String, +x: Nat, t: Tm, v: Tm, ty: Tm) -> K(Tm & Tm & Tm)
         def_check.tmpl(k, m, TApp{t, Ref{o, NoSp{}, False{}}, NoSp{}}, term_apply1(b2, v, Ref{o, NoSp{}, False{}}),
           clo_apply(b2, All.b(h), [Ref{o, NoSp{}, False{}}]))
 
-# A template's ~ names do not outlive its check.
-def def_check.go(+k: String, +tld: Tld, +z: Nat, qs: List<&2, Q>, r: Tm & Tm & Tm, old: Book, tmpl: Bool) -> K(Unit):
-  (t, rest) = r
-  (v, ty) = rest
-  do K<Unit>:
-    u : List<&2, Us> <- term_check(CL{t, Nat.sub(Tld.dn(tld), Tld.x_of(tld)), k, qs, Tld.du(tld), z}, v, QLone{}, ty,
-      Nil{}, 0)
-    b : Book <- K.book()
-    K.set_book(Bool.pick(Book, tmpl, old, b))
+type CSel is Type:
+  STeleCheck{l: CL, tel: Tm, xs: List<&2, Tm>, qt: Q, ctx: List<&2, Tm>, d: U32, s: Sp, us: List<&2, Us>}
+  SInferRefInst{l: CL, k: String, s: Sp, b: Bool, tld: Tld, qt: Q, ctx: List<&2, Tm>, d: U32, sp: List<&2, Tm>}
+  SInferRefLive{l: CL, k: String, s: Sp, b: Bool, tld: Tld, qt: Q, ctx: List<&2, Tm>, d: U32, sp: List<&2, Tm>}
+  SInferRef{l: CL, k: String, s: Sp, b: Bool, t: Maybe<&2, Tld>, qt: Q, ctx: List<&2, Tm>, d: U32, sp: List<&2, Tm>}
+  SCheckKind{l: CL, t: Tm, k: String, q: Q, ctx: List<&2, Tm>, d: U32, s: Sp}
+  STermInfer{l: CL, tm: Tm, qt: Q, ctx: List<&2, Tm>, d: U32, sp: List<&2, Tm>}
+  SInferAppGo{l: CL, fw: Tm, fty: Tm, fus: List<&2, Us>, x: Tm, qt: Q, ctx: List<&2, Tm>, d: U32, s: Sp}
+  SInferApp{l: CL, fi: IR, x: Tm, qt: Q, ctx: List<&2, Tm>, d: U32, s: Sp}
+  SInferAdtGo{l: CL, ad: AD, xs: List<&2, Tm>, s: Sp, qt: Q, ctx: List<&2, Tm>, d: U32}
+  SInferAdt{l: CL, ad: AD, k: String, xs: List<&2, Tm>, s: Sp, qt: Q, ctx: List<&2, Tm>, d: U32}
+  SCheckInfer{l: CL, tm: Tm, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SCheckLets{l: CL, ks: List<&2, String>, vs: List<&2, Tm>, qs: List<&2, Q>, qt: Q, ctx0: List<&2, Tm>, fctx: List<&2, Tm>, d: U32, j: U32, us: List<&2, Us>, s: Sp}
+  SCheckLetBody{l: CL, ks: List<&2, String>, vs: List<&2, Tm>, f: Tm, s: Sp, qs: List<&2, Q>, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32, r: List<&2, Tm> & List<&2, Us>}
+  SCheckElimGo{l: CL, tm: Tm, s: Sp, tall: Tm, ak: String, axs: List<&2, Tm>, r: List<&2, String>, rem: List<&2, CtrD>, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SCheckElimAdt{l: CL, tm: Tm, s: Sp, tall: Tm, aw: Tm, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SCheckElim{l: CL, tm: Tm, s: Sp, tw: Tm, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  STermCheck{l: CL, tm: Tm, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SCheckLam{l: CL, k: String, f: Tm, s: Sp, lq: Q, tw: Tm, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SCheckCtrFields{l: CL, ct: Tm, xs: List<&2, Tm>, s: Sp, axs: List<&2, Tm>, qt: Q, ctx: List<&2, Tm>, d: U32}
+  SCheckCtrFind{l: CL, k: String, xs: List<&2, Tm>, s: Sp, ak: String, axs: List<&2, Tm>, cs: List<&2, CtrD>, c: Maybe<&2, CtrD>, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SCheckCtr{l: CL, k: String, xs: List<&2, Tm>, s: Sp, tw: Tm, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SCheckLit{l: CL, lit: Tm, tw: Tm, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SCheckRwt{l: CL, e: Tm, p: Tm, f: Tm, s: Sp, ei: IR, ew: Tm, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SCheckMatRest{l: CL, m: Tm, last: Bool, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SCheckMat{l: CL, k: String, h: Tm, m: Tm, s: Sp, tall: Tm, ak: String, axs: List<&2, Tm>, r: List<&2, String>, c: Maybe<&2, CtrD>, last: Bool, qt: Q, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SInstClosed{l: CL, tm: Tm, a: Tm, ty: Tm, ctx: List<&2, Tm>, d: U32}
+  SInstArgs{l: CL, tm: Tm, tel: Tm, xs: List<&2, Tm>, ctx: List<&2, Tm>, d: U32}
+  SDefCheckGo{k: String, tld: Tld, z: Nat, qs: List<&2, Q>, r: Tm & Tm & Tm, old: Book, tmpl: Bool}
+  SDefCheck{k: String, tld: Tld, z: Nat}
+  SDefInstMake{tm: Tm, tld: Tld, xs: List<&2, Tm>, ty: Tm, key: String, z: Nat}
+  SDefInstNew{l: CL, tm: Tm, tld: Tld, xs: List<&2, Tm>, ty: Tm, key: String, ctx: List<&2, Tm>}
+  SDefInstFind{l: CL, tm: Tm, tld: Tld, xs: List<&2, Tm>, ty: Tm, key: String, ctx: List<&2, Tm>, m: Maybe<&2, String>}
+  SDefInstGo{l: CL, tm: Tm, tld: Tld, xs: List<&2, Tm>, ctx: List<&2, Tm>, d: U32}
+  SDefInst{l: CL, tm: Tm, tld: Tld, sp: List<&2, Tm>, ctx: List<&2, Tm>, d: U32}
+
+def CSel.ty(k: CSel) -> Type:
+  match k:
+    case STeleCheck{l, tel, xs, qt, ctx, d, s, us}:
+      K(List<&2, Us> & Tm)
+    case SInferRefInst{l, k, s, b, tld, qt, ctx, d, sp}:
+      K(IR)
+    case SInferRefLive{l, k, s, b, tld, qt, ctx, d, sp}:
+      K(IR)
+    case SInferRef{l, k, s, b, t, qt, ctx, d, sp}:
+      K(IR)
+    case SCheckKind{l, t, k, q, ctx, d, s}:
+      K(Unit)
+    case STermInfer{l, tm, qt, ctx, d, sp}:
+      K(IR)
+    case SInferAppGo{l, fw, fty, fus, x, qt, ctx, d, s}:
+      K(IR)
+    case SInferApp{l, fi, x, qt, ctx, d, s}:
+      K(IR)
+    case SInferAdtGo{l, ad, xs, s, qt, ctx, d}:
+      K(IR)
+    case SInferAdt{l, ad, k, xs, s, qt, ctx, d}:
+      K(IR)
+    case SCheckInfer{l, tm, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SCheckLets{l, ks, vs, qs, qt, ctx0, fctx, d, j, us, s}:
+      K(List<&2, Tm> & List<&2, Us>)
+    case SCheckLetBody{l, ks, vs, f, s, qs, qt, ty, ctx, d, r}:
+      K(List<&2, Us>)
+    case SCheckElimGo{l, tm, s, tall, ak, axs, r, rem, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SCheckElimAdt{l, tm, s, tall, aw, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SCheckElim{l, tm, s, tw, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case STermCheck{l, tm, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SCheckLam{l, k, f, s, lq, tw, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SCheckCtrFields{l, ct, xs, s, axs, qt, ctx, d}:
+      K(List<&2, Us>)
+    case SCheckCtrFind{l, k, xs, s, ak, axs, cs, c, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SCheckCtr{l, k, xs, s, tw, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SCheckLit{l, lit, tw, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SCheckRwt{l, e, p, f, s, ei, ew, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SCheckMatRest{l, m, last, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SCheckMat{l, k, h, m, s, tall, ak, axs, r, c, last, qt, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SInstClosed{l, tm, a, ty, ctx, d}:
+      K(List<&2, Us>)
+    case SInstArgs{l, tm, tel, xs, ctx, d}:
+      K(Tm)
+    case SDefCheckGo{k, tld, z, qs, r, old, tmpl}:
+      K(Unit)
+    case SDefCheck{k, tld, z}:
+      K(Unit)
+    case SDefInstMake{tm, tld, xs, ty, key, z}:
+      K(String)
+    case SDefInstNew{l, tm, tld, xs, ty, key, ctx}:
+      K(String)
+    case SDefInstFind{l, tm, tld, xs, ty, key, ctx, m}:
+      K(String)
+    case SDefInstGo{l, tm, tld, xs, ctx, d}:
+      K(String)
+    case SDefInst{l, tm, tld, sp, ctx, d}:
+      K(String)
+
+# Checking and inference, one def: sel picks the step (term_check,
+# term_infer, def_check, def_inst and their parts). Out of fuel, a check
+# fails.
+def check.run(fuel0: Nat, sel: CSel) -> CSel.ty(sel):
+  match fuel0:
+    case 0n:
+      match sel:
+        case STeleCheck{l, tel, xs, qt, ctx, d, s, us}:
+          K.throw(List<&2, Us> & Tm, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SInferRefInst{l, k, s, b, tld, qt, ctx, d, sp}:
+          K.throw(IR, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SInferRefLive{l, k, s, b, tld, qt, ctx, d, sp}:
+          K.throw(IR, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SInferRef{l, k, s, b, t, qt, ctx, d, sp}:
+          K.throw(IR, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckKind{l, t, k, q, ctx, d, s}:
+          K.throw(Unit, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case STermInfer{l, tm, qt, ctx, d, sp}:
+          K.throw(IR, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SInferAppGo{l, fw, fty, fus, x, qt, ctx, d, s}:
+          K.throw(IR, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SInferApp{l, fi, x, qt, ctx, d, s}:
+          K.throw(IR, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SInferAdtGo{l, ad, xs, s, qt, ctx, d}:
+          K.throw(IR, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SInferAdt{l, ad, k, xs, s, qt, ctx, d}:
+          K.throw(IR, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckInfer{l, tm, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckLets{l, ks, vs, qs, qt, ctx0, fctx, d, j, us, s}:
+          K.throw(List<&2, Tm> & List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckLetBody{l, ks, vs, f, s, qs, qt, ty, ctx, d, r}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckElimGo{l, tm, s, tall, ak, axs, r, rem, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckElimAdt{l, tm, s, tall, aw, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckElim{l, tm, s, tw, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case STermCheck{l, tm, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckLam{l, k, f, s, lq, tw, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckCtrFields{l, ct, xs, s, axs, qt, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckCtrFind{l, k, xs, s, ak, axs, cs, c, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckCtr{l, k, xs, s, tw, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckLit{l, lit, tw, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckRwt{l, e, p, f, s, ei, ew, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckMatRest{l, m, last, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SCheckMat{l, k, h, m, s, tall, ak, axs, r, c, last, qt, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SInstClosed{l, tm, a, ty, ctx, d}:
+          K.throw(List<&2, Us>, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SInstArgs{l, tm, tel, xs, ctx, d}:
+          K.throw(Tm, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SDefCheckGo{k, tld, z, qs, r, old, tmpl}:
+          K.throw(Unit, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SDefCheck{k, tld, z}:
+          K.throw(Unit, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SDefInstMake{tm, tld, xs, ty, key, z}:
+          K.throw(String, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SDefInstNew{l, tm, tld, xs, ty, key, ctx}:
+          K.throw(String, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SDefInstFind{l, tm, tld, xs, ty, key, ctx, m}:
+          K.throw(String, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SDefInstGo{l, tm, tld, xs, ctx, d}:
+          K.throw(String, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+        case SDefInst{l, tm, tld, sp, ctx, d}:
+          K.throw(String, err0("a check that ends (out of fuel)", MNone{}, NoSp{}))
+    case 1n+ +fuel:
+      match sel:
+        # Checks xs against the telescope tel; answers their uses and what is left.
+        case STeleCheck{+l, +tel, xs, +qt, +ctx, +d, +s, us}:
+          match xs:
+            case Nil{}:
+              K.pure(List<&2, Us> & Tm, (us, tel))
+            case +x <> t:
+              do K<List<&2, Us> & Tm>:
+                +h : Tm <- tele_head(tel, ctx, CL.dn(l), s)
+                u : List<&2, Us> <- check.run(fuel, STermCheck{l, x, quant_dem(All.q(h), qt), All.a(h), ctx, d})
+                b : Book <- K.book()
+                check.run(fuel, STeleCheck{l, clo_apply(b, All.b(h), [x]), t, qt, ctx, d, s, uses_add(us, u)})
+        case SInferRefInst{+l, +k, +s, +b, +tld, +qt, +ctx, +d, +sp}:
+          do K<IR>:
+            +o : String <- check.run(fuel, SDefInst{l, Ref{k, s, b}, tld, sp, ctx, d})
+            book : Book <- K.book()
+            +x : Nat <- K.pure(Nat, Tld.x_of(tld))
+            infer.ref.self(l, o, s, b, Maybe.default(&2, Tld, book_tld(book, o), tld), ctx, List.drop_tm(sp, x), x)
+        case SInferRefLive{+l, +k, +s, +b, +tld, +qt, +ctx, +d, +sp}:
+          do K<IR>:
+            book : Book <- K.book()
+            +caller_x : Nat <- K.pure(Nat, Tld.x(book_tld(book, CL.dn(l))))
+            +gen : Bool <- K.pure(Bool, Bool.and(Nat.is_gt(Tld.x_of(tld), 0n), Nat.is_eq(0n, caller_x)))
+            +self : Bool <- K.pure(Bool, String.eq(k, CL.dn(l)))
+            K.if(Unit, Bool.and(Bool.and(Tld.is_open(tld), Bool.not(self)),
+              Bool.or(Bool.and(Bool.not(Tld.is_base(tld)), Bool.not(CL.u(l))), gen)),
+              K.err(Unit, ctx, MStr{"a filled definition (an unfilled law is a dead claim: live code cannot use it)"},
+                MTm{Ref{k, s, b}}, s, CL.dn(l)), K.pure(Unit, Unit{}))
+            K.if(IR, gen, check.run(fuel, SInferRefInst{l, k, s, b, tld, qt, ctx, d, sp}), infer.ref.self(l, k, s, b, tld, ctx, sp, 0n))
+        case SInferRef{+l, +k, +s, +b, t, +qt, +ctx, +d, sp}:
+          match t:
+            case None{}:
+              K.err(IR, ctx, MStr{"a defined name"}, MTm{Ref{k, s, b}}, s, CL.dn(l))
+            case Some{+tld}:
+              K.if(IR, Q.is_none(qt), infer.ref.fin(l, k, s, b, tld, ctx, 0n),
+                check.run(fuel, SInferRefLive{l, k, s, b, tld, qt, ctx, d, sp}))
+        case SCheckKind{+l, +t, +k, +q, +ctx, +d, +s}:
+          +kind = {Typ{TQua{lhs_kind(l, q), s}, s} : Tm}
+          b => check_kind.go(check.run(fuel, STermCheck{l, t, QNone{}, kind, ctx, d})(b), kind, k, q, s)
+        case STermInfer{+l, tm, +qt, +ctx, +d, sp}:
+          match tm:
+            case Cel{k, s, v, m}:
+              check.run(fuel, STermInfer{l, v, qt, ctx, d, sp})
+            case Var{+k, +i, +s}:
+              infer.var(Var{k, i, s}, i, qt, ctx, s, l)
+            case VRf{+k, +i, +s, r}:
+              infer.var(Var{k, i, s}, i, qt, ctx, s, l)
+            case Ref{+k, +s, b}:
+              do K<IR>:
+                book : Book <- K.book()
+                check.run(fuel, SInferRef{l, k, s, b, book_tld(book, k), qt, ctx, d, sp})
+            case Typ{g, s}:
+              do K<IR>:
+                u : List<&2, Us> <- check.run(fuel, STermCheck{l, g, QNone{}, Qnt{s}, ctx, d})
+                return IR{typ(QLone{}), Nil{}, 0n}
+            case Qnt{s}:
+              K.pure(IR, IR{typ(QLone{}), Nil{}, 0n})
+            case TQua{q, s}:
+              K.pure(IR, IR{Qnt{s}, Nil{}, 0n})
+            case Min{a, b, +s}:
+              do K<IR>:
+                ua : List<&2, Us> <- check.run(fuel, STermCheck{l, a, qt, Qnt{s}, ctx, d})
+                ub : List<&2, Us> <- check.run(fuel, STermCheck{l, b, qt, Qnt{s}, ctx, d})
+                return IR{Qnt{s}, uses_add(ua, ub), 0n}
+            case All{+q, +k, i, +a, b, +s}:
+              do K<IR>:
+                check.run(fuel, SCheckKind{l, a, k, q, ctx, d, Sp.or(Tm.span(a), s)})
+                book : Book <- K.book()
+                ub : List<&2, Us> <- check.run(fuel, STermCheck{l, clo_apply(book, b, [Var{k, d, NoSp{}}]), QNone{}, typ(QLone{}),
+                  ctx_bind(ctx, d, q, k, a), U32.inc(d)})
+                return IR{typ(QLone{}), Nil{}, 0n}
+            case TApp{f, +x, +s}:
+              do K<IR>:
+                fi : IR <- check.run(fuel, STermInfer{l, f, qt, ctx, d, x <> sp})
+                check.run(fuel, SInferApp{l, fi, x, qt, ctx, d, s})
+            case ADT{+k, +xs, +s, r}:
+              do K<IR>:
+                +ad : AD <- book_adt(ADT{k, xs, s, r}, ctx, CL.dn(l))
+                check.run(fuel, SInferAdt{l, ad, k, xs, s, qt, ctx, d})
+            case Eql{+a, +b, +t, s}:
+              do K<IR>:
+                ut : List<&2, Us> <- check.run(fuel, STermCheck{l, t, QNone{}, typ(QLone{}), ctx, d})
+                ua : List<&2, Us> <- check.run(fuel, STermCheck{l, a, QNone{}, t, ctx, d})
+                ub : List<&2, Us> <- check.run(fuel, STermCheck{l, b, QNone{}, t, ctx, d})
+                return IR{typ(QMany{}), Nil{}, 0n}
+            case Ann{x, +t, s}:
+              do K<IR>:
+                ut : List<&2, Us> <- check.run(fuel, STermCheck{l, t, QNone{}, typ(QLone{}), ctx, d})
+                u : List<&2, Us> <- check.run(fuel, STermCheck{l, x, qt, t, ctx, d})
+                return IR{t, u, 0n}
+            case other:
+              infer.fail(l, other, ctx)
+        case SInferAppGo{+l, fw, +fty, fus, +x, +qt, +ctx, +d, +s}:
+          match fw:
+            case All{q, k, i, a, b, as}:
+              do K<IR>:
+                ux : List<&2, Us> <- check.run(fuel, STermCheck{l, x, quant_dem(q, qt), a, ctx, d})
+                book : Book <- K.book()
+                return IR{clo_apply(book, b, [x]), uses_add(fus, ux), 0n}
+            case other:
+              K.err(IR, ctx, MStr{"a function type"}, MTm{fty}, s, CL.dn(l))
+        case SInferApp{+l, fi, +x, +qt, +ctx, +d, +s}:
+          IR{+fty, fus, fx} = fi
+          match fx:
+            case 1n+m:
+              K.pure(IR, IR{fty, fus, m})
+            case 0n:
+              do K<IR>:
+                book : Book <- K.book()
+                check.run(fuel, SInferAppGo{l, term_wnf(book, fty), fty, fus, x, qt, ctx, d, s})
+        case SInferAdtGo{+l, +ad, xs, +s, +qt, +ctx, +d}:
+          do K<IR>:
+            r : List<&2, Us> & Tm <- check.run(fuel, STeleCheck{l, AD.t(ad), xs, qt, ctx, d, s, Nil{}})
+            return infer.adt.fin(r)
+        case SInferAdt{+l, +ad, +k, +xs, +s, +qt, +ctx, +d}:
+          K.if(IR, Nat.is_eq(List.length(&2, Tm, xs), AD.n(ad)), check.run(fuel, SInferAdtGo{l, ad, xs, s, qt, ctx, d}),
+            K.err(IR, ctx, MStr{k ++ " with " ++ Nat.show(AD.n(ad)) ++ Bool.pick(String, Nat.is_eq(AD.n(ad), 1n),
+              " parameter", " parameters")}, MTm{ADT{k, xs, s, Nil{}}}, s, CL.dn(l)))
+        case SCheckInfer{+l, +tm, +qt, +ty, +ctx, +d}:
+          do K<List<&2, Us>>:
+            +xi : IR <- check.run(fuel, STermInfer{l, tm, qt, ctx, d, Nil{}})
+            book : Book <- K.book()
+            check.infer.cmp(l, tm, xi, ty, ctx, d, term_compare(True{}, book, IR.ty(xi), ty, d))
+        # The values of a let, each inferred in the outer context.
+        case SCheckLets{+l, ks, vs, qs, +qt, +ctx0, fctx, +d, +j, us, +s}:
+          match ks vs qs:
+            case +k <> kt v <> vt +q <> qt2:
+              do K<List<&2, Tm> & List<&2, Us>>:
+                +vi : IR <- check.run(fuel, STermInfer{l, v, quant_dem(q, qt), ctx0, d, Nil{}})
+                check.run(fuel, SCheckKind{l, IR.ty(vi), k, q, ctx0, d, s})
+                check.run(fuel, SCheckLets{l, kt, vt, qt2, qt, ctx0, ctx_bind(fctx, (d + j : U32), q, k, IR.ty(vi)), d, U32.inc(j),
+                  uses_add(us, IR.us(vi)), s})
+            case a b c:
+              K.pure(List<&2, Tm> & List<&2, Us>, (fctx, us))
+        case SCheckLetBody{+l, +ks, vs, f, +s, +qs, +qt, +ty, +ctx, +d, r}:
+          (fctx, us) = r
+          +n = U32.from_nat(List.length(&2, String, ks))
+          do K<List<&2, Us>>:
+            book : Book <- K.book()
+            fu : List<&2, Us> <- check.run(fuel, STermCheck{l, clo_apply(book, f, let.vars(ks, vs, d)), qt, ty, fctx, (d + n : U32)})
+            fu2 : List<&2, Us> <- check.let.used(l, ks, qs, ctx, d, s, fu)
+            return uses_add(us, fu2)
+        case SCheckElimGo{+l, tm, +s, +tall, +ak, +axs, +r, +rem, +qt, +ty, +ctx, +d}:
+          match tm:
+            case Efq{es}:
+              do K<List<&2, Us>>:
+                book : Book <- K.book()
+                K.if(List<&2, Us>, Lazy.and(Bool.not(Lst.empty(&2, CtrD, rem)), u => Bool.not(ctx_dead(book, ctx))),
+                  K.err(List<&2, Us>, ctx, MStr{"cases for " ++ String.join(CtrD.names(rem), ", ")}, MTm{Efq{es}}, s, CL.dn(l)),
+                  K.pure(List<&2, Us>, Nil{}))
+            case Mat{+k, h, m, ms}:
+              check.run(fuel, SCheckMat{l, k, h, m, s, tall, ak, axs, r, ctrs_find(rem, k), Nat.is_eq(List.length(&2, CtrD, rem), 1n), qt, ty, ctx, d})
+            case other:
+              K.pure(List<&2, Us>, Nil{})
+        case SCheckElimAdt{+l, +tm, +s, +tall, aw, +qt, +ty, +ctx, +d}:
+          match aw:
+            case ADT{+ak, +axs, as, +r}:
+              do K<List<&2, Us>>:
+                +ad : AD <- book_adt(ADT{ak, axs, as, r}, ctx, CL.dn(l))
+                check.run(fuel, SCheckElimGo{l, tm, s, tall, ak, axs, r, AD.cs(ad), qt, ty, ctx, d})
+            case other:
+              K.err(List<&2, Us>, ctx, MStr{"a datatype"}, MTm{All.a(tall)}, s, CL.dn(l))
+        # A match (or an empty one) checks against a function type on a datatype.
+        case SCheckElim{+l, +tm, +s, tw, +qt, +ty, +ctx, +d}:
+          match tw:
+            case All{+q, +k, +i, +a, +b, as}:
+              do K<List<&2, Us>>:
+                K.if(Unit, Bool.and(Bool.not(Q.is_none(qt)), Q.is_none(q)),
+                  K.err(Unit, ctx, MStr{"a live scrutinee (a - scrutinee matches only in a dead region)"}, MNone{}, s, CL.dn(l)),
+                  K.pure(Unit, Unit{}))
+                book : Book <- K.book()
+                check.run(fuel, SCheckElimAdt{l, tm, s, All{q, k, i, a, b, as}, term_wnf(book, a), qt, ty, ctx, d})
+            case other:
+              check.typeless(List<&2, Us>, l, tm, ty, ctx, s)
+        case STermCheck{+l, tm, +qt, +ty, +ctx, +d}:
+          match tm:
+            case Cel{k, s, v, m}:
+              check.run(fuel, STermCheck{l, v, qt, ty, ctx, d})
+            case Lam{+k, i, f, +s, q}:
+              do K<List<&2, Us>>:
+                book : Book <- K.book()
+                check.run(fuel, SCheckLam{l, k, f, s, q, term_wnf(book, ty), qt, ty, ctx, d})
+            case Let{+ks, ids, +vs, f, +s, +qs}:
+              do K<List<&2, Us>>:
+                r : List<&2, Tm> & List<&2, Us> <- check.run(fuel, SCheckLets{l, ks, vs, qs, qt, ctx, ctx, d, 0, Nil{}, s})
+                check.run(fuel, SCheckLetBody{l, ks, vs, f, s, qs, qt, ty, ctx, d, r})
+            case Ctr{+k, +xs, +s}:
+              do K<List<&2, Us>>:
+                book : Book <- K.book()
+                check.run(fuel, SCheckCtr{l, k, xs, s, term_wnf(book, ty), qt, ty, ctx, d})
+            case Lit{+v, +s}:
+              do K<List<&2, Us>>:
+                book : Book <- K.book()
+                check.run(fuel, SCheckLit{l, Lit{v, s}, term_wnf(book, ty), qt, ty, ctx, d})
+            case Mat{+k, +h, +m, +s}:
+              do K<List<&2, Us>>:
+                book : Book <- K.book()
+                check.run(fuel, SCheckElim{l, Mat{k, h, m, s}, s, term_wnf(book, ty), qt, ty, ctx, d})
+            case Efq{+s}:
+              do K<List<&2, Us>>:
+                book : Book <- K.book()
+                check.run(fuel, SCheckElim{l, Efq{s}, s, term_wnf(book, ty), qt, ty, ctx, d})
+            case Rfl{+s}:
+              do K<List<&2, Us>>:
+                book : Book <- K.book()
+                check.rfl(l, s, term_wnf(book, ty), ty, ctx, d)
+            case Hol{+k, +s}:
+              K.if(List<&2, Us>, String.eq(k, "TODO"), K.pure(List<&2, Us>, Nil{}),
+                K.err(List<&2, Us>, ctx, MTm{ty}, MTm{Hol{k, s}}, s, CL.dn(l)))
+            case Rwt{+e, +p, f, +s}:
+              do K<List<&2, Us>>:
+                +ei : IR <- check.run(fuel, STermInfer{l, e, qt, ctx, d, Nil{}})
+                book : Book <- K.book()
+                check.run(fuel, SCheckRwt{l, e, p, f, s, ei, term_wnf(book, IR.ty(ei)), qt, ty, ctx, d})
+            case other:
+              check.run(fuel, SCheckInfer{l, other, qt, ty, ctx, d})
+        case SCheckLam{+l, +k, f, +s, lq, tw, +qt, +ty, +ctx, +d}:
+          match tw:
+            case All{+q, ak, ai, +a, b, as}:
+              +x = {Var{k, d, NoSp{}} : Tm}
+              +many = Bool.and(Q.is_many(lq), Q.is_lone(q))
+              +q2 = Bool.pick(Q, many, QMany{}, q)
+              do K<List<&2, Us>>:
+                K.if(Unit, many, check.run(fuel, SCheckKind{l, a, k, q2, ctx, d, s}), K.pure(Unit, Unit{}))
+                fl : CL <- CL.under(l, x)
+                +book : Book <- K.book()
+                +u : List<&2, Us> <- check.run(fuel, STermCheck{fl, clo_apply(book, f, [x]), qt, clo_apply(book, b, [x]),
+                  ctx_bind(ctx, d, q2, k, a), U32.inc(d)})
+                quant_used(ctx, k, q2, uses_get(u, d), s, CL.dn(l))
+                return uses_del(u, d)
+            case other:
+              check.typeless(List<&2, Us>, l, Lam{k, 0, f, s, lq}, ty, ctx, s)
+        case SCheckCtrFields{+l, ct, xs, +s, axs, +qt, +ctx, +d}:
+          do K<List<&2, Us>>:
+            +tel : Tm <- tele_fill(ct, axs, ctx, CL.dn(l), s)
+            r : List<&2, Us> & Tm <- check.run(fuel, STeleCheck{l, tel, xs, qt, ctx, d, s, Nil{}})
+            return Pair.fst(List<&2, Us>, Tm, r)
+        case SCheckCtrFind{+l, +k, +xs, +s, +ak, +axs, +cs, c, +qt, +ty, +ctx, +d}:
+          match c:
+            case None{}:
+              do K<List<&2, Us>>:
+                +book : Book <- K.book()
+                K.if(List<&2, Us>, Maybe.is_some(&2, CtrD, book_ctr(book, k)),
+                  K.err(List<&2, Us>, ctx, MTm{ty}, MTm{Ref{book_fam(book, k), s, False{}}}, s, CL.dn(l)),
+                  K.err(List<&2, Us>, ctx, MStr{"a declared constructor (" ++ ak ++ " declares " ++
+                    String.join(CtrD.names(cs), ", ") ++ ")"}, MTm{Ctr{k, xs, s}}, s, CL.dn(l)))
+            case Some{CtrD{ck, +n, ct}}:
+              K.if(List<&2, Us>, Nat.is_eq(n, List.length(&2, Tm, xs)), check.run(fuel, SCheckCtrFields{l, ct, xs, s, axs, qt, ctx, d}),
+                K.err(List<&2, Us>, ctx, MStr{k ++ " with " ++ Nat.show(n) ++ Bool.pick(String, Nat.is_eq(n, 1n), " field",
+                  " fields")}, MTm{Ctr{k, xs, s}}, s, CL.dn(l)))
+        case SCheckCtr{+l, +k, +xs, +s, tw, +qt, +ty, +ctx, +d}:
+          match tw:
+            case ADT{+ak, +axs, as, +r}:
+              do K<List<&2, Us>>:
+                +ad : AD <- book_adt(ADT{ak, axs, as, r}, ctx, CL.dn(l))
+                book : Book <- K.book()
+                check.run(fuel, SCheckCtrFind{l, k, xs, s, ak, axs, AD.cs(ad), ctrs_find(AD.cs(ad), k), qt, ty, ctx, d})
+            case other:
+              do K<List<&2, Us>>:
+                +book : Book <- K.book()
+                K.if(List<&2, Us>, Maybe.is_some(&2, CtrD, book_ctr(book, k)),
+                  K.err(List<&2, Us>, ctx, MTm{ty}, MTm{Ref{book_fam(book, k), s, False{}}}, s, CL.dn(l)),
+                  check.typeless(List<&2, Us>, l, Ctr{k, xs, s}, ty, ctx, s))
+        case SCheckLit{+l, +lit, tw, +qt, +ty, +ctx, +d}:
+          match tw:
+            case ADT{+ak, axs, as, +r}:
+              do K<List<&2, Us>>:
+                book : Book <- K.book()
+                K.if(List<&2, Us>, check.lit.base(book_tld(book, ak), r, lit.ctr(Lit.v(lit))), K.pure(List<&2, Us>, Nil{}),
+                  check.run(fuel, STermCheck{l, lit_step(lit), qt, ty, ctx, d}))
+            case other:
+              check.run(fuel, STermCheck{l, lit_step(lit), qt, ty, ctx, d})
+        case SCheckRwt{+l, +e, +p, f, +s, ei, ew, +qt, +ty, +ctx, +d}:
+          match ew:
+            case Eql{+a, +b, +t, es}:
+              do K<List<&2, Us>>:
+                up : List<&2, Us> <- check.run(fuel, STermCheck{l, p, QNone{}, All{QLone{}, "_", 0, t, CRwt{a, t, s}, s}, ctx, d})
+                +book : Book <- K.book()
+                +bg : Tm <- K.pure(Tm, term_apply1(book, term_apply1(book, p, b), e))
+                K.if(Unit, term_compare(True{}, book, bg, ty, d), K.pure(Unit, Unit{}),
+                  K.err(Unit, ctx, MTm{ty}, MTm{bg}, s, CL.dn(l)))
+                uf : List<&2, Us> <- check.run(fuel, STermCheck{l, f, qt, term_apply1(book, term_apply1(book, p, a), Rfl{s}), ctx, d})
+                return uses_add(IR.us(ei), uf)
+            case other:
+              K.err(List<&2, Us>, ctx, MStr{"an equation {a == b : T}"}, MTm{IR.ty(ei)}, Sp.or(Tm.span(e), s), CL.dn(l))
+        # Past a datatype's last constructor the rest of a match is dead: a default
+        # there (a flattened fallback) is \{}, unvisited (#1091); a case still checks.
+        case SCheckMatRest{+l, m, last, +qt, ty, +ctx, +d}:
+          match m:
+            case Mat{k, h, n, s}:
+              check.run(fuel, STermCheck{l, Mat{k, h, n, s}, qt, ty, ctx, d})
+            case other:
+              K.if(List<&2, Us>, last, K.pure(List<&2, Us>, Nil{}), check.run(fuel, STermCheck{l, other, qt, ty, ctx, d}))
+        case SCheckMat{+l, +k, h, m, +s, +tall, +ak, +axs, +r, c, last, +qt, +ty, +ctx, +d}:
+          match c:
+            case None{}:
+              K.err(List<&2, Us>, ctx, MStr{"a constructor of " ++ ak ++ " (missing, or already matched)"},
+                MTm{Mat{k, h, m, s}}, s, CL.dn(l))
+            case Some{CtrD{ck, +n, ct}}:
+              do K<List<&2, Us>>:
+                +tel : Tm <- tele_fill(ct, axs, ctx, CL.dn(l), s)
+                hl : CL <- CL.ext(l, k, n)
+                book : Book <- K.book()
+                uh : List<&2, Us> <- check.run(fuel, STermCheck{hl, h, qt, mat_goal(book, tel, n, Nil{}, All.b(tall), k, s, All.q(tall), ctx,
+                  CL.dn(l)), ctx, d})
+                um : List<&2, Us> <- check.run(fuel, SCheckMatRest{l, m, last, qt, All{All.q(tall), All.k(tall), 0, ADT{ak, axs, s,
+                  List.append(&2, String, r, [k])}, All.b(tall), s}, ctx, d})
+                return uses_join(uh, um)
+        case SInstClosed{+l, +tm, +a, +ty, +ctx, +d}:
+          b => inst.closed.go(check.run(fuel, STermCheck{l, a, QNone{}, ty, Nil{}, d})(b), l, tm, ctx, d)
+        # Checks a template's ~ arguments against its telescope; answers the
+        # instance's type.
+        case SInstArgs{+l, +tm, +tel, xs, +ctx, +d}:
+          match xs:
+            case Nil{}:
+              K.pure(Tm, tel)
+            case +a <> t:
+              do K<Tm>:
+                +h : Tm <- tele_head(tel, ctx, CL.dn(l), Tm.span(tm))
+                u : List<&2, Us> <- check.run(fuel, SInstClosed{l, tm, a, All.a(h), ctx, d})
+                book : Book <- K.book()
+                check.run(fuel, SInstArgs{l, tm, clo_apply(book, All.b(h), [a]), t, ctx, d})
+        # A template's ~ names do not outlive its check.
+        case SDefCheckGo{+k, +tld, +z, qs, r, old, tmpl}:
+          (t, rest) = r
+          (v, ty) = rest
+          do K<Unit>:
+            u : List<&2, Us> <- check.run(fuel, STermCheck{CL{t, Nat.sub(Tld.dn(tld), Tld.x_of(tld)), k, qs, Tld.du(tld), z}, v, QLone{}, ty,
+              Nil{}, 0})
+            b : Book <- K.book()
+            K.set_book(Bool.pick(Book, tmpl, old, b))
+        case SDefCheck{+k, +tld, +z}:
+          do K<Unit>:
+            +book : Book <- K.book()
+            +qs : List<&2, Q> <- K.pure(List<&2, Q>, Dom.qs(Pair.fst(List<&2, Dom>, Tm, tele_unbind(book, Tld.t(tld)))))
+            r : Tm & Tm & Tm <- def_check.tmpl(k, Tld.x_of(tld), Ref{k, NoSp{}, False{}},
+              Maybe.default(&2, Tm, Tld.dval(tld), Efq{NoSp{}}), Tld.t(tld))
+            check.run(fuel, SDefCheckGo{k, tld, z, qs, r, book, Nat.is_gt(Tld.x_of(tld), 0n)})
+        case SDefInstMake{+tm, +tld, +xs, +ty, +key, +z}:
+          +k = Tm.name(tm)
+          do K<String>:
+            +book : Book <- K.book()
+            +o : String <- K.pure(String, k ++ "~" ++ Nat.show(Book.tcnt(book, k)))
+            +n : Nat <- K.pure(Nat, Nat.sub(Tld.dn(tld), Tld.x_of(tld)))
+            +v : Tm <- K.pure(Tm, applys(book, Maybe.default(&2, Tm, Tld.dval(tld), Efq{NoSp{}}), xs))
+            K.set_book(book_set(Book.add_tmp(book, k, key, o), o, TDef{n, 0n, ty, None{}, Tld.du(tld), False{}, None{}}))
+            check.run(fuel, SDefCheck{o, TDef{n, 0n, ty, Some{v}, Tld.du(tld), False{}, None{}}, z})
+            b2 : Book <- K.book()
+            K.set_book(book_set(b2, o, TDef{n, 0n, ty, Some{v}, Tld.du(tld), False{}, None{}}))
+            return o
+        case SDefInstNew{+l, +tm, +tld, +xs, +ty, +key, +ctx}:
+          +z = {1n+CL.z(l) : Nat}
+          K.if(String, Nat.is_gt(z, 64n),
+            K.err(String, ctx, MStr{"a template that stops instantiating itself (64 levels at most)"}, MTm{tm}, Tm.span(tm),
+              CL.dn(l)), check.run(fuel, SDefInstMake{tm, tld, xs, ty, key, z}))
+        case SDefInstFind{+l, +tm, +tld, +xs, +ty, +key, +ctx, m}:
+          match m:
+            case Some{+o}:
+              do K<String>:
+                book : Book <- K.book()
+                K.if(String, Bool.and(Bool.not(Maybe.is_some(&2, Tm, Tld.dval(Maybe.default(&2, Tld, book_tld(book, o), tld)))),
+                  Bool.not(String.eq(o, CL.dn(l)))),
+                  K.err(String, ctx, MStr{"a decreasing self-call (arguments are read left to right: each passed unchanged until one shrinks)"},
+                    MTm{tm}, Tm.span(tm), CL.dn(l)), K.pure(String, o))
+            case None{}:
+              check.run(fuel, SDefInstNew{l, tm, tld, xs, ty, key, ctx})
+        case SDefInstGo{+l, +tm, +tld, +xs, +ctx, +d}:
+          do K<String>:
+            +ty : Tm <- check.run(fuel, SInstArgs{l, tm, Tld.t(tld), xs, ctx, d})
+            +book : Book <- K.book()
+            +lxs : List<&2, Tm> = lowers(book, xs, 0)
+            +key : String <- K.pure(String, term_key.list(lxs))
+            K.if(Unit, Nat.is_gt(Nat.add(term_jlen.list(lxs), Nat.sub(List.length(&2, Tm, lxs), 1n)), 32768n),
+              K.err(Unit, ctx, MStr{"a ~ argument that stops growing"}, MTm{tm}, Tm.span(tm), CL.dn(l)), K.pure(Unit, Unit{}))
+            check.run(fuel, SDefInstFind{l, tm, tld, xs, ty, Tm.name(tm) ++ "\n" ++ key, ctx, Book.tmp(book, Tm.name(tm) ++ "\n" ++ key)})
+        # The instance of a template for its ~ arguments (made and checked once).
+        case SDefInst{+l, +tm, +tld, +sp, +ctx, +d}:
+          +x = Tld.x_of(tld)
+          +xs = List.take_tm(sp, x)
+          K.if(String, Nat.is_lt(List.length(&2, Tm, xs), x),
+            K.err(String, ctx, MStr{"a template applied to closed ~ arguments (a def parameter is not comptime)"}, MTm{tm},
+              Tm.span(tm), CL.dn(l)), check.run(fuel, SDefInstGo{l, tm, tld, xs, ctx, d}))
+
+def term_check(+l: CL, tm: Tm, +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K(List<&2, Us>):
+  check.run(Fuel.max(), STermCheck{l, tm, qt, ty, ctx, d})
 
 def def_check(+k: String, +tld: Tld, +z: Nat) -> K(Unit):
-  do K<Unit>:
-    +book : Book <- K.book()
-    +qs : List<&2, Q> <- K.pure(List<&2, Q>, Dom.qs(Pair.fst(List<&2, Dom>, Tm, tele_unbind(book, Tld.t(tld)))))
-    r : Tm & Tm & Tm <- def_check.tmpl(k, Tld.x_of(tld), Ref{k, NoSp{}, False{}},
-      Maybe.default(&2, Tm, Tld.dval(tld), Efq{NoSp{}}), Tld.t(tld))
-    def_check.go(k, tld, z, qs, r, book, Nat.is_gt(Tld.x_of(tld), 0n))
-
-def def_inst.make(+tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ty: Tm, +key: String, +z: Nat) -> K(String):
-  +k = Tm.name(tm)
-  do K<String>:
-    +book : Book <- K.book()
-    +o : String <- K.pure(String, k ++ "~" ++ Nat.show(Book.tcnt(book, k)))
-    +n : Nat <- K.pure(Nat, Nat.sub(Tld.dn(tld), Tld.x_of(tld)))
-    +v : Tm <- K.pure(Tm, applys(book, Maybe.default(&2, Tm, Tld.dval(tld), Efq{NoSp{}}), xs))
-    K.set_book(book_set(Book.add_tmp(book, k, key, o), o, TDef{n, 0n, ty, None{}, Tld.du(tld), False{}, None{}}))
-    def_check(o, TDef{n, 0n, ty, Some{v}, Tld.du(tld), False{}, None{}}, z)
-    b2 : Book <- K.book()
-    K.set_book(book_set(b2, o, TDef{n, 0n, ty, Some{v}, Tld.du(tld), False{}, None{}}))
-    return o
-
-def def_inst.new(+l: CL, +tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ty: Tm, +key: String, +ctx: List<&2, Tm>) ->
-  K(String):
-  +z = {1n+CL.z(l) : Nat}
-  K.if(String, Nat.is_gt(z, 64n),
-    K.err(String, ctx, MStr{"a template that stops instantiating itself (64 levels at most)"}, MTm{tm}, Tm.span(tm),
-      CL.dn(l)), def_inst.make(tm, tld, xs, ty, key, z))
-
-def def_inst.find(
-  +l: CL, +tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ty: Tm, +key: String, +ctx: List<&2, Tm>, m: Maybe<&2, String>
-) -> K(String):
-  match m:
-    case Some{+o}:
-      do K<String>:
-        book : Book <- K.book()
-        K.if(String, Bool.and(Bool.not(Maybe.is_some(&2, Tm, Tld.dval(Maybe.default(&2, Tld, book_tld(book, o), tld)))),
-          Bool.not(String.eq(o, CL.dn(l)))),
-          K.err(String, ctx, MStr{"a decreasing self-call (arguments are read left to right: each passed unchanged until one shrinks)"},
-            MTm{tm}, Tm.span(tm), CL.dn(l)), K.pure(String, o))
-    case None{}:
-      def_inst.new(l, tm, tld, xs, ty, key, ctx)
-
-def def_inst.go(+l: CL, +tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ctx: List<&2, Tm>, +d: U32) -> K(String):
-  do K<String>:
-    +ty : Tm <- inst.args(l, tm, Tld.t(tld), xs, ctx, d)
-    +book : Book <- K.book()
-    +lxs : List<&2, Tm> = lowers(book, xs, 0)
-    +key : String <- K.pure(String, term_key.list(lxs))
-    K.if(Unit, Nat.is_gt(Nat.add(term_jlen.list(lxs), Nat.sub(List.length(&2, Tm, lxs), 1n)), 32768n),
-      K.err(Unit, ctx, MStr{"a ~ argument that stops growing"}, MTm{tm}, Tm.span(tm), CL.dn(l)), K.pure(Unit, Unit{}))
-    def_inst.find(l, tm, tld, xs, ty, Tm.name(tm) ++ "\n" ++ key, ctx, Book.tmp(book, Tm.name(tm) ++ "\n" ++ key))
-
-# The instance of a template for its ~ arguments (made and checked once).
-def def_inst(l, tm, tld, sp, ctx, d):
-  +x = Tld.x_of(tld)
-  +xs = List.take_tm(sp, x)
-  K.if(String, Nat.is_lt(List.length(&2, Tm, xs), x),
-    K.err(String, ctx, MStr{"a template applied to closed ~ arguments (a def parameter is not comptime)"}, MTm{tm},
-      Tm.span(tm), CL.dn(l)), def_inst.go(l, tm, tld, xs, ctx, d))
+  check.run(Fuel.max(), SDefCheck{k, tld, z})
 
 def Tld.is_law_open(t: Tld) -> Bool:
   match t:
