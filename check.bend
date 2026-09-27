@@ -5374,49 +5374,26 @@ def ctx_len(ctx: List<&2, Tm>) -> U32:
     case x <> t:
       ctx_len(t)
 
-law ctx_name:
-  for ctx: List<&2, Tm>
-  for +i: U32
-  String
-
-@unsafe
-def ctx_name.if(k: String, t: List<&2, Tm>, +i: U32, hit: Bool) -> String:
-  match hit:
-    case True{}:
-      k
-    case False{}:
-      ctx_name(t, i)
-
-def ctx_name(ctx, i):
+def ctx_name(ctx: List<&2, Tm>, +i: U32) -> String:
   match ctx:
     case Nil{}:
       "_"
     case CB{+j, q, +k, ty} <> t:
-      ctx_name.if(k, t, i, U32.is_eq(i, j))
+      Bool.pick(Unit -> String, U32.is_eq(i, j), u => k, u => ctx_name(t, i))(Unit{})
     case x <> t:
       ctx_name(t, i)
 
-law ctx_scope.c:
-  for +ctx: List<&2, Tm>
-  for +i: U32
-  for +n: U32
-  for c: Bool
-  List<&2, String>
-
-@unsafe
-def ctx_scope.go(+ctx: List<&2, Tm>, +i: U32, +n: U32) -> List<&2, String>:
-  ctx_scope.c(ctx, i, n, U32.is_ge(i, n))
-
-def ctx_scope.c(ctx, i, n, c):
-  match c:
-    case True{}:
+# The names of the variables i up, k of them.
+def ctx_scope.go(k: Nat, +ctx: List<&2, Tm>, +i: U32) -> List<&2, String>:
+  match k:
+    case 0n:
       Nil{}
-    case False{}:
-      ctx_name(ctx, i) <> ctx_scope.go(ctx, U32.inc(i), n)
+    case 1n+j:
+      ctx_name(ctx, i) <> ctx_scope.go(j, ctx, U32.inc(i))
 
 # The names in scope, outermost first.
 def ctx_scope(+ctx: List<&2, Tm>) -> List<&2, String>:
-  ctx_scope.go(ctx, 0, ctx_len(ctx))
+  ctx_scope.go(U32.to_nat(ctx_len(ctx)), ctx, 0)
 
 def FI.find(fs: List<&2, FI>, +src: String) -> FI:
   match fs:
@@ -5449,23 +5426,19 @@ def name.show(+fi: FI, +k: String) -> String:
   Bool.pick(String, Bool.and(Bool.not(String.is_empty(ns)), String.starts_with(k, ns ++ ".")),
     String.drop(k, 1n+String.length(ns)), name.show.al(List.reverse(&2, SB2, al), k))
 
-law Tm.respell:
-  for +fi: FI
-  for t: Tm
-  Tm
+def Tm.adt_cons(x: Tm, t: Tm) -> Tm:
+  match t:
+    case ADT{k, xs, s, r}:
+      ADT{k, x <> xs, s, r}
+    case other:
+      other
 
-law Tm.respell.xs:
-  for +fi: FI
-  for xs: List<&2, Tm>
-  List<&2, Tm>
-
-@unsafe
-def Tm.respell.xs(fi, xs):
-  match xs:
-    case Nil{}:
-      Nil{}
-    case x <> t:
-      Tm.respell(fi, x) <> Tm.respell.xs(fi, t)
+def Tm.let_cons(x: Tm, t: Tm) -> Tm:
+  match t:
+    case Let{ks, ids, vs, f, s, qs}:
+      Let{ks, ids, x <> vs, f, s, qs}
+    case other:
+      other
 
 def name.show.xs(+fi: FI, ks: List<&2, String>) -> List<&2, String>:
   match ks:
@@ -5474,21 +5447,34 @@ def name.show.xs(+fi: FI, ks: List<&2, String>) -> List<&2, String>:
     case k <> t:
       name.show(fi, k) <> name.show.xs(fi, t)
 
-# A lowered term with its names spelled as fi spells them.
-def Tm.respell(fi, t):
+# A lowered term with its names spelled as fi spells them. A list of
+# fields goes one at a time, each step on the same node with fewer fields.
+def Tm.respell(+fi: FI, t: Tm) -> Tm:
   match t:
     case Ref{k, s, b}:
       Ref{name.show(fi, k), s, b}
     case ADT{k, xs, s, r}:
-      ADT{name.show(fi, k), Tm.respell.xs(fi, xs), s, name.show.xs(fi, r)}
+      match xs:
+        case Nil{}:
+          ADT{name.show(fi, k), Nil{}, s, name.show.xs(fi, r)}
+        case x <> xt:
+          Tm.adt_cons(Tm.respell(fi, x), Tm.respell(fi, ADT{k, xt, s, r}))
     case Ctr{k, xs, s}:
-      Ctr{name.show(fi, k), Tm.respell.xs(fi, xs), s}
+      match xs:
+        case Nil{}:
+          Ctr{name.show(fi, k), Nil{}, s}
+        case x <> xt:
+          Tm.ctr_cons(Tm.respell(fi, x), Tm.respell(fi, Ctr{k, xt, s}))
     case Mat{k, h, m, s}:
       Mat{name.show(fi, k), Tm.respell(fi, h), Tm.respell(fi, m), s}
     case Sub{i, pt, f, s}:
       Sub{i, pt, Tm.respell(fi, f), s}
     case Let{ks, ids, vs, f, s, qs}:
-      Let{ks, ids, Tm.respell.xs(fi, vs), Tm.respell(fi, f), s, qs}
+      match vs:
+        case Nil{}:
+          Let{ks, ids, Nil{}, Tm.respell(fi, f), s, qs}
+        case x <> vt:
+          Tm.let_cons(Tm.respell(fi, x), Tm.respell(fi, Let{ks, ids, vt, f, s, qs}))
     case Typ{g, s}:
       Typ{Tm.respell(fi, g), s}
     case Min{a, b, s}:
@@ -5577,24 +5563,15 @@ def List.drop_str(xs: List<&2, String>, n: Nat) -> List<&2, String>:
     case Nil{} k:
       Nil{}
 
-law err.lines.one:
-  for +l: String
-  for t: List<&2, String>
-  for +i: Nat
-  for +end: Nat
-  for +at: Nat
-  for +w: Nat
-  for +car: String
-  for past: Bool
-  String
-
-@unsafe
 def err.lines.each(lns: List<&2, String>, +i: Nat, +end: Nat, +at: Nat, +w: Nat, +car: String) -> String:
   match lns:
     case Nil{}:
       ""
-    case l <> t:
-      err.lines.one(l, t, i, end, at, w, car, Nat.is_gt(i, end))
+    case +l <> t:
+      Bool.pick(Unit -> String, Nat.is_gt(i, end), u => "",
+        u => "\n" ++ Str.padl(Nat.show(i), w) ++
+          Bool.pick(String, Nat.is_eq(i, at), ">| " ++ l ++ "\n" ++ car, " | " ++ l) ++
+          err.lines.each(t, 1n+i, end, at, w, car))(Unit{})
 
 # Blanks for a line's text (a tab stays a tab, so the caret lines up).
 def err.blank(s: String) -> String:
@@ -5645,14 +5622,6 @@ def err.lines(s: Sp) -> String:
       +pre = String.take(src, U32.to_nat(beg))
       err.lines.go(String.split(src, '\n'), Nat.add(1n, Str.count_nl(pre)), err.last(String.split(pre, '\n')),
         U32.to_nat((end - beg : U32)))
-
-def err.lines.one(l, t, i, end, at, w, car, past):
-  match past:
-    case True{}:
-      ""
-    case False{}:
-      "\n" ++ Str.padl(Nat.show(i), w) ++ Bool.pick(String, Nat.is_eq(i, at), ">| " ++ l ++ "\n" ++ car, " | " ++ l) ++
-        err.lines.each(t, 1n+i, end, at, w, car)
 
 def err.msg(+fi: FI, +book: Book, exp: Msg, obs: Msg, +bnd: List<&2, String>) -> String:
   match obs:
@@ -5888,25 +5857,12 @@ type IR is Data:
 def lhs_kind(+l: CL, +q: Q) -> Q:
   Bool.pick(Q, Bool.and(CL.u(l), Q.is_many(q)), QLone{}, q)
 
-law ctx_get:
-  for ctx: List<&2, Tm>
-  for +i: U32
-  Maybe<&2, Tm>
-
-@unsafe
-def ctx_get.if(ty: Tm, t: List<&2, Tm>, +i: U32, hit: Bool) -> Maybe<&2, Tm>:
-  match hit:
-    case True{}:
-      Some{ty}
-    case False{}:
-      ctx_get(t, i)
-
-def ctx_get(ctx, i):
+def ctx_get(ctx: List<&2, Tm>, +i: U32) -> Maybe<&2, Tm>:
   match ctx:
     case Nil{}:
       None{}
     case CB{+j, q, k, ty} <> t:
-      ctx_get.if(ty, t, i, U32.is_eq(i, j))
+      Bool.pick(Unit -> Maybe<&2, Tm>, U32.is_eq(i, j), u => Some{ty}, u => ctx_get(t, i))(Unit{})
     case x <> t:
       ctx_get(t, i)
 
@@ -5958,8 +5914,7 @@ def All.k(t: Tm) -> String:
     case other:
       "_"
 
-@unsafe
-def tele_fill(+tel: Tm, xs: List<&2, Tm>, +ctx: List<&2, Tm>, +dn: String, +s: Sp) -> K(Tm):
+def tele_fill.go(xs: List<&2, Tm>, +tel: Tm, +ctx: List<&2, Tm>, +dn: String, +s: Sp) -> K(Tm):
   match xs:
     case Nil{}:
       K.pure(Tm, tel)
@@ -5967,7 +5922,10 @@ def tele_fill(+tel: Tm, xs: List<&2, Tm>, +ctx: List<&2, Tm>, +dn: String, +s: S
       do K<Tm>:
         +h : Tm <- tele_head(tel, ctx, dn, s)
         b : Book <- K.book()
-        tele_fill(clo_apply(b, All.b(h), [x]), t, ctx, dn, s)
+        tele_fill.go(t, clo_apply(b, All.b(h), [x]), ctx, dn, s)
+
+def tele_fill(+tel: Tm, xs: List<&2, Tm>, +ctx: List<&2, Tm>, +dn: String, +s: Sp) -> K(Tm):
+  tele_fill.go(xs, tel, ctx, dn, s)
 
 law term_check:
   for +l: CL
@@ -6023,25 +5981,13 @@ def Dom.ctx(ds: List<&2, Dom>, +d: U32, ctx: List<&2, Tm>) -> List<&2, Tm>:
     case Dom{q, k, a} <> t:
       Dom.ctx(t, U32.inc(d), ctx_bind(ctx, d, q, k, a))
 
-law ctrs_find:
-  for cs: List<&2, CtrD>
-  for +k: String
-  Maybe<&2, CtrD>
-
-@unsafe
-def ctrs_find.if(c: CtrD, rest: List<&2, CtrD>, +k: String, hit: Bool) -> Maybe<&2, CtrD>:
-  match hit:
-    case True{}:
-      Some{c}
-    case False{}:
-      ctrs_find(rest, k)
-
-def ctrs_find(cs, k):
+def ctrs_find(cs: List<&2, CtrD>, +k: String) -> Maybe<&2, CtrD>:
   match cs:
     case Nil{}:
       None{}
     case CtrD{+k2, n, t} <> rest:
-      ctrs_find.if(CtrD{k2, n, t}, rest, k, String.eq(k, k2))
+      Bool.pick(Unit -> Maybe<&2, CtrD>, String.eq(k, k2), u => Some{CtrD{k2, n, t}},
+        u => ctrs_find(rest, k))(Unit{})
 
 def ctrs_drop.if(c: CtrD, rest: List<&2, CtrD>, drop: Bool) -> List<&2, CtrD>:
   match drop:
