@@ -22,7 +22,6 @@ def Str.has.if(t: List<&2, String>, +x: String, hit: Bool) -> Bool:
     case False{}:
       Str.has(t, x)
 
-@unsafe
 def Str.has(xs, x):
   match xs:
     case Nil{}:
@@ -61,7 +60,6 @@ def Str.first_dot.if(dot: Bool, t: String) -> Nat:
     case False{}:
       1n+Str.first_dot(t)
 
-@unsafe
 def Str.first_dot(s):
   match s:
     case SNil{}:
@@ -116,7 +114,6 @@ def Str.index.if(t: List<&2, String>, +k: String, +i: Nat, hit: Bool) -> Maybe<&
 # term_show prints a lowered term as the official does. bnd holds the names
 # of the enclosing binders, innermost first; n is their count. Precedences
 # are shifted by one (the official -1 is 0 here).
-@unsafe
 def Str.index(xs, k, i):
   match xs:
     case Nil{}:
@@ -177,7 +174,6 @@ def is_digit(+c: U32) -> Bool:
 def is_name(+c: U32) -> Bool:
   Bool.or(Bool.or(is_head(c), is_digit(c)), U32.is_eq(c, 46))
 
-@unsafe
 def Str.word_at(s):
   match s:
     case SCon{Chr{+c}, t}:
@@ -209,7 +205,6 @@ def Str.words.chr(t: String, +c: U32, +cur: String, acc: List<&2, String>, sp: B
 def is_space(+c: U32) -> Bool:
   Bool.or(Bool.or(U32.is_eq(c, 32), U32.is_eq(c, 10)), Bool.or(U32.is_eq(c, 13), U32.is_eq(c, 9)))
 
-@unsafe
 def Str.words.go(s, cur, acc):
   match s:
     case SNil{}:
@@ -229,7 +224,6 @@ def Str.until_hash.if(hash: Bool, w: String, t: List<&2, String>) -> List<&2, St
     case False{}:
       w <> Str.until_hash(t)
 
-@unsafe
 def Str.until_hash(ws):
   match ws:
     case Nil{}:
@@ -254,7 +248,6 @@ def Str.index_of.if(t: String, +p: String, +i: Nat, hit: Bool) -> Nat:
     case False{}:
       Str.index_of(t, p, 1n+i)
 
-@unsafe
 def Str.index_of(s, p, i):
   match s:
     case SNil{}:
@@ -275,7 +268,6 @@ def Str.unique.if(+x: String, t: List<&2, String>, +seen: List<&2, String>, dup:
     case False{}:
       x <> Str.unique(t, x <> seen)
 
-@unsafe
 def Str.unique(xs, seen):
   match xs:
     case Nil{}:
@@ -588,7 +580,6 @@ def P.open.go(+k: String, ps: PS) -> Result<&1, &1, Err, U32 & PS>:
 def P.open(+k: String) -> P(U32):
   ps => P.open.go(k, ps)
 
-@unsafe
 def P.brace.go(+beg: U32, +a: Tm, eq: Bool, ne: Bool) -> P(Tm):
   match eq ne:
     case True{} x:
@@ -624,7 +615,6 @@ def P.if(-A: Type, c: Bool, t: P(A), e: P(A)) -> P(A):
     case False{}:
       e
 
-@unsafe
 def P.brace.term(+beg: U32) -> P(Tm):
   do P<Tm>:
     +a : Tm <- P.term0()
@@ -637,7 +627,6 @@ def P.bump() -> P(Unit):
   +ps => Done{(Unit{}, PS.set_cur(ps, Cur.step(PS.cur(ps))))}
 
 # {==}  {a == b : T}  {a != b : T}  {x : T}
-@unsafe
 def P.brace(+beg: U32) -> P(Tm):
   do P<Tm>:
     P.bump()
@@ -788,7 +777,6 @@ def P.brack.arr(+beg: U32, x: Tm) -> P(Tm):
     d : Tm <- P.brack.depth(cnt, n)
     return TApp{TApp{TApp{Ref{"Array.new", s, False{}}, ty, s}, d, s}, x2, s}
 
-@unsafe
 def P.brack.first(+beg: U32) -> P(Tm):
   do P<Tm>:
     +x : Tm <- P.term0()
@@ -797,7 +785,6 @@ def P.brack.first(+beg: U32) -> P(Tm):
     P.if(Tm, arr, P.brack.arr(beg, x), P.brack.list(beg, [x]))
 
 # [a, b]  [v : T*n]  [v : T^d]
-@unsafe
 def P.brack(+beg: U32) -> P(Tm):
   do P<Tm>:
     P.bump()
@@ -1070,7 +1057,6 @@ def P.base.ctor(+k: String, +beg: U32) -> P(Tm):
     s : Sp <- P.span(beg)
     return Ctr{q, xs, s}
 
-@unsafe
 def P.base.name(+k: String, +beg: U32) -> P(Tm):
   do P<Tm>:
     brace : Bool <- P.at("{")
@@ -1114,7 +1100,6 @@ def P.base.word.go(+k: String, +beg: U32, m: Maybe<&2, Nat>) -> P(Tm):
       P.if(Tm, Str.has(KEYWORDS(), k), P.fail.at(Tm, "a term (the keyword '" ++ k ++ "' cannot head one)", beg),
         P.base.name(k, beg))
 
-@unsafe
 def P.base.word(+k: String, +beg: U32) -> P(Tm):
   P.base.word.go(k, beg, Str.index(["Type", "Data", "Quant", "Kind", "do", "match", "case", "return"],
     k, 0n))
@@ -1479,7 +1464,6 @@ def P.base.sym.go(+c: U32, +beg: U32, m: Maybe<&2, Nat>) -> P(Tm):
       P.fail(Tm, "a term")
 
 # The syntax of each symbol that starts a term.
-@unsafe
 def P.base.sym(+c: U32, +beg: U32) -> P(Tm):
   P.base.sym.go(c, beg, Str.index(["@", "&", "+", "\\", "%", "{", "(", "[", "'", "\"", "?"],
     Str.chr(c), 0n))
@@ -1499,7 +1483,6 @@ def P.base.go(+c: U32, +beg: U32, kind: Nat) -> P(Tm):
     case 2n+p:
       P.base.sym(c, beg)
 
-@unsafe
 def P.base(+beg: U32) -> P(Tm):
   do P<Tm>:
     +c : U32 <- P.peek()
@@ -1539,7 +1522,6 @@ def amp.code(+d: U32) -> Nat:
   Bool.pick(Nat, U32.is_eq(d, 48), 1n, Bool.pick(Nat, U32.is_eq(d, 49), 2n,
     Bool.pick(Nat, U32.is_eq(d, 50), 3n, 0n)))
 
-@unsafe
 def P.amp(d, beg):
   P.amp.go(beg, amp.code(d))
 
@@ -1583,7 +1565,6 @@ def P.call.bang.go(h: Tm, +lvl: U32) -> P(Tm):
     P.bump()
     P.ops(Tm.bang(h), lvl)
 
-@unsafe
 def P.call.bang(+h: Tm, +lvl: U32) -> P(Tm):
   P.if(Tm, Tm.is_ref(h), P.call.bang.go(h, lvl), P.fail(Tm, "a named def before ! (only f!(..) offloads)"))
 
@@ -1630,7 +1611,6 @@ def P.call.args(+h: Tm, +lvl: U32) -> P(Tm):
     s2 : Sp <- span.grow(h)
     P.ops(apps(h, List.append(&2, Tm, ts, xs), s2), lvl)
 
-@unsafe
 def P.call(out: Tm, +lvl: U32) -> P(Tm):
   do P<Tm>:
     +h : Tm <- P.call.head(out)
@@ -1789,7 +1769,6 @@ def P.infix.go(+out: Tm, +lvl: U32, +sym: String, +prec: U32, right: Bool, +name
     +s : Sp <- span.grow(out)
     P.ops(infix.build(sym, name, out, b, s, t), lvl)
 
-@unsafe
 def P.infix(+out: Tm, +lvl: U32, m: Maybe<&2, Op>, arrow: Bool) -> P(Tm):
   match m:
     case None{}:
@@ -1842,7 +1821,6 @@ def ops.lt(+r: String, +lvl: U32, +prev: U32) -> Bool:
     Bool.and(Bool.not(Str.prefix(r, "<&>")), Bool.or(U32.is_le(lvl, 4),
       Bool.not(Bool.or(is_space(prev), U32.is_zero(prev))))))
 
-@unsafe
 def P.ops(out, lvl):
   do P<Tm>:
     P.skip()
@@ -1942,7 +1920,6 @@ def P.body.erased_name(+beg: U32) -> P(Tm):
     s : Sp <- P.span(beg)
     return Var{k, 0, s}
 
-@unsafe
 def P.body.ty() -> P(Maybe<&2, Tm>):
   do P<Maybe<&2, Tm>>:
     t : Tm <- P.term0()
@@ -1958,7 +1935,6 @@ def P.body.ty_ok(at: Cur, ty: Maybe<&2, Tm>, eq: Bool) -> P(Maybe<&2, Tm>):
     case m e:
       P.pure(Maybe<&2, Tm>, m)
 
-@unsafe
 def P.body.let.ann(+beg: U32, ty: Maybe<&2, Tm>) -> P(List<&2, Tm>):
   match ty:
     case None{}:
@@ -1969,7 +1945,6 @@ def P.body.let.ann(+beg: U32, ty: Maybe<&2, Tm>) -> P(List<&2, Tm>):
         s : Sp <- P.span(beg)
         return [Ann{v, t, s}]
 
-@unsafe
 def P.body.let.eq(+beg: U32, ty: Maybe<&2, Tm>) -> P(List<&2, Tm>):
   do P<List<&2, Tm>>:
     P.eat("=")
@@ -2026,7 +2001,6 @@ def P.more(+col: U32) -> P(Bool):
     +cc : U32 <- P.col()
     return Bool.or(semi, Bool.and(Bool.not(U32.is_zero(c)), U32.is_eq(cc, col)))
 
-@unsafe
 def P.body.reply.go(+col: U32, +beg: U32, +bcol: U32, +t: Tm, w: Maybe<&2, Tm>) -> P(Body):
   match w:
     case None{}:
@@ -2060,7 +2034,6 @@ def term_write.go(r: Tm & List<&2, Tm>) -> Maybe<&2, Tm>:
 def term_write(t: Tm) -> Maybe<&2, Tm>:
   term_write.go(term_unapply(t))
 
-@unsafe
 def P.body.reply(+col: U32, +beg: U32, +bcol: U32, +t: Tm) -> P(Body):
   P.body.reply.go(col, beg, bcol, t, term_write(t))
 
@@ -2078,7 +2051,6 @@ def Lst.head(-A: Data, d: A, xs: List<&2, A>) -> A:
     case h <> t:
       h
 
-@unsafe
 def P.body.local.go(
   +col: U32, +beg: U32, +bcol: U32, +q: Q, +ts: List<&2, Tm>, +ty: Maybe<&2, Tm>, eq: Bool
 ) -> P(Body):
@@ -2121,7 +2093,6 @@ def P.word(+w: String) -> P(Bool):
     ok : Bool <- P.at_word(w)
     P.word.if(w, ok)
 
-@unsafe
 def P.body(col):
   do P<Body>:
     P.skip()
@@ -2136,7 +2107,6 @@ def P.body.vals.more(+vs: List<&2, Tm>, +n: Nat) -> P(List<&2, Tm>):
     v : Tm <- P.term0()
     P.body.vals(List.append(&2, Tm, vs, [v]), n)
 
-@unsafe
 def P.body.vals(vs, n):
   P.if(List<&2, Tm>, Nat.is_ge(List.length(&2, Tm, vs), n), P.pure(List<&2, Tm>, vs), P.body.vals.more(vs, n))
 
@@ -2170,7 +2140,6 @@ def P.patts(xs: List<&2, Tm>) -> P(List<&2, Pt>):
         ps : List<&2, Pt> <- P.patts(t)
         return p <> ps
 
-@unsafe
 def P.patt.ctr.n(+k: String, xs: List<&2, Tm>, +s: Sp, +n: Nat, ok: Bool) -> P(Pt):
   match ok:
     case False{}:
@@ -2181,7 +2150,6 @@ def P.patt.ctr.n(+k: String, xs: List<&2, Tm>, +s: Sp, +n: Nat, ok: Bool) -> P(P
         ps : List<&2, Pt> <- P.patts(xs)
         return PCtr{k, ps, s}
 
-@unsafe
 def P.patt.ctr(+k: String, +xs: List<&2, Tm>, +s: Sp, c: Maybe<&2, CtrD>) -> P(Pt):
   match c:
     case None{}:
@@ -2493,7 +2461,6 @@ def P.arms.more(acc: List<&2, Tm>, +t: Tm, arm: Bool) -> P(List<&2, Tm> & Tm):
         P.eat("}")
         return (acc, t)
 
-@unsafe
 def P.arms.item(acc: List<&2, Tm>) -> P(List<&2, Tm> & Tm):
   do P<List<&2, Tm> & Tm>:
     +t : Tm <- P.term0()
@@ -2502,21 +2469,18 @@ def P.arms.item(acc: List<&2, Tm>) -> P(List<&2, Tm> & Tm):
     colon : Bool <- P.if(Bool, named, P.take(":"), P.pure(Bool, False{}))
     P.arms.more(acc, t, colon)
 
-@unsafe
 def P.arms.go(acc):
   do P<List<&2, Tm> & Tm>:
     P.skip()
     close : Bool <- P.take("}")
     P.if(List<&2, Tm> & Tm, close, P.pure(List<&2, Tm> & Tm, (acc, Efq{NoSp{}})), P.arms.item(acc))
 
-@unsafe
 def P.rwt.named(+e0: Tm) -> P(String & Tm):
   do P<String & Tm>:
     e : Tm <- P.term0()
     return (Tm.name(e0), e)
 
 # %e : P; f   and   %k@e : P; f
-@unsafe
 def P.rwt.name(+e0: Tm, at: Bool) -> P(String & Tm):
   match at:
     case True{}:
@@ -2528,7 +2492,6 @@ def P.rwt.name(+e0: Tm, at: Bool) -> P(String & Tm):
 def P.push_scope(b: SB) -> P(Unit):
   ps => Done{(Unit{}, PS.push(ps, b))}
 
-@unsafe
 def P.rwt.go(+beg: U32, +e0: Tm, r: String & Tm) -> P(Tm):
   (k, e) = r
   +kk = k
@@ -2547,7 +2510,6 @@ def P.rwt.go(+beg: U32, +e0: Tm, r: String & Tm) -> P(Tm):
     return Rwt{e, Lam{"_", xi, CSyn{Nil{}, xi, Lam{kk, ei, CSyn{Nil{}, ei, pr}, Tm.span(e0), QUnd{}}}, s, QUnd{}},
       f, s}
 
-@unsafe
 def P.rwt(beg):
   do P<Tm>:
     P.bump()
@@ -2563,7 +2525,6 @@ def P.str.more(acc: List<&2, U32>) -> P(List<&2, U32>):
     c : U32 <- P.char()
     P.str.go(c <> acc)
 
-@unsafe
 def P.str.go(acc):
   do P<List<&2, U32>>:
     done : Bool <- P.take("\"")
@@ -2579,7 +2540,6 @@ def all.build(exi: Bool, q: Q, +k: String, +i: U32, a: Tm, b: Tm, +s: Sp) -> Tm:
       All{q, k, i, a, CSyn{Nil{}, i, b}, NoSp{}}
 
 # @x:A -> B   @-x:A -> B   &x:A -> B (a dependent pair)
-@unsafe
 def P.all(exi):
   do P<Tm>:
     +beg : U32 <- P.pos()
@@ -2633,7 +2593,6 @@ def Body.is_reply(+b: Body) -> Bool:
       False{}
 
 # (a, b, c), or a parenthesized body with an optional ': T'.
-@unsafe
 def P.tup(beg):
   do P<Tm>:
     P.skip()
@@ -2710,20 +2669,17 @@ def nat.plus(+n: Nat, out: Tm, +s: Sp) -> Tm:
     case other:
       nat.plus.big(n, other, s)
 
-@unsafe
 def P.nat.plus(+beg: U32, +n: Nat) -> P(Tm):
   do P<Tm>:
     out : Tm <- P.term0()
     spn : Sp <- P.span(beg)
     return nat.plus(n, out, spn)
 
-@unsafe
 def P.nat.go(+beg: U32, +n: Nat) -> P(Tm):
   do P<Tm>:
     plus : Bool <- P.take("+")
     P.if(Tm, plus, P.nat.plus(beg, n), P.nat.lit(beg, n))
 
-@unsafe
 def P.nat(+beg: U32, +ds: String, +n: Nat) -> P(Tm):
   P.if(Tm, Nat.is_gt(n, 4294967295n), P.fail(Tm, "a nat literal up to 4294967295n (got " ++ ds ++ "n)"),
     P.nat.go(beg, n))
@@ -2735,7 +2691,6 @@ def digits.val(s: String, n: Nat, +acc: Nat) -> Nat:
     case r k:
       acc
 
-@unsafe
 def P.num.go(+beg: U32, +ds: String, +r: String, kind: Nat) -> P(Tm):
   match kind:
     case 0n:
@@ -2779,14 +2734,12 @@ def P.call.tmpl.go(+h: Tm, +x: Nat, ts: List<&2, Tm>) -> P(List<&2, Tm>):
     P.skip()
     P.call.tmpl(h, x, List.append(&2, Tm, ts, [t]))
 
-@unsafe
 def P.call.tmpl.one(+h: Tm, +x: Nat, +ts: List<&2, Tm>) -> P(List<&2, Tm>):
   P.if(List<&2, Tm>, Nat.is_eq(List.length(&2, Tm, ts), x),
     P.fail(List<&2, Tm>, "a term (" ++ Tm.name(h) ++ " takes " ++ Nat.show(x) ++ " ~)"),
     P.call.tmpl.go(h, x, ts))
 
 # The ~ arguments of a template call.
-@unsafe
 def P.call.tmpl(h, x, ts):
   do P<List<&2, Tm>>:
     tl : Bool <- P.at("~")
@@ -2801,7 +2754,6 @@ def P.lt.adt.go(+out: Tm, a: Tm, +s2: Sp, +lvl: U32) -> P(Tm):
     xs : List<&2, Tm> <- P.fill(k, a <> rest, s2)
     P.ops(ADT{k, xs, s2, Nil{}}, lvl)
 
-@unsafe
 def P.lt.adt(+out: Tm, a: Tm, +s2: Sp, +lvl: U32) -> P(Tm):
   P.if(Tm, Bool.or(Tm.is_var(out), Tm.is_ref(out)), P.lt.adt.go(out, a, s2, lvl),
     P.fail(Tm, "a family name before <..> (a comparison here needs parens)"))
@@ -2813,7 +2765,6 @@ def lt.type_op(+r: String) -> Bool:
     Bool.and(Str.prefix(r, "|"), Bool.not(Str.prefix(r, "||")))))
 
 # f<A, B> (a family instance), or a < comparison.
-@unsafe
 def P.lt(out, lvl):
   do P<Tm>:
     +prev : U32 <- P.prev()
@@ -2846,14 +2797,12 @@ def P.ns.args(xs: List<&2, Tm>, +ty: Tm) -> P(List<&2, Tm>):
 def apps.span(f: Tm, ys: List<&2, Tm>, xs: List<&2, Tm>, +sp: Sp) -> Tm:
   apps(f, ys, sp)
 
-@unsafe
 def P.ns.op.go(+k: String, hk: String, +s: Sp, b: Bool, +xs: List<&2, Tm>, +ty: Tm, +sp: Sp) -> P(Tm):
   do P<Tm>:
     q : String <- P.reso(hk ++ k)
     ys : List<&2, Tm> <- P.ns.args(xs, ty)
     return apps.span(Ref{q, s, b}, ys, xs, sp)
 
-@unsafe
 def P.ns.op(+k: String, +s: Sp, b: Bool, xs: List<&2, Tm>, +ty: Tm, h: Tm, +sp: Sp) -> P(Tm):
   match h:
     case Var{hk, i, hs}:
@@ -2870,7 +2819,6 @@ def P.ns.op(+k: String, +s: Sp, b: Bool, xs: List<&2, Tm>, +ty: Tm, h: Tm, +sp: 
 def term_head(t: Tm) -> Tm:
   Pair.fst(Tm, List<&2, Tm>, term_unapply(t))
 
-@unsafe
 def P.ns.ref(+k: String, +s: Sp, b: Bool, +xs: List<&2, Tm>, +ty: Tm, op: Bool, logic: Bool, +sp: Sp) -> P(Tm):
   match op logic:
     case True{} l:
@@ -2882,7 +2830,6 @@ def P.ns.ref(+k: String, +s: Sp, b: Bool, +xs: List<&2, Tm>, +ty: Tm, op: Bool, 
     case False{} False{}:
       P.pure(Tm, apps(Ref{k, s, b}, xs, sp))
 
-@unsafe
 def P.ns.app(r: Tm & List<&2, Tm>, ty: Tm, +sp: Sp) -> P(Tm):
   (f, xs) = r
   match f:
@@ -2913,7 +2860,6 @@ def P.args.one(+close: String) -> P(List<&2, Tm>):
     xs : List<&2, Tm> <- P.args(close)
     return x <> xs
 
-@unsafe
 def P.args(close):
   do P<List<&2, Tm>>:
     P.skip()
@@ -2948,7 +2894,6 @@ def P.docall(+m: String, +op: String, +ts: List<&2, Tm>, xs: List<&2, Tm>, ys: L
   P(Tm):
   +ps => Done{(do.call(PS.book(ps), ps, m, op, ts, xs, ys, s), ps)}
 
-@unsafe
 def P.do_ret(+m: String, +ts: List<&2, Tm>, +beg: U32) -> P(Tm):
   do P<Tm>:
     e : Tm <- P.term0()
@@ -3012,13 +2957,11 @@ def P.do_bind(
     P.close(n0)
     P.if(Tm, asg, P.pure(Tm, do.let(x, Ann{v, a, s}, f, s)), P.docall(m, ".bind", ts, [a], [v, do.lam(x, f, s)], s))
 
-@unsafe
 def P.do_arrow(+m: String, +ts: List<&2, Tm>, +col: U32, +beg: U32, +t: Tm, +a: Tm) -> P(Tm):
   do P<Tm>:
     arr : Bool <- P.take("<-")
     P.if(Tm, arr, P.do_bind(m, ts, col, beg, t, a, False{}, False{}, False{}), P.do_last(m, ts, t))
 
-@unsafe
 def P.do_step.go(
   +m: String, +ts: List<&2, Tm>, +col: U32, +beg: U32, +t: Tm, +a: Tm, typed: Bool, step: Bool, +asg: Bool
 ) -> P(Tm):
@@ -3030,7 +2973,6 @@ def P.do_step.go(
     case False{}:
       P.if(Tm, step, P.do_bind(m, ts, col, beg, t, a, False{}, False{}, True{}), P.do_arrow(m, ts, col, beg, t, a))
 
-@unsafe
 def P.do_step(+m: String, +ts: List<&2, Tm>, +col: U32, +beg: U32) -> P(Tm):
   do P<Tm>:
     +t : Tm <- P.term0()
@@ -3044,7 +2986,6 @@ def P.do_step(+m: String, +ts: List<&2, Tm>, +col: U32, +beg: U32) -> P(Tm):
     P.do_step.go(m, ts, col, beg, t, a, typed, step, asg)
 
 # The rest of a do block, from column col.
-@unsafe
 def P.do_stmt(m, ts, col):
   do P<Tm>:
     P.skip()
@@ -3077,7 +3018,6 @@ def P.local.names.more(+q: Q, ts: List<&2, Tm>) -> P(List<&2, Tm>):
     P.local.names(q, List.append(&2, Tm, ts, [t]))
 
 # More names of a parallel let: a b c = ...
-@unsafe
 def P.local.names(q, ts):
   do P<List<&2, Tm>>:
     nl : Bool <- P.nl()
@@ -3094,7 +3034,6 @@ def P.terms.more(x: Tm) -> P(List<&2, Tm>):
     xs : List<&2, Tm> <- P.terms()
     return x <> xs
 
-@unsafe
 def P.terms():
   do P<List<&2, Tm>>:
     +x : Tm <- P.term0()
@@ -3239,7 +3178,6 @@ def P.match_flatten(es: List<&2, Tm>, rows: List<&2, Body>, +s: Sp, vars: List<&
     case e <> et rs:
       P.mf.vars(e, et, rs, s, vars)
 
-@unsafe
 def P.flatten.local(ks: List<&2, Pt>, q: Q, +vs: List<&2, Tm>, f: Body, vars: List<&2, Pt>) -> P(Tm):
   match ks:
     case PCtr{k, xs, s} <> Nil{}:
@@ -3247,7 +3185,6 @@ def P.flatten.local(ks: List<&2, Pt>, q: Q, +vs: List<&2, Tm>, f: Body, vars: Li
     case other:
       P.flatten.let(other, q, vs, f, vars)
 
-@unsafe
 def P.flatten(b, vars):
   match b:
     case BReply{x, s}:
@@ -3260,7 +3197,6 @@ def P.flatten(b, vars):
       P.flatten(f, vars)
 
 # The scrutinee is not the next parameter: that parameter becomes a lambda.
-@unsafe
 def P.mf.skip(+e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, +s: Sp, x: Pt, xt: List<&2, Pt>) -> P(Tm):
   do P<Tm>:
     t : Tm <- P.match_flatten(e <> et, rows, s, xt)
@@ -3335,7 +3271,6 @@ def vars.replace(vars: List<&2, Pt>, +w: Pt) -> List<&2, Pt>:
       Bool.pick(Pt, Pt.same(p, w), w, p) <> vars.replace(t, w)
 
 # A column of variable patterns: each row's variable becomes the scrutinee.
-@unsafe
 def P.mf.varcol(
   +e: Tm, et: List<&2, Tm>, +rows: List<&2, Body>, +s: Sp, +x: Pt, xt: List<&2, Pt>, +v: Pt
 ) -> P(Tm):
@@ -3412,7 +3347,6 @@ def mf.others(rows: List<&2, Body>, +ck: String) -> List<&2, Body>:
     case r <> t:
       r <> mf.others(t, ck)
 
-@unsafe
 def P.mf.ctr(
   +e: Tm, +et: List<&2, Tm>, +rows: List<&2, Body>, +s: Sp, +x: Pt, +xt: List<&2, Pt>, c: Maybe<&2, Pt>
 ) -> P(Tm):
@@ -3432,7 +3366,6 @@ def P.mf.ctr(
     case Some{other}:
       P.pure(Tm, Efq{s})
 
-@unsafe
 def P.mf.col.var(
   +e: Tm, +et: List<&2, Tm>, +rows: List<&2, Body>, +s: Sp, +x: Pt, +xt: List<&2, Pt>, +w: Pt,
   c: Maybe<&2, Pt>, norows: Bool
@@ -3452,7 +3385,6 @@ def rows.ctr(rows: List<&2, Body>) -> Maybe<&2, Pt>:
     case r <> rest:
       rows.ctr(rest)
 
-@unsafe
 def P.mf.col(e, et, rows, s, x, xt, v):
   match v:
     case Some{+w}:
@@ -3507,7 +3439,6 @@ def P.tele.one(+close: String, +tele: List<&2, TC>, +tk: Nat) -> P(List<&2, TC> 
       Bool.pick(Nat, ct, 1n+tk, tk))
 
 # Parameters up to close: (x: A, -y: B, +z: C, ~f: F, a) or {x: A, ..}.
-@unsafe
 def P.tele(close, tele, tk):
   do P<List<&2, TC> & Nat>:
     P.skip()
@@ -3750,7 +3681,6 @@ def P.import1(acc: List<&2, String>) -> P(List<&2, String>):
     +dir : String <- P.dir()
     P.imports(List.append(&2, String, acc, [dir ++ eff]))
 
-@unsafe
 def P.imports(acc):
   do P<List<&2, String>>:
     w : Bool <- P.word("import")
@@ -3762,7 +3692,6 @@ def P.until_quote.more(+c: U32, acc: String) -> P(String):
     P.bump()
     P.until_quote(SCon{Chr{c}, acc})
 
-@unsafe
 def P.until_quote(acc):
   do P<String>:
     +c : U32 <- P.peek()
@@ -3837,7 +3766,6 @@ def TC.params(tele: List<&2, TC>) -> List<&2, Tm>:
     case TC{q, k, i, t, s} <> rest:
       Var{k, i, NoSp{}} <> TC.params(rest)
 
-@unsafe
 def P.ctor(k, params, cs):
   do P<List<&2, CtrD>>:
     +nm : String <- P.name()
@@ -3930,7 +3858,6 @@ def P.clause.where(+c: String, a0: Tm, +s: Sp) -> P(Tm):
     P.close(n1)
     return TApp{TApp{Ref{"Exists", ws, False{}}, a0, s}, Lam{c, i, CSyn{Nil{}, i, pw}, s, QUnd{}}, s}
 
-@unsafe
 def P.clause(cls, tc, all):
   do P<List<&2, LC> & Nat>:
     w : Bool <- P.word(Bool.pick(String, all, "for", "exs"))
@@ -3984,7 +3911,6 @@ def P.decl.go(at: Bool, d: Bool, t: Bool, l: Bool) -> P(Unit):
       P.if(Unit, d, P.def(False{}), P.if(Unit, t, P.type(), P.if(Unit, l, P.law(),
         P.fail(Unit, "'def', 'type' or 'law'"))))
 
-@unsafe
 def P.decl():
   do P<Unit>:
     P.reset_scope()
@@ -4007,7 +3933,6 @@ def digits.span.if(d: Bool, t: String) -> Nat:
     case False{}:
       0n
 
-@unsafe
 def digits.span(s):
   match s:
     case SNil{}:
@@ -4023,7 +3948,6 @@ def vars.find.if(v: Pt, t: List<&2, Pt>, +i: U32, hit: Bool) -> Maybe<&2, Pt>:
     case False{}:
       vars.find(t, i)
 
-@unsafe
 def vars.find(vars, i):
   match vars:
     case Nil{}:
@@ -4089,7 +4013,6 @@ def uses_get.if(q: Q, t: List<&2, Us>, +i: U32, hit: Bool) -> Q:
       uses_get(t, i)
 
 # Uses: how many times each variable (by depth) was consumed.
-@unsafe
 def uses_get(u, i):
   match u:
     case Nil{}:
@@ -4124,7 +4047,6 @@ def uses_put.if(+f: U32, +x: Us, +j: U32, +q: Q, t: List<&2, Us>, same: Bool) ->
 
 # The uses of b merged into a, combining a variable's two entries with f
 # (0: quant_add, 1: quant_join).
-@unsafe
 def uses_put(f, x, a):
   match a:
     case Nil{}:
@@ -4174,7 +4096,6 @@ def env_get.if(v: Tm, t: List<&2, Tm>, +i: U32, hit: Bool) -> Maybe<&2, Tm>:
     case False{}:
       env_get(t, i)
 
-@unsafe
 def env_get(env, i):
   match env:
     case Nil{}:
@@ -4211,7 +4132,6 @@ def Map.find.node(-V: Data, lo: Map<&2, V>, hi: Map<&2, V>, +k: String, bit: Boo
     case False{}:
       Map.find.go(V, lo, k)
 
-@unsafe
 def Map.find.go(V, m, k):
   match m:
     case MTip{}:
@@ -4290,7 +4210,6 @@ def u32_from_term(t: Tm, +k: String) -> Maybe<&2, U32>:
 def u32_bits.next(rest: Tm, +i: U32, +n: U32) -> Maybe<&2, U32>:
   Bool.pick(Maybe<&2, U32>, U32.is_ge(i, 32), None{}, u32_bits(term_strip(rest), U32.inc(i), n))
 
-@unsafe
 def u32_bits.bit(b: Tm, rest: Tm, +i: U32, +n: U32) -> Maybe<&2, U32>:
   match b:
     case Ctr{"True", Nil{}, s}:
@@ -4327,7 +4246,6 @@ def term_strip.go(t: Tm) -> Tm:
     case other:
       other
 
-@unsafe
 def term_strip(t):
   term_strip.go(term_force(t))
 
@@ -4464,7 +4382,6 @@ def clo_apply(+book: Book, c: Tm, +xs: List<&2, Tm>) -> Tm:
     case other:
       other
 
-@unsafe
 def term_apply.go(+book: Book, fn: Tm, x: Tm, s: Sp) -> Tm:
   match fn:
     case Lam{k, i, f, ls, q}:
@@ -4472,14 +4389,12 @@ def term_apply.go(+book: Book, fn: Tm, x: Tm, s: Sp) -> Tm:
     case other:
       TApp{other, x, s}
 
-@unsafe
 def term_apply(+book: Book, fn: Tm, x: Tm, s: Sp) -> Tm:
   term_apply.go(book, term_strip(fn), x, s)
 
 def term_apply1(+book: Book, fn: Tm, x: Tm) -> Tm:
   term_apply(book, fn, x, NoSp{})
 
-@unsafe
 def lhs_ext(book, lhs, k, n, xs):
   match n:
     case 0n:
@@ -4497,7 +4412,6 @@ def higher.val(+book: Book, v: Tm, s: Sp) -> Tm:
     case other:
       Tm.respan(other, s)
 
-@unsafe
 def higher.var(+book: Book, m: Maybe<&2, Tm>, d: Tm, s: Sp) -> Tm:
   match m:
     case None{}:
@@ -4505,7 +4419,6 @@ def higher.var(+book: Book, m: Maybe<&2, Tm>, d: Tm, s: Sp) -> Tm:
     case Some{v}:
       higher.val(book, v, s)
 
-@unsafe
 def higher.app(+book: Book, f: Tm, x: Tm, s: Sp) -> Tm:
   match f:
     case Lam{k, i, c, ls, q}:
@@ -4521,7 +4434,6 @@ def highers(+book: Book, xs: List<&2, Tm>, +env: List<&2, Tm>) -> List<&2, Tm>:
     case h <> t:
       higher(book, h, env) <> highers(book, t, env)
 
-@unsafe
 def higher(book, tm, env):
   match tm:
     case Var{+k, +i, +s}:
@@ -4557,7 +4469,6 @@ def higher(book, tm, env):
     case other:
       other
 
-@unsafe
 def patt_term(p, s):
   match p:
     case PVar{k, i, q, ps}:
@@ -4632,7 +4543,6 @@ def term_lower.go(+book: Book, term: Tm, +d: U32) -> Tm:
     case other:
       other
 
-@unsafe
 def term_lower(book, term, d):
   term_lower.go(book, term_force(term), d)
 
@@ -4653,7 +4563,6 @@ def frs_apps(frs: List<&2, Fr>, n: Nat) -> Nat:
     case fs k:
       0n
 
-@unsafe
 def lhs_step(+book: Book, lhs: LH, x: Tm, s: Sp) -> LH:
   match lhs:
     case LNo{}:
@@ -4663,7 +4572,6 @@ def lhs_step(+book: Book, lhs: LH, x: Tm, s: Sp) -> LH:
     case LH{t, 1n+n}:
       LH{term_apply(book, t, x, s), n}
 
-@unsafe
 def lhs_mat(+book: Book, lhs: LH, +k: String, +len: Nat) -> LH:
   match lhs:
     case LNo{}:
@@ -4856,7 +4764,6 @@ def wnf.back(book, tm, frs):
     case FVar{m, v} <> rest:
       wnf.go(book, memo.set(m, v, term_cellv(tm)), rest, LNo{})
 
-@unsafe
 def wnf.mna(book, tm, b, s, rest):
   match tm:
     case TQua{QMany{}, qs}:
@@ -4877,7 +4784,6 @@ def wnf.walk.mat(
     case False{}:
       wnf.walk(book, k, xs, ctr, m, t, e, lhs, s, rest)
 
-@unsafe
 def wnf.walk(book, k, xs, ctr, w, t, e, lhs, s, rest):
   match w:
     case Ann{x, ty, as}:
@@ -4898,7 +4804,6 @@ law snfs:
 
 # The strong normal form: every binder's body normalized too. An applied
 # def stays a call.
-@unsafe
 def snfs(book, xs):
   match xs:
     case Nil{}:
@@ -4906,7 +4811,6 @@ def snfs(book, xs):
     case h <> t:
       term_snf(book, h) <> snfs(book, t)
 
-@unsafe
 def snf.fun(+book: Book, f: Tm) -> Tm:
   match f:
     case Ref{k, s, b}:
@@ -4914,7 +4818,6 @@ def snf.fun(+book: Book, f: Tm) -> Tm:
     case other:
       term_snf(book, other)
 
-@unsafe
 def snf.go(book, tm):
   match tm:
     case Var{k, i, s}:
@@ -5012,7 +4915,6 @@ def cmp.lam(le: Bool, +book: Book, +a: Tm, +b: Tm, +dep: U32, lam: Bool) -> Bool
     case False{}:
       cmp.go(le, book, cmp.lit(a, b), cmp.lit(b, a), dep)
 
-@unsafe
 def cmp.wnf(le, book, a, b, dep):
   cmp.lam(le, book, a, b, dep, Bool.or(Tm.is_lam(a), Tm.is_lam(b)))
 
@@ -5023,7 +4925,6 @@ law cmps:
   for +dep: U32
   Bool
 
-@unsafe
 def cmps(xs, ys, book, dep):
   match xs ys:
     case x <> xt y <> yt:
@@ -5056,7 +4957,6 @@ def Lazy.or(a: Bool, f: Unit -> Bool) -> Bool:
     case False{}:
       f(Unit{})
 
-@unsafe
 def cmp.kind.rmin(+book: Book, +g: Tm, h: Tm, +dep: U32) -> Bool:
   match h:
     case Min{a, b, s}:
@@ -5064,7 +4964,6 @@ def cmp.kind.rmin(+book: Book, +g: Tm, h: Tm, +dep: U32) -> Bool:
     case other:
       term_compare(True{}, book, g, other, dep)
 
-@unsafe
 def cmp.kind.min(+book: Book, g: Tm, +h: Tm, +dep: U32) -> Bool:
   match g:
     case Min{a, b, s}:
@@ -5072,7 +4971,6 @@ def cmp.kind.min(+book: Book, g: Tm, +h: Tm, +dep: U32) -> Bool:
     case other:
       cmp.kind.rmin(book, other, h, dep)
 
-@unsafe
 def cmp.kind.go(+book: Book, g: Tm, h: Tm, +dep: U32, done: Bool) -> Bool:
   match done:
     case True{}:
@@ -5080,11 +4978,9 @@ def cmp.kind.go(+book: Book, g: Tm, h: Tm, +dep: U32, done: Bool) -> Bool:
     case False{}:
       cmp.kind.min(book, g, h, dep)
 
-@unsafe
 def cmp.kind(+book: Book, +g: Tm, +h: Tm, +dep: U32) -> Bool:
   cmp.kind.go(book, g, h, dep, Bool.or(Tm.is_many(g), Tm.is_qua_not_many(h)))
 
-@unsafe
 def cmp.typ(le: Bool, +book: Book, g: Tm, h: Tm, +dep: U32) -> Bool:
   match le:
     case False{}:
@@ -5111,14 +5007,12 @@ def cmp.fresh(n: Nat, f: Tm, +dep: U32) -> Tm:
 
 # A bare def is under-applied, so a function: two defs convert when they
 # agree on fresh arguments (eta, as for a lambda; #1028).
-@unsafe
 def cmp.ref(+book: Book, +k: String, +k2: String, a: Tm, b: Tm, +dep: U32) -> Bool:
   +n = Nat.max(Tld.arity(book_tld(book, k)), Tld.arity(book_tld(book, k2)))
   Lazy.or(String.eq(k, k2), u => Lazy.and(Bool.not(Nat.is_eq(n, 0n)),
     u => term_compare(False{}, book, cmp.fresh(n, a, dep), cmp.fresh(n, b, dep), U32.add(dep, U32.from_nat(n)))))
 
 # A stuck call is canonical: its head def compares by name, not by eta.
-@unsafe
 def cmp.head(+book: Book, f1: Tm, f2: Tm, +dep: U32) -> Bool:
   match f1 f2:
     case Ref{k, s, x} Ref{k2, s2, y}:
@@ -5126,7 +5020,6 @@ def cmp.head(+book: Book, f1: Tm, f2: Tm, +dep: U32) -> Bool:
     case x y:
       term_compare(False{}, book, x, y, dep)
 
-@unsafe
 def cmp.go(le, book, a, b, dep):
   match a b:
     case Var{k, i, s} Var{k2, j, s2}:
@@ -5169,7 +5062,6 @@ def cmp.go(le, book, a, b, dep):
     case x y:
       False{}
 
-@unsafe
 def show_hex.more(n, acc, last):
   match last:
     case True{}:
@@ -5206,7 +5098,6 @@ def show.chain.if(+t: Tm, +xs: List<&2, Tm>, +k: String, +n: Nat, hit: Bool) ->
       (Nil{}, t)
 
 # The heads of a chain of k nodes with n fields, and its tail.
-@unsafe
 def show.chain(t, k, n):
   match t:
     case Ctr{+k2, +xs, s}:
@@ -5215,7 +5106,6 @@ def show.chain(t, k, n):
     case other:
       (Nil{}, other)
 
-@unsafe
 def show.args(bnd, n, xs, p):
   match xs:
     case Nil{}:
@@ -5289,7 +5179,6 @@ law show.arr:
   for +n: Nat
   Maybe<&2, List<&2, String>>
 
-@unsafe
 def show.arr(t, bnd, n):
   match t:
     case Ctr{"ALeaf", x <> Nil{}, s}:
@@ -5312,7 +5201,6 @@ def f32_show(+bits: U32) -> String:
   Bool.pick(String, Bool.or(String.contains(s, "."), Bool.or(String.contains(s, "e"),
     Bool.or(String.contains(s, "n"), String.contains(s, "i")))), s, s ++ ".0")
 
-@unsafe
 def show.typ(g, bnd, n):
   match g:
     case TQua{QLone{}, s}:
@@ -5322,7 +5210,6 @@ def show.typ(g, bnd, n):
     case other:
       "Kind(" ++ term_show.go(other, 1, bnd, n) ++ ")"
 
-@unsafe
 def show.arms(t, bnd, n):
   match t:
     case Mat{k, h, m, s}:
@@ -5332,7 +5219,6 @@ def show.arms(t, bnd, n):
     case other:
       [term_show.go(other, 2, bnd, n)]
 
-@unsafe
 def show.app.go(r: Tm & List<&2, Tm>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
   (h, xs) = r
   match h xs:
@@ -5342,11 +5228,9 @@ def show.app.go(r: Tm & List<&2, Tm>, +p: U32, +bnd: List<&2, String>, +n: Nat) 
     case hd args:
       term_show.go(hd, 3, bnd, n) ++ "(" ++ show.join(show.args(bnd, n, args, 1), ", ") ++ ")"
 
-@unsafe
 def show.app(t, p, bnd, n):
   show.app.go(term_unapply(t), p, bnd, n)
 
-@unsafe
 def show.rwt.inner(es: String, pr: Tm, +k1: String, b: Tm, f: Tm, +bnd: List<&2, String>, +n: Nat) ->
   String:
   match b:
@@ -5356,7 +5240,6 @@ def show.rwt.inner(es: String, pr: Tm, +k1: String, b: Tm, f: Tm, +bnd: List<&2,
     case other:
       "%" ++ es ++ " : " ++ term_show.go(pr, 2, bnd, n) ++ "; " ++ term_show.go(f, 0, bnd, n)
 
-@unsafe
 def show.rwt.go(es: String, pr: Tm, f: Tm, +bnd: List<&2, String>, +n: Nat) -> String:
   match pr:
     case Lam{+k1, i, +f1, s, q}:
@@ -5364,11 +5247,9 @@ def show.rwt.go(es: String, pr: Tm, f: Tm, +bnd: List<&2, String>, +n: Nat) -> S
     case other:
       "%" ++ es ++ " : " ++ term_show.go(other, 2, bnd, n) ++ "; " ++ term_show.go(f, 0, bnd, n)
 
-@unsafe
 def show.rwt(e, pr, f, bnd, n):
   show.rwt.go(term_show.go(e, 2, bnd, n), term_strip(pr), f, bnd, n)
 
-@unsafe
 def show.ctr.plain(t: Tm, +bnd: List<&2, String>, +n: Nat) -> String:
   match t:
     case Ctr{k, xs, s}:
@@ -5376,7 +5257,6 @@ def show.ctr.plain(t: Tm, +bnd: List<&2, String>, +n: Nat) -> String:
     case other:
       "?"
 
-@unsafe
 def show.ctr.arr(t: Tm, m: Maybe<&2, List<&2, String>>, +bnd: List<&2, String>, +n: Nat) -> String:
   match m:
     case Some{xs}:
@@ -5384,7 +5264,6 @@ def show.ctr.arr(t: Tm, m: Maybe<&2, List<&2, String>>, +bnd: List<&2, String>, 
     case None{}:
       show.ctr.plain(t, bnd, n)
 
-@unsafe
 def show.ctr.tup(+t: Tm, r: List<&2, Tm> & Tm, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
   (xs, tl) = r
   match xs:
@@ -5393,7 +5272,6 @@ def show.ctr.tup(+t: Tm, r: List<&2, Tm> & Tm, +p: U32, +bnd: List<&2, String>, 
     case h <> rest:
       "(" ++ show.join(show.args(bnd, n, List.append(&2, Tm, h <> rest, [tl]), 1), ", ") ++ ")"
 
-@unsafe
 def show.ctr.lst(+t: Tm, r: List<&2, Tm> & Tm, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
   (xs, tl) = r
   match xs tl:
@@ -5405,7 +5283,6 @@ def show.ctr.lst(+t: Tm, r: List<&2, Tm> & Tm, +p: U32, +bnd: List<&2, String>, 
       show.paren(U32.is_gt(p, 2), show.join(show.args(bnd, n, ys, 3), " <> ") ++ " <> " ++
         term_show.go(other, 2, bnd, n))
 
-@unsafe
 def show.ctr.str(+t: Tm, m: Maybe<&2, String>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
   match m:
     case Some{c}:
@@ -5413,7 +5290,6 @@ def show.ctr.str(+t: Tm, m: Maybe<&2, String>, +p: U32, +bnd: List<&2, String>, 
     case None{}:
       show.ctr.lst(t, show.chain(t, "Con", 2n), p, bnd, n)
 
-@unsafe
 def show.ctr.chr(+t: Tm, m: Maybe<&2, String>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
   match m:
     case Some{c}:
@@ -5421,7 +5297,6 @@ def show.ctr.chr(+t: Tm, m: Maybe<&2, String>, +p: U32, +bnd: List<&2, String>, 
     case None{}:
       show.ctr.str(t, show.str(t), p, bnd, n)
 
-@unsafe
 def show.ctr.succ(+t: Tm, r: List<&2, Tm> & Tm, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
   (xs, tl) = r
   match xs:
@@ -5431,7 +5306,6 @@ def show.ctr.succ(+t: Tm, r: List<&2, Tm> & Tm, +p: U32, +bnd: List<&2, String>,
       show.paren(U32.is_gt(p, 2), Nat.show(List.length(&2, Tm, h <> rest)) ++ "n+" ++
         term_show.go(tl, 2, bnd, n))
 
-@unsafe
 def show.ctr.nat(+t: Tm, m: Maybe<&2, Nat>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
   match m:
     case Some{v}:
@@ -5439,7 +5313,6 @@ def show.ctr.nat(+t: Tm, m: Maybe<&2, Nat>, +p: U32, +bnd: List<&2, String>, +n:
     case None{}:
       show.ctr.succ(t, show.chain(t, "Succ", 1n), p, bnd, n)
 
-@unsafe
 def show.ctr.f32(+t: Tm, m: Maybe<&2, U32>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
   match m:
     case Some{v}:
@@ -5447,7 +5320,6 @@ def show.ctr.f32(+t: Tm, m: Maybe<&2, U32>, +p: U32, +bnd: List<&2, String>, +n:
     case None{}:
       show.ctr.nat(t, nat_from_term(t), p, bnd, n)
 
-@unsafe
 def show.ctr.u32(+t: Tm, m: Maybe<&2, U32>, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
   match m:
     case Some{v}:
@@ -5455,7 +5327,6 @@ def show.ctr.u32(+t: Tm, m: Maybe<&2, U32>, +p: U32, +bnd: List<&2, String>, +n:
     case None{}:
       show.ctr.f32(t, u32_from_term(t, "F32"), p, bnd, n)
 
-@unsafe
 def show.ctr(t, p, bnd, n):
   show.ctr.u32(t, u32_from_term(t, "U32"), p, bnd, n)
 
@@ -5487,7 +5358,6 @@ def ctx_name.if(k: String, t: List<&2, Tm>, +i: U32, hit: Bool) -> String:
     case False{}:
       ctx_name(t, i)
 
-@unsafe
 def ctx_name(ctx, i):
   match ctx:
     case Nil{}:
@@ -5508,7 +5378,6 @@ law ctx_scope.c:
 def ctx_scope.go(+ctx: List<&2, Tm>, +i: U32, +n: U32) -> List<&2, String>:
   ctx_scope.c(ctx, i, n, U32.is_ge(i, n))
 
-@unsafe
 def ctx_scope.c(ctx, i, n, c):
   match c:
     case True{}:
@@ -5577,7 +5446,6 @@ def name.show.xs(+fi: FI, ks: List<&2, String>) -> List<&2, String>:
       name.show(fi, k) <> name.show.xs(fi, t)
 
 # A lowered term with its names spelled as fi spells them.
-@unsafe
 def Tm.respell(fi, t):
   match t:
     case Ref{k, s, b}:
@@ -5749,7 +5617,6 @@ def err.lines(s: Sp) -> String:
       err.lines.go(String.split(src, '\n'), Nat.add(1n, Str.count_nl(pre)), err.last(String.split(pre, '\n')),
         U32.to_nat((end - beg : U32)))
 
-@unsafe
 def err.lines.one(l, t, i, end, at, w, car, past):
   match past:
     case True{}:
@@ -5791,12 +5658,10 @@ def Cur.skip.c(c: Cur, k: Nat) -> Cur:
     case 2n+p:
       Cur.skip(Cur.line(c))
 
-@unsafe
 def Cur.skip.go(+x: U32, c: Cur) -> Cur:
   Cur.skip.c(c, Bool.pick(Nat, is_space(x), 1n, Bool.pick(Nat, U32.is_eq(x, 35), 2n, 0n)))
 
 # Skips spaces and # comments.
-@unsafe
 def Cur.skip(c):
   Cur.skip.go(Cur.peek(c), c)
 
@@ -5808,12 +5673,10 @@ def Cur.line.c(c: Cur, stop: Bool) -> Cur:
     case False{}:
       Cur.line(Cur.step(c))
 
-@unsafe
 def Cur.line.go(+x: U32, c: Cur) -> Cur:
   Cur.line.c(c, Bool.or(U32.is_eq(x, 10), U32.is_zero(x)))
 
 # Moves to the end of the line (before its newline).
-@unsafe
 def Cur.line(c):
   Cur.line.go(Cur.peek(c), c)
 
@@ -5825,11 +5688,9 @@ def Cur.name.c(+x: U32, c: Cur, acc: String, ok: Bool) -> String & Cur:
     case False{}:
       (String.reverse(acc), c)
 
-@unsafe
 def Cur.name.go(+x: U32, c: Cur, acc: String) -> String & Cur:
   Cur.name.c(x, c, acc, is_name(x))
 
-@unsafe
 def Cur.name(c, acc):
   Cur.name.go(Cur.peek(c), c, acc)
 
@@ -5845,7 +5706,6 @@ def SB.find.if(t: List<&2, SB>, +k: String, +i: U32, hit: Bool) -> Maybe<&2, U32
     case False{}:
       SB.find(t, k)
 
-@unsafe
 def SB.find(xs, k):
   match xs:
     case Nil{}:
@@ -5861,7 +5721,6 @@ def SB2.find.if(t: List<&2, SB2>, +k: String, v: String, hit: Bool) -> Maybe<&2,
     case False{}:
       SB2.find(t, k)
 
-@unsafe
 def SB2.find(xs, k):
   match xs:
     case Nil{}:
@@ -5877,7 +5736,6 @@ def escape.find.if(t: List<&2, U32>, +c: U32, v: U32, hit: Bool) -> Maybe<&2, U3
     case False{}:
       escape.find(t, c)
 
-@unsafe
 def escape.find(e, c):
   match e:
     case +k <> v <> t:
@@ -5903,7 +5761,6 @@ def uesc.hex.if(t: String, +c: U32, +acc: U32, +n: Nat, hex: Bool, close: Bool) 
     case False{} False{}:
       None{}
 
-@unsafe
 def uesc.hex(s, acc, n):
   match s:
     case SCon{Chr{+c}, t}:
@@ -5921,7 +5778,6 @@ def Nat.log2_exact.cmp(+n: Nat, +k: Nat, +p: Nat, c: Cmp) -> Maybe<&2, Nat>:
     case GT{}:
       None{}
 
-@unsafe
 def Nat.log2_exact.go(n, k, p):
   Nat.log2_exact.cmp(n, k, p, Nat.cmp(p, n))
 
@@ -5942,7 +5798,6 @@ def op.find.if(t: List<&2, Op>, +r: String, +prev: U32, o: Op, hit: Bool) -> May
       op.find(t, r, prev)
 
 # The operator at the head of r (prev: the character before it).
-@unsafe
 def op.find(ops, r, prev):
   match ops:
     case Nil{}:
@@ -5980,7 +5835,6 @@ def body_sub.rows(rows: List<&2, Body>, +i: U32, +v: Pt) -> List<&2, Body>:
     case r <> t:
       body_sub(r, i, v) <> body_sub.rows(t, i, v)
 
-@unsafe
 def body_sub(b, i, v):
   match b:
     case BMatch{es, rows, s}:
@@ -6127,7 +5981,6 @@ def ctx_get.if(ty: Tm, t: List<&2, Tm>, +i: U32, hit: Bool) -> Maybe<&2, Tm>:
     case False{}:
       ctx_get(t, i)
 
-@unsafe
 def ctx_get(ctx, i):
   match ctx:
     case Nil{}:
@@ -6263,7 +6116,6 @@ def ctrs_find.if(c: CtrD, rest: List<&2, CtrD>, +k: String, hit: Bool) -> Maybe<
     case False{}:
       ctrs_find(rest, k)
 
-@unsafe
 def ctrs_find(cs, k):
   match cs:
     case Nil{}:
@@ -6439,7 +6291,6 @@ def descend.sub.skip(+book: Book, +a: Tm, p: Tm, t: List<&2, Tm>, +bad: U32, +j:
 # Whether a is (within) one of the fields ps: then it is smaller. Field bad
 # (the one a same-constructor comparison missed on) is skipped: it already
 # missed, and searching it again made a descent on a Nat literal 2^n.
-@unsafe
 def descend.sub(book, a, ps, bad, j):
   match ps:
     case Nil{}:
@@ -6447,7 +6298,6 @@ def descend.sub(book, a, ps, bad, j):
     case p <> t:
       descend.sub.skip(book, a, p, t, bad, j, U32.is_eq(j, bad))
 
-@unsafe
 def descend.ctr.fields(+book: Book, +a: Tm, +xs: List<&2, Tm>, r: U32 & U32) -> U32:
   (+ord, +bad) = r
   Bool.pick(U32, U32.is_eq(ord, 2), descend.sub(book, a, xs, bad, 0), ord)
@@ -6468,7 +6318,6 @@ def descend.ctr(+book: Book, +a: Tm, +k: String, +xs: List<&2, Tm>, same: Bool) 
     case False{}:
       descend.sub(book, a, xs, 4294967295, 0)
 
-@unsafe
 def descend.go(book, a, p):
   match p:
     case Var{k, +i, s}:
@@ -6486,12 +6335,10 @@ def descend.fields.next(+book: Book, as: List<&2, Tm>, ps: List<&2, Tm>, +ord: U
     case False{}:
       descend.fields(book, as, ps, ord, U32.inc(j))
 
-@unsafe
 def descend.fields.step(+book: Book, as: List<&2, Tm>, ps: List<&2, Tm>, +ord: U32, +j: U32, +fld: U32) -> U32 & U32:
   descend.fields.next(book, as, ps, Bool.pick(U32, U32.is_eq(fld, 0), ord, fld), j, U32.is_eq(fld, 2))
 
 # The fields compared in order: the order, and the field that missed (if any).
-@unsafe
 def descend.fields(book, as, ps, ord, j):
   match as ps:
     case a <> at p <> pt:
@@ -6518,11 +6365,9 @@ def descend.args.if(+book: Book, qs: List<&2, Q>, sp: List<&2, Tm>, cols: List<&
     case False{}:
       o
 
-@unsafe
 def descend.args.step(+book: Book, qs: List<&2, Q>, sp: List<&2, Tm>, cols: List<&2, Tm>, +ord: U32, +o: U32) -> U32:
   descend.args.if(book, qs, sp, cols, ord, o, U32.is_eq(o, 0))
 
-@unsafe
 def descend.args(book, qs, sp, cols, ord):
   match qs sp cols:
     case q <> qt x <> xt c <> ct:
@@ -6647,7 +6492,6 @@ def infer.ref.inst(
     +x : Nat <- K.pure(Nat, Tld.x_of(tld))
     infer.ref.self(l, o, s, b, Maybe.default(&2, Tld, book_tld(book, o), tld), ctx, List.drop_tm(sp, x), x)
 
-@unsafe
 def infer.ref.live(
   +l: CL, +k: String, +s: Sp, +b: Bool, +tld: Tld, +qt: Q, +ctx: List<&2, Tm>, +d: U32, +sp: List<&2, Tm>
 ) -> K(IR):
@@ -6662,7 +6506,6 @@ def infer.ref.live(
         MTm{Ref{k, s, b}}, s, CL.dn(l)), K.pure(Unit, Unit{}))
     K.if(IR, gen, infer.ref.inst(l, k, s, b, tld, qt, ctx, d, sp), infer.ref.self(l, k, s, b, tld, ctx, sp, 0n))
 
-@unsafe
 def infer.ref(
   +l: CL, +k: String, +s: Sp, +b: Bool, t: Maybe<&2, Tld>, +qt: Q, +ctx: List<&2, Tm>, +d: U32, sp: List<&2, Tm>
 ) -> K(IR):
@@ -6819,7 +6662,6 @@ def infer.app.go(
     case other:
       K.err(IR, ctx, MStr{"a function type"}, MTm{fty}, s, CL.dn(l))
 
-@unsafe
 def infer.app(l, fi, x, qt, ctx, d, s):
   IR{+fty, fus, fx} = fi
   match fx:
@@ -6842,13 +6684,11 @@ def infer.adt.fin(r: List<&2, Us> & Tm) -> IR:
   (us, tel) = r
   IR{tel, us, 0n}
 
-@unsafe
 def infer.adt.go(+l: CL, +ad: AD, xs: List<&2, Tm>, +s: Sp, +qt: Q, +ctx: List<&2, Tm>, +d: U32) -> K(IR):
   do K<IR>:
     r : List<&2, Us> & Tm <- tele_check(l, AD.t(ad), xs, qt, ctx, d, s, Nil{})
     return infer.adt.fin(r)
 
-@unsafe
 def infer.adt(l, ad, k, xs, s, qt, ctx, d):
   K.if(IR, Nat.is_eq(List.length(&2, Tm, xs), AD.n(ad)), infer.adt.go(l, ad, xs, s, qt, ctx, d),
     K.err(IR, ctx, MStr{k ++ " with " ++ Nat.show(AD.n(ad)) ++ Bool.pick(String, Nat.is_eq(AD.n(ad), 1n),
@@ -6883,7 +6723,6 @@ def check.infer.cmp(+l: CL, +tm: Tm, xi: IR, +ty: Tm, +ctx: List<&2, Tm>, +d: U3
     case False{}:
       K.err(List<&2, Us>, ctx, MTm{ty}, MTm{xty}, Tm.span(tm), CL.dn(l))
 
-@unsafe
 def check.infer(+l: CL, +tm: Tm, +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K(List<&2, Us>):
   do K<List<&2, Us>>:
     +xi : IR <- term_infer(l, tm, qt, ctx, d, Nil{})
@@ -6891,7 +6730,6 @@ def check.infer(+l: CL, +tm: Tm, +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32) -
     check.infer.cmp(l, tm, xi, ty, ctx, d, term_compare(True{}, book, IR.ty(xi), ty, d))
 
 # The values of a let, each inferred in the outer context.
-@unsafe
 def check.lets(
   +l: CL, ks: List<&2, String>, vs: List<&2, Tm>, qs: List<&2, Q>, +qt: Q, +ctx0: List<&2, Tm>, fctx: List<&2, Tm>,
   +d: U32, +j: U32, us: List<&2, Us>, +s: Sp
@@ -6985,7 +6823,6 @@ def check.elim.go(
     case other:
       K.pure(List<&2, Us>, Nil{})
 
-@unsafe
 def check.elim.adt(
   +l: CL, +tm: Tm, +s: Sp, +tall: Tm, aw: Tm, +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32
 ) -> K(List<&2, Us>):
@@ -6998,7 +6835,6 @@ def check.elim.adt(
       K.err(List<&2, Us>, ctx, MStr{"a datatype"}, MTm{All.a(tall)}, s, CL.dn(l))
 
 # A match (or an empty one) checks against a function type on a datatype.
-@unsafe
 def check.elim(+l: CL, +tm: Tm, +s: Sp, tw: Tm, +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K(List<&2, Us>):
   match tw:
     case All{+q, +k, +i, +a, +b, as}:
@@ -7114,7 +6950,6 @@ def CL.under(+l: CL, +x: Tm) -> K(CL):
         book : Book <- K.book()
         return CL{term_apply1(book, t, x), m, dn, qs, u, z}
 
-@unsafe
 def check.lam(l, k, f, s, lq, tw, qt, ty, ctx, d):
   match tw:
     case All{+q, ak, ai, +a, b, as}:
@@ -7132,7 +6967,6 @@ def check.lam(l, k, f, s, lq, tw, qt, ty, ctx, d):
     case other:
       check.typeless(List<&2, Us>, l, Lam{k, 0, f, s, lq}, ty, ctx, s)
 
-@unsafe
 def check.ctr.fields(
   +l: CL, ct: Tm, xs: List<&2, Tm>, +s: Sp, axs: List<&2, Tm>, +qt: Q, +ctx: List<&2, Tm>, +d: U32
 ) -> K(List<&2, Us>):
@@ -7141,7 +6975,6 @@ def check.ctr.fields(
     r : List<&2, Us> & Tm <- tele_check(l, tel, xs, qt, ctx, d, s, Nil{})
     return Pair.fst(List<&2, Us>, Tm, r)
 
-@unsafe
 def check.ctr.find(
   +l: CL, +k: String, +xs: List<&2, Tm>, +s: Sp, +ak: String, +axs: List<&2, Tm>, +cs: List<&2, CtrD>,
   c: Maybe<&2, CtrD>, +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32
@@ -7159,7 +6992,6 @@ def check.ctr.find(
         K.err(List<&2, Us>, ctx, MStr{k ++ " with " ++ Nat.show(n) ++ Bool.pick(String, Nat.is_eq(n, 1n), " field",
           " fields")}, MTm{Ctr{k, xs, s}}, s, CL.dn(l)))
 
-@unsafe
 def check.ctr(l, k, xs, s, tw, qt, ty, ctx, d):
   match tw:
     case ADT{+ak, +axs, as, +r}:
@@ -7200,7 +7032,6 @@ def check.lit.base(t: Maybe<&2, Tld>, +r: List<&2, String>, +c: String) -> Bool:
     case other:
       False{}
 
-@unsafe
 def check.lit(l, lit, tw, qt, ty, ctx, d):
   match tw:
     case ADT{+ak, axs, as, +r}:
@@ -7211,7 +7042,6 @@ def check.lit(l, lit, tw, qt, ty, ctx, d):
     case other:
       term_check(l, lit_step(lit), qt, ty, ctx, d)
 
-@unsafe
 def check.rwt(l, e, p, f, s, ei, ew, qt, ty, ctx, d):
   match ew:
     case Eql{+a, +b, +t, es}:
@@ -7238,7 +7068,6 @@ def CL.ext(+l: CL, +k: String, +n: Nat) -> K(CL):
 
 # Past a datatype's last constructor the rest of a match is dead: a default
 # there (a flattened fallback) is \{}, unvisited (#1091); a case still checks.
-@unsafe
 def check.mat.rest(+l: CL, m: Tm, last: Bool, +qt: Q, ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K(List<&2, Us>):
   match m:
     case Mat{k, h, n, s}:
@@ -7283,7 +7112,6 @@ def mat_goal.go(
 
 # The goal of a match case: the motive applied to the constructor, bound
 # over its fields (each field as live as the scrutinee).
-@unsafe
 def mat_goal(book, tel, n, xs, tb, ck, cs, tq, ctx, dn):
   match n:
     case 0n:
@@ -7406,7 +7234,6 @@ def jl.pats(ps):
     case p <> t:
       Nat.add(jl.pat(p), jl.pats(t))
 
-@unsafe
 def jl.pat(p):
   match p:
     case PVar{+k, +i, q, s}:
@@ -7431,7 +7258,6 @@ def term_jlen.list(xs):
     case x <> t:
       Nat.add(term_jlen(x), term_jlen.list(t))
 
-@unsafe
 def jl.xs(+xs: List<&2, Tm>) -> Nat:
   jl.arr(term_jlen.list(xs), List.length(&2, Tm, xs))
 
@@ -7543,7 +7369,6 @@ def inst.closed.go(
     case Fail{e}:
       Fail{inst.closed.err(e, l, tm, ctx, d)}
 
-@unsafe
 def inst.closed(+l: CL, +tm: Tm, +a: Tm, +ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K(List<&2, Us>):
   b => inst.closed.go(term_check(l, a, QNone{}, ty, Nil{}, d)(b), l, tm, ctx, d)
 
@@ -7613,7 +7438,6 @@ def def_check.tmpl(+k: String, +x: Nat, t: Tm, v: Tm, ty: Tm) -> K(Tm & Tm & Tm)
           clo_apply(b2, All.b(h), [Ref{o, NoSp{}, False{}}]))
 
 # A template's ~ names do not outlive its check.
-@unsafe
 def def_check.go(+k: String, +tld: Tld, +z: Nat, qs: List<&2, Q>, r: Tm & Tm & Tm, old: Book, tmpl: Bool) -> K(Unit):
   (t, rest) = r
   (v, ty) = rest
@@ -7623,7 +7447,6 @@ def def_check.go(+k: String, +tld: Tld, +z: Nat, qs: List<&2, Q>, r: Tm & Tm & T
     b : Book <- K.book()
     K.set_book(Bool.pick(Book, tmpl, old, b))
 
-@unsafe
 def def_check(+k: String, +tld: Tld, +z: Nat) -> K(Unit):
   do K<Unit>:
     +book : Book <- K.book()
@@ -7632,7 +7455,6 @@ def def_check(+k: String, +tld: Tld, +z: Nat) -> K(Unit):
       Maybe.default(&2, Tm, Tld.dval(tld), Efq{NoSp{}}), Tld.t(tld))
     def_check.go(k, tld, z, qs, r, book, Nat.is_gt(Tld.x_of(tld), 0n))
 
-@unsafe
 def def_inst.make(+tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ty: Tm, +key: String, +z: Nat) -> K(String):
   +k = Tm.name(tm)
   do K<String>:
@@ -7646,7 +7468,6 @@ def def_inst.make(+tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ty: Tm, +key: String, 
     K.set_book(book_set(b2, o, TDef{n, 0n, ty, Some{v}, Tld.du(tld), False{}, None{}}))
     return o
 
-@unsafe
 def def_inst.new(+l: CL, +tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ty: Tm, +key: String, +ctx: List<&2, Tm>) ->
   K(String):
   +z = {1n+CL.z(l) : Nat}
@@ -7654,7 +7475,6 @@ def def_inst.new(+l: CL, +tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ty: Tm, +key: S
     K.err(String, ctx, MStr{"a template that stops instantiating itself (64 levels at most)"}, MTm{tm}, Tm.span(tm),
       CL.dn(l)), def_inst.make(tm, tld, xs, ty, key, z))
 
-@unsafe
 def def_inst.find(
   +l: CL, +tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ty: Tm, +key: String, +ctx: List<&2, Tm>, m: Maybe<&2, String>
 ) -> K(String):
@@ -7669,7 +7489,6 @@ def def_inst.find(
     case None{}:
       def_inst.new(l, tm, tld, xs, ty, key, ctx)
 
-@unsafe
 def def_inst.go(+l: CL, +tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ctx: List<&2, Tm>, +d: U32) -> K(String):
   do K<String>:
     +ty : Tm <- inst.args(l, tm, Tld.t(tld), xs, ctx, d)
@@ -7681,7 +7500,6 @@ def def_inst.go(+l: CL, +tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ctx: List<&2, Tm
     def_inst.find(l, tm, tld, xs, ty, Tm.name(tm) ++ "\n" ++ key, ctx, Book.tmp(book, Tm.name(tm) ++ "\n" ++ key))
 
 # The instance of a template for its ~ arguments (made and checked once).
-@unsafe
 def def_inst(l, tm, tld, sp, ctx, d):
   +x = Tld.x_of(tld)
   +xs = List.take_tm(sp, x)
@@ -7968,7 +7786,6 @@ def book_valid.jobs.one(+k: String, tld: Tld, fin: Bool, rest: List<&2, KFin>, +
       book_valid.jobs.def(k, TDef{n, x, ty, v, u, bb, imps}, fin, rest, full, b, acc)
 
 # The checks to run, each with its book, and the book after them all.
-@unsafe
 def book_valid.jobs(ks, full, b, acc):
   match ks:
     case Nil{}:
@@ -8045,7 +7862,6 @@ def VJob.all.split(+js: List<&2, VJob>, +n: Nat) -> Maybe<&2, List<&2, VJob>>:
   a b = VJob.all(List.take(&2, VJob, js, h), h) VJob.all(List.drop(&2, VJob, js, h), Nat.sub(n, h))
   VJob.join(a, b)
 
-@unsafe
 def VJob.all.if(small: Bool, js: List<&2, VJob>, +n: Nat) -> Maybe<&2, List<&2, VJob>>:
   match small:
     case True{}:
@@ -8054,7 +7870,6 @@ def VJob.all.if(small: Bool, js: List<&2, VJob>, +n: Nat) -> Maybe<&2, List<&2, 
       VJob.all.split(js, n)
 
 # All the checks, halves in parallel.
-@unsafe
 def VJob.all(js, n):
   VJob.all.if(Nat.is_le(n, 16n), js, n)
 
@@ -8083,7 +7898,6 @@ def VJob.redo(j: VJob, +book: Book) -> Result<&1, &1, Err, Unit & Book>:
     case VDef{+k, +dd, bj}:
       valid.def.check(k, dd)(book_set(book, k, Tld.dec(dd)))
 
-@unsafe
 def book_valid.redo(js, book):
   match js:
     case Nil{}:
@@ -8099,7 +7913,6 @@ def book_valid.lasts.if(+k: String, t: List<&2, String>, r: Set() & Bool, acc: L
 
 # Each name of the order with whether it is its last occurrence (from the
 # reversed order, with the names seen so far: one pass, not a scan each).
-@unsafe
 def book_valid.lasts(rev, seen, acc):
   match rev:
     case Nil{}:
@@ -8177,7 +7990,6 @@ def header.go.rest(t: List<&2, String>, done: List<&2, String>, imps: List<&2, I
 def header.go.next(+src: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>) -> Hdr:
   header.go(src, t, off, done, imps)
 
-@unsafe
 def header.rest(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>, blank: Bool
 ) -> Hdr:
@@ -8187,7 +7999,6 @@ def header.rest(
     case False{}:
       Hdr{List.append(&2, String, List.reverse(&2, String, l <> done), t), imps, None{}}
 
-@unsafe
 def header.imp.go(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>,
   v: String & String
@@ -8206,7 +8017,6 @@ def header.bad.at(+l: String, ws: List<&2, String>, +at: Nat) -> Nat:
     case other:
       at
 
-@unsafe
 def header.imp(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>, +tl: String,
   m: Maybe<&1, String & String>
@@ -8220,7 +8030,6 @@ def header.imp(
     case Some{v}:
       header.imp.go(src, l, t, off, done, imps, v)
 
-@unsafe
 def header.line.go(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>, +tl: String,
   imp: Bool, blank: Bool
@@ -8231,7 +8040,6 @@ def header.line.go(
     case False{}:
       header.rest(src, l, t, off, done, imps, blank)
 
-@unsafe
 def header.line(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>, +tl: String
 ) -> Hdr:
@@ -8240,7 +8048,6 @@ def header.line(
   header.line.go(src, l, t, off, done, imps, tl, is_imp,
     Bool.or(String.is_empty(tl), String.starts_with(tl, "#")))
 
-@unsafe
 def header.go(src, ls, off, done, imps):
   match ls:
     case Nil{}:
@@ -8378,7 +8185,6 @@ def term_refs(t: Tm, acc: List<&2, String>) -> List<&2, String>:
     case other:
       acc
 
-@unsafe
 def refs.list(xs, acc):
   match xs:
     case Nil{}:
@@ -8445,7 +8251,6 @@ def report.walk.one(+b: Book, +k: String, t: List<&2, String>, r: Set() & Bool, 
       report.walk(b, List.append(&2, String, rs, t), Set.add(seen, k), report.uses(rs, k, uses))
 
 # Walks the definitions reachable from q, recording who uses what.
-@unsafe
 def report.walk(b, q, seen, uses):
   match q:
     case Nil{}:
@@ -8500,7 +8305,6 @@ def report.close.add.if(
     case False{}:
       report.close.add(uses, List.append(&2, String, todo, [u]), u <> bad, us)
 
-@unsafe
 def report.close.add(uses, todo, bad, us):
   match us:
     case Nil{}:
@@ -8572,13 +8376,11 @@ def report.close2.if.go(seen: Bool, +um: Map<&2, List<&2, String>>, todo: List<&
     case False{}:
       report.close2.add(um, u <> todo, Set.add(bad, u), us)
 
-@unsafe
 def report.close2.if(+um: Map<&2, List<&2, String>>, todo: List<&2, String>, +u: String, us: List<&2, String>,
   r: Set() & Bool) -> Set():
   (bad, seen) = r
   report.close2.if.go(seen, um, todo, u, us, bad)
 
-@unsafe
 def report.close2.add(um, todo, bad, us):
   match us:
     case Nil{}:
@@ -8604,7 +8406,6 @@ def report.keep.if(+k: String, t: List<&2, String>, r: Set() & Bool) -> List<&2,
   report.keep.go(hit, k, t, s)
 
 # The names of ks in s, in order.
-@unsafe
 def report.keep(ks, s):
   match ks:
     case Nil{}:
@@ -8638,7 +8439,6 @@ def report.own(+b: Book, ks: List<&2, String>) -> List<&2, String>:
 
 # The claims that rely on unsafe or foreign code: the defs outside Base
 # (laws and types too), imports included.
-@unsafe
 def report(+b: Book) -> List<&2, String>:
   +own = Str.unique(report.own(b, book_order(b)), Nil{})
   +bad = report.bad_all(b, Map.keys(&2, Tld, Book.tlds(b)))
@@ -8696,7 +8496,6 @@ def has_fun.fields(+b: Book, t: Tm, n: Nat, +d: U32, +seen: List<&2, String>) ->
     case 1n+m:
       has_fun.field(b, term_wnf(b, t), m, d, seen)
 
-@unsafe
 def has_fun.ctrs(+b: Book, +xs: List<&2, Tm>, cs: List<&2, CtrD>, +seen: List<&2, String>) -> Bool:
   match cs:
     case Nil{}:
@@ -8704,7 +8503,6 @@ def has_fun.ctrs(+b: Book, +xs: List<&2, Tm>, cs: List<&2, CtrD>, +seen: List<&2
     case CtrD{k, +n, t} <> rest:
       Lazy.or(has_fun.fields(b, has_fun.fill(b, t, xs), n, 0, seen), u => has_fun.ctrs(b, xs, rest, seen))
 
-@unsafe
 def has_fun.adt.c(+b: Book, +k: String, +xs: List<&2, Tm>, +key: String, +seen: List<&2, String>, c: Bool) -> Bool:
   match c:
     case True{}:
@@ -8712,11 +8510,9 @@ def has_fun.adt.c(+b: Book, +k: String, +xs: List<&2, Tm>, +key: String, +seen: 
     case False{}:
       has_fun.ctrs(b, xs, has_fun.cs(book_tld(b, k)), key <> seen)
 
-@unsafe
 def has_fun.adt(+b: Book, +k: String, +xs: List<&2, Tm>, +key: String, +seen: List<&2, String>) -> Bool:
   has_fun.adt.c(b, k, xs, key, seen, Str.has(seen, key))
 
-@unsafe
 def has_fun.go(+b: Book, t: Tm, +seen: List<&2, String>) -> Bool:
   match t:
     case All{q, k, i, a, c, s}:
@@ -8734,11 +8530,9 @@ law has_fun:
 
 # Whether values of type t may hold a function (then a value main is
 # printed by normalizing it, as the official bend does).
-@unsafe
 def has_fun(b, t, seen):
   has_fun.go(b, term_wnf(b, t), seen)
 
-@unsafe
 def has_fun.field(b, t, m, d, seen):
   match t:
     case All{q, +k, i, a, c, s}:
@@ -8792,7 +8586,6 @@ def main_io.tld(+book: Book, t: Maybe<&2, Tld>, xs: List<&2, Tm>, fuel: Nat) -> 
     case other:
       False{}
 
-@unsafe
 def main_io.ref(+book: Book, h: Tm, xs: List<&2, Tm>, fuel: Nat) -> Bool:
   match h:
     case Ref{+k, s, b}:
@@ -8800,7 +8593,6 @@ def main_io.ref(+book: Book, h: Tm, xs: List<&2, Tm>, fuel: Nat) -> Bool:
     case other:
       False{}
 
-@unsafe
 def main_io.head(+book: Book, +h: Tm, xs: List<&2, Tm>, fuel: Nat, io: Bool) -> Bool:
   match io:
     case True{}:
@@ -8808,12 +8600,10 @@ def main_io.head(+book: Book, +h: Tm, xs: List<&2, Tm>, fuel: Nat, io: Bool) -> 
     case False{}:
       main_io.ref(book, h, xs, fuel)
 
-@unsafe
 def main_io.split(+book: Book, r: Tm & List<&2, Tm>, fuel: Nat) -> Bool:
   (+h, xs) = r
   main_io.head(book, h, xs, fuel, valid.io(book, h))
 
-@unsafe
 def main_io.step(book, t, fuel):
   match fuel:
     case 0n:
@@ -8821,7 +8611,6 @@ def main_io.step(book, t, fuel):
     case 1n+p:
       main_io.split(book, term_unapply(term_strip(t)), p)
 
-@unsafe
 def main_is_io.go(+b: Book, t: Maybe<&2, Tld>) -> Bool:
   match t:
     case Some{TDef{n, x, ty, v, u, bb, imps}}:
@@ -8860,7 +8649,6 @@ def fam.open(book, v, d, lam):
     case other:
       fam.head(term_head(term_strip(other)), lam)
 
-@unsafe
 def fam.tld(+book: Book, t: Maybe<&2, Tld>) -> Bool:
   match t:
     case Some{TDef{+n, x, ty, Some{v}, u, bb, imps}}:
@@ -8868,7 +8656,6 @@ def fam.tld(+book: Book, t: Maybe<&2, Tld>) -> Bool:
     case other:
       False{}
 
-@unsafe
 def fam.ty(+book: Book, h: Tm) -> Bool:
   match h:
     case Typ{g, s}:
@@ -8878,7 +8665,6 @@ def fam.ty(+book: Book, h: Tm) -> Bool:
     case other:
       False{}
 
-@unsafe
 def main_is_family.go(+b: Book, t: Maybe<&2, Tld>) -> Bool:
   match t:
     case Some{TDef{n, x, ty, v, u, bb, imps}}:
@@ -8887,7 +8673,6 @@ def main_is_family.go(+b: Book, t: Maybe<&2, Tld>) -> Bool:
       False{}
 
 # Whether main's type is Type, or a type family's.
-@unsafe
 def main_is_family(+b: Book) -> Bool:
   main_is_family.go(b, main_tld(b))
 

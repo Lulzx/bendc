@@ -25,7 +25,6 @@ type Doc is Data:
   DStr{s: String}
   DCat{a: Doc, b: Doc}
 
-@unsafe
 def Doc.go(d: Doc, acc: String) -> String:
   match d:
     case DNil{}:
@@ -78,7 +77,6 @@ def Str.split_tab.if(+c: U32, t: String, tab: Bool) -> String & String:
     case False{}:
       Str.split_tab.cons(c, Str.split_tab(t))
 
-@unsafe
 def Str.split_tab(s):
   match s:
     case SNil{}:
@@ -139,7 +137,6 @@ def Lex.id.if(c: Char, t: String, acc: String, b: Bool) -> String & String:
     case False{}:
       (Str.rev(acc), SCon{c, t})
 
-@unsafe
 def Lex.id(s, acc):
   match s:
     case SNil{}:
@@ -161,7 +158,6 @@ def Lex.digits.if(c: Char, t: String, +acc: U32, b: Bool) -> U32 & String:
     case False{}:
       (acc, SCon{c, t})
 
-@unsafe
 def Lex.digits(s, acc):
   match s:
     case SNil{}:
@@ -183,7 +179,6 @@ def Lex.dtext.if(c: Char, t: String, acc: String, b: Bool) -> String & String:
     case False{}:
       (Str.rev(acc), SCon{c, t})
 
-@unsafe
 def Lex.dtext(s, acc):
   match s:
     case SNil{}:
@@ -217,7 +212,6 @@ def Lex.hex.if(+c: U32, t: String, +acc: U32, end: Bool) -> U32 & String:
       Lex.hex(t, (acc * 16 + Lex.hex.digit(c) : U32))
 
 # The digits of a \u{hex} escape, through its '}'.
-@unsafe
 def Lex.hex(s, acc):
   match s:
     case SNil{}:
@@ -225,7 +219,6 @@ def Lex.hex(s, acc):
     case SCon{Chr{+c}, t}:
       Lex.hex.if(c, t, acc, U32.is_eq(c, 125))
 
-@unsafe
 def Lex.esc.brace.if(+y: U32, +c: U32, t: String, brace: Bool) -> U32 & String:
   match brace:
     case True{}:
@@ -233,7 +226,6 @@ def Lex.esc.brace.if(+y: U32, +c: U32, t: String, brace: Bool) -> U32 & String:
     case False{}:
       (Lex.esc(y), SCon{Chr{c}, t})
 
-@unsafe
 def Lex.esc.brace(+y: U32, t: String) -> U32 & String:
   match t:
     case SNil{}:
@@ -241,7 +233,6 @@ def Lex.esc.brace(+y: U32, t: String) -> U32 & String:
     case SCon{Chr{+c}, t2}:
       Lex.esc.brace.if(y, c, t2, U32.is_eq(c, 123))
 
-@unsafe
 def Lex.esc.u(+y: U32, t: String, u: Bool) -> U32 & String:
   match u:
     case True{}:
@@ -249,7 +240,6 @@ def Lex.esc.u(+y: U32, t: String, u: Bool) -> U32 & String:
     case False{}:
       (Lex.esc(y), t)
 
-@unsafe
 def Lex.lit_char.esc(t: String) -> U32 & String:
   match t:
     case SNil{}:
@@ -283,7 +273,6 @@ def Lex.str.next(acc: String, r: U32 & String) -> String & String:
   (c, t) = r
   Lex.str(t, SCon{Chr{c}, acc})
 
-@unsafe
 def Lex.str.if(x: U32, t: String, acc: String, q: Bool) -> String & String:
   match q:
     case True{}:
@@ -291,7 +280,6 @@ def Lex.str.if(x: U32, t: String, acc: String, q: Bool) -> String & String:
     case False{}:
       Lex.str.next(acc, Lex.lit_char(SCon{Chr{x}, t}))
 
-@unsafe
 def Lex.str(s, acc):
   match s:
     case SNil{}:
@@ -382,7 +370,6 @@ def Lex.exp.cat(+pre: String, r: String & String) -> String & String:
   (pre ++ d, rest)
 
 # 0 no exponent, 1 a signed one, 2 an unsigned one.
-@unsafe
 def Lex.exp.k(+e: U32, +c: U32, t: String, k: Nat) -> String & String:
   match k:
     case 0n:
@@ -400,7 +387,6 @@ def Lex.exp.sign(+c: U32, t: String) -> Bool:
       False{}
 
 # A float's exponent after its digits (e-3, E+2, e10), and what follows.
-@unsafe
 def Lex.exp(s: String) -> String & String:
   match s:
     case SCon{Chr{+e}, SCon{Chr{+c}, +t}}:
@@ -417,7 +403,6 @@ def Lex.line.flt.e(sp: Bool, +ln: U32, acc: Toks(), +ds: String, +frac: String,
   Lex.line(rest, False{}, ln,
     Tok{KFlt{ds ++ "." ++ frac ++ e}, sp, ln} <> acc)
 
-@unsafe
 def Lex.line.flt(sp: Bool, +ln: U32, acc: Toks(), +ds: String, r: String & String) ->
   Toks():
   (frac, rest) = r
@@ -447,7 +432,6 @@ def Lex.line.num.go(sp: Bool, +ln: U32, acc: Toks(), +v: U32, +ds: String, rest:
           Bool.pick(Nat, U32.is_eq(x, 46), 2n, 0n)))
 
 # After digits: Nat literal (n / n+), float (.digits) or U32.
-@unsafe
 # ds: the digits as written, less leading zeros (a float keeps them all, as
 # its integer part may pass 2^32 - 1).
 def Lex.line.num(sp: Bool, +ln: U32, acc: Toks(), +ds: String, r: U32 & String) -> Toks():
@@ -524,7 +508,6 @@ def Lex.line.go(+x: U32, +t: String, sp: Bool, +ln: U32, acc: Toks(), cls: Nat) 
       +s = {SCon{Chr{x}, t} : String}
       Lex.line.op(s, sp, ln, acc, Lex.op_of(s))
 
-@unsafe
 def Lex.line(s, sp, ln, acc):
   match s:
     case SNil{}:
@@ -634,12 +617,10 @@ def Lex.semis.at(+i: U32, +ln: U32, +ts: List<&2, Tok>, rest: List<&2, Line>, +n
     case False{}:
       Lex.lines.put(Line{i, ln, ts}, rest)
 
-@unsafe
 def Lex.semis(i, ln, ts, rest):
   +n = Lex.colon(ts, 0, 0n, ";")
   Lex.semis.at(i, ln, ts, rest, n, Nat.is_gt(n, 0n))
 
-@unsafe
 def Lex.split(+i: U32, +ln: U32, +ts: List<&2, Tok>, +rest: List<&2, Line>) -> List<&2, Line>:
   +n = Bool.pick(Nat, Lex.is_def(ts), Lex.colon(ts, 0, 0n, ":"), 0n)
   Bool.pick(List<&2, Line>, Bool.and(Nat.is_gt(n, 0n), Nat.is_lt(n, List.length(&2, Tok, ts))),
@@ -743,7 +724,6 @@ law Lay.toks:
 def Lay.toks.at(t: List<&2, Tok>, +k: TK, sp: Bool, +ln: U32, +d: U32, r: List<&2, U32> & List<&2, Tok>) -> LS:
   Lay.toks(t, Lay.toks.go(k, sp, ln, d, r))
 
-@unsafe
 def Lay.toks(ts, st):
   match ts:
     case Nil{}:
@@ -820,7 +800,6 @@ def Lay.start.cmp(
 # block runs until a line shallower than it. A line at column 0 is a
 # declaration, and a case line an arm of a match around, after an empty
 # block (type Empty is Data:, match e:).
-@unsafe
 def Lay.start.flat(
   acc: List<&2, Tok>, +depth: U32, colon: Bool, stack: List<&2, U32>, +ind: U32, +ln: U32, c: Cmp,
   lead: Bool, open: Bool
@@ -831,7 +810,6 @@ def Lay.start.flat(
     case False{}:
       Lay.start.cmp(acc, depth, colon, stack, ind, ln, c, lead)
 
-@unsafe
 def Lay.start.go(
   acc: List<&2, Tok>, +depth: U32, +colon: Bool, stack: List<&2, U32>, +ind: U32,
   +ln: U32, c: Cmp, lead: Bool, +stmt: Nat
@@ -895,7 +873,6 @@ def Lay.line.open.st(st: LS, +ind: U32, +ln: U32) -> LS:
   LS{acc, depth, colon, +stack, op} = st
   Lay.line.open(acc, depth, colon, stack, ind, ln, op, U32.is_gt(ind, Lay.ind(Lay.top(stack))))
 
-@unsafe
 def Lay.line.go(+ind: U32, +ln: U32, +toks: List<&2, Tok>, st: LS, k: Nat) -> LS:
   match k:
     case 0n:
@@ -905,7 +882,6 @@ def Lay.line.go(+ind: U32, +ln: U32, +toks: List<&2, Tok>, st: LS, k: Nat) -> LS
     case 2n+p:
       Lay.toks(toks, st)
 
-@unsafe
 def Lay.line(l: Line, st: LS) -> LS:
   Line{+ind, +ln, toks} = l
   LS{acc, +depth, +colon, +stack, op} = st
@@ -986,7 +962,6 @@ def Lay.pop.if(
       (h <> t, acc)
 
 # Pops levels deeper than ind, emitting KDe for each.
-@unsafe
 def Lay.pop(stack, ind, acc, ln):
   match stack:
     case Nil{}:
@@ -1278,7 +1253,6 @@ def P.nls.if(b: Bool) -> Parser(Unit):
       Parser.pure(Unit, Unit{})
 
 # Skips newlines.
-@unsafe
 def P.nls():
   do Parser<Unit>:
     t : Tok <- P.peek()
@@ -1298,7 +1272,6 @@ def P.which.if(+s: String, t: List<&2, String>, hit: Bool) -> Nat:
       1n+P.which(s, t)
 
 # Index of s in xs (or length when absent).
-@unsafe
 def P.which(s, xs):
   match xs:
     case Nil{}:
@@ -1570,7 +1543,6 @@ def P.op_find.if(+s: String, t: List<&2, OpInfo>, h: OpInfo, hit: Bool) ->
     case False{}:
       P.op_find(s, t)
 
-@unsafe
 def P.op_find(s, xs):
   match xs:
     case Nil{}:
@@ -1595,7 +1567,6 @@ def P.bin.loop.go(+min: U32, lhs: Expr, o: String, +p: U32, r: Bool, ok: Bool) -
         rhs : Expr <- P.bin(Bool.pick(U32, r, p, U32.inc(p)))
         P.bin.loop(min, P.mk_bin(o, lhs, rhs))
 
-@unsafe
 def P.bin.loop.op(+min: U32, lhs: Expr, op: OpInfo) -> Parser(Expr):
   OpInfo{o, +p, r} = op
   P.bin.loop.go(min, lhs, o, p, r, Bool.and(U32.is_ne(p, 0), U32.is_ge(p, min)))
@@ -1608,7 +1579,6 @@ def P.tok_op(t: Tok) -> OpInfo:
     case other:
       OpInfo{"", 0, False{}}
 
-@unsafe
 def P.bin.loop(min, lhs):
   do Parser<Expr>:
     t : Tok <- P.peek()
@@ -1635,7 +1605,6 @@ def P.list.more(+close: String, more: Bool) -> Parser(List<&2, Expr>):
         P.expect(close)
         return Nil{}
 
-@unsafe
 def P.list.item(+close: String) -> Parser(List<&2, Expr>):
   do Parser<List<&2, Expr>>:
     e : Expr <- P.expr()
@@ -1643,7 +1612,6 @@ def P.list.item(+close: String) -> Parser(List<&2, Expr>):
     rest : List<&2, Expr> <- P.list.more(close, more)
     return e <> rest
 
-@unsafe
 def P.list.go(+close: String, at_close: Bool) -> Parser(List<&2, Expr>):
   match at_close:
     case True{}:
@@ -1653,7 +1621,6 @@ def P.list.go(+close: String, at_close: Bool) -> Parser(List<&2, Expr>):
     case False{}:
       P.list.item(close)
 
-@unsafe
 def P.list.stuck(+close: String, +t: Tok, stuck: Bool) -> Parser(List<&2, Expr>):
   match stuck:
     case True{}:
@@ -1663,7 +1630,6 @@ def P.list.stuck(+close: String, +t: Tok, stuck: Bool) -> Parser(List<&2, Expr>)
     case False{}:
       P.list.go(close, P.tok_is(t, close))
 
-@unsafe
 def P.list(close):
   do Parser<List<&2, Expr>>:
     +t : Tok <- P.peek()
@@ -1722,7 +1688,6 @@ def P.lscan.stop(t: Toks(), +depth: U32, top: Bool) -> Bool:
 
 # Whether an expression opens with 'pat = value;' (an '=' at depth 0
 # before any ';', ',', '=>' or closing bracket on the line).
-@unsafe
 def P.lscan(ts, depth):
   match ts:
     case Tok{KSym{+s}, sp, ln} <> t:
@@ -1762,7 +1727,6 @@ def P.ilet() -> Parser(Expr):
     b : Expr <- P.iexpr()
     return ELet{p, v, b}
 
-@unsafe
 def P.iexpr.go(lets: Bool) -> Parser(Expr):
   match lets:
     case True{}:
@@ -1771,7 +1735,6 @@ def P.iexpr.go(lets: Bool) -> Parser(Expr):
       P.expr()
 
 # An expression that may open with lets: x = a; y : T = b; e.
-@unsafe
 def P.iexpr():
   do Parser<Expr>:
     lets : Bool <- ts => P.lscan.ret(ts)
@@ -1800,7 +1763,6 @@ def P.paren.item(e: Expr, k: Nat) -> Parser(List<&2, Expr>):
         return [e]
 
 # A tuple's elements after its first ',': (a, b, c : T) annotates c alone.
-@unsafe
 def P.paren.items.go(close: Bool) -> Parser(List<&2, Expr>):
   match close:
     case True{}:
@@ -1813,7 +1775,6 @@ def P.paren.items.go(close: Bool) -> Parser(List<&2, Expr>):
         t : Tok <- P.peek()
         P.paren.item(e, P.tok_which(t, [",", ":"]))
 
-@unsafe
 def P.paren.items():
   do Parser<List<&2, Expr>>:
     t : Tok <- P.peek()
@@ -1930,7 +1891,6 @@ def P.lmat.go(k: Nat) -> Parser(Expr):
 # The arms of \{K: h; ...; m} after its {: K's fields go to h, any other
 # value to m; \{} (no m) matches nothing. LM.expr unfolds it once the
 # constructors' arities are known.
-@unsafe
 def P.lmat():
   do Parser<Expr>:
     P.nls()
@@ -1949,7 +1909,6 @@ def P.rw.eq(first: Expr, at: Bool) -> Parser(Expr):
     case False{}:
       Parser.pure(Expr, first)
 
-@unsafe
 def P.rw.tail(semi: Bool) -> Parser(Expr):
   match semi:
     case True{}:
@@ -2032,7 +1991,6 @@ def P.tyargs.more(more: Bool) -> Parser(List<&2, Expr>):
         P.gt()
         return Nil{}
 
-@unsafe
 def P.tyargs.item() -> Parser(List<&2, Expr>):
   do Parser<List<&2, Expr>>:
     e : Expr <- P.expr()
@@ -2040,7 +1998,6 @@ def P.tyargs.item() -> Parser(List<&2, Expr>):
     rest : List<&2, Expr> <- P.tyargs.more(more)
     return e <> rest
 
-@unsafe
 def P.tyargs.close(close: Bool) -> Parser(List<&2, Expr>):
   match close:
     case True{}:
@@ -2050,7 +2007,6 @@ def P.tyargs.close(close: Bool) -> Parser(List<&2, Expr>):
     case False{}:
       P.tyargs.item()
 
-@unsafe
 def P.tyargs.go(+t: Tok, stuck: Bool) -> Parser(List<&2, Expr>):
   match stuck:
     case True{}:
@@ -2058,7 +2014,6 @@ def P.tyargs.go(+t: Tok, stuck: Bool) -> Parser(List<&2, Expr>):
     case False{}:
       P.tyargs.close(P.is_gt(t))
 
-@unsafe
 def P.tyargs():
   do Parser<List<&2, Expr>>:
     +t : Tok <- P.peek()
@@ -2216,11 +2171,9 @@ def P.postfix.k(e: Expr, k: Nat) -> Parser(Expr):
     case 3n+p:
       Parser.pure(Expr, e)
 
-@unsafe
 def P.postfix.t(e: Expr, +t: Tok) -> Parser(Expr):
   P.postfix.k(e, Bool.pick(Nat, P.tok_sp(t), 9n, P.tok_which(t, ["(", "!", "["])))
 
-@unsafe
 def P.postfix(e):
   do Parser<Expr>:
     t : Tok <- P.peek()
@@ -2270,7 +2223,6 @@ def P.pat_seq.go(+stops: List<&2, String>, +t: Tok, stop: Bool) ->
         rest : List<&2, Pat> <- P.pat_seq(stops)
         return p <> rest
 
-@unsafe
 def P.pat_seq(stops):
   do Parser<List<&2, Pat>>:
     +t : Tok <- P.peek()
@@ -2298,7 +2250,6 @@ def P.pats.item(+close: String) -> Parser(List<&2, Pat>):
     rest : List<&2, Pat> <- P.pats.more(close, more)
     return p <> rest
 
-@unsafe
 def P.pats.close(+close: String, at: Bool) -> Parser(List<&2, Pat>):
   match at:
     case True{}:
@@ -2308,7 +2259,6 @@ def P.pats.close(+close: String, at: Bool) -> Parser(List<&2, Pat>):
     case False{}:
       P.pats.item(close)
 
-@unsafe
 def P.pats.go(+close: String, +t: Tok, stuck: Bool) -> Parser(List<&2, Pat>):
   match stuck:
     case True{}:
@@ -2317,13 +2267,11 @@ def P.pats.go(+close: String, +t: Tok, stuck: Bool) -> Parser(List<&2, Pat>):
       P.pats.close(close, P.tok_is(t, close))
 
 # Comma-separated patterns up to (and including) a closing symbol.
-@unsafe
 def P.pats(close):
   do Parser<List<&2, Pat>>:
     +t : Tok <- P.peek()
     P.pats.go(close, t, P.stuck(P.tok_kind(t)))
 
-@unsafe
 def P.pat.id(+name: String, ctor: Bool) -> Parser(Pat):
   match ctor:
     case True{}:
@@ -2411,13 +2359,11 @@ def P.pat1.k(k: TK) -> Parser(Pat):
         P.err("expected a pattern")
         return PVar{"_"}
 
-@unsafe
 def P.pat1():
   do Parser<Pat>:
     t : Tok <- P.peek()
     P.pat1.k(P.tok_kind(t))
 
-@unsafe
 def P.pat():
   do Parser<Pat>:
     p : Pat <- P.pat1()
@@ -2675,7 +2621,6 @@ def P.scan.sym(t: Toks(), +depth: U32, k: Nat) -> U32:
 
 # Finds the first '=' or '<-' at depth 0 on the current line:
 # 0 none, 1 '=', 2 '<-'.
-@unsafe
 def P.scan.go(ts, depth):
   match ts:
     case Nil{}:
@@ -2745,7 +2690,6 @@ def P.skip_block.de(t: Toks(), +depth: U32, last: Bool) -> Toks():
       P.skip_block.go(t, (depth - 1 : U32))
 
 # Skips tokens until the matching dedent (consumed).
-@unsafe
 def P.skip_block.go(ts, depth):
   match ts:
     case Nil{}:
@@ -2787,7 +2731,6 @@ def P.tok_which_id(t: Tok, xs: List<&2, String>) -> Nat:
     case other:
       99n
 
-@unsafe
 def P.cases.de(de: Bool) -> Parser(List<&2, Expr>):
   match de:
     case True{}:
@@ -2799,7 +2742,6 @@ def P.cases.de(de: Bool) -> Parser(List<&2, Expr>):
         +t : Tok <- P.peek()
         P.cases.go(P.tok_which_id(t, ["case"]))
 
-@unsafe
 def P.cases():
   do Parser<List<&2, Expr>>:
     P.nls()
@@ -2830,7 +2772,6 @@ def P.scrs.go(+t: Tok, stop: Bool) -> Parser(List<&2, Expr>):
         rest : List<&2, Expr> <- P.scrs()
         return e <> rest
 
-@unsafe
 def P.scrs():
   do Parser<List<&2, Expr>>:
     +t : Tok <- P.peek()
@@ -2990,7 +2931,6 @@ def P.eff.go(ts: Toks(), acc: List<&2, String>) -> List<&2, String> & Toks():
 def P.eff.imports() -> Parser(List<&2, String>):
   ts => P.eff.go(ts, Nil{})
 
-@unsafe
 def P.def.body(name: String, params: List<&2, Param>, ret: Expr, eff: Bool) -> Parser(Decl):
   match eff:
     case True{}:
@@ -3028,7 +2968,6 @@ def P.params.more(more: Bool) -> Parser(List<&2, Param>):
         P.expect(")")
         return Nil{}
 
-@unsafe
 def P.params.go(close: Bool) -> Parser(List<&2, Param>):
   match close:
     case True{}:
@@ -3043,7 +2982,6 @@ def P.params.go(close: Bool) -> Parser(List<&2, Param>):
         return p <> rest
 
 # Parameters up to (and including) ')'.
-@unsafe
 def P.params():
   do Parser<List<&2, Param>>:
     +t : Tok <- P.peek()
@@ -3085,7 +3023,6 @@ def P.fields.go(close: Bool) -> Parser(List<&2, Field>):
         return Field{name, ty} <> rest
 
 # Constructor fields up to (and including) '}'.
-@unsafe
 def P.fields():
   do Parser<List<&2, Field>>:
     +t : Tok <- P.peek()
@@ -3112,7 +3049,6 @@ def P.ctors.go(+t: Tok, k: Nat) -> Parser(List<&2, Ctor>):
         return Ctor{name, fields} <> rest
 
 # Constructor lines up to (and including) the dedent.
-@unsafe
 def P.ctors():
   do Parser<List<&2, Ctor>>:
     P.nls()
@@ -3141,7 +3077,6 @@ def P.until_is.if(h: Tok, t: Toks(), hit: Bool) -> Toks():
     case False{}:
       P.until_is.go(t)
 
-@unsafe
 def P.until_is.go(ts):
   match ts:
     case Nil{}:
@@ -3173,7 +3108,6 @@ def P.law.lines() -> Parser(List<&2, Param>):
     P.law.go(t, Bool.pick(Nat, P.is_de(t), 0n,
       Bool.pick(Nat, P.stuck(P.tok_kind(t)), 1n, 2n)))
 
-@unsafe
 def P.law.line(k: Nat) -> Parser(List<&2, Param>):
   match k:
     case 0n:
@@ -3188,7 +3122,6 @@ def P.law.line(k: Nat) -> Parser(List<&2, Param>):
         P.skip_line()
         P.law.lines()
 
-@unsafe
 def P.law.go(t, k):
   match k:
     case 0n:
@@ -3266,7 +3199,6 @@ def P.law.rets.line(k: Nat) -> Parser(Expr):
         +rest : Expr <- P.law.rets()
         return Bool.pick(Expr, P.no_ty(rest), e, rest)
 
-@unsafe
 def P.law.rets.go(+t: Tok, k: Nat) -> Parser(Expr):
   match k:
     case 0n:
@@ -3277,7 +3209,6 @@ def P.law.rets.go(+t: Tok, k: Nat) -> Parser(Expr):
       P.law.rets.line(P.tok_which_id(t, ["for", "exs"]))
 
 # The type of a law: its last line that is not a 'for'.
-@unsafe
 def P.law.rets():
   do Parser<Expr>:
     P.nls()
@@ -3312,7 +3243,6 @@ def P.decls.go(stop: Bool) -> Parser(List<&2, Decl>):
         rest : List<&2, Decl> <- P.decls()
         return d <> rest
 
-@unsafe
 def P.decls():
   do Parser<List<&2, Decl>>:
     P.nls()
@@ -3363,7 +3293,6 @@ def P.tparams.more(more: Bool) -> Parser(List<&2, String>):
         P.gt()
         return Nil{}
 
-@unsafe
 def P.tparams():
   do Parser<List<&2, String>>:
     e1 : Bool <- P.eat("-")
@@ -3387,7 +3316,6 @@ def P.import.path.id(+s: String, sp: Bool, +ln: U32, t: Toks(), stop: Bool) ->
       P.import.path.cat(s, P.import.path.go(t))
 
 # The path: the text of the tokens up to 'as' or the end of the line.
-@unsafe
 def P.import.path.go(ts):
   match ts:
     case Tok{KId{+s}, sp, ln} <> t:
@@ -3439,7 +3367,6 @@ def P.decl.at(at: Bool, +t: Tok) -> Parser(Decl):
     case False{}:
       P.decl.go(P.tok_which_id(t, ["def", "type", "law", "import"]))
 
-@unsafe
 def P.decl():
   do Parser<Decl>:
     +t : Tok <- P.peek()
@@ -3466,7 +3393,6 @@ def Pats.show(xs: List<&2, Pat>) -> String:
     case h <> t:
       Pat.show(h) ++ " " ++ Pats.show(t)
 
-@unsafe
 def Pat.show(p):
   match p:
     case PVar{n}:
@@ -3521,7 +3447,6 @@ def Exprs.show(xs):
     case h <> t:
       Expr.show(h) ++ " " ++ Exprs.show(t)
 
-@unsafe
 def Expr.show(e):
   match e:
     case EVar{n}:
@@ -3572,7 +3497,6 @@ def Ctors.show(xs: List<&2, Ctor>) -> String:
     case h <> t:
       Ctor.show(h) ++ " " ++ Ctors.show(t)
 
-@unsafe
 def Decl.show(d: Decl) -> String:
   match d:
     case DDef{n, ps, b, r}:
@@ -3650,7 +3574,6 @@ def R.opss(xs: List<&2, Expr>, +ty: String) -> List<&2, Expr>:
     case h <> t:
       R.ops(h, ty) <> R.opss(t, ty)
 
-@unsafe
 def R.ops(e, ty):
   match e:
     case EOp{op, a, b}:
@@ -3695,7 +3618,6 @@ def Pats.vars(ps: List<&2, Pat>, acc: List<&2, String>) -> List<&2, String>:
     case h <> t:
       Pats.vars(t, Pat.vars(h, acc))
 
-@unsafe
 def Pat.vars(p, acc):
   match p:
     case PVar{x}:
@@ -3722,7 +3644,6 @@ def FV.exprs(xs: List<&2, Expr>, +bound: List<&2, String>, acc: List<&2, String>
     case h <> t:
       FV.exprs(t, bound, FV.expr(h, bound, acc))
 
-@unsafe
 def FV.expr(e, bound, acc):
   match e:
     case EVar{x}:
@@ -4184,7 +4105,6 @@ def Env.find.if(c: String, t: Env(), +x: String, hit: Bool) -> Maybe<&2, String>
     case False{}:
       Env.find(t, x)
 
-@unsafe
 def Env.find(env, x):
   match env:
     case Nil{}:
@@ -4247,7 +4167,6 @@ def Gen.pat.halves(+g: G, args: List<&2, Pat>, +path: String, r: PatR) -> PatR:
     case other:
       r
 
-@unsafe
 def Gen.pat.kind(
   +g: G, kind: Nat, +tag: U32, +ar: U32, +single: Bool, +args: List<&2, Pat>,
   +path: String, r: PatR
@@ -4305,11 +4224,9 @@ def Gen.pat.bits.go(+g: G, k: Nat, p: Pat, +path: String, r: PatR) -> PatR:
     case 2n+q:
       Gen.pat(g, p, path, r)
 
-@unsafe
 def Gen.pat.bits(g, p, path, r):
   Gen.pat.bits.go(g, Pat.wordk(p), p, path, r)
 
-@unsafe
 def Gen.pat.bits.one(+g: G, args: List<&2, Pat>, +path: String, r: PatR) -> PatR:
   match args:
     case a <> Nil{}:
@@ -4317,7 +4234,6 @@ def Gen.pat.bits.one(+g: G, args: List<&2, Pat>, +path: String, r: PatR) -> PatR
     case other:
       r
 
-@unsafe
 def Gen.pat.num(
   +g: G, w: Nat, kind: Nat, +tag: U32, +ar: U32, +single: Bool, +args: List<&2, Pat>,
   +path: String, r: PatR
@@ -4328,7 +4244,6 @@ def Gen.pat.num(
     case other:
       Gen.pat.bits.one(g, args, path, r)
 
-@unsafe
 def Gen.pat.ctor(
   +g: G, info: Maybe<&2, CInfo>, name: String, args: List<&2, Pat>,
   +path: String, r: PatR
@@ -4339,7 +4254,6 @@ def Gen.pat.ctor(
     case Some{CInfo{+tag, +ar, +kind, +single}}:
       Gen.pat.num(g, P.which(name, ["U32", "F32"]), U32.to_nat(kind), tag, ar, single, args, path, r)
 
-@unsafe
 def Gen.pat(g, p, path, r):
   match p:
     case PVar{x}:
@@ -4604,13 +4518,11 @@ def Gen.call.full(
           U32.show(U32.from_nat(List.length(&2, Bool, mask))) ++ ", " ++
           U32.show(Gen.len(as)) ++ ", "}, Gen.arr(as), DStr{")"}])
 
-@unsafe
 def Gen.call.split(+g: G, +env: Env(), +name: String, +mask: List<&2, Bool>, s: Split) ->
   Gen(Doc):
   Split{kept, all, extra, full} = s
   Gen.call.full(g, env, name, mask, kept, all, extra, full)
 
-@unsafe
 def Gen.call.kind(
   +g: G, +env: Env(), +name: String, kind: Nat, +mask: List<&2, Bool>, s: Split
 ) -> Gen(Doc):
@@ -4626,7 +4538,6 @@ def Gen.call.kind(
         Gen.ref(name)
         Gen.call.split(g, env, name, mask, s)
 
-@unsafe
 def Gen.call.def(+g: G, +env: Env(), +name: String, info: DInfo, args: List<&2, Expr>) ->
   Gen(Doc):
   DInfo{kind, +mask} = info
@@ -4659,7 +4570,6 @@ def Gen.fadd.doc(+g: G, +env: Env(), x: Expr, k: Expr, b: Expr) -> Gen(Doc):
     bd : Doc <- Gen.expr(g, env, b)
     return Doc.list([DStr{"F32_mulk_add("}, xd, DStr{", "}, kd, DStr{", "}, bd, DStr{")"}])
 
-@unsafe
 def Gen.fadd.emit(+g: G, +env: Env(), k: Nat, x: Expr, y: Expr, b: Expr) -> Gen(Doc):
   match k:
     case 1n:
@@ -4667,7 +4577,6 @@ def Gen.fadd.emit(+g: G, +env: Env(), k: Nat, x: Expr, y: Expr, b: Expr) -> Gen(
     case other:
       Gen.fadd.doc(g, env, y, x, b)
 
-@unsafe
 def Gen.fadd.mul(+g: G, +env: Env(), m: Expr, b: Expr, k: Nat) -> Gen(Doc):
   match m:
     case ECall{f, x <> y <> Nil{}}:
@@ -4676,7 +4585,6 @@ def Gen.fadd.mul(+g: G, +env: Env(), m: Expr, b: Expr, k: Nat) -> Gen(Doc):
       Gen.call.def(g, env, "F32.add", G.def(g, "F32.add"), [other, b])
 
 # a + m, where m is x * k when km is not 0n.
-@unsafe
 def Gen.fadd.one(+g: G, +env: Env(), a: Expr, m: Expr, km: Nat) -> Gen(Doc):
   match km:
     case 0n:
@@ -4684,7 +4592,6 @@ def Gen.fadd.one(+g: G, +env: Env(), a: Expr, m: Expr, km: Nat) -> Gen(Doc):
     case 1n+p:
       Gen.fadd.mul(g, env, m, a, km)
 
-@unsafe
 def Gen.fadd.two(+g: G, +env: Env(), a: Expr, b: Expr, ka: Nat, kb: Nat) -> Gen(Doc):
   match ka:
     case 0n:
@@ -4693,7 +4600,6 @@ def Gen.fadd.two(+g: G, +env: Env(), a: Expr, b: Expr, ka: Nat, kb: Nat) -> Gen(
       Gen.fadd.mul(g, env, a, b, ka)
 
 # a + b as F32_mulk_add(x, k, b) when a is x * k (see rt/bendrt.h).
-@unsafe
 def Gen.fadd(+g: G, +env: Env(), args: List<&2, Expr>) -> Gen(Doc):
   match args:
     case +a <> +b <> Nil{}:
@@ -4701,7 +4607,6 @@ def Gen.fadd(+g: G, +env: Env(), args: List<&2, Expr>) -> Gen(Doc):
     case other:
       Gen.call.def(g, env, "F32.add", G.def(g, "F32.add"), other)
 
-@unsafe
 def Gen.call.global(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, fadd: Bool) -> Gen(Doc):
   match fadd:
     case True{}:
@@ -4709,7 +4614,6 @@ def Gen.call.global(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, fad
     case False{}:
       Gen.call.def(g, env, name, G.def(g, name), args)
 
-@unsafe
 def Gen.call.var(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, local: Bool) ->
   Gen(Doc):
   match local:
@@ -4748,7 +4652,6 @@ def Gen.cparams(ps: List<&2, String>) -> String:
       String.join(Gen.cparams.go(h <> t), ", ")
 
 # f!(args) with every argument of a def: G_f tries the device, then the CPU.
-@unsafe
 def Gen.call.gpu(+g: G, +env: Env(), +name: String, kept: List<&2, Expr>) -> Gen(Doc):
   do Gen<Doc>:
     Gen.ref(name)
@@ -4768,18 +4671,15 @@ def Gen.call.bang.pick(
     case k e f:
       Gen.call(g, env, EVar{name}, args)
 
-@unsafe
 def Gen.call.bang.split(+g: G, +env: Env(), +name: String, kind: Nat, s: Split, args: List<&2, Expr>) -> Gen(Doc):
   Split{kept, all, extra, full} = s
   Gen.call.bang.pick(kind, extra, full, g, env, name, kept, args)
 
-@unsafe
 def Gen.call.bang.def(+g: G, +env: Env(), +name: String, info: DInfo, +args: List<&2, Expr>) -> Gen(Doc):
   DInfo{kind, +mask} = info
   Gen.call.bang.split(g, env, name, U32.to_nat(kind), Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}),
     args)
 
-@unsafe
 def Gen.call.bang.var(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, local: Bool) -> Gen(Doc):
   match local:
     case True{}:
@@ -4798,7 +4698,6 @@ def Gen.call.bang(+g: G, +env: Env(), args: List<&2, Expr>) -> Gen(Doc):
     case Nil{}:
       Gen.pure(Doc, DStr{"0"})
 
-@unsafe
 def Gen.call.name(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, bang: Bool) -> Gen(Doc):
   match bang:
     case True{}:
@@ -4806,7 +4705,6 @@ def Gen.call.name(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, bang:
     case False{}:
       Gen.call.var(g, env, name, args, Env.has(env, name))
 
-@unsafe
 def Gen.call(g, env, f, args):
   match f:
     case EVar{+name}:
@@ -4848,11 +4746,9 @@ def Gen.bits.go(+g: G, +env: Env(), k: Nat, e: Expr) -> Gen(Doc):
     case 2n+q:
       Gen.expr(g, env, e)
 
-@unsafe
 def Gen.bits(g, env, e):
   Gen.bits.go(g, env, Expr.wordk(e), e)
 
-@unsafe
 def Gen.bits.args(+g: G, +env: Env(), w: Nat, args: List<&2, Expr>) -> Gen(List<&2, Doc>):
   match w args:
     case 2n+p xs:
@@ -4864,7 +4760,6 @@ def Gen.bits.args(+g: G, +env: Env(), w: Nat, args: List<&2, Expr>) -> Gen(List<
     case k xs:
       Gen.exprs(g, env, xs)
 
-@unsafe
 def Gen.ctor.info(+g: G, +env: Env(), name: String, info: Maybe<&2, CInfo>,
   args: List<&2, Expr>
 ) -> Gen(Doc):
@@ -4878,7 +4773,6 @@ def Gen.ctor.info(+g: G, +env: Env(), name: String, info: Maybe<&2, CInfo>,
         ds : List<&2, Doc> <- Gen.bits.args(g, env, P.which(name, ["U32", "F32"]), args)
         return Gen.ctor.kind(tag, U32.to_nat(kind), ds)
 
-@unsafe
 def Gen.ctor(g, env, name, args):
   Gen.ctor.info(g, env, name, G.ctor(g, name), args)
 
@@ -4904,7 +4798,6 @@ def Gen.tail(+g: G, +env: Env(), cps: List<&2, String>, s: Split) -> Gen(Doc):
     return Doc.list([DStr{"{ "}, Gen.tail.temps(ds, 0), Gen.tail.assign(cps, 0),
       DStr{"goto top; }\n"}])
 
-@unsafe
 def Gen.tail.self(+g: G, +env: Env(), self: Self, args: List<&2, Expr>) -> Gen(Doc):
   Self{sn, +mask, cps} = self
   Gen.tail(g, env, cps, Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}))
@@ -4941,7 +4834,6 @@ def Gen.dst.args(n: Nat, ds: List<&2, Doc>) -> Doc:
     case 1n+m d <> t:
       Doc.list([DStr{", "}, d, Gen.dst.args(m, t)])
 
-@unsafe
 def Gen.dst.jump.split(+g: G, +env: Env(), +tgt: Tgt, +name: String, s: Split) -> Gen(Doc):
   Split{kept, all, extra, full} = s
   do Gen<Doc>:
@@ -4952,12 +4844,10 @@ def Gen.dst.jump.split(+g: G, +env: Env(), +tgt: Tgt, +name: String, s: Split) -
 
 # A tail call to another def of the group: a jump to its D_ function, with
 # the same dst.
-@unsafe
 def Gen.dst.jump(+g: G, +env: Env(), +tgt: Tgt, +name: String, args: List<&2, Expr>) -> Gen(Doc):
   Gen.dst.jump.split(g, env, tgt, name,
     Gen.split(DInfo.mask(G.def(g, name)), args, Split{Nil{}, Nil{}, Nil{}, False{}}))
 
-@unsafe
 def Gen.stmt.call.dst(+g: G, +env: Env(), +tgt: Tgt, +name: String, args: List<&2, Expr>,
   dst: Bool
 ) -> Gen(Doc):
@@ -4969,7 +4859,6 @@ def Gen.stmt.call.dst(+g: G, +env: Env(), +tgt: Tgt, +name: String, args: List<&
         d : Doc <- Gen.call(g, env, EVar{name}, args)
         return Gen.ret(tgt, d)
 
-@unsafe
 def Gen.stmt.call(
   +g: G, +env: Env(), +self: Self, +tgt: Tgt, +name: String, +args: List<&2, Expr>,
   tail: Bool
@@ -5012,8 +4901,8 @@ def Gen.dst.hole(+g: G, +env: Env(), +tgt: Tgt, node: Bool, as: List<&2, Expr>, 
     case n l:
       acc
 
-@unsafe
 # The hole holds BEND_HOLE until it is filled (the collector looks for it).
+@unsafe
 def Gen.dst.field(hole: Bool, +g: G, +env: Env(), a: Expr) -> Gen(Doc):
   match hole:
     case True{}:
@@ -5021,7 +4910,6 @@ def Gen.dst.field(hole: Bool, +g: G, +env: Env(), a: Expr) -> Gen(Doc):
     case False{}:
       Gen.expr(g, env, a)
 
-@unsafe
 def Gen.dst.fields(+g: G, +env: Env(), as: List<&2, Expr>, +i: U32, +hole: U32) ->
   Gen(List<&2, Doc>):
   match as:
@@ -5042,7 +4930,6 @@ def Gen.dst.nth(k: Nat, as: List<&2, Expr>) -> Expr:
     case n Nil{}:
       EErr{"hole"}
 
-@unsafe
 def Gen.stmt.ctor.next(+g: G, +env: Env(), +self: Self, +tgt: Tgt, e: Expr) -> Gen(Doc):
   match e:
     case ECall{EVar{+h}, +hargs}:
@@ -5057,11 +4944,9 @@ def Gen.stmt.ctor.tag.go(info: Maybe<&2, CInfo>) -> U32:
     case None{}:
       0
 
-@unsafe
 def Gen.stmt.ctor.tag(+g: G, +name: String) -> U32:
   Gen.stmt.ctor.tag.go(G.ctor(g, name))
 
-@unsafe
 def Gen.stmt.ctor.hole(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +name: String,
   args: List<&2, Expr>, +hole: U32, next: Expr
 ) -> Gen(Doc):
@@ -5086,7 +4971,6 @@ def Gen.stmt.ctor.pick(none: Bool, +g: G, +env: Env(), +self: Self, +tgt: Tgt, +
 
 # C(.., f(..), ..) with f in the group: the node is stored with a hole
 # where f's result goes, dst moves to the hole, and f's code follows.
-@unsafe
 def Gen.stmt.ctor(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +name: String, +args: List<&2, Expr>,
   +hole: U32
 ) -> Gen(Doc):
@@ -5267,7 +5151,6 @@ def Gen.match.go(
     body : Doc <- Gen.cases(g, env, self, tgt, cs, cases)
     return Doc.list([decls, body])
 
-@unsafe
 def Gen.match(+g: G, +env: Env(), +self: Self, +tgt: Tgt, scrs: List<&2, Expr>,
   cases: List<&2, Expr>
 ) -> Gen(Doc):
@@ -5390,7 +5273,6 @@ def Gen.takes.stmts(cs: List<&2, String>) -> String:
 # The fields and the opened nodes are read, then the nodes taken, each
 # before the nodes inside it: a shared one shares its fields, so the nodes
 # inside it are shared when they are taken, and share theirs.
-@unsafe
 def Gen.case.body.mat(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +body: Expr, r: Env() & Doc) ->
   Gen(Doc):
   (+mb, loads) = r
@@ -5400,7 +5282,6 @@ def Gen.case.body.mat(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +body: Expr, r
     return Doc.list([loads, DStr{Gen.takes.stmts(Gen.takes(mb, "%top")) ++
       Gen.takes.stmts(List.reverse(&2, String, Gen.takes(mb, "%sub")))}, Gen.shares.g(g, vars, body), b])
 
-@unsafe
 def Gen.case.body.go(opens: Bool, +g: G, +env: Env(), +self: Self, +tgt: Tgt, +binds: Env(), +body: Expr) ->
   Gen(Doc):
   match opens:
@@ -5415,12 +5296,10 @@ def Gen.case.body.go(opens: Bool, +g: G, +env: Env(), +self: Self, +tgt: Tgt, +b
 
 # A body after a pattern's bindings: the nodes the pattern opens are freed
 # (see above).
-@unsafe
 def Gen.case.body(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +binds: Env(), +body: Expr) -> Gen(Doc):
   Gen.case.body.go(Bool.or(Bool.and(Gen.free(g), Gen.opens(binds)), Gen.halves(binds)), g, env, self,
     tgt, binds, body)
 
-@unsafe
 def Gen.lam(g, env, p, body):
   +caps = Gen.caps(FV.expr(body, Pat.vars(p, Nil{}), Nil{}), env)
   +n = U32.from_nat(List.length(&2, Bind, caps))
@@ -5435,7 +5314,6 @@ def Gen.lam(g, env, p, body):
     return Doc.list([DStr{"mk_clo(" ++ name ++ ", " ++ U32.show(U32.inc(n)) ++ ", " ++
       U32.show(n) ++ ", "}, Gen.arr(Gen.caps.outer(caps)), DStr{")"}])
 
-@unsafe
 def Gen.let.pat(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +p: Pat, v: Expr, +body: Expr) ->
   Gen(Doc):
   do Gen<Doc>:
@@ -5526,7 +5404,6 @@ def Gen.par.copy(+k: U32, +j: U32, +i: U32, n: Nat) -> String:
 
 # A seq def's parallel let: forks above the frontier (par_depth), and in
 # order below it, through S_name.
-@unsafe
 def Gen.par.front(+g: G, +env: Env(), +sn: String, +k: U32, +vs: List<&2, Expr>) -> Gen(Doc):
   +n = List.length(&2, Expr, vs)
   do Gen<Doc>:
@@ -5537,7 +5414,6 @@ def Gen.par.front(+g: G, +env: Env(), +sn: String, +k: U32, +vs: List<&2, Expr>)
       Gen.mangle(sn) ++ "\n"}, sq, DStr{"#undef " ++ Gen.f(sn) ++ "\n} else {\npar_depth += 1;\n"}, fk,
       DStr{Gen.par.copy(k, j, 0, n) ++ "\npar_depth -= 1;\n}\n"}])
 
-@unsafe
 def Gen.par.sq(sq: Bool, +g: G, +env: Env(), +sn: String, +k: U32, +vs: List<&2, Expr>) -> Gen(Doc):
   match sq:
     case True{}:
@@ -5665,7 +5541,6 @@ def K.isseq(+g: G, +name: String) -> KM(Bool):
 def Gen.isseq(+g: G, +name: String) -> Bool:
   Gen.isseq.fst(K.isseq(g, name)(KSt{8, 0, 0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}, DNil{}, Nil{}}))
 
-@unsafe
 def Gen.par.pick(mode: Nat, +g: G, +env: Env(), +sn: String, +k: U32, +vs: List<&2, Expr>) -> Gen(Doc):
   match mode:
     case 1n:
@@ -5680,7 +5555,6 @@ def Gen.memo.find.go(st: St, +k: String) -> Maybe<&2, String> & St:
 def Gen.memo.find(+k: String) -> Gen(Maybe<&2, String>):
   st => Gen.memo.find.go(st, k)
 
-@unsafe
 def Gen.par(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +ps: List<&2, Pat>, +vs: List<&2, Expr>,
   +body: Expr
 ) -> Gen(Doc):
@@ -5692,7 +5566,6 @@ def Gen.par(+g: G, +env: Env(), +self: Self, +tgt: Tgt, +ps: List<&2, Pat>, +vs:
     b : Doc <- Gen.stmt(g, Gen.par.env(ps, k, 0, env), self, tgt, body)
     return Doc.list([pre, Gen.shares.g(g, Gen.par.env(ps, k, 0, Nil{}), body), b])
 
-@unsafe
 def Gen.let.par(+g: G, +env: Env(), +self: Self, +tgt: Tgt, ps: List<&2, Pat>, v: Expr,
   body: Expr
 ) -> Gen(Doc):
@@ -5702,7 +5575,6 @@ def Gen.let.par(+g: G, +env: Env(), +self: Self, +tgt: Tgt, ps: List<&2, Pat>, v
     case other:
       Gen.par(g, env, self, tgt, ps, [other], body)
 
-@unsafe
 def Gen.let.ctor(+g: G, +env: Env(), +self: Self, +tgt: Tgt, name: String, ps: List<&2, Pat>,
   v: Expr, body: Expr, par: Bool
 ) -> Gen(Doc):
@@ -5712,7 +5584,6 @@ def Gen.let.ctor(+g: G, +env: Env(), +self: Self, +tgt: Tgt, name: String, ps: L
     case False{}:
       Gen.let.pat(g, env, self, tgt, PCtor{name, ps}, v, body)
 
-@unsafe
 def Gen.let(g, env, self, tgt, p, v, body):
   match p:
     case PVar{+x}:
@@ -5726,7 +5597,6 @@ def PatR.conds(r: PatR) -> List<&2, String>:
   PatR{conds, binds} = r
   conds
 
-@unsafe
 def Gen.cases(g, env, self, tgt, cs, cases):
   match cases:
     case Nil{}:
@@ -5803,7 +5673,6 @@ def Gen.dst.pad(n: Nat, xs: List<&2, String>, +names: Bool, +i: U32) -> List<&2,
 
 # A def of a destination-passing group: D_name stores its result through
 # dst (see Dps), and F_name calls it with dst pointing at a local.
-@unsafe
 def Gen.def.dst(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr, +params: List<&2, String>,
   +env: Env(), +wargs: List<&2, String>, grp: DGrp
 ) -> Gen(Unit):
@@ -5837,7 +5706,6 @@ def Gen.def.plain(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr,
     Gen.wrapper(name, wargs)
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
 
-@unsafe
 def Gen.def.body.pick(plain: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Expr,
   +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
 ) -> Gen(Unit):
@@ -5847,7 +5715,6 @@ def Gen.def.body.pick(plain: Bool, +g: G, +name: String, +mask: List<&2, Bool>, 
     case True{}:
       Gen.def.plain(g, name, mask, body, params, env, wargs)
 
-@unsafe
 def Gen.def.body(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr, sig: Sig) ->
   Gen(Unit):
   Sig{+params, +env, +wargs} = sig
@@ -6220,13 +6087,11 @@ def Gen.all.go(+g: G, +h: String, t: List<&2, String>, done: Set(), seen: Bool) 
         refs : List<&2, String> <- Gen.take_refs()
         Gen.all(g, List.append(&2, String, refs, t), Set.add(done, h))
 
-@unsafe
 def Gen.all.seen(+g: G, +h: String, t: List<&2, String>, r: Set() & Bool) -> Gen(Unit):
   (done, seen) = r
   Gen.all.go(g, h, t, done, seen)
 
 # Generates every def reachable from the queue.
-@unsafe
 def Gen.all(g, queue, done):
   match queue:
     case Nil{}:
@@ -6273,7 +6138,6 @@ def Gen.entry.ty(+g: G, +ret: Expr, io: Bool) -> Gen(String):
         return "int main(int argc, char **argv) {" ++ Gen.ctors.call() ++
           " return bend_run_value(argc, argv, F_main, " ++ p ++ "); }\n"
 
-@unsafe
 def Gen.entry.ret(+g: G, +ret: Expr) -> Gen(String):
   Gen.entry.ty(g, ret, Str.eq(Ty.head(ret), "IO"))
 
@@ -6372,7 +6236,6 @@ def Exprs.mentions(es, k):
       Expr.mentions.or(Expr.mentions(e, k), t, k)
 
 # Whether e names k anywhere (under lambdas too).
-@unsafe
 def Expr.mentions(e, k):
   match e:
     case EVar{+n}:
@@ -6444,7 +6307,6 @@ def Par.has.list(g, d, es):
 
 # Whether e runs a recursive call of d (outside lambdas: a lambda's body
 # runs when it is called, not where it is built).
-@unsafe
 def Par.has(g, d, e):
   match e:
     case ECall{EVar{+f}, args}:
@@ -6483,7 +6345,6 @@ def Par.live.mask.at(bs: List<&2, Bool>, t: List<&2, Expr>) -> List<&2, Bool>:
     case b <> mt:
       b <> Par.live.mask(t, mt)
 
-@unsafe
 def Par.live.mask(xs, bs):
   match xs:
     case Nil{}:
@@ -6601,11 +6462,9 @@ def Par.exprs(g, d, n, es):
     case e <> t:
       Par.expr(g, d, n, e) <> Par.exprs(g, d, n, t)
 
-@unsafe
 def Par.call(+g: G, +d: String, +n: U32, +f: Expr, +xs: List<&2, Expr>) -> Expr:
   Par.wrap(n, Par.marks(g, d, Par.live(g, f, xs), xs), xs, as => ECall{f, as})
 
-@unsafe
 def Par.ctor(+g: G, +d: String, +n: U32, +k: String, +xs: List<&2, Expr>) -> Expr:
   Bool.pick(Expr, Str.eq(k, "%par"), ECtor{k, xs},
     Par.wrap(n, Par.marks(g, d, Par.all(True{}, xs), xs), xs, as => ECtor{k, as}))
@@ -6617,7 +6476,6 @@ def Par.op.k(+op: String, xs: List<&2, Expr>) -> Expr:
     case other:
       EErr{"auto-par: an operator of two operands"}
 
-@unsafe
 def Par.op(+g: G, +d: String, +n: U32, +op: String, a: Expr, b: Expr) -> Expr:
   +xs = {[a, b] : List<&2, Expr>}
   Par.wrap(n, Par.marks(g, d, Par.all(True{}, xs), xs), xs, as => Par.op.k(op, as))
@@ -6648,7 +6506,6 @@ def Par.expr.go(+g: G, +d: String, +n: U32, +m: U32, e: Expr) -> Expr:
     case other:
       other
 
-@unsafe
 def Par.expr(g, d, n, e):
   Par.expr.go(g, d, n, U32.inc(n), e)
 
@@ -6724,7 +6581,6 @@ def Dps.edges(+g: G, ds: List<&2, Decl>, m: Map<&2, List<&2, DEdge>>) -> Map<&2,
 def Dps.out(+em: Map<&2, List<&2, DEdge>>, +name: String) -> List<&2, DEdge>:
   G.get(List<&2, DEdge>, Nil{}, em, name)
 
-@unsafe
 def Dps.rev.add(+from: String, es: List<&2, DEdge>, +m: Map<&2, List<&2, DEdge>>) ->
   Map<&2, List<&2, DEdge>>:
   match es:
@@ -6735,7 +6591,6 @@ def Dps.rev.add(+from: String, es: List<&2, DEdge>, +m: Map<&2, List<&2, DEdge>>
         DEdge{from, c} <> G.get(List<&2, DEdge>, Nil{}, m, to)))
 
 # The reversed graph: for each def, the defs with an edge to it.
-@unsafe
 def Dps.rev(ks: List<&2, String>, +em: Map<&2, List<&2, DEdge>>, m: Map<&2, List<&2, DEdge>>) ->
   Map<&2, List<&2, DEdge>>:
   match ks:
@@ -6800,7 +6655,6 @@ def Dps.cases(+g: G, cs: List<&2, Expr>, acc: List<&2, DEdge>) -> List<&2, DEdge
       Dps.cases(g, t, acc)
 
 # The tail calls of an expression, as Gen.stmt compiles it.
-@unsafe
 def Dps.tails(g, e, acc):
   match e:
     case ELet{p, v, b}:
@@ -6841,7 +6695,6 @@ def Dps.reach.go(+em: Map<&2, List<&2, DEdge>>, +h: String, t: List<&2, String>,
       Dps.reach(em, Dps.tos(Dps.out(em, h), t), Set.add(seen, h))
 
 # The defs reachable from the queue (the queue's included).
-@unsafe
 def Dps.reach(em, todo, seen):
   match todo:
     case Nil{}:
@@ -6915,7 +6768,6 @@ def Dps.group.fin(+g: G, +em: Map<&2, List<&2, DEdge>>, +name: String, +ms: List
   +s = Set.from_list(ms)
   Dps.group.put(Dps.ctors(ms, em, s), g, name, ms, m)
 
-@unsafe
 def Dps.group.cyc(cyc: Bool, +g: G, +em: Map<&2, List<&2, DEdge>>, +rv: Map<&2, List<&2, DEdge>>,
   +name: String, +fwd: Set(), m: Map<&2, DGrp>
 ) -> Map<&2, DGrp>:
@@ -6927,7 +6779,6 @@ def Dps.group.cyc(cyc: Bool, +g: G, +em: Map<&2, List<&2, DEdge>>, +rv: Map<&2, 
       m
 
 # name's group: what it reaches that reaches it back.
-@unsafe
 def Dps.group(+g: G, +em: Map<&2, List<&2, DEdge>>, +rv: Map<&2, List<&2, DEdge>>, +name: String,
   m: Map<&2, DGrp>
 ) -> Map<&2, DGrp>:
@@ -6955,7 +6806,6 @@ def Dps.groups.if(new: Bool, +g: G, +k: String, ks: List<&2, String>, +em: Map<&
       Dps.groups(g, ks, em, rv, m)
 
 # Each def with a constructor edge that is in no group yet starts one.
-@unsafe
 def Dps.groups(g, ks, em, rv, m):
   match ks:
     case Nil{}:
@@ -7030,7 +6880,6 @@ def Ty.find.if(t: Expr, rest: List<&2, TB>, +x: String, hit: Bool) -> Maybe<&2, 
     case False{}:
       Ty.find(rest, x)
 
-@unsafe
 def Ty.find(sub, x):
   match sub:
     case Nil{}:
@@ -7066,7 +6915,6 @@ def Ty.substs(xs: List<&2, Expr>, +sub: List<&2, TB>) -> List<&2, Expr>:
     case h <> t:
       Ty.subst(h, sub) <> Ty.substs(t, sub)
 
-@unsafe
 def Ty.subst(e, sub):
   match e:
     case EVar{+n}:
@@ -7122,7 +6970,6 @@ def Ty.pms(ps: List<&2, Pat>, es: List<&2, Expr>) -> PM:
     case pl el:
       PM{0n, Nil{}}
 
-@unsafe
 def Ty.pm.ctor(+n: String, ps: List<&2, Pat>, e: Expr) -> PM:
   match e:
     case ECtor{+m, es}:
@@ -7155,7 +7002,6 @@ def Ty.pm.succ.by(+k: U32, p: Pat, +j: U32, x: Expr, ok: Bool) -> PM:
     case False{}:
       PM{2n, Nil{}}
 
-@unsafe
 def Ty.pm.succ(+k: U32, p: Pat, e: Expr) -> PM:
   match e:
     case ENat{+m}:
@@ -7172,7 +7018,6 @@ def Ty.pm.num(+n: U32, e: Expr) -> PM:
     case other:
       PM{2n, Nil{}}
 
-@unsafe
 def Ty.pm(p, e):
   match p:
     case PVar{+x}:
@@ -7221,7 +7066,6 @@ def Ty.cands.at(
     case 2n+p:
       Ty.norm(g, Ty.subst(b, binds), fuel) <> Ty.cands(g, scrs, t, fuel)
 
-@unsafe
 def Ty.cands(g, scrs, cases, fuel):
   match cases:
     case Nil{}:
@@ -7321,7 +7165,6 @@ def Ty.norms(g, xs, fuel):
     case h <> t:
       Ty.norm(g, h, fuel) <> Ty.norms(g, t, fuel)
 
-@unsafe
 def Ty.norm.at(+g: G, +ty: Expr, +h: String, fuel: Nat, stop: Bool) -> Expr:
   match stop:
     case True{}:
@@ -7329,7 +7172,6 @@ def Ty.norm.at(+g: G, +ty: Expr, +h: String, fuel: Nat, stop: Bool) -> Expr:
     case False{}:
       Ty.norm.def(g, ty, G.body(g, h), fuel)
 
-@unsafe
 def Ty.norm(g, ty, fuel):
   match fuel:
     case 0n:
@@ -7374,7 +7216,6 @@ def Ty.tuple.sigma(e: Expr, args: List<&2, Expr>) -> List<&2, Expr>:
     case other:
       [e]
 
-@unsafe
 def Ty.tuple.go(e: Expr, args: List<&2, Expr>, k: Nat) -> List<&2, Expr>:
   match k:
     case 0n:
@@ -7385,7 +7226,6 @@ def Ty.tuple.go(e: Expr, args: List<&2, Expr>, k: Nat) -> List<&2, Expr>:
       [e]
 
 # Components of a (right-nested) pair type.
-@unsafe
 def Ty.tuple(e):
   match e:
     case ETy{+n, +args}:
@@ -7423,7 +7263,6 @@ def Gen.printer.fields(
           "(" ++ Bool.pick(String, Str.eq(path, "v"), "v", path ++ U32.show(i) ++ ")") ++
           ");\n"}, more])
 
-@unsafe
 def Gen.printer.ctor(
   +g: G, +sub: List<&2, TB>, +name: String, fields: List<&2, Field>,
   info: Maybe<&2, CInfo>
@@ -7438,7 +7277,6 @@ def Gen.printer.ctor(
         return Doc.list([DStr{Gen.printer.test(kind, tag, single) ++ " { pr_s(\"" ++ name ++
           "{\");\n"}, fs, DStr{"pr_s(\"}\"); return; }\n"}])
 
-@unsafe
 def Gen.printer.ctors(+g: G, +sub: List<&2, TB>, cs: List<&2, Ctor>) -> Gen(Doc):
   match cs:
     case Nil{}:
@@ -7449,7 +7287,6 @@ def Gen.printer.ctors(+g: G, +sub: List<&2, TB>, cs: List<&2, Ctor>) -> Gen(Doc)
         rest : Doc <- Gen.printer.ctors(g, sub, t)
         return Doc.list([one, rest])
 
-@unsafe
 def Gen.printer.adt(+g: G, +ty: Expr, d: Decl) -> Gen(Doc):
   match d:
     case DType{name, ps, cs}:
@@ -7501,12 +7338,10 @@ def Gen.printer.head(+g: G, +ty: Expr, k: Nat) -> Gen(Doc):
     case 10n+p:
       Gen.printer.adt(g, ty, G.body(g, "%" ++ Ty.head(ty)))
 
-@unsafe
 def Gen.printer.body(+g: G, +ty: Expr, +h: String) -> Gen(Doc):
   Gen.printer.head(g, ty, P.which(Ty.alias(h), ["U32", "Nat", "F32", "Char", "String", "List",
     "&", "->", "Array", "=="]))
 
-@unsafe
 def Gen.printer.memo(+g: G, +ty: Expr, +key: String, m: Maybe<&2, String>) -> Gen(String):
   match m:
     case Some{f}:
@@ -7522,7 +7357,6 @@ def Gen.printer.memo(+g: G, +ty: Expr, +key: String, m: Maybe<&2, String>) -> Ge
         return f
 
 # Returns the name of a C function printing values of a type.
-@unsafe
 def Gen.printer(g, ty0):
   +ty = Ty.norm(g, ty0, 16n)
   +key = Expr.show(ty)
@@ -7586,7 +7420,6 @@ def Mod.pats(+q: Qual, ps: List<&2, Pat>) -> List<&2, Pat>:
     case h <> t:
       Mod.pat(q, h) <> Mod.pats(q, t)
 
-@unsafe
 def Mod.pat(q, p):
   match p:
     case PCtor{n, args}:
@@ -7690,7 +7523,6 @@ def Mod.dir.if(x: U32, t: String, slash: Bool) -> String:
     case False{}:
       Mod.dir.go(t)
 
-@unsafe
 def Mod.dir.go(s):
   match s:
     case SNil{}:
@@ -7822,7 +7654,6 @@ def Main.ids.len.if(ok: Bool, t: String) -> Nat:
       0n
 
 # The length of the name s starts with.
-@unsafe
 def Main.ids.len(s):
   match s:
     case SNil{}:
@@ -7889,7 +7720,6 @@ def Main.ids.hit(hit: Bool, +c: U32, +t0: String, +env: IdEnv) -> String:
 
 # s with each CID(..) and FID(..) replaced; prev: the last character was
 # part of a word.
-@unsafe
 def Main.ids(s, prev, env):
   match s:
     case SNil{}:
@@ -7949,7 +7779,6 @@ def Main.eff.src(+p: String) -> IO(String):
   Main.eff.pick(p, String.ends_with(p, "/effs/chan.c"))
 
 # Reads the effect sources to splice into the output.
-@unsafe
 def Main.effs(ps, ds, known, acc):
   match ps:
     case Nil{}:
@@ -7984,7 +7813,6 @@ def Ctors.ident.sp(sp: Bool, +c: U32, t: String) -> String:
       Ctors.ident.if(Ctors.is_ident(c), c, t)
 
 # The identifier s starts with (after blanks).
-@unsafe
 def Ctors.ident(s):
   match s:
     case SNil{}:
@@ -8187,11 +8015,9 @@ def J.entry.ty(+j: JG, +ret: Expr, io: Bool) -> Gen(String):
         p : String <- J.printer(j, ret)
         return "bend_run_value(F_main, " ++ p ++ ");\n"
 
-@unsafe
 def J.entry.ret(+j: JG, +ret: Expr) -> Gen(String):
   J.entry.ty(j, ret, Str.eq(Ty.head(ret), "IO"))
 
-@unsafe
 def J.entry(+j: JG, d: Decl) -> Gen(String):
   match d:
     case DDef{n, ps, b, ret}:
@@ -8246,7 +8072,6 @@ def LM.arity.cs(cs: List<&2, Ctor>, t: List<&2, Decl>, +c: String) -> Nat:
       LM.arity.hit(fs, r, t, c, Str.eq(name, c))
 
 # The field count of constructor c.
-@unsafe
 def LM.arity(ds, c):
   match ds:
     case Nil{}:
@@ -8261,7 +8086,6 @@ law LM.names:
   for +i: U32
   List<&2, String>
 
-@unsafe
 def LM.names(n, i):
   match n:
     case 0n:
@@ -8305,7 +8129,6 @@ def LM.fields.lam(h: Expr, +p: Nat, +i: U32) -> List<&2, Pat> & Expr:
       LM.app(other, LM.names(1n+p, i))
 
 # An arm's field patterns and body.
-@unsafe
 def LM.fields(h, n, i):
   match n:
     case 0n:
@@ -8329,7 +8152,6 @@ law LM.arms:
   for e: Expr
   List<&2, Expr>
 
-@unsafe
 def LM.arms(ds, e):
   match e:
     case ECtor{"%mat", ECtor{+c, cn} <> h <> m <> Nil{}}:
@@ -8378,7 +8200,6 @@ def LM.let(+ds: List<&2, Decl>, p: Pat, v: Expr, +b: Expr) -> Expr:
     case other:
       ELet{other, LM.expr(ds, v), b}
 
-@unsafe
 def LM.expr(ds, e):
   match e:
     case ECall{f, args}:
@@ -8559,7 +8380,6 @@ def Imp.names.at(+x: String, t: List<&2, String>, ups: Bool) -> Bool:
       +up = Bool.and(ups, String.eq(x, ".."))
       Bool.and(Bool.or(up, Imp.name(x, True{})), Imp.names(h <> r, up))
 
-@unsafe
 def Imp.names(xs, ups):
   match xs:
     case Nil{}:
@@ -8640,7 +8460,6 @@ def Path.rel.if(+x: String, xt: List<&2, String>, +y: String, yt: List<&2, Strin
     case False{}:
       Path.ups(x <> xt, y <> yt)
 
-@unsafe
 def Path.rel.go(xs, ys):
   match xs ys:
     case +x <> xt +y <> yt:
@@ -8709,7 +8528,6 @@ def Main.chk.imp.go(
     case False{}:
       Main.chk.imp.fresh(f, base, dir, ns, sp, rel, alias, path, st, al, Chk.SB2.has(al, alias))
 
-@unsafe
 def Main.chk.imp.fresh(
   f: Nat, +base: String, +dir: String, +ns: String, +sp: Chk.Sp, +rel: String, +alias: String, +path: String, st: CS,
   al: List<&2, Chk.SB2>, taken: Bool
@@ -8722,7 +8540,6 @@ def Main.chk.imp.fresh(
       Main.chk.imp.rel(f, base, dir, ns, sp, rel, alias, path, st, al, String.ends_with(rel, ".bend"))
 
 # An import of a file as alias: where it is and its namespace.
-@unsafe
 def Main.chk.imp(
   f: Nat, +base: String, +dir: String, +ns: String, +src: String, imp: Chk.Imp, st: CS, al: List<&2, Chk.SB2>
 ) -> IO(CS & List<&2, Chk.SB2>):
@@ -8750,7 +8567,6 @@ def Main.chk.imps.next(
   (st, al) = r
   Main.chk.imps(f, base, dir, ns, src, imps, st, al)
 
-@unsafe
 def Main.chk.imps(f, base, dir, ns, src, imps, st, al):
   match imps:
     case Nil{}:
@@ -8776,7 +8592,6 @@ def Main.chk.parse_text(book: Chk.Book, +text: String, ns: String, dir: String, 
   Chk.parse_file(book, text, text, ns, dir, al)
 
 # After a file's imports: its declarations join the book.
-@unsafe
 def Main.chk.parse(
   +base: String, +file: String, +ns: String, +src: String, lines: List<&2, String>, r: CS & List<&2, Chk.SB2>
 ) -> IO(CS):
@@ -8789,7 +8604,6 @@ def CS.mark(st: CS, +real: String) -> CS:
   CS{book, seen, n0} = st
   CS{book, Chk.SB2{real, Main.chk.loading()} <> seen, n0}
 
-@unsafe
 def Main.chk.hdr(f: Nat, +base: String, +file: String, +ns: String, +src: String, st: CS, h: Chk.Hdr) -> IO(CS):
   Chk.Hdr{lines, imps, err} = h
   match err:
@@ -8801,7 +8615,6 @@ def Main.chk.hdr(f: Nat, +base: String, +file: String, +ns: String, +src: String
           CS.mark(st, Path.norm(file)), Nil{})
         Main.chk.parse(base, file, ns, src, lines, r)
 
-@unsafe
 def Main.chk.src(f: Nat, +base: String, +file: String, +ns: String, +src: String, st: CS) -> IO(CS):
   Main.chk.hdr(f, base, file, ns, src, st, Chk.header(src))
 
@@ -8817,7 +8630,6 @@ def Main.pwd(r: Result<&1, &1, U32 & String, String>) -> String:
 def Path.abs(+pwd: String, +p: String) -> String:
   Path.norm(Bool.pick(String, Bool.or(String.starts_with(p, "/"), String.is_empty(pwd)), p, pwd ++ "/" ++ p))
 
-@unsafe
 def Main.chk.read(
   f: Nat, +base: String, +file: String, +ns: String, +sp: Chk.Sp, st: CS, m: Maybe<&2, String>
 ) -> IO(CS):
@@ -8833,7 +8645,6 @@ def CS.at_end(st: CS) -> CS:
   CS{+book, seen, n0} = st
   CS{book, seen, Chk.book_len(book)}
 
-@unsafe
 def Main.chk.seen(
   f: Nat, +base: String, +file: String, +ns: String, +sp: Chk.Sp, st: CS, done: Maybe<&2, String>
 ) -> IO(CS):
@@ -8853,7 +8664,6 @@ def CS.seen(+st: CS) -> List<&2, Chk.SB2>:
   CS{book, +seen, n0} = st
   seen
 
-@unsafe
 def Main.chk.load(fuel, base, file, ns, sp, st):
   match fuel:
     case 0n:
@@ -8874,7 +8684,6 @@ def Main.check.fin(st: CS) -> IO(Chk.Book & Nat):
 
 # Loads and checks a program; answers the checked book and where the
 # file's own declarations start.
-@unsafe
 def Main.check(+base: String, +file: String) -> IO(Chk.Book & Nat):
   do IO<Chk.Book & Nat>:
     st : CS <- Main.chk.load(64n, base, file, "", Chk.NoSp{}, CS{Chk.book_nil(), Nil{}, 0n})
@@ -8935,7 +8744,6 @@ def Main.emit_value(js: Bool, v: String) -> IO(Unit):
       IO.write("#include <stdio.h>\n\nint main(void) {\n  fputs(\"" ++ Gen.lit(v) ++
         "\\n\", stdout);\n  return 0;\n}\n")
 
-@unsafe
 def Main.checked.go(js: Bool, +base_path: String, user_path: String, +bk: Chk.Book, norm: Bool) -> IO(Unit):
   match norm:
     case True{}:
@@ -8945,7 +8753,6 @@ def Main.checked.go(js: Bool, +base_path: String, user_path: String, +bk: Chk.Bo
 
 # After checking, compile. A value main that may hold a function is
 # printed as the checker normalizes it.
-@unsafe
 def Main.checked(js: Bool, +base_path: String, user_path: String, r: Chk.Book & Nat) -> IO(Unit):
   (b, n0) = r
   +bk = b
@@ -8961,7 +8768,6 @@ def Main.code(+s: String) -> Nat:
     Str.eq(s, "--check-only"), 3n, Bool.pick(Nat, Str.eq(s, "--no-check"), 4n, Bool.pick(Nat, Str.eq(s, "--js"), 5n,
     Bool.pick(Nat, Str.eq(s, "-o"), 6n, 0n))))))
 
-@unsafe
 def Main.run2(code: Nat, +a: String, +b: String) -> IO(Unit):
   match code:
     case 0n:
@@ -8979,7 +8785,6 @@ def Main.run2(code: Nat, +a: String, +b: String) -> IO(Unit):
     case other:
       Main.usage()
 
-@unsafe
 def Main.run3(code: Nat, +base_path: String, +user_path: String) -> IO(Unit):
   match code:
     case 3n:
@@ -9029,7 +8834,6 @@ def Cc.end(out: String) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./rt/cc.js"
 
 # bendc -o out base.bend input.bend: the C, compiled into out.
-@unsafe
 def Main.run4(code: Nat, +out: String, +base_path: String, +user_path: String) -> IO(Unit):
   match code:
     case 6n:
@@ -9041,7 +8845,6 @@ def Main.run4(code: Nat, +out: String, +base_path: String, +user_path: String) -
     case other:
       Main.usage()
 
-@unsafe
 def Main.run(args: List<&2, String>) -> IO(Unit):
   match args:
     case +a <> +b <> Nil{}:
@@ -9097,7 +8900,6 @@ def Main.imports.one(
         rest : List<&2, Decl> <- Main.imports(f, dir, t)
         return List.append(&2, Decl, Mod.qualify(a, sub), rest)
 
-@unsafe
 def Main.imports(f, dir, ds):
   match ds:
     case Nil{}:
@@ -9109,7 +8911,6 @@ def Main.imports(f, dir, ds):
 
 # Loads a file and (recursively) the modules it imports; an imported
 # module's names are qualified by its alias.
-@unsafe
 def Main.load(fuel, path):
   match fuel:
     case 0n:
@@ -9139,7 +8940,6 @@ def Main.js.wrap(src: String, hosts: List<&2, String>) -> String:
 # The effect table: each JS file effects import, run once (Chan's four
 # effects share chan.js and its state) and wrapped as the official target
 # wraps it, answering the host functions of the effects that import it.
-@unsafe
 def Main.js.effs(ps, es, ds, known, acc):
   match ps:
     case Nil{}:
@@ -9169,7 +8969,6 @@ def Use.max(+x: String, es: List<&2, Expr>) -> U32:
       U32.max(Use.n(x, e), Use.max(x, t))
 
 # The uses of x on the path through e that uses it most.
-@unsafe
 def Use.n(x, e):
   match e:
     case EVar{+n}:
@@ -9216,7 +9015,6 @@ def Exprs.has_par(es):
       Expr.has_par.or(Expr.has_par(e), t)
 
 # Whether an expression holds a parallel let (outside lambdas).
-@unsafe
 def Expr.has_par(e):
   match e:
     case ELet{PCtor{+n, ps}, v, b}:
@@ -9509,7 +9307,6 @@ def K.flat.need.memo(+g: G, +name: String, m: Maybe<&2, String>) -> KM(Unit):
         KX.def(g, name, G.def(g, name))
 
 # Emits a flat def's function (once; its callees come first).
-@unsafe
 def K.flat.need(+g: G, +name: String) -> KM(Unit):
   do KM<Unit>:
     m : Maybe<&2, String> <- K.memo.get("%emit " ++ name)
@@ -9529,7 +9326,6 @@ def K.heads.list(es: List<&2, Expr>, acc: List<&2, String>) -> List<&2, String>:
       K.heads.list(t, K.heads(e, acc))
 
 # The names an expression calls.
-@unsafe
 def K.heads(e, acc):
   match e:
     case ECall{EVar{f}, args}:
@@ -9578,7 +9374,6 @@ def K.loops.callee(+g: G, +name: String, +h: String, +t: List<&2, String>, info:
   DInfo{kind, mask} = info
   KM.if(Bool, U32.is_zero(kind), K.loops.or(g, name, h, t), K.loops.any(g, name, t))
 
-@unsafe
 def K.loops.any(g, name, hs):
   match hs:
     case Nil{}:
@@ -9586,7 +9381,6 @@ def K.loops.any(g, name, hs):
     case +h <> t:
       KM.if(Bool, Str.eq(h, name), KM.pure(Bool, True{}), K.loops.callee(g, name, h, t, G.def(g, h)))
 
-@unsafe
 def K.loops.or.if(a: Bool, +g: G, +name: String, t: List<&2, String>) -> KM(Bool):
   match a:
     case True{}:
@@ -9607,7 +9401,6 @@ def K.loops.body(d: Decl) -> List<&2, String>:
     case other:
       Nil{}
 
-@unsafe
 def K.loops.memo(+g: G, +name: String, m: Maybe<&2, String>) -> KM(Bool):
   match m:
     case Some{v}:
@@ -9621,7 +9414,6 @@ def K.loops.memo(+g: G, +name: String, m: Maybe<&2, String>) -> KM(Bool):
 
 # Whether a flat def loops (calls itself, or a flat def that does): its
 # calls can take long, so the kernel runs them with the SIMD group (PC_KQ).
-@unsafe
 def K.loops(g, name):
   do KM<Bool>:
     m : Maybe<&2, String> <- K.memo.get("%loop " ++ name)
@@ -9742,7 +9534,6 @@ def K.var.found(+g: G, +name: String, m: Maybe<&2, String>) -> KM(Doc):
 def K.var(+g: G, +env: Env(), +name: String) -> KM(Doc):
   K.var.found(g, name, Env.find(env, name))
 
-@unsafe
 def K.call.full(
   +g: G, +env: Env(), +name: String, +mask: List<&2, Bool>, kind: Nat, kept: List<&2, Expr>, all: List<&2, Expr>,
   extra: List<&2, Expr>, full: Bool
@@ -9760,7 +9551,6 @@ def K.call.full(
         +w : U32 <- K.fn(K.wrap.name(name))
         K.clo(w, U32.from_nat(List.length(&2, Bool, mask)), as)
 
-@unsafe
 def K.call.def.kind(
   kind: Nat, +g: G, +env: Env(), +name: String, +mask: List<&2, Bool>, kept: List<&2, Expr>, all: List<&2, Expr>,
   extra: List<&2, Expr>, full: Bool
@@ -9775,12 +9565,10 @@ def K.call.def.kind(
     case other:
       K.call.full(g, env, name, mask, other, kept, all, extra, full)
 
-@unsafe
 def K.call.def.go(+g: G, +env: Env(), +name: String, +mask: List<&2, Bool>, kind: Nat, s: Split) -> KM(Doc):
   Split{kept, all, extra, full} = s
   K.call.def.kind(kind, g, env, name, mask, kept, all, extra, full)
 
-@unsafe
 def K.call.def(+g: G, +env: Env(), +name: String, info: DInfo, args: List<&2, Expr>) -> KM(Doc):
   DInfo{kind, +mask} = info
   K.call.def.go(g, env, name, mask, U32.to_nat(kind), Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}))
@@ -9794,7 +9582,6 @@ def K.call.local(+g: G, +env: Env(), f: Expr, args: List<&2, Expr>) -> KM(Doc):
     xs : List<&2, Doc> <- K.exprs(g, env, args)
     K.apply(xs, DStr{S(k)})
 
-@unsafe
 def K.call.var(+g: G, +env: Env(), +name: String, args: List<&2, Expr>, local: Bool) -> KM(Doc):
   match local:
     case True{}:
@@ -9818,7 +9605,6 @@ def K.call.bang(+g: G, +env: Env(), args: List<&2, Expr>) -> KM(Doc):
     case Nil{}:
       KM.pure(Doc, DStr{"0"})
 
-@unsafe
 def K.call(g, env, f, args):
   match f:
     case EVar{"%gpu"}:
@@ -9854,7 +9640,6 @@ def K.ctor.kind(+tag: U32, kind: Nat, +ds: List<&2, Doc>) -> KM(Doc):
     case 5n+p:
       KM.pure(Doc, DStr{"k_arr(c)"})
 
-@unsafe
 def K.ctor(+g: G, +env: Env(), name: String, info: Maybe<&2, CInfo>, args: List<&2, Expr>) -> KM(Doc):
   match info:
     case None{}:
@@ -10000,7 +9785,6 @@ def K.pat.zeros(xs: List<&2, String>, r: PatR) -> PatR:
     case x <> t:
       K.pat.zeros(t, Gen.pat.var(x, "0", r))
 
-@unsafe
 def K.pat.kind(+g: G, kind: Nat, +tag: U32, +single: Bool, args: List<&2, Pat>, +path: String, r: PatR) -> PatR:
   match kind:
     case 0n:
@@ -10016,7 +9800,6 @@ def K.pat.kind(+g: G, kind: Nat, +tag: U32, +single: Bool, args: List<&2, Pat>, 
     case 5n+p:
       K.pat.zeros(Pats.vars(args, Nil{}), Gen.pat.cond("k_arr(c)", r))
 
-@unsafe
 def K.pat.ctor(+g: G, info: Maybe<&2, CInfo>, name: String, args: List<&2, Pat>, +path: String, r: PatR) -> PatR:
   match info:
     case None{}:
@@ -10024,7 +9807,6 @@ def K.pat.ctor(+g: G, info: Maybe<&2, CInfo>, name: String, args: List<&2, Pat>,
     case Some{CInfo{+tag, ar, +kind, +single}}:
       K.pat.kind(g, U32.to_nat(kind), tag, single, args, path, r)
 
-@unsafe
 def K.pat(g, p, path, r):
   match p:
     case PVar{x}:
@@ -10040,7 +9822,6 @@ def K.pat(g, p, path, r):
     case PFlt{s}:
       Gen.pat.cond("(" ++ path ++ ") == KUF(" ++ s ++ "f)", r)
 
-@unsafe
 def K.pats(+g: G, ps: List<&2, Pat>, paths: List<&2, String>, r: PatR) -> PatR:
   match ps paths:
     case p <> pt c <> ct:
@@ -10063,7 +9844,6 @@ def K.tail.set(ds: List<&2, Doc>, +i: U32) -> Doc:
       Doc.list([DStr{S(i) ++ " = "}, d, DStr{"; "}, K.tail.set(t, U32.inc(i))])
 
 # A self tail call: the arguments (already in slots) become the parameters.
-@unsafe
 def K.tail(+g: G, +env: Env(), +entry: U32, s: Split) -> KM(Unit):
   Split{kept, all, extra, full} = s
   do KM<Unit>:
@@ -10082,12 +9862,10 @@ def KSelf.is_tail(+env: Env(), +self: KSelf, +tgt: KTgt, +name: String, +args: L
   Bool.and(Bool.and(K.is_ret(tgt), Str.eq(sn, name)), Bool.and(Bool.not(Env.has(env, name)),
     Nat.is_eq(List.length(&2, Bool, mask), List.length(&2, Expr, args))))
 
-@unsafe
 def K.tail.self(+g: G, +env: Env(), self: KSelf, args: List<&2, Expr>) -> KM(Unit):
   KSelf{sn, +entry, +mask} = self
   K.tail(g, env, entry, Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}))
 
-@unsafe
 def K.stmt.call(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, +name: String, args: List<&2, Expr>, tail: Bool) ->
   KM(Unit):
   match tail:
@@ -10120,7 +9898,6 @@ def K.let.pat(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, +p: Pat, v: Expr, bo
 # but the last go to the queue, the last runs here, and a join record
 # collects the values; the lane that brings the last value continues. Past
 # the limit they run one after the other.
-@unsafe
 def K.par.thunks(+g: G, +env: Env(), vs: List<&2, Expr>) -> KM(List<&2, U32>):
   match vs:
     case Nil{}:
@@ -10133,7 +9910,6 @@ def K.par.thunks(+g: G, +env: Env(), vs: List<&2, Expr>) -> KM(List<&2, U32>):
         ks : List<&2, U32> <- K.par.thunks(g, env, t)
         return k <> ks
 
-@unsafe
 def K.par.seq.plain(+g: G, +env: Env(), v: Expr, +r: U32) -> KM(Unit):
   do KM<Unit>:
     x : Doc <- K.expr(g, env, v)
@@ -10146,7 +9922,6 @@ def KQ.req.args(n: Nat, +i: U32) -> List<&2, Doc>:
     case 1n+m:
       DStr{"c->kqa[" ++ U32.show(i) ++ "]"} <> KQ.req.args(m, U32.inc(i))
 
-@unsafe
 def K.par.seq.kq(+g: G, +env: Env(), +f: String, kept: List<&2, Expr>, +r: U32) -> KM(Unit):
   do KM<Unit>:
     +ds : List<&2, Doc> <- K.exprs(g, env, kept)
@@ -10165,7 +9940,6 @@ def K.par.seq.kq(+g: G, +env: Env(), +f: String, kept: List<&2, Expr>, +r: U32) 
     K.putS(S(r) ++ " = KRV;\nKPC = " ++ U32.show(after) ++ ";\n")
     K.start(after)
 
-@unsafe
 def K.par.seq.pick(sq: Bool, extra: List<&2, Expr>, full: Bool, +g: G, +env: Env(), +f: String, args: List<&2, Expr>,
   kept: List<&2, Expr>, +r: U32) -> KM(Unit):
   match sq extra full:
@@ -10174,7 +9948,6 @@ def K.par.seq.pick(sq: Bool, extra: List<&2, Expr>, full: Bool, +g: G, +env: Env
     case a b c:
       K.par.seq.plain(g, env, ECall{EVar{f}, args}, r)
 
-@unsafe
 def K.par.seq.split(sq: Bool, +g: G, +env: Env(), +f: String, args: List<&2, Expr>, +r: U32, s: Split) -> KM(Unit):
   Split{kept, all, extra, full} = s
   K.par.seq.pick(sq, extra, full, g, env, f, args, kept, r)
@@ -10190,7 +9963,6 @@ def K.par.seq.def(+g: G, +env: Env(), +f: String, +args: List<&2, Expr>, +r: U32
 
 # One value of a parallel let past the fork limit: a call of a seq def runs
 # in its KQ_ function, or through frames if that gives up.
-@unsafe
 def K.par.seq.val(+g: G, +env: Env(), v: Expr, +r: U32) -> KM(Unit):
   match v:
     case ECall{EVar{+f}, +args}:
@@ -10200,7 +9972,6 @@ def K.par.seq.val(+g: G, +env: Env(), v: Expr, +r: U32) -> KM(Unit):
       K.par.seq.plain(g, env, other, r)
 
 # Past the fork limit the values are evaluated one after the other.
-@unsafe
 def K.par.seq(+g: G, +env: Env(), vs: List<&2, Expr>, rs: List<&2, U32>) -> KM(Unit):
   match vs rs:
     case v <> vt +r <> rt:
@@ -10227,7 +9998,6 @@ def K.par.collect(rs: List<&2, U32>, +j: U32, +i: U32) -> Doc:
     case r <> t:
       Doc.list([DStr{S(r) ++ " = c->H[" ++ S(j) ++ " + " ++ U32.show((i + 4 : U32)) ++ "];\n"}, K.par.collect(t, j, U32.inc(i))])
 
-@unsafe
 def K.par.env(+g: G, ps: List<&2, Pat>, rs: List<&2, U32>, +env: Env()) -> Env():
   match ps rs:
     case p <> pt +r <> rt:
@@ -10282,7 +10052,6 @@ def K.par(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, +ps: List<&2, Pat>, +vs:
     K.start(lbody)
     K.stmt(g, K.par.env(g, ps, rs, env), self, tgt, body)
 
-@unsafe
 def K.let.par(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, ps: List<&2, Pat>, v: Expr, body: Expr) -> KM(Unit):
   match v:
     case ECtor{n, vs}:
@@ -10290,7 +10059,6 @@ def K.let.par(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, ps: List<&2, Pat>, v
     case other:
       K.par(g, env, self, tgt, ps, [other], body)
 
-@unsafe
 def K.let.ctor(
   +g: G, +env: Env(), +self: KSelf, +tgt: KTgt, name: String, ps: List<&2, Pat>, v: Expr, body: Expr, par: Bool
 ) -> KM(Unit):
@@ -10300,7 +10068,6 @@ def K.let.ctor(
     case False{}:
       K.let.pat(g, env, self, tgt, PCtor{name, ps}, v, body)
 
-@unsafe
 def K.let(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, p: Pat, v: Expr, body: Expr) -> KM(Unit):
   match p:
     case PVar{+x}:
@@ -10320,7 +10087,6 @@ law K.cases:
   for cases: List<&2, Expr>
   KM(List<&2, KCase>)
 
-@unsafe
 def K.cases(g, env, cs, cases):
   match cases:
     case Nil{}:
@@ -10359,7 +10125,6 @@ def K.doc_strs(ds: List<&2, Doc>) -> List<&2, String>:
     case d <> t:
       Doc.flat(d) <> K.doc_strs(t)
 
-@unsafe
 def K.match(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, scrs: List<&2, Expr>, cases: List<&2, Expr>) -> KM(Unit):
   do KM<Unit>:
     ds : List<&2, Doc> <- K.exprs(g, env, scrs)
@@ -10367,7 +10132,6 @@ def K.match(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, scrs: List<&2, Expr>, 
     K.put(K.dispatch(cs))
     K.bodies(g, self, tgt, cs)
 
-@unsafe
 def K.stmt(g, env, self, tgt, e):
   match e:
     case ELet{p, v, body}:
@@ -10609,7 +10373,6 @@ def KSelf.seq(s: KSelf) -> Bool:
   KSelf{n, e, m} = s
   U32.is_eq(e, 1)
 
-@unsafe
 def K.fl.var(+g: G, +self: KSelf, +bound: List<&2, String>, +x: String) -> KM(Bool):
   KM.if(Bool, Bool.or(Str.has(bound, x), Str.eq(x, "_")), KM.pure(Bool, True{}), K.fl.global(g, self, x, G.def(g, x)))
 
@@ -10624,7 +10387,6 @@ def K.fl.call.def(+g: G, +self: KSelf, +bound: List<&2, String>, +f: String, kep
         a : Bool <- K.isflat(g, f)
         K.fl.and(a, K.fl.exprs(g, self, bound, kept))
 
-@unsafe
 def K.fl.call.kind(
   kind: Nat, extra: List<&2, Expr>, full: Bool, +g: G, +self: KSelf, +bound: List<&2, String>, +f: String,
   kept: List<&2, Expr>, tail: Bool
@@ -10639,20 +10401,17 @@ def K.fl.call.kind(
     case k e fl:
       KM.pure(Bool, False{})
 
-@unsafe
 def K.fl.call.split(+g: G, +self: KSelf, +bound: List<&2, String>, +f: String, kind: Nat, s: Split, +tail: Bool) ->
   KM(Bool):
   Split{kept, all, extra, full} = s
   K.fl.call.kind(kind, extra, full, g, self, bound, f, kept, tail)
 
-@unsafe
 def K.fl.call.global(+g: G, +self: KSelf, +bound: List<&2, String>, +f: String, args: List<&2, Expr>, tail: Bool,
   info: DInfo) -> KM(Bool):
   DInfo{kind, mask} = info
   K.fl.call.split(g, self, bound, f, U32.to_nat(kind), Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}),
     tail)
 
-@unsafe
 def K.fl.call(+g: G, +self: KSelf, +bound: List<&2, String>, +f: String, args: List<&2, Expr>, tail: Bool) ->
   KM(Bool):
   KM.if(Bool, Bool.or(Str.has(bound, f), Str.eq(f, "%gpu")), KM.pure(Bool, False{}),
@@ -10708,11 +10467,9 @@ def K.fl.let.go(par: Bool, +g: G, +self: KSelf, +bound: List<&2, String>, p: Pat
         a : Bool <- K.fl.expr(g, self, bound, v, Bool.and(Bool.and(KSelf.seq(self), tail), K.fl.direct(self, bound, v)))
         K.fl.and(a, K.fl.expr(g, self, Pat.vars(p, bound), b, tail))
 
-@unsafe
 def K.fl.let(+g: G, +self: KSelf, +bound: List<&2, String>, +p: Pat, v: Expr, b: Expr, +tail: Bool) -> KM(Bool):
   K.fl.let.go(K.pat.is_par(p), g, self, bound, p, v, b, tail)
 
-@unsafe
 def K.fl.expr(g, self, bound, e, tail):
   match e:
     case EVar{+x}:
@@ -10765,7 +10522,6 @@ def K.isflat.memo(+g: G, +name: String, m: Maybe<&2, String>) -> KM(Bool):
         K.memo.put("%flat " ++ name, Bool.pick(String, ok, "1", "0"))
         return ok
 
-@unsafe
 def K.isflat(g, name):
   do KM<Bool>:
     m : Maybe<&2, String> <- K.memo.get("%flat " ++ name)
@@ -10829,7 +10585,6 @@ def KX.ctor.kind(+tag: U32, kind: Nat, ds: List<&2, Doc>) -> KM(Doc):
     case 5n+p:
       KM.pure(Doc, DStr{"k_arr(c)"})
 
-@unsafe
 def KX.ctor(+g: G, +env: Env(), name: String, info: Maybe<&2, CInfo>, args: List<&2, Expr>) -> KM(Doc):
   match info:
     case None{}:
@@ -10850,14 +10605,12 @@ def KX.call.kind(+g: G, +name: String, kind: Nat, ks: List<&2, Doc>) -> KM(Doc):
     case other:
       K.call.flat(g, name, ks, True{})
 
-@unsafe
 def KX.call.split(+g: G, +env: Env(), +name: String, kind: Nat, s: Split) -> KM(Doc):
   Split{kept, all, extra, full} = s
   do KM<Doc>:
     ks : List<&2, Doc> <- KX.exprs(g, env, kept)
     KX.call.kind(g, name, kind, ks)
 
-@unsafe
 def KX.call.def(+g: G, +env: Env(), +name: String, info: DInfo, args: List<&2, Expr>) -> KM(Doc):
   DInfo{kind, mask} = info
   KX.call.split(g, env, name, U32.to_nat(kind), Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}))
@@ -10880,7 +10633,6 @@ def KX.block(+g: G, +env: Env(), e: Expr) -> KM(Doc):
     b : Doc <- KX.stmt(g, env, KSelf.none(), KSet{k, 0}, e)
     return Doc.list([DStr{"({ KW " ++ KX.v(k) ++ ";\n"}, b, DStr{KX.v(k) ++ "; })"}])
 
-@unsafe
 def KX.expr(g, env, e):
   match e:
     case EVar{+name}:
@@ -10924,7 +10676,6 @@ def KX.scrs.put(+c: String, d: Doc, r: List<&2, String> & Doc) -> List<&2, Strin
   (c <> cs, Doc.list([DStr{"KW " ++ c ++ " = "}, d, DStr{";\n"}, code]))
 
 # Scrutinees and let values go to fresh locals.
-@unsafe
 def KX.scrs(+g: G, +env: Env(), xs: List<&2, Expr>) -> KM(List<&2, String> & Doc):
   match xs:
     case Nil{}:
@@ -10960,7 +10711,6 @@ def KX.cases(g, env, self, tgt, cs, cases):
     case other <> t:
       KX.cases(g, env, self, tgt, cs, t)
 
-@unsafe
 def KX.match.go(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, r: List<&2, String> & Doc, cases: List<&2, Expr>) ->
   KM(Doc):
   (cs, code) = r
@@ -10968,7 +10718,6 @@ def KX.match.go(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, r: List<&2, String
     b : Doc <- KX.cases(g, env, self, tgt, cs, cases)
     return DCat{code, b}
 
-@unsafe
 def KX.match(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, scrs: List<&2, Expr>, cases: List<&2, Expr>) -> KM(Doc):
   do KM<Doc>:
     r : List<&2, String> & Doc <- KX.scrs(g, env, scrs)
@@ -10993,7 +10742,6 @@ def KX.tail.set(+k: U32, +n: Nat, +i: U32) -> String:
 # A self tail call: the new arguments, then back to the top of the loop.
 # (No error check in the loop: reading c->err there keeps the lane's context
 # in memory, 3x slower. An error still stops the call when it returns.)
-@unsafe
 def KX.tail(+g: G, +env: Env(), s: Split) -> KM(Doc):
   Split{kept, all, extra, full} = s
   do KM<Doc>:
@@ -11002,7 +10750,6 @@ def KX.tail(+g: G, +env: Env(), s: Split) -> KM(Doc):
     return Doc.list([DStr{"{ "}, KX.temps(ds, k, 0), DStr{KX.tail.set(k, U32.to_nat(Gen.len(ds)), 0) ++
       "continue; }\n"}])
 
-@unsafe
 def KX.stmt.call(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, +name: String, args: List<&2, Expr>, tail: Bool) ->
   KM(Doc):
   match tail:
@@ -11013,7 +10760,6 @@ def KX.stmt.call(+g: G, +env: Env(), +self: KSelf, +tgt: KTgt, +name: String, ar
         d : Doc <- KX.expr(g, env, ECall{EVar{name}, args})
         return KX.ret(tgt, d)
 
-@unsafe
 def KX.stmt(g, env, self, tgt, e):
   match e:
     case ELet{p, v, body}:
@@ -11052,7 +10798,6 @@ def KQ.live.if(skip: Bool, +x: String, c: String, t: Env(), +seen: List<&2, Stri
       Bind{x, c} <> KQ.live(t, x <> seen)
 
 # The bindings to save at a call: the first of each name, not erased.
-@unsafe
 def KQ.live(env, seen):
   match env:
     case Nil{}:
@@ -11146,11 +10891,9 @@ def KQ.call.go(+g: G, +env: Env(), +self: KSelf, +x: String, s: Split, +body: Ex
     K.restore(saved)
 
 # x = f(args) at statement level, f the def itself: save, call, resume.
-@unsafe
 def KQ.call(+g: G, +env: Env(), +self: KSelf, +x: String, args: List<&2, Expr>, body: Expr) -> KM(Unit):
   KQ.call.go(g, env, self, x, Gen.split(KSelf.mask(self), args, Split{Nil{}, Nil{}, Nil{}, False{}}), body)
 
-@unsafe
 def KQ.tail.go(+g: G, +env: Env(), +self: KSelf, s: Split) -> KM(Unit):
   Split{kept, all, extra, full} = s
   do KM<Unit>:
@@ -11162,12 +10905,10 @@ def KQ.tail.go(+g: G, +env: Env(), +self: KSelf, s: Split) -> KM(Unit):
       "if (c->err) { *ok = false; return 0; }\npc = " ++ U32.show(KSelf.entry(self)) ++ "; break; }\n"}]))
 
 # A tail call of the def itself: new arguments, back to the entry.
-@unsafe
 def KQ.tail(+g: G, +env: Env(), +self: KSelf, args: List<&2, Expr>) -> KM(Unit):
   KQ.tail.go(g, env, self, Gen.split(KSelf.mask(self), args, Split{Nil{}, Nil{}, Nil{}, False{}}))
 
 # A value to return: to the caller's resume label, or out of KQ_name.
-@unsafe
 def KQ.ret(+g: G, +env: Env(), e: Expr) -> KM(Unit):
   do KM<Unit>:
     d : Doc <- KX.expr(g, env, e)
@@ -11188,14 +10929,12 @@ def KQ.cases(+g: G, +env: Env(), +self: KSelf, +cs: List<&2, String>, cases: Lis
     case other <> t:
       KQ.cases(g, env, self, cs, t)
 
-@unsafe
 def KQ.match.go(+g: G, +env: Env(), +self: KSelf, r: List<&2, String> & Doc, cases: List<&2, Expr>) -> KM(Unit):
   (cs, code) = r
   do KM<Unit>:
     K.put(code)
     KQ.cases(g, env, self, cs, cases)
 
-@unsafe
 def KQ.match(+g: G, +env: Env(), +self: KSelf, scrs: List<&2, Expr>, cases: List<&2, Expr>) -> KM(Unit):
   do KM<Unit>:
     r : List<&2, String> & Doc <- KX.scrs(g, env, scrs)
@@ -11262,7 +11001,6 @@ def KQ.let(+g: G, +env: Env(), +self: KSelf, p: Pat, +v: Expr, +body: Expr) -> K
     case other:
       KQ.let.pat(g, env, self, other, v, body, K.fl.direct(self, Nil{}, v))
 
-@unsafe
 def KQ.stmt(g, env, self, e):
   match e:
     case ELet{p, v, body}:
@@ -11301,7 +11039,6 @@ def K.all.list(+g: G, fuel: Nat, todo: List<&2, String>) -> KM(Unit):
         K.all.list(g, fuel, List.append(&2, String, t, more))
 
 # Compiles queued functions until none is left.
-@unsafe
 def K.all(g, fuel):
   match fuel:
     case 0n:
@@ -11323,7 +11060,6 @@ def K.frame_table.go(+frames: List<&2, Bind>, +l: U32, +n: U32, done: Bool) -> S
     case False{}:
       K.frame_of(frames, l) ++ "u, " ++ K.frame_table(frames, U32.inc(l), n)
 
-@unsafe
 def K.frame_table(frames, l, n):
   K.frame_table.go(frames, l, n, U32.is_ge(l, n))
 
@@ -11371,7 +11107,6 @@ def J.hex.more(+n: U32, acc: String, last: Bool) -> String:
     case False{}:
       J.hex.go((n >> 4n : U32), acc)
 
-@unsafe
 def J.hex.go(n, acc):
   +d = (n .&. 15 : U32)
   +c = Str.chr(Bool.pick(U32, U32.is_lt(d, 10), (48 + d : U32), (87 + d : U32)))
@@ -11448,11 +11183,9 @@ def J.pat.bits.go(+j: JG, k: Nat, p: Pat, +path: String, r: PatR) -> PatR:
     case 2n+q:
       J.pat(j, p, path, r)
 
-@unsafe
 def J.pat.bits(j, p, path, r):
   J.pat.bits.go(j, Pat.wordk(p), p, path, r)
 
-@unsafe
 def J.pat.bits.one(+j: JG, args: List<&2, Pat>, +path: String, r: PatR) -> PatR:
   match args:
     case a <> Nil{}:
@@ -11460,7 +11193,6 @@ def J.pat.bits.one(+j: JG, args: List<&2, Pat>, +path: String, r: PatR) -> PatR:
     case other:
       r
 
-@unsafe
 def J.pat.arr(leaf: Bool, +j: JG, args: List<&2, Pat>, +path: String, r: PatR) -> PatR:
   match leaf:
     case True{}:
@@ -11469,7 +11201,6 @@ def J.pat.arr(leaf: Bool, +j: JG, args: List<&2, Pat>, +path: String, r: PatR) -
       J.pat.fields(j, args, ["array_half(" ++ path ++ ", 0)", "array_half(" ++ path ++ ", 1)"],
         Gen.pat.cond("(" ++ path ++ ").length !== 1", r))
 
-@unsafe
 def J.pat.kind(
   +j: JG, kind: Nat, +name: String, args: List<&2, Pat>, +path: String, fs: List<&2, String>, single: Bool, +r: PatR
 ) -> PatR:
@@ -11494,7 +11225,6 @@ def J.pat.kind(
     case other:
       J.pat.fields(j, args, J.paths(path, fs), Gen.pat.tag(single, "(" ++ path ++ ").$ === \"" ++ name ++ "\"", r))
 
-@unsafe
 def J.pat.ctor(+j: JG, info: Maybe<&2, JCI>, +name: String, args: List<&2, Pat>, +path: String, r: PatR) -> PatR:
   match info:
     case None{}:
@@ -11579,11 +11309,9 @@ def J.bits.go(+j: JG, +env: Env(), k: Nat, e: Expr) -> Gen(Doc):
     case 2n+q:
       J.expr(j, env, e)
 
-@unsafe
 def J.bits(j, env, e):
   J.bits.go(j, env, Expr.wordk(e), e)
 
-@unsafe
 def J.bits.args(+j: JG, +env: Env(), w: Nat, args: List<&2, Expr>) -> Gen(List<&2, Doc>):
   match w args:
     case 2n+p xs:
@@ -11595,7 +11323,6 @@ def J.bits.args(+j: JG, +env: Env(), w: Nat, args: List<&2, Expr>) -> Gen(List<&
     case k xs:
       J.exprs(j, env, xs)
 
-@unsafe
 def J.ctor.build(+j: JG, +env: Env(), +name: String, info: Maybe<&2, JCI>, args: List<&2, Expr>) -> Gen(Doc):
   match info:
     case None{}:
@@ -11630,7 +11357,6 @@ def J.flt.of(+s: String, m: Maybe<&2, F32>) -> String:
 def J.flt(+s: String) -> String:
   J.flt.of(s, F32.read(s))
 
-@unsafe
 def J.pat(j, p, path, r):
   match p:
     case PVar{x}:
@@ -11647,7 +11373,6 @@ def J.pat(j, p, path, r):
     case PFlt{s}:
       Gen.pat.cond("(" ++ path ++ ") === " ++ J.flt(s), r)
 
-@unsafe
 def J.pats(+j: JG, ps: List<&2, Pat>, paths: List<&2, String>, r: PatR) -> PatR:
   match ps paths:
     case p <> pt c <> ct:
@@ -11702,7 +11427,6 @@ def J.var(+j: JG, +env: Env(), +name: String) -> Gen(Doc):
 def J.nulls(all: List<&2, Expr>) -> List<&2, Expr>:
   all
 
-@unsafe
 def J.call.full(
   +j: JG, +env: Env(), +name: String, kept: List<&2, Expr>, all: List<&2, Expr>, extra: List<&2, Expr>, full: Bool
 ) -> Gen(Doc):
@@ -11717,12 +11441,10 @@ def J.call.full(
         as : List<&2, Doc> <- J.exprs(j, env, all)
         return J.apply(as, DStr{Gen.w(name)})
 
-@unsafe
 def J.call.split(+j: JG, +env: Env(), +name: String, s: Split) -> Gen(Doc):
   Split{kept, all, extra, full} = s
   J.call.full(j, env, name, kept, all, extra, full)
 
-@unsafe
 def J.call.kind(+j: JG, +env: Env(), +name: String, kind: Nat, s: Split) -> Gen(Doc):
   match kind:
     case 3n:
@@ -11736,7 +11458,6 @@ def J.call.kind(+j: JG, +env: Env(), +name: String, kind: Nat, s: Split) -> Gen(
         Gen.ref(name)
         J.call.split(j, env, name, s)
 
-@unsafe
 def J.call.def(+j: JG, +env: Env(), +name: String, info: DInfo, args: List<&2, Expr>) -> Gen(Doc):
   DInfo{kind, +mask} = info
   J.call.kind(j, env, name, U32.to_nat(kind), Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}))
@@ -11748,7 +11469,6 @@ def J.call.local(+j: JG, +env: Env(), f: Expr, args: List<&2, Expr>) -> Gen(Doc)
     xs : List<&2, Doc> <- J.exprs(j, env, args)
     return J.apply(xs, Doc.list([DStr{"("}, fd, DStr{")"}]))
 
-@unsafe
 def J.call.var(+j: JG, +env: Env(), +name: String, args: List<&2, Expr>, local: Bool) -> Gen(Doc):
   match local:
     case True{}:
@@ -11772,7 +11492,6 @@ def J.call.bang(+j: JG, +env: Env(), args: List<&2, Expr>) -> Gen(Doc):
     case Nil{}:
       Gen.pure(Doc, DStr{"0"})
 
-@unsafe
 def J.call.name(+j: JG, +env: Env(), +name: String, args: List<&2, Expr>, bang: Bool) -> Gen(Doc):
   match bang:
     case True{}:
@@ -11780,7 +11499,6 @@ def J.call.name(+j: JG, +env: Env(), +name: String, args: List<&2, Expr>, bang: 
     case False{}:
       J.call.var(j, env, name, args, Env.has(env, name))
 
-@unsafe
 def J.call(j, env, f, args):
   match f:
     case EVar{+name}:
@@ -11868,19 +11586,16 @@ def J.tail.temps(ds: List<&2, Doc>, +i: U32) -> Doc:
     case d <> t:
       Doc.list([DStr{"const t" ++ U32.show(i) ++ " = "}, d, DStr{"; "}, J.tail.temps(t, U32.inc(i))])
 
-@unsafe
 def J.tail(+j: JG, +env: Env(), cps: List<&2, String>, s: Split) -> Gen(Doc):
   Split{kept, all, extra, full} = s
   do Gen<Doc>:
     ds : List<&2, Doc> <- J.exprs(j, env, kept)
     return Doc.list([DStr{"{ "}, J.tail.temps(ds, 0), Gen.tail.assign(cps, 0), DStr{"continue top; }\n"}])
 
-@unsafe
 def J.tail.self(+j: JG, +env: Env(), self: Self, args: List<&2, Expr>) -> Gen(Doc):
   Self{sn, +mask, cps} = self
   J.tail(j, env, cps, Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}}))
 
-@unsafe
 def J.stmt.call(
   +j: JG, +env: Env(), +self: Self, +tgt: Tgt, +name: String, args: List<&2, Expr>, tail: Bool
 ) -> Gen(Doc):
@@ -11929,7 +11644,6 @@ def J.let.par(+j: JG, +env: Env(), +self: Self, +tgt: Tgt, ps: List<&2, Pat>, v:
     case pl other:
       J.stmt(j, env, self, tgt, body)
 
-@unsafe
 def J.let.ctor(
   +j: JG, +env: Env(), +self: Self, +tgt: Tgt, name: String, ps: List<&2, Pat>, v: Expr, body: Expr, par: Bool
 ) -> Gen(Doc):
@@ -11939,7 +11653,6 @@ def J.let.ctor(
     case False{}:
       J.let.pat(j, env, self, tgt, PCtor{name, ps}, v, body)
 
-@unsafe
 def J.let(+j: JG, +env: Env(), +self: Self, +tgt: Tgt, p: Pat, v: Expr, body: Expr) -> Gen(Doc):
   match p:
     case PVar{+x}:
@@ -11990,7 +11703,6 @@ def J.scrs.put(+c: String, d: Doc, r: List<&2, String> & Doc) -> List<&2, String
   (cs, code) = r
   (c <> cs, Doc.list([DStr{"const " ++ c ++ " = "}, d, DStr{";\n"}, code]))
 
-@unsafe
 def J.scrs(+j: JG, +env: Env(), xs: List<&2, Expr>) -> Gen(List<&2, String> & Doc):
   match xs:
     case Nil{}:
@@ -12003,7 +11715,6 @@ def J.scrs(+j: JG, +env: Env(), xs: List<&2, Expr>) -> Gen(List<&2, String> & Do
         r : List<&2, String> & Doc <- J.scrs(j, env, t)
         return J.scrs.put(c, d, r)
 
-@unsafe
 def J.match.go(+j: JG, +env: Env(), +self: Self, +tgt: Tgt, cases: List<&2, Expr>, r: List<&2, String> & Doc) ->
   Gen(Doc):
   (cs, decls) = r
@@ -12011,13 +11722,11 @@ def J.match.go(+j: JG, +env: Env(), +self: Self, +tgt: Tgt, cases: List<&2, Expr
     body : Doc <- J.cases(j, env, self, tgt, cs, cases)
     return Doc.list([decls, body])
 
-@unsafe
 def J.match(+j: JG, +env: Env(), +self: Self, +tgt: Tgt, scrs: List<&2, Expr>, cases: List<&2, Expr>) -> Gen(Doc):
   do Gen<Doc>:
     r : List<&2, String> & Doc <- J.scrs(j, env, scrs)
     J.match.go(j, env, self, tgt, cases, r)
 
-@unsafe
 def J.stmt(j, env, self, tgt, e):
   match e:
     case ELet{p, v, body}:
@@ -12144,7 +11853,6 @@ def J.eff.nulls.go(s: String, b: Bool) -> String:
     case False{}:
       ""
 
-@unsafe
 def J.eff.nulls(s):
   J.eff.nulls.go(s, String.starts_with(s, "@-"))
 
@@ -12180,7 +11888,6 @@ def J.eff.args(ps, kept):
     case +p <> t:
       J.eff.arg(p, t, kept, G.keep(p))
 
-@unsafe
 def J.eff.live(+ty: String, t: List<&2, Param>, kept: List<&2, String>) -> List<&2, String>:
   match kept:
     case Nil{}:
@@ -12188,7 +11895,6 @@ def J.eff.live(+ty: String, t: List<&2, Param>, kept: List<&2, String>) -> List<
     case h <> kt:
       J.eff.wrap(ty, h) <> J.eff.args(t, kt)
 
-@unsafe
 def J.eff.arg(p: Param, t: List<&2, Param>, kept: List<&2, String>, keep: Bool) -> List<&2, String>:
   Param{n, +m, +ty} = p
   match keep:
@@ -12288,12 +11994,10 @@ def J.all.go(+j: JG, +h: String, t: List<&2, String>, done: Set(), seen: Bool) -
         refs : List<&2, String> <- Gen.take_refs()
         J.all(j, List.append(&2, String, refs, t), Set.add(done, h))
 
-@unsafe
 def J.all.seen(+j: JG, +h: String, t: List<&2, String>, r: Set() & Bool) -> Gen(Unit):
   (done, seen) = r
   J.all.go(j, h, t, done, seen)
 
-@unsafe
 def J.all(j, queue, done):
   match queue:
     case Nil{}:
@@ -12328,14 +12032,12 @@ def J.printer.fields(+j: JG, +sub: List<&2, TB>, fs: List<&2, Field>, +path: Str
         return Doc.list([DStr{Bool.pick(String, U32.is_zero(i), "", "s += \", \";\n") ++ "s += " ++ f ++ "((" ++ path ++
           ")" ++ J.acc(n) ++ ");\n"}, more])
 
-@unsafe
 def J.printer.ctor(+j: JG, +sub: List<&2, TB>, +name: String, fields: List<&2, Field>, +single: Bool) -> Gen(Doc):
   do Gen<Doc>:
     fs : Doc <- J.printer.fields(j, sub, fields, "v", 0)
     return Doc.list([DStr{Bool.pick(String, single, "if (true)", "if (v.$ === \"" ++ name ++ "\")") ++
       " { let s = \"" ++ name ++ "{\";\n"}, fs, DStr{"return s + \"}\"; }\n"}])
 
-@unsafe
 def J.printer.ctors(+j: JG, +sub: List<&2, TB>, cs: List<&2, Ctor>, +single: Bool) -> Gen(Doc):
   match cs:
     case Nil{}:
@@ -12346,7 +12048,6 @@ def J.printer.ctors(+j: JG, +sub: List<&2, TB>, cs: List<&2, Ctor>, +single: Boo
         rest : Doc <- J.printer.ctors(j, sub, t, single)
         return Doc.list([one, rest])
 
-@unsafe
 def J.printer.adt(+j: JG, +ty: Expr, d: Decl) -> Gen(Doc):
   match d:
     case DType{name, ps, +cs}:
@@ -12391,12 +12092,10 @@ def J.printer.head(+j: JG, +ty: Expr, k: Nat) -> Gen(Doc):
     case 11n+p:
       J.printer.adt(j, ty, G.body(JG.g(j), "%" ++ Ty.head(ty)))
 
-@unsafe
 def J.printer.body(+j: JG, +ty: Expr, +h: String) -> Gen(Doc):
   J.printer.head(j, ty, P.which(Ty.alias(h), ["U32", "Nat", "F32", "Char", "String", "List", "&", "->", "Bool",
     "Array", "=="]))
 
-@unsafe
 def J.printer.memo(+j: JG, +ty: Expr, +key: String, m: Maybe<&2, String>) -> Gen(String):
   match m:
     case Some{f}:
@@ -12411,7 +12110,6 @@ def J.printer.memo(+j: JG, +ty: Expr, +key: String, m: Maybe<&2, String>) -> Gen
         return f
 
 # The name of a JS function that prints values of a type.
-@unsafe
 def J.printer(j, ty0):
   +ty = Ty.norm(JG.g(j), ty0, 16n)
   +key = Expr.show(ty)

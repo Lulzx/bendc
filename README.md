@@ -442,10 +442,11 @@ Bend 2 is a proof language, and its checker is strict about code that runs. It s
 - **Affine variables.** A variable is used at most once unless it is marked `+`, which requires a
   copyable `Data` type. Every AST type is `Data`, and `+` appears where values are reused.
 - **Totality.** A recursive call must shrink its first changing argument. The compiler's recursion
-  over tokens isn't structural, so those defs are `@unsafe`. Many of the 958 `@unsafe` defs across
+  over tokens isn't structural, so those defs are `@unsafe`. Many of the 436 `@unsafe` defs across
   the two files are there for the rule above rather than for their own recursion: a def that calls a `law`
   before the law is filled must be `@unsafe`, so a mutually recursive walk over the AST is unsafe
-  even though it is structural.
+  even though it is structural. `tools/unsafe_min.py` keeps a file's markers minimal: it strips
+  them all and puts back one for each def the checker rejects.
 
 The compiler compiles every one of these patterns in its own source. It handles its own laws, its
 own `@unsafe` defs, and its own user-defined monads (`Parser`, `Gen`), which is what makes the
@@ -518,6 +519,7 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`bootstrap.sh`](bootstrap.sh), [`run_tests.sh`](run_tests.sh), [`Makefile`](Makefile) | bootstrap and fixpoint check, test runner, build entry points |
 | [`tools/ddc.sh`](tools/ddc.sh) | diverse double-compiling: the seed, reproduced by two toolchains that share no C compiler |
 | [`tools/tcc.sh`](tools/tcc.sh) | the seed built by tcc reproduces itself, and the tests pass with tcc |
+| [`tools/unsafe_min.py`](tools/unsafe_min.py) | dev tool: drops the `@unsafe` markers the checker does not need |
 | [`tools/order.py`](tools/order.py) | dev tool: section-aware dependency sort, with automatic `law` forward declarations for cycles |
 | [`tools/upstream.py`](tools/upstream.py) | dev tool: runs the official repository's tests through a `bendc` (see [Testing](#testing)) |
 | [`tools/embed.py`](tools/embed.py) | dev tool: embeds `rt/bendrt.js`, `rt/chan.c` and `rt/gpu.h` (`rt/rtjs.bend`, `rt/rtchan.bend`, `rt/gpu_src.h`) |
