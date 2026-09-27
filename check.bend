@@ -2444,7 +2444,8 @@ def rows.ctr(rows: List<&2, Body>) -> Maybe<&2, Pt>:
     case r <> rest:
       rows.ctr(rest)
 
-# A body as a term (the official match_flatten); the selector says which step runs.
+# A body as a term (the official match_flatten): one def, the selector names
+# the step and holds its arguments.
 type FlatK is Data:
   FkFlattenLet{ws: List<&2, Pt>, q: Q, vs: List<&2, Tm>, f: Body, vars: List<&2, Pt>}
   FkMfVars{e: Tm, et: List<&2, Tm>, rows: List<&2, Body>, s: Sp, vars: List<&2, Pt>}
@@ -2474,7 +2475,8 @@ def P.flatten.go(n: Nat, sel: FlatK) -> P(Tm):
             case Nil{}:
               P.mf.bad(Tm.strip_subs(e), s)
             case +x <> +xt:
-              P.flatten.go(fu, FkMfCol{e, et, rows, s, x, xt, vars.find(x <> xt, Maybe.default(&2, U32, Tm.var_i(e), 4294967295))})
+              P.flatten.go(fu, FkMfCol{e, et, rows, s, x, xt, vars.find(x <> xt, Maybe.default(&2, U32, Tm.var_i(e),
+                4294967295))})
         case FkMatchFlatten{es, rows, +s, vars}:
           match es rows:
             case Nil{} Row{ps, f} <> t:
@@ -2488,7 +2490,8 @@ def P.flatten.go(n: Nat, sel: FlatK) -> P(Tm):
         case FkFlattenLocal{ks, q, +vs, f, vars}:
           match ks:
             case PCtr{k, xs, s} <> Nil{}:
-              P.flatten.go(fu, FkMatchFlatten{vs, [Row{[PCtr{k, xs, s}], f}], Tm.span(Lst.head(Tm, Efq{NoSp{}}, vs)), vars})
+              P.flatten.go(fu, FkMatchFlatten{vs, [Row{[PCtr{k, xs, s}], f}], Tm.span(Lst.head(Tm, Efq{NoSp{}},
+                vs)), vars})
             case other:
               P.flatten.go(fu, FkFlattenLet{other, q, vs, f, vars})
         case FkFlatten{b, vars}:
@@ -2533,18 +2536,22 @@ def P.flatten.go(n: Nat, sel: FlatK) -> P(Tm):
             case None{} False{}:
               P.flatten.go(fu, FkMfVarcol{e, et, rows, s, x, xt, w})
             case m b:
-              P.if(Tm, Pt.same(w, x), P.flatten.go(fu, FkMfCtr{e, et, rows, s, x, xt, m}), P.flatten.go(fu, FkMfSkip{e, et, rows, s, x, xt}))
+              P.if(Tm, Pt.same(w, x), P.flatten.go(fu, FkMfCtr{e, et, rows, s, x, xt, m}), P.flatten.go(fu,
+                FkMfSkip{e, et, rows, s, x, xt}))
         case FkMfCol{+e, et, +rows, +s, +x, xt, v}:
           match v:
             case Some{+w}:
-              P.flatten.go(fu, FkMfColVar{e, et, rows, s, x, xt, w, rows.ctr(rows), Nat.is_eq(List.length(&2, Body, rows), 0n)})
+              P.flatten.go(fu, FkMfColVar{e, et, rows, s, x, xt, w, rows.ctr(rows), Nat.is_eq(List.length(&2, Body,
+                rows), 0n)})
             case None{}:
               P.flatten.go(fu, FkMfSkip{e, et, rows, s, x, xt})
 
 def P.flatten(b: Body, vars: List<&2, Pt>) -> P(Tm):
   P.flatten.go(Fuel.max(), FkFlatten{b, vars})
 
-# The term parser: one def for the official's mutually recursive parsers, the selector says which runs (the old def names are wrappers below).
+# The parsers of terms, bodies and statements (mutually recursive in the
+# official) as one def: the selector names the parser and holds its
+# arguments, and the fuel runs out only on input nested past any real file.
 type TermK is Data:
   TkTerm0{}
   TkBraceGo{beg: U32, a: Tm, eq: Bool, ne: Bool}
@@ -2928,7 +2935,8 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
               P.if(Tm, Str.has(KEYWORDS(), k), P.fail.at(Tm, "a term (the keyword '" ++ k ++ "' cannot head one)", beg),
                 P.term.go(fu, TkBaseName{k, beg}))
         case TkBaseWord{+k, +beg}:
-          P.term.go(fu, TkBaseWordGo{k, beg, Str.index(["Type", "Data", "Quant", "Kind", "do", "match", "case", "return"],
+          P.term.go(fu, TkBaseWordGo{k, beg, Str.index(["Type", "Data", "Quant", "Kind", "do", "match", "case",
+            "return"],
             k, 0n)})
         case TkPlus{+beg}:
           do P<Tm>:
@@ -3017,7 +3025,8 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
             P.bump()
             P.term.go(fu, TkOps{Tm.bang(h), lvl})
         case TkCallBang{+h, +lvl}:
-          P.if(Tm, Tm.is_ref(h), P.term.go(fu, TkCallBangGo{h, lvl}), P.fail(Tm, "a named def before ! (only f!(..) offloads)"))
+          P.if(Tm, Tm.is_ref(h), P.term.go(fu, TkCallBangGo{h, lvl}), P.fail(Tm,
+            "a named def before ! (only f!(..) offloads)"))
         case TkCallArgs{+h, +lvl}:
           do P<Tm>:
             P.bump()
@@ -3047,7 +3056,8 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
             P.skip()
             +nl : Bool <- P.nl()
             set : Bool <- P.if(Bool, nl, P.pure(Bool, False{}), P.take("<-"))
-            P.if(Tm, set, P.term.go(fu, TkIndexSet{out, ix, s2, lvl}), P.term.go(fu, TkOps{TApp{TApp{TApp{Ref{"Array.get", s2, False{}},
+            P.if(Tm, set, P.term.go(fu, TkIndexSet{out, ix, s2, lvl}), P.term.go(fu,
+              TkOps{TApp{TApp{TApp{Ref{"Array.get", s2, False{}},
               Ref{"U32", s2, False{}}, s2}, out, s2}, ix, s2}, lvl}))
         case TkBlock{}:
           do P<Tm>:
@@ -3089,7 +3099,8 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
             case None{}:
               P.pure(Tm, out)
             case Some{Op{+sym, +prec, +right, +name}}:
-              P.if(Tm, Bool.or(U32.is_lt(prec, lvl), arrow), P.pure(Tm, out), P.term.go(fu, TkInfixGo{out, lvl, sym, prec, right, name}))
+              P.if(Tm, Bool.or(U32.is_lt(prec, lvl), arrow), P.pure(Tm, out), P.term.go(fu, TkInfixGo{out, lvl, sym,
+                prec, right, name}))
         case TkOpsGo{out, +lvl, +r, +prev, k}:
           match k:
             case 0n:
@@ -3138,7 +3149,8 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
           do P<List<&2, Body>>:
             cw : Bool <- P.at_word("case")
             +c : U32 <- P.col()
-            P.if(List<&2, Body>, Bool.and(U32.is_gt(ccol, col), Bool.and(cw, U32.is_ge(c, ccol))), P.term.go(fu, TkRow{col, ccol, n, c}),
+            P.if(List<&2, Body>, Bool.and(U32.is_gt(ccol, col), Bool.and(cw, U32.is_ge(c, ccol))), P.term.go(fu,
+              TkRow{col, ccol, n, c}),
               P.pure(List<&2, Body>, Nil{}))
         case TkBodyMatch{+col, +beg}:
           do P<Body>:
@@ -3167,12 +3179,14 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
             P.term.go(fu, TkBodyLetAnn{beg, ty})
         case TkBodyLet{+col, +beg, +q, +ts, +ty, +vs0}:
           do P<Body>:
-            vs1 : List<&2, Tm> <- P.if(List<&2, Tm>, Lst.empty(&2, Tm, vs0), P.term.go(fu, TkBodyLetEq{beg, ty}), P.pure(List<&2, Tm>, vs0))
+            vs1 : List<&2, Tm> <- P.if(List<&2, Tm>, Lst.empty(&2, Tm, vs0), P.term.go(fu, TkBodyLetEq{beg, ty}),
+              P.pure(List<&2, Tm>, vs0))
             vs : List<&2, Tm> <- P.term.go(fu, TkBodyVals{vs1, List.length(&2, Tm, ts)})
             P.skip()
             semi : Bool <- P.take(";")
             +n0 : Nat <- P.stn()
-            ks : List<&2, Pt> <- P.body.binders(ts, Bool.or(Nat.is_gt(List.length(&2, Tm, ts), 1n), Maybe.is_some(&2, Tm, ty)))
+            ks : List<&2, Pt> <- P.body.binders(ts, Bool.or(Nat.is_gt(List.length(&2, Tm, ts), 1n),
+              Maybe.is_some(&2, Tm, ty)))
             f : Body <- P.term.go(fu, TkBody{col})
             P.close(n0)
             return BLocal{ks, q, vs, f}
@@ -3186,7 +3200,8 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
               do P<Body>:
                 more : Bool <- P.more(bcol)
                 s : Sp <- P.span(beg)
-                P.if(Body, more, P.term.go(fu, TkBodyLet{col, beg, QLone{}, [x], None{}, [t]}), P.pure(Body, BReply{t, s}))
+                P.if(Body, more, P.term.go(fu, TkBodyLet{col, beg, QLone{}, [x], None{}, [t]}), P.pure(Body,
+                  BReply{t, s}))
         case TkBodyReply{+col, +beg, +bcol, +t}:
           P.term.go(fu, TkBodyReplyGo{col, beg, bcol, t, term_write(t)})
         case TkBodyLocalGo{+col, +beg, +bcol, +q, +ts, +ty, eq}:
@@ -3221,7 +3236,8 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
             v : Tm <- P.term.go(fu, TkTerm0{})
             P.term.go(fu, TkBodyVals{List.append(&2, Tm, vs, [v]), n})
         case TkBodyVals{+vs, +n}:
-          P.if(List<&2, Tm>, Nat.is_ge(List.length(&2, Tm, vs), n), P.pure(List<&2, Tm>, vs), P.term.go(fu, TkBodyValsMore{vs, n}))
+          P.if(List<&2, Tm>, Nat.is_ge(List.length(&2, Tm, vs), n), P.pure(List<&2, Tm>, vs), P.term.go(fu,
+            TkBodyValsMore{vs, n}))
         case TkArmsMore{acc, +t, arm}:
           match arm:
             case True{}:
@@ -3248,7 +3264,8 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
           do P<List<&2, Tm> & Tm>:
             P.skip()
             close : Bool <- P.take("}")
-            P.if(List<&2, Tm> & Tm, close, P.pure(List<&2, Tm> & Tm, (acc, Efq{NoSp{}})), P.term.go(fu, TkArmsItem{acc}))
+            P.if(List<&2, Tm> & Tm, close, P.pure(List<&2, Tm> & Tm, (acc, Efq{NoSp{}})), P.term.go(fu,
+              TkArmsItem{acc}))
         case TkRwtNamed{+e0}:
           do P<KT>:
             e : Tm <- P.term.go(fu, TkTerm0{})
@@ -3276,7 +3293,8 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
                 semi : Bool <- P.take(";")
                 f : Tm <- P.term.go(fu, TkBlock{})
                 +s : Sp <- P.span(beg)
-                return Rwt{e, Lam{"_", xi, CSyn{Nil{}, xi, Lam{kk, ei, CSyn{Nil{}, ei, pr}, Tm.span(e0), QUnd{}}}, s, QUnd{}},
+                return Rwt{e, Lam{"_", xi, CSyn{Nil{}, xi, Lam{kk, ei, CSyn{Nil{}, ei, pr}, Tm.span(e0), QUnd{}}},
+                  s, QUnd{}},
                   f, s}
         case TkRwt{+beg}:
           do P<Tm>:
@@ -3348,7 +3366,8 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
                 +c : U32 <- P.peek()
                 s : Sp <- P.span(beg)
                 P.if(Tm, is_name(c), P.fail(Tm, "a numeric literal (NUMBER is U32, NUMBER n is Nat)"),
-                  P.if(Tm, Nat.is_gt(v, 4294967295n), P.fail.at(Tm, "a u32 literal up to 4294967295 (got " ++ ds ++ ")", beg),
+                  P.if(Tm, Nat.is_gt(v, 4294967295n), P.fail.at(Tm,
+                    "a u32 literal up to 4294967295 (got " ++ ds ++ ")", beg),
                     P.pure(Tm, u32_to_term(U32.from_nat(v), s))))
             case 1n:
               do P<Tm>:
@@ -3381,7 +3400,8 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
         case TkCallTmpl{+h, +x, +ts}:
           do P<List<&2, Tm>>:
             tl : Bool <- P.at("~")
-            P.if(List<&2, Tm>, Bool.and(Nat.is_gt(x, 0n), tl), P.term.go(fu, TkCallTmplOne{h, x, ts}), P.pure(List<&2, Tm>, ts))
+            P.if(List<&2, Tm>, Bool.and(Nat.is_gt(x, 0n), tl), P.term.go(fu, TkCallTmplOne{h, x, ts}),
+              P.pure(List<&2, Tm>, ts))
         case TkLtAdtGo{+out, a, +s2, +lvl}:
           do P<Tm>:
             comma : Bool <- P.take(",")
@@ -3436,11 +3456,13 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
             +x : Pt <- P.binder(Bool.pick(Tm, typed, t, Var{"_", 0, NoSp{}}))
             +f : Tm <- P.term.go(fu, TkDoStmt{m, ts, col})
             P.close(n0)
-            P.if(Tm, asg, P.pure(Tm, do.let(x, Ann{v, a, s}, f, s)), P.docall(m, ".bind", ts, [a], [v, do.lam(x, f, s)], s))
+            P.if(Tm, asg, P.pure(Tm, do.let(x, Ann{v, a, s}, f, s)), P.docall(m, ".bind", ts, [a], [v, do.lam(x, f,
+              s)], s))
         case TkDoArrow{+m, +ts, +col, +beg, +t, +a}:
           do P<Tm>:
             arr : Bool <- P.take("<-")
-            P.if(Tm, arr, P.term.go(fu, TkDoBind{m, ts, col, beg, t, a, False{}, False{}, False{}}), P.do_last(m, ts, t))
+            P.if(Tm, arr, P.term.go(fu, TkDoBind{m, ts, col, beg, t, a, False{}, False{}, False{}}), P.do_last(m,
+              ts, t))
         case TkDoStepGo{+m, +ts, +col, +beg, +t, +a, typed, step, +asg}:
           match typed:
             case True{}:
@@ -3448,14 +3470,16 @@ def P.term.go(n: Nat, sel: TermK) -> P(TermK.ty(sel)):
                 P.if(Unit, asg, P.pure(Unit, Unit{}), P.eat("<-"))
                 P.term.go(fu, TkDoBind{m, ts, col, beg, t, a, True{}, asg, False{}})
             case False{}:
-              P.if(Tm, step, P.term.go(fu, TkDoBind{m, ts, col, beg, t, a, False{}, False{}, True{}}), P.term.go(fu, TkDoArrow{m, ts, col, beg, t, a}))
+              P.if(Tm, step, P.term.go(fu, TkDoBind{m, ts, col, beg, t, a, False{}, False{}, True{}}), P.term.go(fu,
+                TkDoArrow{m, ts, col, beg, t, a}))
         case TkDoStep{+m, +ts, +col, +beg}:
           do P<Tm>:
             +t : Tm <- P.term.go(fu, TkTerm0{})
             P.skip()
             +typed : Bool <- P.if(Bool, Tm.is_var(t), P.take(":"), P.pure(Bool, False{}))
             +step : Bool <- P.if(Bool, typed, P.pure(Bool, False{}), P.more(col))
-            +a : Tm <- P.if(Tm, typed, P.term.go(fu, TkTerm{1}), P.if(Tm, step, P.var("Unit", Tm.span(t)), P.pure(Tm, t)))
+            +a : Tm <- P.if(Tm, typed, P.term.go(fu, TkTerm{1}), P.if(Tm, step, P.var("Unit", Tm.span(t)),
+              P.pure(Tm, t)))
             P.skip()
             eqeq : Bool <- P.at("==")
             asg : Bool <- P.if(Bool, Bool.and(typed, Bool.not(eqeq)), P.take("="), P.pure(Bool, False{}))
