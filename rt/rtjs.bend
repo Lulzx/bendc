@@ -89,7 +89,7 @@ def src.p1() -> String:
   "  }\n" ++
   "  return Number(r);\n" ++
   "};\n" ++
-  "const F_U32_dlog2 = (n) => (n <= 1 ? 0 : 31 - Math.clz32(n));\n" ++
+  "const F_U32_dlog2 = (n) => BigInt(n <= 1 ? 0 : 31 - Math.clz32(n));  // a Nat\n" ++
   "const F_U32_dto__f32 = (a) => Math.fround(a);\n" ++
   "\n" ++
   "// Natives: Nat (BigInt, unbounded)\n" ++
@@ -162,7 +162,9 @@ def src.p2() -> String:
   "const F_F32_dceil = (a) => fr(Math.ceil(a));\n" ++
   "const F_F32_dtrunc = (a) => fr(Math.trunc(a));\n" ++
   "const F_F32_dbits = (a) => new Uint32Array(new Float32Array([a]).buffer)[0];\n" ++
-  "const F_F32_dto__u32 = (a) => (a <= 0 || a !== a ? 0 : a >= 4294967295 ? 4294967295 : Math.trunc(a) >>> 0);\n" ++
+  "const f32_of_bits = (u) => new Float32Array(new Uint32Array([u]).buffer)[0];\n" ++
+  "const word_con = (b, r) => ((r << 1) | (b ? 1 : 0)) >>> 0;\n" ++
+  "const F_F32_dto__u32 = (a) => (!(a > 0) || a >= 4294967296 ? 0 : Math.trunc(a) >>> 0);\n" ++
   "\n" ++
   "// The shortest text that reads back.\n" ++
   "function f32_show(x) {\n" ++
@@ -184,11 +186,11 @@ def src.p2() -> String:
   "}\n" ++
   "\n" ++
   "// Printing values (a main that is not IO)\n" ++
-  "// =======================================\n" ++
-  "\n" ++
-  "function show_chr(c, q) {\n"
+  "// =======================================\n"
 
 def src.p3() -> String:
+  "\n" ++
+  "function show_chr(c, q) {\n" ++
   "  const k = { 10: \"n\", 9: \"t\", 13: \"r\", 0: \"0\", 92: \"\\\\\" }[c] ?? (c === q.codePointAt(0) ? q : null);\n" ++
   "  return k !== null ? \"\\\\\" + k\n" ++
   "    : c < 32 || c === 127 || (c >= 0xD800 && c <= 0xDFFF) ? \"\\\\u{\" + c.toString(16) + \"}\"\n" ++
@@ -246,11 +248,11 @@ def src.p3() -> String:
   "\n" ++
   "function io_fail(code) {\n" ++
   "  let text = \"error \" + code;\n" ++
-  "  try {\n" ++
-  "    text = String(io_sys().strerror(code));\n" ++
-  "  } catch (e) {\n"
+  "  try {\n"
 
 def src.p4() -> String:
+  "    text = String(io_sys().strerror(code));\n" ++
+  "  } catch (e) {\n" ++
   "  }\n" ++
   "  return { $: \"Fail\", error: io_tup(code >>> 0, text) };\n" ++
   "}\n" ++
@@ -308,11 +310,11 @@ def src.p4() -> String:
   "  }\n" ++
   "  const now = performance.now();\n" ++
   "  io.waits = io.waits.filter((w) => {\n" ++
-  "    const ready = w.at <= now || (w.fd !== undefined && io.ready !== undefined && io.ready(w));\n" ++
-  "    if (ready) io_push(io_wake, w, false);\n" ++
-  "    return !ready;\n"
+  "    const ready = w.at <= now || (w.fd !== undefined && io.ready !== undefined && io.ready(w));\n"
 
 def src.p5() -> String:
+  "    if (ready) io_push(io_wake, w, false);\n" ++
+  "    return !ready;\n" ++
   "  });\n" ++
   "  io.ready = undefined;\n" ++
   "}\n" ++
@@ -370,11 +372,11 @@ def src.p5() -> String:
   "    }\n" ++
   "  }\n" ++
   "}\n" ++
-  "\n" ++
-  "// A request for effect e with arguments args, continued by k.\n" ++
-  "function io_req(e, name, args, k) {\n"
+  "\n"
 
 def src.p6() -> String:
+  "// A request for effect e with arguments args, continued by k.\n" ++
+  "function io_req(e, name, args, k) {\n" ++
   "  return { $: \"$REQ\", name, run: e?.run, need: e?.need, args, kont: k };\n" ++
   "}\n" ++
   "\n" ++
@@ -412,7 +414,7 @@ def src.p6() -> String:
   "    if (argv[i] === \"--\") {\n" ++
   "      cli_args.push(...argv.slice(i + 1));\n" ++
   "      break;\n" ++
-  "    } else if (argv[i] === \"--help\") {\n" ++
+  "    } else if (argv[i] === \"--bend-help\") {\n" ++
   "      io_out(1, io_bytes(\"usage: \" + process.argv[1] + \" [arguments]\\n\"));\n" ++
   "      process.exit(0);\n" ++
   "    } else if (argv[i] === \"--threads\" || argv[i] === \"--gpu\") {\n" ++
@@ -429,20 +431,20 @@ def src.p6() -> String:
   "  try {\n" ++
   "    code = io_run(main());\n" ++
   "  } catch (e) {\n" ++
-  "    io_errs(e instanceof RangeError ? \"bend: the machine stack overflowed\" : String(e));\n" ++
+  "    io_errs(e instanceof RangeError ? \"bend: memory fault (machine stack overflow?)\" : String(e));\n" ++
   "    code = 1;\n" ++
   "  }\n" ++
-  "  process.exit(code);\n" ++
-  "}\n" ++
-  "\n"
+  "  process.exit(code);\n"
 
 def src.p7() -> String:
+  "}\n" ++
+  "\n" ++
   "function bend_run_value(main, show) {\n" ++
   "  cli(process.argv.slice(2));\n" ++
   "  try {\n" ++
   "    io_out(1, io_bytes(show(main()) + \"\\n\"));\n" ++
   "  } catch (e) {\n" ++
-  "    io_errs(e instanceof RangeError ? \"bend: the machine stack overflowed\" : String(e));\n" ++
+  "    io_errs(e instanceof RangeError ? \"bend: memory fault (machine stack overflow?)\" : String(e));\n" ++
   "    process.exit(1);\n" ++
   "  }\n" ++
   "  process.exit(0);\n" ++

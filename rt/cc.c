@@ -58,7 +58,7 @@ Term cc_begin_run(Env e, Term *f, IoWork *w) {
   cc_saved = dup(1);
   dup2(fd, 1);
   close(fd);
-  return io_done(e, term_pak(CID_UNIT, 0));
+  return io_done(e, term_pak(CID(Unit), 0));
 }
 
 static Term cc_fail(Env e, const char *msg) {
@@ -102,10 +102,10 @@ Term cc_end_run(Env e, Term *f, IoWork *w) {
   free(out);
   if (rc != 0) return cc_fail(e, "the C compiler failed");
   unlink(cc_tmp);
-  return io_done(e, term_pak(CID_UNIT, 0));
+  return io_done(e, term_pak(CID(Unit), 0));
 }
 
 static void __attribute__((constructor)) cc_use(void) {
-  io_eff(CID_CC_BEGIN, cc_begin_run, 0);
-  io_eff(CID_CC_END, cc_end_run, 0);
+  io_eff(CID(Cc.begin), cc_begin_run, 0);
+  io_eff(CID(Cc.end), cc_end_run, 0);
 }

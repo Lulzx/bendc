@@ -443,7 +443,7 @@ static const char K_GPU_H[] =
 "KF1(ceil, KUF(KMF(ceil)(x)))\n"
 "KF1(trunc, KUF(KMF(trunc)(x)))\n"
 "KF1(bits, KU32(a))\n"
-"KF1(to__u32, x <= 0.0f ? 0 : x >= 4294967295.0f ? (KW)0xffffffffu : (KW)(KU)x)\n"
+"KF1(to__u32, !(x > 0.0f) || x >= 4294967296.0f ? 0 : (KW)(KU)x)\n"
 "KINLINE KW KF_F32_dshow(KTHR KCtx *c, KW a) { k_fail(c, KE_FX); return 0; }\n"
 "KINLINE KW KF_F32_dread(KTHR KCtx *c, KW a) { k_fail(c, KE_FX); return 0; }\n"
 "\n"

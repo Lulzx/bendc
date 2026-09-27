@@ -82,7 +82,7 @@ const F_U32_dpow = (a, n) => {
   }
   return Number(r);
 };
-const F_U32_dlog2 = (n) => (n <= 1 ? 0 : 31 - Math.clz32(n));
+const F_U32_dlog2 = (n) => BigInt(n <= 1 ? 0 : 31 - Math.clz32(n));  // a Nat
 const F_U32_dto__f32 = (a) => Math.fround(a);
 
 // Natives: Nat (BigInt, unbounded)
@@ -153,7 +153,9 @@ const F_F32_dfloor = (a) => fr(Math.floor(a));
 const F_F32_dceil = (a) => fr(Math.ceil(a));
 const F_F32_dtrunc = (a) => fr(Math.trunc(a));
 const F_F32_dbits = (a) => new Uint32Array(new Float32Array([a]).buffer)[0];
-const F_F32_dto__u32 = (a) => (a <= 0 || a !== a ? 0 : a >= 4294967295 ? 4294967295 : Math.trunc(a) >>> 0);
+const f32_of_bits = (u) => new Float32Array(new Uint32Array([u]).buffer)[0];
+const word_con = (b, r) => ((r << 1) | (b ? 1 : 0)) >>> 0;
+const F_F32_dto__u32 = (a) => (!(a > 0) || a >= 4294967296 ? 0 : Math.trunc(a) >>> 0);
 
 // The shortest text that reads back.
 function f32_show(x) {
@@ -395,7 +397,7 @@ function cli(argv) {
     if (argv[i] === "--") {
       cli_args.push(...argv.slice(i + 1));
       break;
-    } else if (argv[i] === "--help") {
+    } else if (argv[i] === "--bend-help") {
       io_out(1, io_bytes("usage: " + process.argv[1] + " [arguments]\n"));
       process.exit(0);
     } else if (argv[i] === "--threads" || argv[i] === "--gpu") {
@@ -412,7 +414,7 @@ function bend_run(main) {
   try {
     code = io_run(main());
   } catch (e) {
-    io_errs(e instanceof RangeError ? "bend: the machine stack overflowed" : String(e));
+    io_errs(e instanceof RangeError ? "bend: memory fault (machine stack overflow?)" : String(e));
     code = 1;
   }
   process.exit(code);
@@ -423,7 +425,7 @@ function bend_run_value(main, show) {
   try {
     io_out(1, io_bytes(show(main()) + "\n"));
   } catch (e) {
-    io_errs(e instanceof RangeError ? "bend: the machine stack overflowed" : String(e));
+    io_errs(e instanceof RangeError ? "bend: memory fault (machine stack overflow?)" : String(e));
     process.exit(1);
   }
   process.exit(0);

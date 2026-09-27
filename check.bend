@@ -3617,6 +3617,7 @@ def P.def(u: Bool) -> P(Unit):
   do P<Unit>:
     w : Bool <- P.word("def")
     +nm : String <- P.name()
+    qm : Bool <- P.take("?")
     +q : String <- P.reso(nm)
     b : Book <- P.book()
     +lw : Bool <- P.pure(Bool, Tld.open_law(book_tld(b, q)))
@@ -3629,7 +3630,7 @@ def P.def(u: Bool) -> P(Unit):
     P.if(Unit, Bool.and(lw, tl), P.fail(Unit, "a name"), P.pure(Unit, Unit{}))
     r : List<&2, TC> & Nat <- P.tele(")", Nil{}, 0n)
     P.skip()
-    P.def.go(u, k, lw, n0, r)
+    P.def.go(Bool.or(u, qm), k, lw, n0, r)
 
 def PS.dir(+ps: PS) -> String:
   PS{cur, stk, stn, frs, book, src, ns, +dir, al} = ps
@@ -6102,43 +6103,57 @@ law descend.sub:
   for +book: Book
   for +a: Tm
   for ps: List<&2, Tm>
+  for +bad: U32
+  for +j: U32
   U32
 
 @unsafe
-def descend.sub.if(+book: Book, +a: Tm, ps: List<&2, Tm>, gt: Bool) -> U32:
+def descend.sub.if(+book: Book, +a: Tm, ps: List<&2, Tm>, +bad: U32, +j: U32, gt: Bool) -> U32:
   match gt:
     case True{}:
-      descend.sub(book, a, ps)
+      descend.sub(book, a, ps, bad, j)
     case False{}:
       1
 
-# Whether a is (within) one of the fields ps: then it is smaller.
 @unsafe
-def descend.sub(book, a, ps):
+def descend.sub.skip(+book: Book, +a: Tm, p: Tm, t: List<&2, Tm>, +bad: U32, +j: U32, skip: Bool) -> U32:
+  match skip:
+    case True{}:
+      descend.sub(book, a, t, bad, U32.inc(j))
+    case False{}:
+      descend.sub.if(book, a, t, bad, U32.inc(j), U32.is_eq(term_descend(book, QLone{}, a, p), 2))
+
+# Whether a is (within) one of the fields ps: then it is smaller. Field bad
+# (the one a same-constructor comparison missed on) is skipped: it already
+# missed, and searching it again made a descent on a Nat literal 2^n.
+@unsafe
+def descend.sub(book, a, ps, bad, j):
   match ps:
     case Nil{}:
       2
     case p <> t:
-      descend.sub.if(book, a, t, U32.is_eq(term_descend(book, QLone{}, a, p), 2))
+      descend.sub.skip(book, a, p, t, bad, j, U32.is_eq(j, bad))
 
 @unsafe
-def descend.ctr.fields(+book: Book, +a: Tm, +xs: List<&2, Tm>, +ord: U32) -> U32:
-  Bool.pick(U32, U32.is_eq(ord, 2), descend.sub(book, a, xs), ord)
+def descend.ctr.fields(+book: Book, +a: Tm, +xs: List<&2, Tm>, r: U32 & U32) -> U32:
+  (+ord, +bad) = r
+  Bool.pick(U32, U32.is_eq(ord, 2), descend.sub(book, a, xs, bad, 0), ord)
 
 law descend.fields:
   for +book: Book
   for as: List<&2, Tm>
   for ps: List<&2, Tm>
   for +ord: U32
-  U32
+  for +j: U32
+  U32 & U32
 
 @unsafe
 def descend.ctr(+book: Book, +a: Tm, +k: String, +xs: List<&2, Tm>, same: Bool) -> U32:
   match same:
     case True{}:
-      descend.ctr.fields(book, a, xs, descend.fields(book, Ctr.xs(a), xs, 0))
+      descend.ctr.fields(book, a, xs, descend.fields(book, Ctr.xs(a), xs, 0, 0))
     case False{}:
-      descend.sub(book, a, xs)
+      descend.sub(book, a, xs, 4294967295, 0)
 
 @unsafe
 def descend.go(book, a, p):
@@ -6151,24 +6166,25 @@ def descend.go(book, a, p):
       2
 
 @unsafe
-def descend.fields.next(+book: Book, as: List<&2, Tm>, ps: List<&2, Tm>, +ord: U32, stop: Bool) -> U32:
+def descend.fields.next(+book: Book, as: List<&2, Tm>, ps: List<&2, Tm>, +ord: U32, +j: U32, stop: Bool) -> U32 & U32:
   match stop:
     case True{}:
-      2
+      (2, j)
     case False{}:
-      descend.fields(book, as, ps, ord)
+      descend.fields(book, as, ps, ord, U32.inc(j))
 
 @unsafe
-def descend.fields.step(+book: Book, as: List<&2, Tm>, ps: List<&2, Tm>, +ord: U32, +fld: U32) -> U32:
-  descend.fields.next(book, as, ps, Bool.pick(U32, U32.is_eq(fld, 0), ord, fld), U32.is_eq(fld, 2))
+def descend.fields.step(+book: Book, as: List<&2, Tm>, ps: List<&2, Tm>, +ord: U32, +j: U32, +fld: U32) -> U32 & U32:
+  descend.fields.next(book, as, ps, Bool.pick(U32, U32.is_eq(fld, 0), ord, fld), j, U32.is_eq(fld, 2))
 
+# The fields compared in order: the order, and the field that missed (if any).
 @unsafe
-def descend.fields(book, as, ps, ord):
+def descend.fields(book, as, ps, ord, j):
   match as ps:
     case a <> at p <> pt:
-      descend.fields.step(book, at, pt, ord, term_descend(book, QLone{}, a, p))
+      descend.fields.step(book, at, pt, ord, j, term_descend(book, QLone{}, a, p))
     case x y:
-      ord
+      (ord, 4294967295)
 
 def cl.cols(t: Tm) -> List<&2, Tm>:
   term_args(t)
@@ -7182,10 +7198,6 @@ def def_inst(l, tm, tld, sp, ctx, d):
     K.err(String, ctx, MStr{"a template applied to closed ~ arguments (a def parameter is not comptime)"}, MTm{tm},
       Tm.span(tm), CL.dn(l)), def_inst.go(l, tm, tld, xs, ctx, d))
 
-def book_reset(b: Book) -> Book:
-  Book{tlds, ctrs, order, hols, open, tmps, tcnt} = b
-  Book{MTip{}, MTip{}, order, hols, open, tmps, tcnt}
-
 def Tld.is_law_open(t: Tld) -> Bool:
   match t:
     case TDef{n, x, ty, None{}, u, False{}, None{}}:
@@ -7199,6 +7211,23 @@ def Tld.dec(t: Tld) -> Tld:
       TDef{n, x, ty, None{}, u, b, imps}
     case other:
       other
+
+def Tlds.dec(m: Map<&2, Tld>) -> Map<&2, Tld>:
+  match m:
+    case MTip{}:
+      MTip{}
+    case MLeaf{k, t}:
+      MLeaf{k, Tld.dec(t)}
+    case MNode{p, lo, hi}:
+      MNode{p, Tlds.dec(lo), Tlds.dec(hi)}
+
+# The book every check starts from: each datatype whole (constructors too)
+# and each def without its body, so types name each other and later defs in
+# any order; a def's body joins at its event, and a live call to a def below
+# still meets it bodiless (an unfilled law) unless the def is @unsafe.
+def book_reset(b: Book) -> Book:
+  Book{tlds, ctrs, order, hols, open, tmps, tcnt} = b
+  Book{Tlds.dec(tlds), ctrs, order, hols, open, tmps, tcnt}
 
 def Tld.imps(t: Tld) -> Maybe<&2, List<&2, String>>:
   match t:
@@ -7761,23 +7790,9 @@ def Book.holes(+b: Book) -> Nat:
   Book{tlds, ctrs, order, +hols, +open, tmps, tcnt} = b
   Nat.add(hols, open)
 
-def Tld.base_of(t: Maybe<&2, Tld>) -> Bool:
-  match t:
-    case Some{TDef{n, x, ty, v, u, b, imps}}:
-      b
-    case Some{TADT{n, g, ty, cs, b}}:
-      b
-    case None{}:
-      False{}
-
-def check_book.owned(+b: Book) -> Result<&1, &1, Err, Book>:
-  Bool.pick(Result<&1, &1, Err, Book>, Bool.and(book_has(b, "Clo.apply"), Bool.not(Tld.base_of(book_tld(b, "Clo.apply")))),
-    Fail{Err{book_nil(), Nil{}, MStr{"Clo.apply is a name the compiler encodes itself: name yours apart"}, MNone{}, NoSp{},
-      "", "!raw"}}, Done{b})
-
 def check_book.holes(+b: Book) -> Result<&1, &1, Err, Book>:
   +n = Book.holes(b)
-  Bool.pick(Result<&1, &1, Err, Book>, Nat.is_eq(n, 0n), check_book.owned(b),
+  Bool.pick(Result<&1, &1, Err, Book>, Nat.is_eq(n, 0n), Done{b},
     Fail{Err{book_nil(), Nil{}, MStr{Nat.show(n) ++ " TODO" ++ Bool.pick(String, Nat.is_eq(n, 1n), "", "s") ++
       " found.\nThe code is incomplete, and not a valid proof yet."}, MNone{}, NoSp{}, "", "!raw"}})
 
@@ -8098,10 +8113,49 @@ def report.go(+b: Book, +own: List<&2, String>, +bad: List<&2, String>, none: Bo
     case False{}:
       report.keep(own, report.close2(report.umap(report.walk(b, own, Set.new(), Nil{}), MTip{}), bad, Set.from_list(bad)))
 
-# The defs of the file (those after the first n0) that rely on unsafe or
-# foreign code.
+def Tld.base(t: Maybe<&2, Tld>) -> Bool:
+  match t:
+    case Some{TDef{n, x, ty, v, u, bb, imps}}:
+      bb
+    case Some{TADT{n, g, ty, cs, bb}}:
+      bb
+    case None{}:
+      False{}
+
+law report.laws:
+  for +b: Book
+  for ks: List<&2, String>
+  for met: Set()
+  List<&2, String>
+
+@unsafe
+def report.laws.met(+b: Book, +k: String, t: List<&2, String>, met: Set(), hit: Bool) -> List<&2, String>:
+  match hit:
+    case True{}:
+      Str.filter_in.if(k, report.laws(b, t, met), Bool.not(Tld.base(book_tld(b, k))))
+    case False{}:
+      report.laws(b, t, Set.add(met, k))
+
+def report.laws.if(+b: Book, +k: String, t: List<&2, String>, r: Set() & Bool) -> List<&2, String>:
+  (met, hit) = r
+  report.laws.met(b, k, t, met, hit)
+
+# The laws outside Base: a law is ordered twice, declared and then filled
+# (an open one fails wherever it is, so every file's laws are claims).
+@unsafe
+def report.laws(b, ks, met):
+  match ks:
+    case Nil{}:
+      Nil{}
+    case +k <> t:
+      report.laws.if(b, k, t, Set.has(met, k))
+
+# The claims that rely on unsafe or foreign code: the file's own defs
+# (those after the first n0) and every law outside Base.
+@unsafe
 def report(+b: Book, +n0: Nat) -> List<&2, String>:
-  +own = Str.unique(List.drop_str2(book_order(b), n0), Nil{})
+  +order = book_order(b)
+  +own = Str.unique(List.append(&2, String, List.drop_str2(order, n0), report.laws(b, order, Set.new())), Nil{})
   +bad = report.bad_all(b, Map.keys(&2, Tld, Book.tlds(b)))
   report.go(b, own, bad, Lst.empty(&2, String, bad))
 
@@ -8224,15 +8278,129 @@ def show_main.go(+b: Book, t: Maybe<&2, Tld>) -> String:
     case other:
       ""
 
+# main's type reaches Base's IO through aliases (def Entry() -> Type:
+# Program(Unit)), unfolded a head at a time: a full normal form would
+# unfold IO itself.
+@unsafe
+def main_io.args(+book: Book, v: Tm, xs: List<&2, Tm>) -> Tm:
+  match v xs:
+    case Lam{+k, i, f, s, q} a <> t:
+      main_io.args(book, clo_apply(book, f, [term_cell(a, k)]), t)
+    case w ys:
+      w
+
+law main_io.step:
+  for +book: Book
+  for t: Tm
+  for fuel: Nat
+  Bool
+
+@unsafe
+def main_io.tld(+book: Book, t: Maybe<&2, Tld>, xs: List<&2, Tm>, fuel: Nat) -> Bool:
+  match t:
+    case Some{TDef{n, x, ty, Some{v}, u, bb, imps}}:
+      main_io.step(book, main_io.args(book, v, xs), fuel)
+    case other:
+      False{}
+
+@unsafe
+def main_io.ref(+book: Book, h: Tm, xs: List<&2, Tm>, fuel: Nat) -> Bool:
+  match h:
+    case Ref{+k, s, b}:
+      main_io.tld(book, book_tld(book, k), xs, fuel)
+    case other:
+      False{}
+
+@unsafe
+def main_io.head(+book: Book, +h: Tm, xs: List<&2, Tm>, fuel: Nat, io: Bool) -> Bool:
+  match io:
+    case True{}:
+      True{}
+    case False{}:
+      main_io.ref(book, h, xs, fuel)
+
+@unsafe
+def main_io.split(+book: Book, r: Tm & List<&2, Tm>, fuel: Nat) -> Bool:
+  (+h, xs) = r
+  main_io.head(book, h, xs, fuel, valid.io(book, h))
+
+@unsafe
+def main_io.step(book, t, fuel):
+  match fuel:
+    case 0n:
+      False{}
+    case 1n+p:
+      main_io.split(book, term_unapply(term_strip(t)), p)
+
+@unsafe
 def main_is_io.go(+b: Book, t: Maybe<&2, Tld>) -> Bool:
   match t:
     case Some{TDef{n, x, ty, v, u, bb, imps}}:
-      valid.io(b, term_head(term_strip(ty)))
+      main_io.step(b, ty, 8n)
     case other:
       False{}
 
 def main_is_io(+b: Book) -> Bool:
   main_is_io.go(b, main_tld(b))
+
+# A body that computes a type by cases (match n: ..), or a def that is a
+# lambda outright (fam(): _ => U32): the compiler has no printer for the
+# types such a def names, so main's value is printed as the checker
+# normalizes it.
+def fam.head(t: Tm, lam: Bool) -> Bool:
+  match t:
+    case Mat{k, h, m, s}:
+      True{}
+    case Efq{s}:
+      True{}
+    case other:
+      lam
+
+law fam.open:
+  for +book: Book
+  for v: Tm
+  for +d: U32
+  for lam: Bool
+  Bool
+
+@unsafe
+def fam.open(book, v, d, lam):
+  match v:
+    case Lam{+k, i, f, s, q}:
+      fam.open(book, clo_apply(book, f, [Var{k, d, NoSp{}}]), U32.inc(d), lam)
+    case other:
+      fam.head(term_head(term_strip(other)), lam)
+
+@unsafe
+def fam.tld(+book: Book, t: Maybe<&2, Tld>) -> Bool:
+  match t:
+    case Some{TDef{+n, x, ty, Some{v}, u, bb, imps}}:
+      fam.open(book, v, 0, Nat.is_eq(n, 0n))
+    case other:
+      False{}
+
+@unsafe
+def fam.ty(+book: Book, h: Tm) -> Bool:
+  match h:
+    case Typ{g, s}:
+      True{}
+    case Ref{+k, s, b}:
+      fam.tld(book, book_tld(book, k))
+    case other:
+      False{}
+
+@unsafe
+def main_is_family.go(+b: Book, t: Maybe<&2, Tld>) -> Bool:
+  match t:
+    case Some{TDef{n, x, ty, v, u, bb, imps}}:
+      fam.ty(b, term_head(term_strip(ty)))
+    case other:
+      False{}
+
+# Whether main's type is Type, or a type family's.
+@unsafe
+def main_is_family(+b: Book) -> Bool:
+  main_is_family.go(b, main_tld(b))
 
 # main's value, normalized and printed as the official bend prints it.
 def show_main(+b: Book) -> String:

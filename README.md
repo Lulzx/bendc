@@ -71,7 +71,7 @@ clang -O2 -I rt hello.c -o hello -lm && ./hello
 token stream after layout, and `bendc --ast file.bend` prints the parsed declarations.
 
 A compiled program takes the official runtime's options: `--threads N` (default: the CPU count),
-`--gpu on|off|SIZE` (`off` runs `f!(x)` calls on the CPU threads), `--help`, and `--` before
+`--gpu on|off|SIZE` (`off` runs `f!(x)` calls on the CPU threads), `--bend-help`, and `--` before
 the program's own arguments.
 
 ## What it looks like
@@ -113,7 +113,7 @@ if (TAG(s0) == 0) {
 return F_U32_dmul(F_U32_dmul(3u, FLD(s0, 0)), FLD(s0, 0));
 } else if (TAG(s0) == 1) {
 return F_U32_dmul(FLD(s0, 0), FLD(s0, 0));
-} else { bend_fail("incomplete match"); }
+} else { bend_fail("runtime fail-stop"); }
 }
 
 static V F_sum(V a0, V a1) {               // the tail call becomes a loop
@@ -123,7 +123,7 @@ if ((s33) == IMM(0)) {
 return a1;
 } else if (TAG(s33) == 1) {
 { V t0 = FLD(s33, 1); V t1 = F_U32_dadd(a1, FLD(s33, 0)); a0 = t0; a1 = t1; goto top; }
-} else { bend_fail("incomplete match"); }
+} else { bend_fail("runtime fail-stop"); }
 }
 
 static V F_adder(V a0) {                   // lambdas are lifted into closures
@@ -169,7 +169,7 @@ flowchart LR
   still compiles to exactly this seed, and `make seed` regenerates it after the compiler changes.
 
 CI runs the whole chain on Linux (arm64) and macOS: seed build, tests, selfcheck, and full bootstrap. It
-pins the official Bend it tests against (`tools/install-bend.sh`, Bend 2.0.26; 2.0.25 works too),
+pins the official Bend it tests against (`tools/install-bend.sh`, Bend 2.0.31),
 and a weekly run tries the latest release, so a new Bend shows up there before it breaks a push.
 
 ## Language support
@@ -436,11 +436,34 @@ make test                      # with build/bendc
 ./run_tests.sh build/stage1    # with any stage
 ```
 
+The official repository's own tests are a second, larger suite. `tools/upstream.py` runs every one
+that imports Base, has a `main` and expects output (not an error) through a given `bendc`, and
+compares the result with the test's `#|` lines as the official gate does. The failures go to
+`build/upstream/fails.txt`. Against Bend 2.0.31, 771 of 786 pass in C and 793 of 806 in JavaScript;
+the rest are the limitations below.
+
+```sh
+git clone --depth 1 -b v2.0.31 https://github.com/bendlang/bend /tmp/bendup
+python3 tools/upstream.py build/bendc /tmp/bendup           # C
+python3 tools/upstream.py build/bendc /tmp/bendup --js io_  # JavaScript, tests whose name has io_
+```
+
 ## Limitations
 
 - The GPU backend targets Metal only; elsewhere `f!(x)` runs on the CPU threads (or on the
   simulator, with `BEND_GPU=sim`).
 - No windowing or audio effects (Base's `Window` and `Audio`).
+- An array written through two forks at once (`Array.fork`, or two calls given one `+a` whose halves
+  are joined back) is copied on write here, so the forks' writes do not meet as the official
+  runtime's shared blocks do.
+- `Nat` is unbounded, so a `Nat` past 2^48 - 1 computes where the official runtime stops with an
+  error, and a foreign effect's raw word is not checked as a `Nat`.
+- A main whose type is `Type` or a type family is printed by normalizing it at compile time, as the
+  official interpreter does, but without its sharing of match arms (an exponential evaluation stays
+  exponential). A main whose type holds a family only inside a constructor field, or depends on a
+  runtime value, prints `?` there.
+- Blocks follow indentation: a `do` statement shallower than its block, or `case` arms at
+  unrelated indents, do not parse (the official parser does not read layout).
 
 ## Repository layout
 
@@ -457,6 +480,7 @@ make test                      # with build/bendc
 | [`tests/`](tests) | test programs and the official `bend`'s output for each |
 | [`bootstrap.sh`](bootstrap.sh), [`run_tests.sh`](run_tests.sh), [`Makefile`](Makefile) | bootstrap and fixpoint check, test runner, build entry points |
 | [`tools/order.py`](tools/order.py) | dev tool: section-aware dependency sort, with automatic `law` forward declarations for cycles |
+| [`tools/upstream.py`](tools/upstream.py) | dev tool: runs the official repository's tests through a `bendc` (see [Testing](#testing)) |
 | [`tools/embed.py`](tools/embed.py) | dev tool: embeds `rt/bendrt.js`, `rt/chan.c` and `rt/gpu.h` (`rt/rtjs.bend`, `rt/rtchan.bend`, `rt/gpu_src.h`) |
 
 ## License

@@ -136,7 +136,7 @@ static Term hub_ensure(Env e, const char *lib, const char *hub, const char *rel)
   struct stat st;
   int have = stat(at, &st) == 0;
   free(at);
-  if (have) return io_done(e, term_pak(CID_UNIT, 0));
+  if (have) return io_done(e, term_pak(CID(Unit), 0));
   const char *slash = strchr(rel, '/');
   if (slash == NULL || rel[0] != '0' || rel[1] != 'x') return io_fail(e, 1, "a hub import (0x<hash>/<path>.bend)");
   char *pkg = strndup(rel, (size_t)(slash - rel));
@@ -150,7 +150,7 @@ static Term hub_ensure(Env e, const char *lib, const char *hub, const char *rel)
     return t;
   }
   free(msub);
-  Term out = io_done(e, term_pak(CID_UNIT, 0));
+  Term out = io_done(e, term_pak(CID(Unit), 0));
   for (char *line = strtok(man, "\n"); line != NULL; line = strtok(NULL, "\n")) {
     char *sp = strchr(line, ' ');
     if (sp == NULL) continue;
@@ -195,5 +195,5 @@ Term hub_ensure_run(Env e, Term *f, IoWork *w) {
 }
 
 static void __attribute__((constructor)) hub_ensure_use(void) {
-  io_eff(CID_HUB_ENSURE, hub_ensure_run, 0);
+  io_eff(CID(Hub.ensure), hub_ensure_run, 0);
 }

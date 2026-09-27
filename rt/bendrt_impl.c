@@ -5,6 +5,7 @@
 #ifdef __linux__
 #define _GNU_SOURCE
 #endif
+#define _DARWIN_UNLIMITED_SELECT  // select past FD_SETSIZE (io_wait)
 #define IMM(t) ((((V)(t)) << 3) | 1)
 #define BEND_SH ((V)1 << 20)
 #define BEND_DEEP ((V)1 << 21)
@@ -13,6 +14,7 @@
 #define BEND_BARRIER() __asm__ volatile("" ::: "memory")
 #define FLD(v, i) (((V *)(v))[(i) + 1])
 #define BOOL(b) ((b) ? IMM(1) : IMM(0))
+#define word_con(b, r) ((V)(U32)(((U32)(r) << 1) | ((b) == IMM(1))))
 #define UNIT IMM(0)
 #if defined(__has_attribute)
 #if __has_attribute(musttail)
@@ -292,7 +294,8 @@ __attribute__((noinline)) void bend_share_slow(V v) {
   if (w0 >= ((V)1 << 22)) {
     V n = p[2];
     if (b->words >= 3 && n <= (V)b->words - 3)
-      for (V j = 0; j < n; j++) bend_share_slow(p[3 + j]);
+      for (V j = 0; j < n; j++)
+        if (p[3 + j] >= ((V)1 << 32)) bend_share_slow(p[3 + j]);  // numbers are no nodes
   } else if (!(w0 & BEND_SH)) {
     __atomic_fetch_or(&p[0], BEND_SH, __ATOMIC_RELAXED);
   }
@@ -488,7 +491,31 @@ void gc_collect(void) {
   gc_collect_locked();
   pthread_mutex_unlock(&gc_lock);
 }
+void bend_fault(int sig) {
+  (void)sig;
+  static const char msg[] = "bend: memory fault (machine stack overflow?)\n";
+  fflush(stdout);
+  if (write(2, msg, sizeof msg - 1) < 0) {}
+  _exit(1);
+}
+void fault_stack(void) {
+  stack_t ss;
+  ss.ss_size = 1 << 16;
+  ss.ss_sp = malloc(ss.ss_size);
+  ss.ss_flags = 0;
+  if (ss.ss_sp) sigaltstack(&ss, NULL);
+}
+void fault_init(void) {
+  struct sigaction sa;
+  memset(&sa, 0, sizeof sa);
+  sa.sa_handler = bend_fault;
+  sa.sa_flags = SA_ONSTACK;
+  sigemptyset(&sa.sa_mask);
+  sigaction(SIGSEGV, &sa, NULL);
+  sigaction(SIGBUS, &sa, NULL);
+}
 void thr_register(uintptr_t top) {
+  fault_stack();
   Thr *t = calloc(1, sizeof(Thr));
   t->top = top;
   t->id = pthread_self();
@@ -786,9 +813,32 @@ __attribute__((noinline, cold)) float F32_mul_add(float x, float k, float c) {
   float p = x * k;
   return p + c;
 }
+int f32_text(float v, char *buf, size_t n) {
+  int k = 0, p = 0;
+  if (v != v) return snprintf(buf, n, "nan");
+  for (; p < 9; p++) {
+    k = snprintf(buf, n, "%.*e", p, (double)v);
+    if (strtof(buf, NULL) == v) break;
+  }
+  char *ep = strchr(buf, 'e');
+  if (ep == NULL) return k;
+  int ex = atoi(ep + 1);
+  if (ex >= 21 || ex <= -7) {
+    k = (int)(ep - buf) + snprintf(ep, n - (size_t)(ep - buf), "e%c%d", ex < 0 ? '-' : '+', abs(ex));
+  } else if (ex <= p) {
+    k = snprintf(buf, n, "%.*f", p - ex, (double)v);
+  } else {
+    int s = *buf == '-';
+    memmove(buf + s + 1, buf + s + 2, (size_t)p);
+    memset(buf + s + 1 + p, '0', (size_t)(ex - p));
+    k = s + 1 + ex;
+    buf[k] = 0;
+  }
+  return k;
+}
 V F_F32_dshow(V a) {
   char buf[64];
-  snprintf(buf, sizeof buf, "%g", FV(a));
+  f32_text(FV(a), buf, sizeof buf);
   return mk_str(buf, strlen(buf));
 }
 V F_F32_dread(V s) {
@@ -805,6 +855,7 @@ V F_F32_dread(V s) {
 __thread int par_depth;
 int par_front = 0;
 int par_nthreads = 1;
+#define pool_size ((u32)par_nthreads)
 _Atomic int par_started;
 pthread_mutex_t par_mu = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t par_cv = PTHREAD_COND_INITIALIZER;
@@ -1067,12 +1118,12 @@ Term io_wait_on(IoWork *w, int fd, short evts, u64 time, IoPack more) {
   IoAct *a = (IoAct *)w;
   a->work.word = (u32)fd;
   a->work.pack = more;
-  a->time = time;
+  a->work.time = time;
   a->evts = evts;
   io_push(&io_park, a);
   return IO_PARK;
 }
-u64 io_wait_time(IoWork *w) { return ((IoAct *)w)->time; }
+u64 io_wait_time(IoWork *w) { return w->time; }
 OUTLINE void io_out(FILE *h, const char *data, u64 len) {
   if (fwrite(data, 1, len, h) != len) err_fail("a short write on a standard stream");
 }
@@ -1230,7 +1281,7 @@ void io_wait(Env e) {
   int top = io_wake_fd[0];
   u64 soon = 0;
   for (IoAct *a = io_park.head; a != NULL; a = a->next) {
-    if (a->time != 0 && (soon == 0 || a->time < soon)) soon = a->time;
+    if (a->work.time != 0 && (soon == 0 || a->work.time < soon)) soon = a->work.time;
     if (a->evts != 0 && (int)a->work.word > top) top = (int)a->work.word;
   }
   u64 len = (u64)top / 64 * 8 + 8;
@@ -1254,7 +1305,7 @@ void io_wait(Env e) {
   while (todo.head != NULL) {
     IoAct *a = io_pop(&todo);
     bool due = (a->evts != 0 && io_bit(set[a->evts == POLLOUT], (int)a->work.word, false)) ||
-      (a->time != 0 && a->time <= now);
+      (a->work.time != 0 && a->work.time <= now);
     if (!due) {
       io_push(&io_park, a);
       continue;
@@ -1414,14 +1465,12 @@ void pr_nat(V v) {
   free(s);
 }
 void pr_f32(V v) {
-  float f = FV(v);
   char buf[64];
-  for (int p = 1; p <= 9; p++) {
-    snprintf(buf, sizeof buf, "%.*g", p, f);
-    if (strtof(buf, NULL) == f) break;
-  }
-  fputs(buf, stdout);
-  if (!strpbrk(buf, ".eEna")) fputs(".0", stdout);
+  int n = f32_text(FV(v), buf, sizeof buf);
+  char *ep = memchr(buf, 'e', (size_t)n);
+  int m = ep == NULL ? n : (int)(ep - buf);
+  if (strpbrk(buf, ".ni") == NULL) printf("%.*s.0%s", m, buf, buf + m);
+  else fputs(buf, stdout);
 }
 void pr_cp(uint32_t cp, char quote) {
   int k = cp == 10 ? 'n' : cp == 9 ? 't' : cp == 13 ? 'r' : cp == 0 ? '0'
@@ -1460,7 +1509,7 @@ const char *CLI_HELP =
   "usage: %s [options] [arguments]\n"
   "  --threads N       worker threads, 1 to 128 (default: the CPU count)\n"
   "  --gpu on|off|4GB  where ! calls run: the GPU (the default) or the CPU threads\n"
-  "  --help            show this text\n"
+  "  --bend-help       show this text\n"
   "  --                the rest are the program's arguments (IO.args)\n";
 void cli_fail(const char *msg) {
   fprintf(stderr, "bend: %s\n", msg);
@@ -1475,7 +1524,7 @@ int bend_start(int argc, char **argv, V (*m)(void), int value) {
     const char *v = i + 1 < argc ? argv[i + 1] : NULL;
     if (strcmp(a, "--") == 0) {
       while (i + 1 < argc) io_argv[io_argc++] = argv[++i];
-    } else if (strcmp(a, "--help") == 0) {
+    } else if (strcmp(a, "--bend-help") == 0) {
       printf(CLI_HELP, argv[0]);
       return 0;
     } else if (strcmp(a, "--threads") == 0) {
@@ -1506,6 +1555,7 @@ int bend_start(int argc, char **argv, V (*m)(void), int value) {
   sa.sa_flags = SA_RESTART;
   sigemptyset(&sa.sa_mask);
   sigaction(GC_SIG, &sa, NULL);
+  fault_init();
   gc_hook(par_hook);
   gc_hook(io_hook);
   pthread_attr_t attr;

@@ -439,7 +439,7 @@ KF1(floor, KUF(KMF(floor)(x)))
 KF1(ceil, KUF(KMF(ceil)(x)))
 KF1(trunc, KUF(KMF(trunc)(x)))
 KF1(bits, KU32(a))
-KF1(to__u32, x <= 0.0f ? 0 : x >= 4294967295.0f ? (KW)0xffffffffu : (KW)(KU)x)
+KF1(to__u32, !(x > 0.0f) || x >= 4294967296.0f ? 0 : (KW)(KU)x)
 KINLINE KW KF_F32_dshow(KTHR KCtx *c, KW a) { k_fail(c, KE_FX); return 0; }
 KINLINE KW KF_F32_dread(KTHR KCtx *c, KW a) { k_fail(c, KE_FX); return 0; }
 
