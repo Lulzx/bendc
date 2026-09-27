@@ -485,10 +485,6 @@ def P.pos() -> P(U32):
 def P.span(+beg: U32) -> P(Sp):
   +ps => Done{(Sp{PS.src(ps), beg, Cur.pos(PS.cur(ps))}, ps)}
 
-@unsafe
-def P.term0() -> P(Tm):
-  P.term(0)
-
 def PS.push(ps: PS, b: SB) -> PS:
   PS{cur, stk, stn, frs, book, src, ns, dir, al} = ps
   PS{cur, b <> stk, 1n+stn, frs, book, src, ns, dir, al}
@@ -509,33 +505,6 @@ def P.open.go(+k: String, ps: PS) -> Result<&1, &1, Err, U32 & PS>:
 def P.open(+k: String) -> P(U32):
   ps => P.open.go(k, ps)
 
-def P.brace.go(+beg: U32, +a: Tm, eq: Bool, ne: Bool) -> P(Tm):
-  match eq ne:
-    case True{} x:
-      do P<Tm>:
-        b : Tm <- P.term0()
-        P.eat(":")
-        ty : Tm <- P.term0()
-        P.eat("}")
-        return Eql{a, b, ty, NoSp{}}
-    case False{} True{}:
-      do P<Tm>:
-        +pos : U32 <- P.pos()
-        ns : Sp <- P.span((pos - 2 : U32))
-        b : Tm <- P.term0()
-        P.eat(":")
-        ty : Tm <- P.term0()
-        P.eat("}")
-        +s : Sp <- P.span(beg)
-        +i : U32 <- P.open("_")
-        return All{QLone{}, "_", i, Eql{a, b, ty, s}, CSyn{Nil{}, i, Ref{"Empty", ns, False{}}}, s}
-    case False{} False{}:
-      do P<Tm>:
-        P.eat(":")
-        ty : Tm <- P.term0()
-        P.eat("}")
-        return Ann{a, ty, NoSp{}}
-
 # Branching in the parser monad: both actions are built, one runs.
 def P.if(-A: Type, c: Bool, t: P(A), e: P(A)) -> P(A):
   match c:
@@ -544,24 +513,8 @@ def P.if(-A: Type, c: Bool, t: P(A), e: P(A)) -> P(A):
     case False{}:
       e
 
-def P.brace.term(+beg: U32) -> P(Tm):
-  do P<Tm>:
-    +a : Tm <- P.term0()
-    P.skip()
-    +eq : Bool <- P.take("==")
-    ne : Bool <- P.if(Bool, eq, P.pure(Bool, False{}), P.take("!="))
-    P.brace.go(beg, a, eq, ne)
-
 def P.bump() -> P(Unit):
   +ps => Done{(Unit{}, PS.set_cur(ps, Cur.step(PS.cur(ps))))}
-
-# {==}  {a == b : T}  {a != b : T}  {x : T}
-def P.brace(+beg: U32) -> P(Tm):
-  do P<Tm>:
-    P.bump()
-    P.skip()
-    rfl : Bool <- P.take("==")
-    P.if(Tm, rfl, P.brace.rfl(), P.brace.term(beg))
 
 law P.args:
   for +close: String
@@ -694,35 +647,6 @@ law P.ns:
   for tm: Tm
   for ty: Tm
   P(Tm)
-
-@unsafe
-def P.brack.arr(+beg: U32, x: Tm) -> P(Tm):
-  do P<Tm>:
-    +ty : Tm <- P.term(12)
-    P.skip()
-    +cnt : Bool <- P.take("*")
-    P.if(Unit, cnt, P.pure(Unit, Unit{}), P.eat("^"))
-    n : Tm <- P.term0()
-    P.eat("]")
-    +s : Sp <- P.span(beg)
-    x2 : Tm <- P.ns(x, ty)
-    d : Tm <- P.brack.depth(cnt, n)
-    return TApp{TApp{TApp{Ref{"Array.new", s, False{}}, ty, s}, d, s}, x2, s}
-
-def P.brack.first(+beg: U32) -> P(Tm):
-  do P<Tm>:
-    +x : Tm <- P.term0()
-    P.skip()
-    arr : Bool <- P.take(":")
-    P.if(Tm, arr, P.brack.arr(beg, x), P.brack.list(beg, [x]))
-
-# [a, b]  [v : T*n]  [v : T^d]
-def P.brack(+beg: U32) -> P(Tm):
-  do P<Tm>:
-    P.bump()
-    P.skip()
-    empty : Bool <- P.at("]")
-    P.if(Tm, empty, P.brack.list(beg, Nil{}), P.brack.first(beg))
 
 law P.amp:
   for +d: U32
@@ -1020,44 +944,6 @@ law P.do:
   for +beg: U32
   P(Tm)
 
-@unsafe
-def P.base.word.go(+k: String, +beg: U32, m: Maybe<&2, Nat>) -> P(Tm):
-  match m:
-    case Some{0n}:
-      do P<Tm>:
-        +s : Sp <- P.span(beg)
-        return Typ{TQua{QLone{}, s}, s}
-    case Some{1n}:
-      do P<Tm>:
-        +s : Sp <- P.span(beg)
-        return Typ{TQua{QMany{}, s}, s}
-    case Some{2n}:
-      do P<Tm>:
-        s : Sp <- P.span(beg)
-        return Qnt{s}
-    case Some{3n}:
-      do P<Tm>:
-        P.eat("(")
-        g : Tm <- P.term0()
-        P.eat(")")
-        s : Sp <- P.span(beg)
-        return Typ{g, s}
-    case Some{4n}:
-      P.do(beg)
-    case Some{5n}:
-      P.fail.at(Tm, "a term (a match heads a def body, not a term)", beg)
-    case Some{6n}:
-      P.fail.at(Tm, "a match heading this case (this case is orphaned)", beg)
-    case Some{7n}:
-      P.fail.at(Tm, "a do-block heading this return", beg)
-    case other:
-      P.if(Tm, Str.has(KEYWORDS(), k), P.fail.at(Tm, "a term (the keyword '" ++ k ++ "' cannot head one)", beg),
-        P.base.name(k, beg))
-
-def P.base.word(+k: String, +beg: U32) -> P(Tm):
-  P.base.word.go(k, beg, Str.index(["Type", "Data", "Quant", "Kind", "do", "match", "case", "return"],
-    k, 0n))
-
 def P.peek_rest() -> P(String):
   +ps => Done{(Cur.rest(PS.cur(ps)), ps)}
 
@@ -1156,16 +1042,6 @@ def P.plus.go(+t: Tm, +k: String, +s: Sp, ng: Maybe<&1, Nat & Nat>) -> P(Tm):
         P.fail(Tm, "a quantified datatype after + (+D<..> sets D's leading quantities to &2)"))
     case Some{v}:
       P.plus.adt(t, k, s, v)
-
-@unsafe
-def P.plus(+beg: U32) -> P(Tm):
-  do P<Tm>:
-    P.bump()
-    +t : Tm <- P.term(12)
-    +s : Sp <- P.span(beg)
-    +k : String <- P.plus.key(t)
-    b : Book <- P.book()
-    P.plus.go(t, k, s, Tld.adt_ng(book_tld(b, k)))
 
 # \{K: h; ...; tail}: a match written out, arm by arm.
 def arms.build(arms: List<&2, Tm>, tail: Tm, +s: Sp) -> Tm:
@@ -1407,71 +1283,8 @@ law P.tup:
   for +beg: U32
   P(Tm)
 
-@unsafe
-def P.base.sym.go(+c: U32, +beg: U32, m: Maybe<&2, Nat>) -> P(Tm):
-  match m:
-    case Some{0n}:
-      P.all(False{})
-    case Some{1n}:
-      do P<Tm>:
-        +r : String <- P.peek_rest()
-        P.amp(Str.second(r), beg)
-    case Some{2n}:
-      P.plus(beg)
-    case Some{3n}:
-      P.arms(beg)
-    case Some{4n}:
-      P.rwt(beg)
-    case Some{5n}:
-      P.brace(beg)
-    case Some{6n}:
-      do P<Tm>:
-        P.bump()
-        P.tup(beg)
-    case Some{7n}:
-      P.brack(beg)
-    case Some{8n}:
-      P.chr_lit(beg)
-    case Some{9n}:
-      P.str_lit(beg)
-    case Some{10n}:
-      P.hole(beg)
-    case other:
-      P.fail(Tm, "a term")
-
-# The syntax of each symbol that starts a term.
-def P.base.sym(+c: U32, +beg: U32) -> P(Tm):
-  P.base.sym.go(c, beg, Str.index(["@", "&", "+", "\\", "%", "{", "(", "[", "'", "\"", "?"],
-    Str.chr(c), 0n))
-
 law P.num:
   P(Tm)
-
-@unsafe
-def P.base.go(+c: U32, +beg: U32, kind: Nat) -> P(Tm):
-  match kind:
-    case 0n:
-      do P<Tm>:
-        +k : String <- P.lexeme()
-        P.base.word(k, beg)
-    case 1n:
-      P.num()
-    case 2n+p:
-      P.base.sym(c, beg)
-
-def P.base(+beg: U32) -> P(Tm):
-  do P<Tm>:
-    +c : U32 <- P.peek()
-    P.base.go(c, beg, Bool.pick(Nat, is_head(c), 0n, Bool.pick(Nat, is_digit(c), 1n, 2n)))
-
-@unsafe
-def P.term(lvl):
-  do P<Tm>:
-    P.skip()
-    +beg : U32 <- P.pos()
-    base : Tm <- P.base(beg)
-    s : Sp <- P.span(beg)
-    P.ops(Tm.spanned(base, s), lvl)
 
 def amp.q(k: Nat) -> Q:
   match k:
@@ -1535,15 +1348,6 @@ def Tm.bang(t: Tm) -> Tm:
     case other:
       other
 
-@unsafe
-def P.call.bang.go(h: Tm, +lvl: U32) -> P(Tm):
-  do P<Tm>:
-    P.bump()
-    P.ops(Tm.bang(h), lvl)
-
-def P.call.bang(+h: Tm, +lvl: U32) -> P(Tm):
-  P.if(Tm, Tm.is_ref(h), P.call.bang.go(h, lvl), P.fail(Tm, "a named def before ! (only f!(..) offloads)"))
-
 def P.span.from(s: Sp) -> P(Sp):
   match s:
     case NoSp{}:
@@ -1575,50 +1379,12 @@ law P.call.tmpl:
   for +ts: List<&2, Tm>
   P(List<&2, Tm>)
 
-@unsafe
-def P.call.args(+h: Tm, +lvl: U32) -> P(Tm):
-  do P<Tm>:
-    P.bump()
-    b : Book <- P.book()
-    +x : Nat <- P.pure(Nat, Tld.x(book_tld(b, Bool.pick(String, Tm.is_ref(h), Tm.name(h), ""))))
-    P.skip()
-    ts : List<&2, Tm> <- P.call.tmpl(h, x, Nil{})
-    xs : List<&2, Tm> <- P.args(")")
-    s2 : Sp <- span.grow(h)
-    P.ops(apps(h, List.append(&2, Tm, ts, xs), s2), lvl)
-
-def P.call(out: Tm, +lvl: U32) -> P(Tm):
-  do P<Tm>:
-    +h : Tm <- P.call.head(out)
-    bang : Bool <- P.at("!")
-    P.if(Tm, bang, P.call.bang(h, lvl), P.call.args(h, lvl))
-
 def Cur.nl(+c: Cur) -> Bool:
   Cur{rest, pos, col, +nl, prev} = c
   nl
 
 def P.nl() -> P(Bool):
   +ps => Done{(Cur.nl(PS.cur(ps)), ps)}
-
-@unsafe
-def P.index.set(out: Tm, ix: Tm, +s2: Sp, +lvl: U32) -> P(Tm):
-  do P<Tm>:
-    v : Tm <- P.term(2)
-    P.ops(apps(Ref{"Array.set", s2, False{}}, [Ref{"U32", s2, False{}}, out, ix, v], s2), lvl)
-
-@unsafe
-def P.index(+out: Tm, +lvl: U32) -> P(Tm):
-  do P<Tm>:
-    P.bump()
-    ix0 : Tm <- P.term0()
-    P.eat("]")
-    +s2 : Sp <- span.grow(out)
-    +ix : Tm <- P.ns(ix0, Ref{"U32", s2, False{}})
-    P.skip()
-    +nl : Bool <- P.nl()
-    set : Bool <- P.if(Bool, nl, P.pure(Bool, False{}), P.take("<-"))
-    P.if(Tm, set, P.index.set(out, ix, s2, lvl), P.ops(TApp{TApp{TApp{Ref{"Array.get", s2, False{}},
-      Ref{"U32", s2, False{}}, s2}, out, s2}, ix, s2}, lvl))
 
 def PS.stn(+ps: PS) -> Nat:
   PS{cur, stk, +stn, frs, book, src, ns, dir, al} = ps
@@ -1694,63 +1460,11 @@ law P.body:
   for +col: U32
   P(Body)
 
-@unsafe
-def P.block() -> P(Tm):
-  do P<Tm>:
-    P.skip()
-    +c : U32 <- P.col()
-    b : Body <- P.body((c - 1 : U32))
-    P.flatten(b, Nil{})
-
-@unsafe
-def P.lam(out: Tm, +lvl: U32) -> P(Tm):
-  do P<Tm>:
-    ok : Bool <- P.take("=>")
-    +n0 : Nat <- P.stn()
-    x : Pt <- P.binder(out)
-    f : Tm <- P.block()
-    P.close(n0)
-    P.ops(lam.build(x, f), lvl)
-
-@unsafe
-def P.arrow(+out: Tm, +lvl: U32) -> P(Tm):
-  do P<Tm>:
-    ok : Bool <- P.take("->")
-    b : Tm <- P.term0()
-    s2 : Sp <- span.grow(out)
-    +i : U32 <- P.open("_")
-    P.ops(All{QLone{}, "_", i, out, CSyn{Nil{}, i, b}, s2}, lvl)
-
-@unsafe
-def P.minq(+out: Tm, +lvl: U32) -> P(Tm):
-  do P<Tm>:
-    ok : Bool <- P.take("<&>")
-    b : Tm <- P.term(5)
-    s2 : Sp <- span.grow(out)
-    P.ops(Min{out, b, s2}, lvl)
-
 def infix.build(+sym: String, name: String, +out: Tm, +b: Tm, +s: Sp, t: Sp) -> Tm:
   Bool.pick(Tm, String.eq(sym, "<>"), Ctr{"Con", [out, b], s},
     Bool.pick(Tm, String.eq(sym, "&"), TApp{TApp{Ref{"Pair", s, False{}}, out, s}, b, s},
       Bool.pick(Tm, String.eq(sym, "|"), TApp{TApp{Ref{"Or", s, False{}}, out, s}, b, s},
         TApp{TApp{Ref{name, t, False{}}, out, s}, b, s})))
-
-@unsafe
-def P.infix.go(+out: Tm, +lvl: U32, +sym: String, +prec: U32, right: Bool, +name: String) -> P(Tm):
-  do P<Tm>:
-    ok : Bool <- P.take(sym)
-    +pos : U32 <- P.pos()
-    +t : Sp <- P.span((pos - U32.from_nat(String.length(sym)) : U32))
-    b : Tm <- P.term(Bool.pick(U32, right, prec, U32.inc(prec)))
-    +s : Sp <- span.grow(out)
-    P.ops(infix.build(sym, name, out, b, s, t), lvl)
-
-def P.infix(+out: Tm, +lvl: U32, m: Maybe<&2, Op>, arrow: Bool) -> P(Tm):
-  match m:
-    case None{}:
-      P.pure(Tm, out)
-    case Some{Op{+sym, +prec, +right, +name}}:
-      P.if(Tm, Bool.or(U32.is_lt(prec, lvl), arrow), P.pure(Tm, out), P.infix.go(out, lvl, sym, prec, right, name))
 
 def op.ok(+sym: String, +r: String, +prev: U32) -> Bool:
   +nx = Str.first(String.drop(r, String.length(sym)))
@@ -1774,26 +1488,6 @@ law P.lt:
   for +lvl: U32
   P(Tm)
 
-@unsafe
-def P.ops.go(out: Tm, +lvl: U32, +r: String, +prev: U32, k: Nat) -> P(Tm):
-  match k:
-    case 0n:
-      P.pure(Tm, out)
-    case 1n:
-      P.call(out, lvl)
-    case 2n:
-      P.index(out, lvl)
-    case 3n:
-      P.lt(out, lvl)
-    case 4n:
-      P.lam(out, lvl)
-    case 5n:
-      P.arrow(out, lvl)
-    case 6n:
-      P.minq(out, lvl)
-    case 7n+p:
-      P.infix(out, lvl, op.find(OPS(), r, prev), Str.prefix(r, "<-"))
-
 def Cur.prev(+c: Cur) -> U32:
   Cur{rest, pos, col, nl, +prev} = c
   prev
@@ -1807,21 +1501,6 @@ def ops.lt(+r: String, +lvl: U32, +prev: U32) -> Bool:
     Bool.or(U32.is_eq(nx, 60), U32.is_eq(nx, 62))))),
     Bool.and(Bool.not(Str.prefix(r, "<&>")), Bool.or(U32.is_le(lvl, 4),
       Bool.not(Bool.or(is_space(prev), U32.is_zero(prev))))))
-
-def P.ops(out, lvl):
-  do P<Tm>:
-    P.skip()
-    +nl : Bool <- P.nl()
-    +r : String <- P.peek_rest()
-    +prev : U32 <- P.prev()
-    +call : Bool = Bool.or(Str.prefix(r, "("), Str.prefix(r, "!("))
-    +idx : Bool = Str.prefix(r, "[")
-    P.ops.go(out, lvl, r, prev, Bool.pick(Nat, Bool.and(nl, Bool.or(Str.prefix(r, "("), idx)), 0n,
-      Bool.pick(Nat, call, 1n, Bool.pick(Nat, idx, 2n,
-        Bool.pick(Nat, ops.lt(r, lvl, prev), 3n,
-          Bool.pick(Nat, Bool.and(U32.is_zero(lvl), Str.prefix(r, "=>")), 4n,
-            Bool.pick(Nat, Bool.and(U32.is_zero(lvl), Str.prefix(r, "->")), 5n,
-              Bool.pick(Nat, Bool.and(U32.is_le(lvl, 5), Str.prefix(r, "<&>")), 6n, 7n))))))))
 
 # Statements
 # ==========
@@ -1907,11 +1586,6 @@ def P.body.erased_name(+beg: U32) -> P(Tm):
     s : Sp <- P.span(beg)
     return Var{k, 0, s}
 
-def P.body.ty() -> P(Maybe<&2, Tm>):
-  do P<Maybe<&2, Tm>>:
-    t : Tm <- P.term0()
-    return Some{t}
-
 # x : T with no '=' after it is not a typed let: back to before the ':'.
 def P.body.ty_ok(at: Cur, ty: Maybe<&2, Tm>, eq: Bool) -> P(Maybe<&2, Tm>):
   match ty eq:
@@ -1921,39 +1595,6 @@ def P.body.ty_ok(at: Cur, ty: Maybe<&2, Tm>, eq: Bool) -> P(Maybe<&2, Tm>):
         return None{}
     case m e:
       P.pure(Maybe<&2, Tm>, m)
-
-def P.body.let.ann(+beg: U32, ty: Maybe<&2, Tm>) -> P(List<&2, Tm>):
-  match ty:
-    case None{}:
-      P.pure(List<&2, Tm>, Nil{})
-    case Some{t}:
-      do P<List<&2, Tm>>:
-        v : Tm <- P.term0()
-        s : Sp <- P.span(beg)
-        return [Ann{v, t, s}]
-
-def P.body.let.eq(+beg: U32, ty: Maybe<&2, Tm>) -> P(List<&2, Tm>):
-  do P<List<&2, Tm>>:
-    P.eat("=")
-    P.body.let.ann(beg, ty)
-
-law P.patt:
-  for +t: Tm
-  P(Pt)
-
-@unsafe
-def P.body.binders(ts: List<&2, Tm>, +names: Bool) -> P(List<&2, Pt>):
-  match ts:
-    case Nil{}:
-      P.pure(List<&2, Pt>, Nil{})
-    case +x <> t:
-      do P<List<&2, Pt>>:
-        P.if(Unit, Bool.and(names, Bool.not(Tm.is_var(x))),
-          P.throw(Unit, err0("a name (a parallel or typed let binds names; destructure in its body)", MNone{},
-            Tm.span(x))), P.pure(Unit, Unit{}))
-        p : Pt <- P.patt(x)
-        ps : List<&2, Pt> <- P.body.binders(t, names)
-        return p <> ps
 
 law P.body.vals:
   for +vs: List<&2, Tm>
@@ -1967,38 +1608,12 @@ def Lst.empty(a, -A: Kind(a), xs: List<a, A>) -> Bool:
     case h <> t:
       False{}
 
-@unsafe
-def P.body.let(+col: U32, +beg: U32, +q: Q, +ts: List<&2, Tm>, +ty: Maybe<&2, Tm>, +vs0: List<&2, Tm>) ->
-  P(Body):
-  do P<Body>:
-    vs1 : List<&2, Tm> <- P.if(List<&2, Tm>, Lst.empty(&2, Tm, vs0), P.body.let.eq(beg, ty), P.pure(List<&2, Tm>, vs0))
-    vs : List<&2, Tm> <- P.body.vals(vs1, List.length(&2, Tm, ts))
-    P.skip()
-    semi : Bool <- P.take(";")
-    +n0 : Nat <- P.stn()
-    ks : List<&2, Pt> <- P.body.binders(ts, Bool.or(Nat.is_gt(List.length(&2, Tm, ts), 1n), Maybe.is_some(&2, Tm, ty)))
-    f : Body <- P.body(col)
-    P.close(n0)
-    return BLocal{ks, q, vs, f}
-
 def P.more(+col: U32) -> P(Bool):
   do P<Bool>:
     semi : Bool <- P.at(";")
     +c : U32 <- P.peek()
     +cc : U32 <- P.col()
     return Bool.or(semi, Bool.and(Bool.not(U32.is_zero(c)), U32.is_eq(cc, col)))
-
-def P.body.reply.go(+col: U32, +beg: U32, +bcol: U32, +t: Tm, w: Maybe<&2, Tm>) -> P(Body):
-  match w:
-    case None{}:
-      do P<Body>:
-        s : Sp <- P.span(beg)
-        return BReply{t, s}
-    case Some{x}:
-      do P<Body>:
-        more : Bool <- P.more(bcol)
-        s : Sp <- P.span(beg)
-        P.if(Body, more, P.body.let(col, beg, QLone{}, [x], None{}, [t]), P.pure(Body, BReply{t, s}))
 
 def term_unapply.go(t: Tm, xs: List<&2, Tm>) -> Tm & List<&2, Tm>:
   match t:
@@ -2021,9 +1636,6 @@ def term_write.go(r: Tm & List<&2, Tm>) -> Maybe<&2, Tm>:
 def term_write(t: Tm) -> Maybe<&2, Tm>:
   term_write.go(term_unapply(t))
 
-def P.body.reply(+col: U32, +beg: U32, +bcol: U32, +t: Tm) -> P(Body):
-  P.body.reply.go(col, beg, bcol, t, term_write(t))
-
 def Q.is_lone(q: Q) -> Bool:
   match q:
     case QLone{}:
@@ -2038,35 +1650,10 @@ def Lst.head(-A: Data, d: A, xs: List<&2, A>) -> A:
     case h <> t:
       h
 
-def P.body.local.go(
-  +col: U32, +beg: U32, +bcol: U32, +q: Q, +ts: List<&2, Tm>, +ty: Maybe<&2, Tm>, eq: Bool
-) -> P(Body):
-  +one = Nat.is_eq(List.length(&2, Tm, ts), 1n)
-  +plain = Bool.and(Bool.and(Maybe.is_none(&2, Tm, ty), Q.is_lone(q)), Bool.and(one, Bool.not(eq)))
-  P.if(Body, plain, P.body.reply(col, beg, bcol, Lst.head(Tm, Efq{NoSp{}}, ts)),
-    P.body.let(col, beg, q, ts, ty, Nil{}))
-
 law P.local.names:
   for +q: Q
   for +ts: List<&2, Tm>
   P(List<&2, Tm>)
-
-@unsafe
-def P.body.local(+col: U32, +beg: U32, +bcol: U32) -> P(Body):
-  do P<Body>:
-    +neg : Bool <- P.take("-")
-    +q : Q <- P.pure(Q, Bool.pick(Q, neg, QNone{}, QLone{}))
-    first : Tm <- P.if(Tm, neg, P.body.erased_name(beg), P.term0())
-    P.skip()
-    +ts : List<&2, Tm> <- P.local.names(q, [first])
-    +at : Cur <- P.cur()
-    colon : Bool <- P.if(Bool, Nat.is_eq(List.length(&2, Tm, ts), 1n), P.take(":"), P.pure(Bool, False{}))
-    ty0 : Maybe<&2, Tm> <- P.if(Maybe<&2, Tm>, colon, P.body.ty(), P.pure(Maybe<&2, Tm>, None{}))
-    P.skip()
-    +eq : Bool <- P.at("=")
-    +ty : Maybe<&2, Tm> <- P.body.ty_ok(at, ty0, eq)
-    eqeq : Bool <- P.at("==")
-    P.body.local.go(col, beg, bcol, q, ts, ty, Bool.and(eq, Bool.not(eqeq)))
 
 def P.word.if(+w: String, ok: Bool) -> P(Bool):
   match ok:
@@ -2079,23 +1666,6 @@ def P.word(+w: String) -> P(Bool):
   do P<Bool>:
     ok : Bool <- P.at_word(w)
     P.word.if(w, ok)
-
-def P.body(col):
-  do P<Body>:
-    P.skip()
-    +beg : U32 <- P.pos()
-    +bcol : U32 <- P.col()
-    mat : Bool <- P.word("match")
-    P.if(Body, mat, P.body.match(col, beg), P.body.local(col, beg, bcol))
-
-@unsafe
-def P.body.vals.more(+vs: List<&2, Tm>, +n: Nat) -> P(List<&2, Tm>):
-  do P<List<&2, Tm>>:
-    v : Tm <- P.term0()
-    P.body.vals(List.append(&2, Tm, vs, [v]), n)
-
-def P.body.vals(vs, n):
-  P.if(List<&2, Tm>, Nat.is_ge(List.length(&2, Tm, vs), n), P.pure(List<&2, Tm>, vs), P.body.vals.more(vs, n))
 
 # Declarations
 # ============
@@ -2115,34 +1685,6 @@ def P.quant() -> P(Q):
     +minus : Bool <- P.take("-")
     plus : Bool <- P.if(Bool, minus, P.pure(Bool, False{}), P.take("+"))
     return Bool.pick(Q, minus, QNone{}, Bool.pick(Q, plus, QMany{}, QLone{}))
-
-@unsafe
-def P.patts(xs: List<&2, Tm>) -> P(List<&2, Pt>):
-  match xs:
-    case Nil{}:
-      P.pure(List<&2, Pt>, Nil{})
-    case x <> t:
-      do P<List<&2, Pt>>:
-        p : Pt <- P.patt(x)
-        ps : List<&2, Pt> <- P.patts(t)
-        return p <> ps
-
-def P.patt.ctr.n(+k: String, xs: List<&2, Tm>, +s: Sp, +n: Nat, ok: Bool) -> P(Pt):
-  match ok:
-    case False{}:
-      P.throw(Pt, err0("a " ++ k ++ " pattern with " ++ Nat.show(n) ++
-        Bool.pick(String, Nat.is_eq(n, 1n), " field", " fields"), MNone{}, s))
-    case True{}:
-      do P<Pt>:
-        ps : List<&2, Pt> <- P.patts(xs)
-        return PCtr{k, ps, s}
-
-def P.patt.ctr(+k: String, +xs: List<&2, Tm>, +s: Sp, c: Maybe<&2, CtrD>) -> P(Pt):
-  match c:
-    case None{}:
-      P.throw(Pt, err0("a declared constructor (unknown: " ++ k ++ ")", MNone{}, s))
-    case Some{CtrD{ck, +n, ty}}:
-      P.patt.ctr.n(k, xs, s, n, Nat.is_eq(n, List.length(&2, Tm, xs)))
 
 def P.patt.var.go(+t: Tm, ctr: Bool) -> P(Pt):
   match ctr:
@@ -2419,17 +1961,496 @@ def lit_full(t: Tm) -> Tm:
     case other:
       other
 
+# A pattern, or the patterns of a list (the selector says which).
+type PattK is Data:
+  PkPatts{xs: List<&2, Tm>}
+  PkPattCtrN{k: String, xs: List<&2, Tm>, s: Sp, n: Nat, ok: Bool}
+  PkPattCtr{k: String, xs: List<&2, Tm>, s: Sp, c: Maybe<&2, CtrD>}
+  PkPatt{t: Tm}
+
+def PattK.ty(k: PattK) -> Type:
+  match k:
+    case PkPatts{xs}:
+      List<&2, Pt>
+    case PkPattCtrN{k, xs, s, n, ok}:
+      Pt
+    case PkPattCtr{k, xs, s, c}:
+      Pt
+    case PkPatt{t}:
+      Pt
+
+def P.patt.go(n: Nat, sel: PattK) -> P(PattK.ty(sel)):
+  match n:
+    case 0n:
+      P.fuel(PattK.ty(sel))
+    case 1n+ +fu:
+      match sel:
+        case PkPatts{xs}:
+          match xs:
+            case Nil{}:
+              P.pure(List<&2, Pt>, Nil{})
+            case x <> t:
+              do P<List<&2, Pt>>:
+                p : Pt <- P.patt.go(fu, PkPatt{x})
+                ps : List<&2, Pt> <- P.patt.go(fu, PkPatts{t})
+                return p <> ps
+        case PkPattCtrN{+k, xs, +s, +n, ok}:
+          match ok:
+            case False{}:
+              P.throw(Pt, err0("a " ++ k ++ " pattern with " ++ Nat.show(n) ++
+                Bool.pick(String, Nat.is_eq(n, 1n), " field", " fields"), MNone{}, s))
+            case True{}:
+              do P<Pt>:
+                ps : List<&2, Pt> <- P.patt.go(fu, PkPatts{xs})
+                return PCtr{k, ps, s}
+        case PkPattCtr{+k, +xs, +s, c}:
+          match c:
+            case None{}:
+              P.throw(Pt, err0("a declared constructor (unknown: " ++ k ++ ")", MNone{}, s))
+            case Some{CtrD{ck, +n, ty}}:
+              P.patt.go(fu, PkPattCtrN{k, xs, s, n, Nat.is_eq(n, List.length(&2, Tm, xs))})
+        case PkPatt{+t}:
+          match t:
+            case Ctr{+k, xs, +s}:
+              do P<Pt>:
+                b : Book <- P.book()
+                P.patt.go(fu, PkPattCtr{k, xs, s, book_ctr(b, k)})
+            case Lit{v, s}:
+              P.patt.go(fu, PkPatt{lit_full(Lit{v, s})})
+            case other:
+              P.patt.var(other, Tm.is_var(other))
+
+def P.patts(xs: List<&2, Tm>) -> P(List<&2, Pt>):
+  P.patt.go(Fuel.max(), PkPatts{xs})
+
+def P.patt(+t: Tm) -> P(Pt):
+  P.patt.go(Fuel.max(), PkPatt{t})
+
 @unsafe
-def P.patt(t):
-  match t:
-    case Ctr{+k, xs, +s}:
-      do P<Pt>:
-        b : Book <- P.book()
-        P.patt.ctr(k, xs, s, book_ctr(b, k))
-    case Lit{v, s}:
-      P.patt(lit_full(Lit{v, s}))
+def P.term0() -> P(Tm):
+  P.term(0)
+
+def P.brace.go(+beg: U32, +a: Tm, eq: Bool, ne: Bool) -> P(Tm):
+  match eq ne:
+    case True{} x:
+      do P<Tm>:
+        b : Tm <- P.term0()
+        P.eat(":")
+        ty : Tm <- P.term0()
+        P.eat("}")
+        return Eql{a, b, ty, NoSp{}}
+    case False{} True{}:
+      do P<Tm>:
+        +pos : U32 <- P.pos()
+        ns : Sp <- P.span((pos - 2 : U32))
+        b : Tm <- P.term0()
+        P.eat(":")
+        ty : Tm <- P.term0()
+        P.eat("}")
+        +s : Sp <- P.span(beg)
+        +i : U32 <- P.open("_")
+        return All{QLone{}, "_", i, Eql{a, b, ty, s}, CSyn{Nil{}, i, Ref{"Empty", ns, False{}}}, s}
+    case False{} False{}:
+      do P<Tm>:
+        P.eat(":")
+        ty : Tm <- P.term0()
+        P.eat("}")
+        return Ann{a, ty, NoSp{}}
+
+def P.brace.term(+beg: U32) -> P(Tm):
+  do P<Tm>:
+    +a : Tm <- P.term0()
+    P.skip()
+    +eq : Bool <- P.take("==")
+    ne : Bool <- P.if(Bool, eq, P.pure(Bool, False{}), P.take("!="))
+    P.brace.go(beg, a, eq, ne)
+
+# {==}  {a == b : T}  {a != b : T}  {x : T}
+def P.brace(+beg: U32) -> P(Tm):
+  do P<Tm>:
+    P.bump()
+    P.skip()
+    rfl : Bool <- P.take("==")
+    P.if(Tm, rfl, P.brace.rfl(), P.brace.term(beg))
+
+@unsafe
+def P.brack.arr(+beg: U32, x: Tm) -> P(Tm):
+  do P<Tm>:
+    +ty : Tm <- P.term(12)
+    P.skip()
+    +cnt : Bool <- P.take("*")
+    P.if(Unit, cnt, P.pure(Unit, Unit{}), P.eat("^"))
+    n : Tm <- P.term0()
+    P.eat("]")
+    +s : Sp <- P.span(beg)
+    x2 : Tm <- P.ns(x, ty)
+    d : Tm <- P.brack.depth(cnt, n)
+    return TApp{TApp{TApp{Ref{"Array.new", s, False{}}, ty, s}, d, s}, x2, s}
+
+def P.brack.first(+beg: U32) -> P(Tm):
+  do P<Tm>:
+    +x : Tm <- P.term0()
+    P.skip()
+    arr : Bool <- P.take(":")
+    P.if(Tm, arr, P.brack.arr(beg, x), P.brack.list(beg, [x]))
+
+# [a, b]  [v : T*n]  [v : T^d]
+def P.brack(+beg: U32) -> P(Tm):
+  do P<Tm>:
+    P.bump()
+    P.skip()
+    empty : Bool <- P.at("]")
+    P.if(Tm, empty, P.brack.list(beg, Nil{}), P.brack.first(beg))
+
+@unsafe
+def P.base.word.go(+k: String, +beg: U32, m: Maybe<&2, Nat>) -> P(Tm):
+  match m:
+    case Some{0n}:
+      do P<Tm>:
+        +s : Sp <- P.span(beg)
+        return Typ{TQua{QLone{}, s}, s}
+    case Some{1n}:
+      do P<Tm>:
+        +s : Sp <- P.span(beg)
+        return Typ{TQua{QMany{}, s}, s}
+    case Some{2n}:
+      do P<Tm>:
+        s : Sp <- P.span(beg)
+        return Qnt{s}
+    case Some{3n}:
+      do P<Tm>:
+        P.eat("(")
+        g : Tm <- P.term0()
+        P.eat(")")
+        s : Sp <- P.span(beg)
+        return Typ{g, s}
+    case Some{4n}:
+      P.do(beg)
+    case Some{5n}:
+      P.fail.at(Tm, "a term (a match heads a def body, not a term)", beg)
+    case Some{6n}:
+      P.fail.at(Tm, "a match heading this case (this case is orphaned)", beg)
+    case Some{7n}:
+      P.fail.at(Tm, "a do-block heading this return", beg)
     case other:
-      P.patt.var(other, Tm.is_var(other))
+      P.if(Tm, Str.has(KEYWORDS(), k), P.fail.at(Tm, "a term (the keyword '" ++ k ++ "' cannot head one)", beg),
+        P.base.name(k, beg))
+
+def P.base.word(+k: String, +beg: U32) -> P(Tm):
+  P.base.word.go(k, beg, Str.index(["Type", "Data", "Quant", "Kind", "do", "match", "case", "return"],
+    k, 0n))
+
+@unsafe
+def P.plus(+beg: U32) -> P(Tm):
+  do P<Tm>:
+    P.bump()
+    +t : Tm <- P.term(12)
+    +s : Sp <- P.span(beg)
+    +k : String <- P.plus.key(t)
+    b : Book <- P.book()
+    P.plus.go(t, k, s, Tld.adt_ng(book_tld(b, k)))
+
+@unsafe
+def P.base.sym.go(+c: U32, +beg: U32, m: Maybe<&2, Nat>) -> P(Tm):
+  match m:
+    case Some{0n}:
+      P.all(False{})
+    case Some{1n}:
+      do P<Tm>:
+        +r : String <- P.peek_rest()
+        P.amp(Str.second(r), beg)
+    case Some{2n}:
+      P.plus(beg)
+    case Some{3n}:
+      P.arms(beg)
+    case Some{4n}:
+      P.rwt(beg)
+    case Some{5n}:
+      P.brace(beg)
+    case Some{6n}:
+      do P<Tm>:
+        P.bump()
+        P.tup(beg)
+    case Some{7n}:
+      P.brack(beg)
+    case Some{8n}:
+      P.chr_lit(beg)
+    case Some{9n}:
+      P.str_lit(beg)
+    case Some{10n}:
+      P.hole(beg)
+    case other:
+      P.fail(Tm, "a term")
+
+# The syntax of each symbol that starts a term.
+def P.base.sym(+c: U32, +beg: U32) -> P(Tm):
+  P.base.sym.go(c, beg, Str.index(["@", "&", "+", "\\", "%", "{", "(", "[", "'", "\"", "?"],
+    Str.chr(c), 0n))
+
+@unsafe
+def P.base.go(+c: U32, +beg: U32, kind: Nat) -> P(Tm):
+  match kind:
+    case 0n:
+      do P<Tm>:
+        +k : String <- P.lexeme()
+        P.base.word(k, beg)
+    case 1n:
+      P.num()
+    case 2n+p:
+      P.base.sym(c, beg)
+
+def P.base(+beg: U32) -> P(Tm):
+  do P<Tm>:
+    +c : U32 <- P.peek()
+    P.base.go(c, beg, Bool.pick(Nat, is_head(c), 0n, Bool.pick(Nat, is_digit(c), 1n, 2n)))
+
+@unsafe
+def P.term(lvl):
+  do P<Tm>:
+    P.skip()
+    +beg : U32 <- P.pos()
+    base : Tm <- P.base(beg)
+    s : Sp <- P.span(beg)
+    P.ops(Tm.spanned(base, s), lvl)
+
+@unsafe
+def P.call.bang.go(h: Tm, +lvl: U32) -> P(Tm):
+  do P<Tm>:
+    P.bump()
+    P.ops(Tm.bang(h), lvl)
+
+def P.call.bang(+h: Tm, +lvl: U32) -> P(Tm):
+  P.if(Tm, Tm.is_ref(h), P.call.bang.go(h, lvl), P.fail(Tm, "a named def before ! (only f!(..) offloads)"))
+
+@unsafe
+def P.call.args(+h: Tm, +lvl: U32) -> P(Tm):
+  do P<Tm>:
+    P.bump()
+    b : Book <- P.book()
+    +x : Nat <- P.pure(Nat, Tld.x(book_tld(b, Bool.pick(String, Tm.is_ref(h), Tm.name(h), ""))))
+    P.skip()
+    ts : List<&2, Tm> <- P.call.tmpl(h, x, Nil{})
+    xs : List<&2, Tm> <- P.args(")")
+    s2 : Sp <- span.grow(h)
+    P.ops(apps(h, List.append(&2, Tm, ts, xs), s2), lvl)
+
+def P.call(out: Tm, +lvl: U32) -> P(Tm):
+  do P<Tm>:
+    +h : Tm <- P.call.head(out)
+    bang : Bool <- P.at("!")
+    P.if(Tm, bang, P.call.bang(h, lvl), P.call.args(h, lvl))
+
+@unsafe
+def P.index.set(out: Tm, ix: Tm, +s2: Sp, +lvl: U32) -> P(Tm):
+  do P<Tm>:
+    v : Tm <- P.term(2)
+    P.ops(apps(Ref{"Array.set", s2, False{}}, [Ref{"U32", s2, False{}}, out, ix, v], s2), lvl)
+
+@unsafe
+def P.index(+out: Tm, +lvl: U32) -> P(Tm):
+  do P<Tm>:
+    P.bump()
+    ix0 : Tm <- P.term0()
+    P.eat("]")
+    +s2 : Sp <- span.grow(out)
+    +ix : Tm <- P.ns(ix0, Ref{"U32", s2, False{}})
+    P.skip()
+    +nl : Bool <- P.nl()
+    set : Bool <- P.if(Bool, nl, P.pure(Bool, False{}), P.take("<-"))
+    P.if(Tm, set, P.index.set(out, ix, s2, lvl), P.ops(TApp{TApp{TApp{Ref{"Array.get", s2, False{}},
+      Ref{"U32", s2, False{}}, s2}, out, s2}, ix, s2}, lvl))
+
+@unsafe
+def P.block() -> P(Tm):
+  do P<Tm>:
+    P.skip()
+    +c : U32 <- P.col()
+    b : Body <- P.body((c - 1 : U32))
+    P.flatten(b, Nil{})
+
+@unsafe
+def P.lam(out: Tm, +lvl: U32) -> P(Tm):
+  do P<Tm>:
+    ok : Bool <- P.take("=>")
+    +n0 : Nat <- P.stn()
+    x : Pt <- P.binder(out)
+    f : Tm <- P.block()
+    P.close(n0)
+    P.ops(lam.build(x, f), lvl)
+
+@unsafe
+def P.arrow(+out: Tm, +lvl: U32) -> P(Tm):
+  do P<Tm>:
+    ok : Bool <- P.take("->")
+    b : Tm <- P.term0()
+    s2 : Sp <- span.grow(out)
+    +i : U32 <- P.open("_")
+    P.ops(All{QLone{}, "_", i, out, CSyn{Nil{}, i, b}, s2}, lvl)
+
+@unsafe
+def P.minq(+out: Tm, +lvl: U32) -> P(Tm):
+  do P<Tm>:
+    ok : Bool <- P.take("<&>")
+    b : Tm <- P.term(5)
+    s2 : Sp <- span.grow(out)
+    P.ops(Min{out, b, s2}, lvl)
+
+@unsafe
+def P.infix.go(+out: Tm, +lvl: U32, +sym: String, +prec: U32, right: Bool, +name: String) -> P(Tm):
+  do P<Tm>:
+    ok : Bool <- P.take(sym)
+    +pos : U32 <- P.pos()
+    +t : Sp <- P.span((pos - U32.from_nat(String.length(sym)) : U32))
+    b : Tm <- P.term(Bool.pick(U32, right, prec, U32.inc(prec)))
+    +s : Sp <- span.grow(out)
+    P.ops(infix.build(sym, name, out, b, s, t), lvl)
+
+def P.infix(+out: Tm, +lvl: U32, m: Maybe<&2, Op>, arrow: Bool) -> P(Tm):
+  match m:
+    case None{}:
+      P.pure(Tm, out)
+    case Some{Op{+sym, +prec, +right, +name}}:
+      P.if(Tm, Bool.or(U32.is_lt(prec, lvl), arrow), P.pure(Tm, out), P.infix.go(out, lvl, sym, prec, right, name))
+
+@unsafe
+def P.ops.go(out: Tm, +lvl: U32, +r: String, +prev: U32, k: Nat) -> P(Tm):
+  match k:
+    case 0n:
+      P.pure(Tm, out)
+    case 1n:
+      P.call(out, lvl)
+    case 2n:
+      P.index(out, lvl)
+    case 3n:
+      P.lt(out, lvl)
+    case 4n:
+      P.lam(out, lvl)
+    case 5n:
+      P.arrow(out, lvl)
+    case 6n:
+      P.minq(out, lvl)
+    case 7n+p:
+      P.infix(out, lvl, op.find(OPS(), r, prev), Str.prefix(r, "<-"))
+
+def P.ops(out, lvl):
+  do P<Tm>:
+    P.skip()
+    +nl : Bool <- P.nl()
+    +r : String <- P.peek_rest()
+    +prev : U32 <- P.prev()
+    +call : Bool = Bool.or(Str.prefix(r, "("), Str.prefix(r, "!("))
+    +idx : Bool = Str.prefix(r, "[")
+    P.ops.go(out, lvl, r, prev, Bool.pick(Nat, Bool.and(nl, Bool.or(Str.prefix(r, "("), idx)), 0n,
+      Bool.pick(Nat, call, 1n, Bool.pick(Nat, idx, 2n,
+        Bool.pick(Nat, ops.lt(r, lvl, prev), 3n,
+          Bool.pick(Nat, Bool.and(U32.is_zero(lvl), Str.prefix(r, "=>")), 4n,
+            Bool.pick(Nat, Bool.and(U32.is_zero(lvl), Str.prefix(r, "->")), 5n,
+              Bool.pick(Nat, Bool.and(U32.is_le(lvl, 5), Str.prefix(r, "<&>")), 6n, 7n))))))))
+
+def P.body.ty() -> P(Maybe<&2, Tm>):
+  do P<Maybe<&2, Tm>>:
+    t : Tm <- P.term0()
+    return Some{t}
+
+def P.body.let.ann(+beg: U32, ty: Maybe<&2, Tm>) -> P(List<&2, Tm>):
+  match ty:
+    case None{}:
+      P.pure(List<&2, Tm>, Nil{})
+    case Some{t}:
+      do P<List<&2, Tm>>:
+        v : Tm <- P.term0()
+        s : Sp <- P.span(beg)
+        return [Ann{v, t, s}]
+
+def P.body.let.eq(+beg: U32, ty: Maybe<&2, Tm>) -> P(List<&2, Tm>):
+  do P<List<&2, Tm>>:
+    P.eat("=")
+    P.body.let.ann(beg, ty)
+
+@unsafe
+def P.body.binders(ts: List<&2, Tm>, +names: Bool) -> P(List<&2, Pt>):
+  match ts:
+    case Nil{}:
+      P.pure(List<&2, Pt>, Nil{})
+    case +x <> t:
+      do P<List<&2, Pt>>:
+        P.if(Unit, Bool.and(names, Bool.not(Tm.is_var(x))),
+          P.throw(Unit, err0("a name (a parallel or typed let binds names; destructure in its body)", MNone{},
+            Tm.span(x))), P.pure(Unit, Unit{}))
+        p : Pt <- P.patt(x)
+        ps : List<&2, Pt> <- P.body.binders(t, names)
+        return p <> ps
+
+@unsafe
+def P.body.let(+col: U32, +beg: U32, +q: Q, +ts: List<&2, Tm>, +ty: Maybe<&2, Tm>, +vs0: List<&2, Tm>) ->
+  P(Body):
+  do P<Body>:
+    vs1 : List<&2, Tm> <- P.if(List<&2, Tm>, Lst.empty(&2, Tm, vs0), P.body.let.eq(beg, ty), P.pure(List<&2, Tm>, vs0))
+    vs : List<&2, Tm> <- P.body.vals(vs1, List.length(&2, Tm, ts))
+    P.skip()
+    semi : Bool <- P.take(";")
+    +n0 : Nat <- P.stn()
+    ks : List<&2, Pt> <- P.body.binders(ts, Bool.or(Nat.is_gt(List.length(&2, Tm, ts), 1n), Maybe.is_some(&2, Tm, ty)))
+    f : Body <- P.body(col)
+    P.close(n0)
+    return BLocal{ks, q, vs, f}
+
+def P.body.reply.go(+col: U32, +beg: U32, +bcol: U32, +t: Tm, w: Maybe<&2, Tm>) -> P(Body):
+  match w:
+    case None{}:
+      do P<Body>:
+        s : Sp <- P.span(beg)
+        return BReply{t, s}
+    case Some{x}:
+      do P<Body>:
+        more : Bool <- P.more(bcol)
+        s : Sp <- P.span(beg)
+        P.if(Body, more, P.body.let(col, beg, QLone{}, [x], None{}, [t]), P.pure(Body, BReply{t, s}))
+
+def P.body.reply(+col: U32, +beg: U32, +bcol: U32, +t: Tm) -> P(Body):
+  P.body.reply.go(col, beg, bcol, t, term_write(t))
+
+def P.body.local.go(
+  +col: U32, +beg: U32, +bcol: U32, +q: Q, +ts: List<&2, Tm>, +ty: Maybe<&2, Tm>, eq: Bool
+) -> P(Body):
+  +one = Nat.is_eq(List.length(&2, Tm, ts), 1n)
+  +plain = Bool.and(Bool.and(Maybe.is_none(&2, Tm, ty), Q.is_lone(q)), Bool.and(one, Bool.not(eq)))
+  P.if(Body, plain, P.body.reply(col, beg, bcol, Lst.head(Tm, Efq{NoSp{}}, ts)),
+    P.body.let(col, beg, q, ts, ty, Nil{}))
+
+@unsafe
+def P.body.local(+col: U32, +beg: U32, +bcol: U32) -> P(Body):
+  do P<Body>:
+    +neg : Bool <- P.take("-")
+    +q : Q <- P.pure(Q, Bool.pick(Q, neg, QNone{}, QLone{}))
+    first : Tm <- P.if(Tm, neg, P.body.erased_name(beg), P.term0())
+    P.skip()
+    +ts : List<&2, Tm> <- P.local.names(q, [first])
+    +at : Cur <- P.cur()
+    colon : Bool <- P.if(Bool, Nat.is_eq(List.length(&2, Tm, ts), 1n), P.take(":"), P.pure(Bool, False{}))
+    ty0 : Maybe<&2, Tm> <- P.if(Maybe<&2, Tm>, colon, P.body.ty(), P.pure(Maybe<&2, Tm>, None{}))
+    P.skip()
+    +eq : Bool <- P.at("=")
+    +ty : Maybe<&2, Tm> <- P.body.ty_ok(at, ty0, eq)
+    eqeq : Bool <- P.at("==")
+    P.body.local.go(col, beg, bcol, q, ts, ty, Bool.and(eq, Bool.not(eqeq)))
+
+def P.body(col):
+  do P<Body>:
+    P.skip()
+    +beg : U32 <- P.pos()
+    +bcol : U32 <- P.col()
+    mat : Bool <- P.word("match")
+    P.if(Body, mat, P.body.match(col, beg), P.body.local(col, beg, bcol))
+
+@unsafe
+def P.body.vals.more(+vs: List<&2, Tm>, +n: Nat) -> P(List<&2, Tm>):
+  do P<List<&2, Tm>>:
+    v : Tm <- P.term0()
+    P.body.vals(List.append(&2, Tm, vs, [v]), n)
+
+def P.body.vals(vs, n):
+  P.if(List<&2, Tm>, Nat.is_ge(List.length(&2, Tm, vs), n), P.pure(List<&2, Tm>, vs), P.body.vals.more(vs, n))
 
 @unsafe
 def P.arms.more(acc: List<&2, Tm>, +t: Tm, arm: Bool) -> P(List<&2, Tm> & Tm):
