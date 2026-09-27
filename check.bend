@@ -4448,7 +4448,6 @@ def mat_goal.go(
       Efq{cs}
 
 type WSel is Data:
-  STermWnf{book: Book, t: Tm}
   STermSnf{book: Book, term: Tm}
   SCloApply{book: Book, c: Tm, xs: List<&2, Tm>}
   STermApplyGo{book: Book, fn: Tm, x: Tm, s: Sp}
@@ -4461,18 +4460,15 @@ type WSel is Data:
   SHigher{book: Book, tm: Tm, env: List<&2, Tm>}
   SLhsStep{book: Book, lhs: LH, x: Tm, s: Sp}
   SLhsMat{book: Book, lhs: LH, k: String, len: Nat}
-  SWnfLam{book: Book, tm: Tm, frs: List<&2, Fr>, lhs: LH}
+  SWnfLam{book: Book, tm: Tm, f: Tm, frs: List<&2, Fr>, lhs: LH}
   SWnfMat{book: Book, tm: Tm, frs: List<&2, Fr>, lhs: LH}
   SWnfEfq{book: Book, tm: Tm, frs: List<&2, Fr>, lhs: LH}
   SWnfRwt{book: Book, e: Tm, tm: Tm, f: Tm, frs: List<&2, Fr>, lhs: LH}
-  SWnfRefDef{book: Book, tm: Tm, v: Tm, n: Nat, frs: List<&2, Fr>, short: Bool}
   SWnfRef{book: Book, tld: Maybe<&2, Tld>, tm: Tm, frs: List<&2, Fr>, lhs: LH}
-  SWnfCel{book: Book, v: Tm, m: Tm, hit: Bool, frs: List<&2, Fr>}
   SWnfGo{book: Book, tm: Tm, frs: List<&2, Fr>, lhs: LH}
   SWnfMatd{book: Book, tm: Tm, t: Tm, e: Tm, lhs: LH, s: Sp, rest: List<&2, Fr>}
   SWnfBack{book: Book, tm: Tm, frs: List<&2, Fr>}
   SWnfMna{book: Book, tm: Tm, b: Tm, s: Sp, rest: List<&2, Fr>}
-  SWnfWalkMat{book: Book, k: String, xs: List<&2, Tm>, ctr: Tm, w: Tm, h: Tm, m: Tm, t: Tm, e: Tm, lhs: LH, s: Sp, rest: List<&2, Fr>, hit: Bool}
   SWnfWalk{book: Book, k: String, xs: List<&2, Tm>, ctr: Tm, w: Tm, t: Tm, e: Tm, lhs: LH, s: Sp, rest: List<&2, Fr>}
   SSnfs{book: Book, xs: List<&2, Tm>}
   SSnfFun{book: Book, f: Tm}
@@ -4481,8 +4477,6 @@ type WSel is Data:
 
 def WSel.ty(k: WSel) -> Type:
   match k:
-    case STermWnf{book, t}:
-      Tm
     case STermSnf{book, term}:
       Tm
     case SCloApply{book, c, xs}:
@@ -4507,7 +4501,7 @@ def WSel.ty(k: WSel) -> Type:
       LH
     case SLhsMat{book, lhs, k, len}:
       LH
-    case SWnfLam{book, tm, frs, lhs}:
+    case SWnfLam{book, tm, f, frs, lhs}:
       Tm
     case SWnfMat{book, tm, frs, lhs}:
       Tm
@@ -4515,11 +4509,7 @@ def WSel.ty(k: WSel) -> Type:
       Tm
     case SWnfRwt{book, e, tm, f, frs, lhs}:
       Tm
-    case SWnfRefDef{book, tm, v, n, frs, short}:
-      Tm
     case SWnfRef{book, tld, tm, frs, lhs}:
-      Tm
-    case SWnfCel{book, v, m, hit, frs}:
       Tm
     case SWnfGo{book, tm, frs, lhs}:
       Tm
@@ -4528,8 +4518,6 @@ def WSel.ty(k: WSel) -> Type:
     case SWnfBack{book, tm, frs}:
       Tm
     case SWnfMna{book, tm, b, s, rest}:
-      Tm
-    case SWnfWalkMat{book, k, xs, ctr, w, h, m, t, e, lhs, s, rest, hit}:
       Tm
     case SWnfWalk{book, k, xs, ctr, w, t, e, lhs, s, rest}:
       Tm
@@ -4548,8 +4536,6 @@ def wnf.run(fuel0: Nat, sel: WSel) -> WSel.ty(sel):
   match fuel0:
     case 0n:
       match sel:
-        case STermWnf{book, t}:
-          Hol{"out of fuel", NoSp{}}
         case STermSnf{book, term}:
           Hol{"out of fuel", NoSp{}}
         case SCloApply{book, c, xs}:
@@ -4574,7 +4560,7 @@ def wnf.run(fuel0: Nat, sel: WSel) -> WSel.ty(sel):
           LNo{}
         case SLhsMat{book, lhs, k, len}:
           LNo{}
-        case SWnfLam{book, tm, frs, lhs}:
+        case SWnfLam{book, tm, f, frs, lhs}:
           Hol{"out of fuel", NoSp{}}
         case SWnfMat{book, tm, frs, lhs}:
           Hol{"out of fuel", NoSp{}}
@@ -4582,11 +4568,7 @@ def wnf.run(fuel0: Nat, sel: WSel) -> WSel.ty(sel):
           Hol{"out of fuel", NoSp{}}
         case SWnfRwt{book, e, tm, f, frs, lhs}:
           Hol{"out of fuel", NoSp{}}
-        case SWnfRefDef{book, tm, v, n, frs, short}:
-          Hol{"out of fuel", NoSp{}}
         case SWnfRef{book, tld, tm, frs, lhs}:
-          Hol{"out of fuel", NoSp{}}
-        case SWnfCel{book, v, m, hit, frs}:
           Hol{"out of fuel", NoSp{}}
         case SWnfGo{book, tm, frs, lhs}:
           Hol{"out of fuel", NoSp{}}
@@ -4595,8 +4577,6 @@ def wnf.run(fuel0: Nat, sel: WSel) -> WSel.ty(sel):
         case SWnfBack{book, tm, frs}:
           Hol{"out of fuel", NoSp{}}
         case SWnfMna{book, tm, b, s, rest}:
-          Hol{"out of fuel", NoSp{}}
-        case SWnfWalkMat{book, k, xs, ctr, w, h, m, t, e, lhs, s, rest, hit}:
           Hol{"out of fuel", NoSp{}}
         case SWnfWalk{book, k, xs, ctr, w, t, e, lhs, s, rest}:
           Hol{"out of fuel", NoSp{}}
@@ -4610,10 +4590,8 @@ def wnf.run(fuel0: Nat, sel: WSel) -> WSel.ty(sel):
           Hol{"out of fuel", NoSp{}}
     case 1n+ +fuel:
       match sel:
-        case STermWnf{+book, t}:
-          wnf.run(fuel, SWnfGo{book, t, Nil{}, LNo{}})
         case STermSnf{+book, term}:
-          wnf.run(fuel, SSnfGo{book, wnf.run(fuel, STermWnf{book, term})})
+          wnf.run(fuel, SSnfGo{book, wnf.run(fuel, SWnfGo{book, term, Nil{}, LNo{}})})
         # Applies a binder's body to its arguments.
         case SCloApply{+book, c, +xs}:
           match c:
@@ -4722,10 +4700,10 @@ def wnf.run(fuel0: Nat, sel: WSel) -> WSel.ty(sel):
               LNo{}
             case LH{t, n}:
               LH{wnf.run(fuel, SLhsExt{book, t, k, len, Nil{}}), Nat.add(Nat.sub(n, 1n), len)}
-        case SWnfLam{+book, tm, frs, lhs}:
+        case SWnfLam{+book, tm, f, frs, lhs}:
           match frs:
-            case FApp{+x, +s} <> rest:
-              wnf.run(fuel, SWnfGo{book, wnf.run(fuel, STermApply{book, tm, x, s}), rest, wnf.run(fuel, SLhsStep{book, lhs, x, s})})
+            case FApp{+x, s} <> rest:
+              wnf.run(fuel, SWnfGo{book, wnf.run(fuel, SCloApply{book, f, [x]}), rest, wnf.run(fuel, SLhsStep{book, lhs, x, s})})
             case other:
               wnf.run(fuel, SWnfBack{book, tm, other})
         case SWnfMat{+book, tm, frs, lhs}:
@@ -4746,32 +4724,24 @@ def wnf.run(fuel0: Nat, sel: WSel) -> WSel.ty(sel):
               wnf.run(fuel, SWnfGo{book, f, frs, lhs})
             case other:
               wnf.run(fuel, SWnfBack{book, tm, frs})
-        case SWnfRefDef{+book, tm, v, n, frs, short}:
-          match short:
-            case True{}:
-              wnf.run(fuel, SWnfBack{book, tm, frs})
-            case False{}:
-              wnf.run(fuel, SWnfGo{book, v, frs, LH{tm, n}})
         case SWnfRef{+book, tld, +tm, +frs, lhs}:
           match tld:
             case Some{TADT{0n, g, ty, cs, tbase}}:
               wnf.run(fuel, SWnfBack{book, ADT{Tm.ref_k(tm), Nil{}, Tm.span(tm), Nil{}}, frs})
             case Some{TDef{+n, x, ty, Some{v}, u, b, imps}}:
-              wnf.run(fuel, SWnfRefDef{book, tm, v, n, frs, Nat.is_lt(frs_apps(frs, n), n)})
+              Bool.pick(Unit -> Tm, Nat.is_lt(frs_apps(frs, n), n),
+                un => wnf.run(fuel, SWnfBack{book, tm, frs}),
+                un => wnf.run(fuel, SWnfGo{book, v, frs, LH{tm, n}}))(Unit{})
             case other:
               wnf.run(fuel, SWnfBack{book, tm, frs})
-        # A cell evaluates once: its memo keeps the value for every copy of the
-        # cell, so the arms of a match a cell holds evaluate once too.
-        case SWnfCel{+book, +v, +m, hit, frs}:
-          match hit:
-            case True{}:
-              wnf.run(fuel, SWnfGo{book, memo.get(m), frs, LNo{}})
-            case False{}:
-              wnf.run(fuel, SWnfGo{book, v, FVar{m, v} <> frs, LNo{}})
-        case SWnfGo{+book, tm, frs, lhs}:
+        case SWnfGo{+book, tm, +frs, lhs}:
           match tm:
+            # A cell evaluates once: its memo keeps the value for every copy of
+            # the cell, so the arms of a match a cell holds evaluate once too.
             case Cel{k, s, +v, +m}:
-              wnf.run(fuel, SWnfCel{book, v, m, memo.has(m, v), frs})
+              Bool.pick(Unit -> Tm, memo.has(m, v),
+                un => wnf.run(fuel, SWnfGo{book, memo.get(m), frs, LNo{}}),
+                un => wnf.run(fuel, SWnfGo{book, v, FVar{m, v} <> frs, LNo{}}))(Unit{})
             case VRf{k, i, s, r}:
               wnf.run(fuel, SWnfGo{book, r, frs, LNo{}})
             case Ann{x, ty, s}:
@@ -4782,14 +4752,14 @@ def wnf.run(fuel0: Nat, sel: WSel) -> WSel.ty(sel):
               wnf.run(fuel, SWnfGo{book, wnf.run(fuel, SCloApply{book, f, term_cells(vs, ks)}), frs, lhs})
             case TApp{f, x, s}:
               wnf.run(fuel, SWnfGo{book, f, FApp{term_cell(x, "_"), s} <> frs, LNo{}})
-            case Lam{k, i, f, s, q}:
-              wnf.run(fuel, SWnfLam{book, Lam{k, i, f, s, q}, frs, lhs})
+            case Lam{k, i, +f, s, q}:
+              wnf.run(fuel, SWnfLam{book, Lam{k, i, f, s, q}, f, frs, lhs})
             case Mat{k, h, m, s}:
               wnf.run(fuel, SWnfMat{book, Mat{k, h, m, s}, frs, lhs})
             case Efq{s}:
               wnf.run(fuel, SWnfEfq{book, Efq{s}, frs, lhs})
             case Rwt{+e, p, +f, s}:
-              wnf.run(fuel, SWnfRwt{book, wnf.run(fuel, STermWnf{book, e}), Rwt{e, p, f, s}, f, frs, lhs})
+              wnf.run(fuel, SWnfRwt{book, wnf.run(fuel, SWnfGo{book, e, Nil{}, LNo{}}), Rwt{e, p, f, s}, f, frs, lhs})
             case Ref{+k, +s, b}:
               wnf.run(fuel, SWnfRef{book, book_tld(book, k), Ref{k, s, b}, frs, lhs})
             case other:
@@ -4822,20 +4792,16 @@ def wnf.run(fuel0: Nat, sel: WSel) -> WSel.ty(sel):
               wnf.run(fuel, SWnfBack{book, TQua{QNone{}, qs}, rest})
             case other:
               wnf.run(fuel, SWnfGo{book, b, FMnb{other, s} <> rest, LNo{}})
-        case SWnfWalkMat{+book, +k, +xs, ctr, w, h, m, t, e, lhs, s, rest, hit}:
-          match hit:
-            case True{}:
-              wnf.run(fuel, SWnfGo{book, h, app_frames(xs, rest), wnf.run(fuel, SLhsMat{book, lhs, k, List.length(&2, Tm, xs)})})
-            case False{}:
-              wnf.run(fuel, SWnfWalk{book, k, xs, ctr, m, t, e, lhs, s, rest})
-        case SWnfWalk{+book, +k, +xs, ctr, w, t, e, lhs, s, rest}:
+        case SWnfWalk{+book, +k, +xs, ctr, w, t, e, +lhs, s, +rest}:
           match w:
             case Ann{x, ty, as}:
               wnf.run(fuel, SWnfWalk{book, k, xs, ctr, x, t, e, lhs, s, rest})
             case Cel{ck, cs, x, cm}:
               wnf.run(fuel, SWnfWalk{book, k, xs, ctr, x, t, e, lhs, s, rest})
             case Mat{+k2, +h, +m, ms}:
-              wnf.run(fuel, SWnfWalkMat{book, k, xs, ctr, Mat{k2, h, m, ms}, h, m, t, e, lhs, s, rest, String.eq(k, k2)})
+              Bool.pick(Unit -> Tm, String.eq(k, k2),
+                un => wnf.run(fuel, SWnfGo{book, h, app_frames(xs, rest), wnf.run(fuel, SLhsMat{book, lhs, k, List.length(&2, Tm, xs)})}),
+                un => wnf.run(fuel, SWnfWalk{book, k, xs, ctr, m, t, e, lhs, s, rest}))(Unit{})
             case Efq{es}:
               wnf.run(fuel, SWnfBack{book, wnf.run(fuel, STermApply{book, lhs_or(lhs, t), e, s}), rest})
             case other:
@@ -4891,10 +4857,10 @@ def wnf.run(fuel0: Nat, sel: WSel) -> WSel.ty(sel):
             case 0n:
               wnf.run(fuel, SCloApply{book, tb, [Ctr{ck, xs, cs}]})
             case 1n+m:
-              mat_goal.go(wnf.run(fuel, STermWnf{book, tel}), m, xs, tb, ck, cs, tq, ctx, dn)
+              mat_goal.go(wnf.run(fuel, SWnfGo{book, tel, Nil{}, LNo{}}), m, xs, tb, ck, cs, tq, ctx, dn)
 
 def term_wnf(+book: Book, t: Tm) -> Tm:
-  wnf.run(Fuel.max(), STermWnf{book, t})
+  wnf.run(Fuel.max(), SWnfGo{book, t, Nil{}, LNo{}})
 
 def term_snf(+book: Book, term: Tm) -> Tm:
   wnf.run(Fuel.max(), STermSnf{book, term})
@@ -5076,12 +5042,10 @@ def cmp.fresh(n: Nat, f: Tm, +dep: U32) -> Tm:
 
 type CmpSel is Data:
   STermCompare{le: Bool, book: Book, lhs: Tm, rhs: Tm, dep: U32}
-  SCmpLam{le: Bool, book: Book, a: Tm, b: Tm, dep: U32, lam: Bool}
   SCmpWnf{le: Bool, book: Book, a: Tm, b: Tm, dep: U32}
   SCmps{xs: List<&2, Tm>, ys: List<&2, Tm>, book: Book, dep: U32}
   SCmpKindRmin{book: Book, g: Tm, h: Tm, dep: U32}
   SCmpKindMin{book: Book, g: Tm, h: Tm, dep: U32}
-  SCmpKindGo{book: Book, g: Tm, h: Tm, dep: U32, done: Bool}
   SCmpKind{book: Book, g: Tm, h: Tm, dep: U32}
   SCmpTyp{le: Bool, book: Book, g: Tm, h: Tm, dep: U32}
   SCmpRef{book: Book, k: String, k2: String, a: Tm, b: Tm, dep: U32}
@@ -5096,8 +5060,6 @@ def cmp.run(fuel0: Nat, sel: CmpSel) -> Bool:
       match sel:
         case STermCompare{le, book, lhs, rhs, dep}:
           False{}
-        case SCmpLam{le, book, a, b, dep, lam}:
-          False{}
         case SCmpWnf{le, book, a, b, dep}:
           False{}
         case SCmps{xs, ys, book, dep}:
@@ -5105,8 +5067,6 @@ def cmp.run(fuel0: Nat, sel: CmpSel) -> Bool:
         case SCmpKindRmin{book, g, h, dep}:
           False{}
         case SCmpKindMin{book, g, h, dep}:
-          False{}
-        case SCmpKindGo{book, g, h, dep, done}:
           False{}
         case SCmpKind{book, g, h, dep}:
           False{}
@@ -5122,15 +5082,11 @@ def cmp.run(fuel0: Nat, sel: CmpSel) -> Bool:
       match sel:
         case STermCompare{le, +book, lhs, rhs, +dep}:
           cmp.run(fuel, SCmpWnf{le, book, term_wnf(book, lhs), term_wnf(book, rhs), dep})
-        case SCmpLam{le, +book, +a, +b, +dep, lam}:
-          match lam:
-            case True{}:
-              +x = {Var{Tm.lam_k(a, b), dep, NoSp{}} : Tm}
-              cmp.run(fuel, STermCompare{le, book, term_apply1(book, a, x), term_apply1(book, b, x), U32.inc(dep)})
-            case False{}:
-              cmp.run(fuel, SCmpGo{le, book, cmp.lit(a, b), cmp.lit(b, a), dep})
-        case SCmpWnf{le, +book, +a, +b, +dep}:
-          cmp.run(fuel, SCmpLam{le, book, a, b, dep, Bool.or(Tm.is_lam(a), Tm.is_lam(b))})
+        case SCmpWnf{+le, +book, +a, +b, +dep}:
+          Bool.pick(Unit -> Bool, Bool.or(Tm.is_lam(a), Tm.is_lam(b)),
+            un => cmp.run(fuel, STermCompare{le, book, term_apply1(book, a, Var{Tm.lam_k(a, b), dep, NoSp{}}),
+              term_apply1(book, b, Var{Tm.lam_k(a, b), dep, NoSp{}}), U32.inc(dep)}),
+            un => cmp.run(fuel, SCmpGo{le, book, cmp.lit(a, b), cmp.lit(b, a), dep}))(Unit{})
         case SCmps{xs, ys, +book, +dep}:
           match xs ys:
             case x <> xt y <> yt:
@@ -5151,14 +5107,8 @@ def cmp.run(fuel0: Nat, sel: CmpSel) -> Bool:
               Lazy.and(cmp.run(fuel, STermCompare{True{}, book, Typ{a, NoSp{}}, Typ{h, NoSp{}}, dep}), u => cmp.run(fuel, STermCompare{True{}, book, Typ{b, NoSp{}}, Typ{h, NoSp{}}, dep}))
             case other:
               cmp.run(fuel, SCmpKindRmin{book, other, h, dep})
-        case SCmpKindGo{+book, g, h, +dep, done}:
-          match done:
-            case True{}:
-              True{}
-            case False{}:
-              cmp.run(fuel, SCmpKindMin{book, g, h, dep})
         case SCmpKind{+book, +g, +h, +dep}:
-          cmp.run(fuel, SCmpKindGo{book, g, h, dep, Bool.or(Tm.is_many(g), Tm.is_qua_not_many(h))})
+          Lazy.or(Bool.or(Tm.is_many(g), Tm.is_qua_not_many(h)), u => cmp.run(fuel, SCmpKindMin{book, g, h, dep}))
         case SCmpTyp{le, +book, g, h, +dep}:
           match le:
             case False{}:
