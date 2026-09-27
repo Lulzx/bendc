@@ -86,6 +86,6 @@ def main() -> IO(Unit):
     IO.print(U32.show(app(adder!(3), 4)))
     IO.print(greet!(3n))
     IO.print(Nat.show(big!(10n)))
-    IO.print(Nat.show(big!(70n)))
+    IO.print(Nat.show(big!(47n)))
     IO.print(Nat.show(count!(12n)))
     IO.print(Nat.show(List.length(&1, (U32 & Bool), pairs!(5n))))

@@ -99,6 +99,7 @@ int gc_nhooks;
 _Atomic int gc_stopping, gc_acks, gc_inside;
 __thread Thr *thr_self;
 GcItem *gc_stk;
+uint8_t *gc_dirty;
 size_t gc_sp, gc_cap;
 void *gc_reserve(size_t bytes, void *hint) {
   void *p = mmap(hint, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
@@ -110,6 +111,7 @@ void gc_init(void) {
   gc_base = gc_reserve(GC_MAXBLK << GC_BLK_SHIFT, (void *)((uintptr_t)1 << 44));
   if ((uintptr_t)gc_base < ((uintptr_t)1 << 32)) bend_fail("the heap must be above 4 GB (bend_share)");
   gc_kind = gc_reserve(GC_MAXBLK, NULL);
+  gc_dirty = gc_reserve(GC_MAXBLK, NULL);
   gc_back = gc_reserve(GC_MAXBLK * sizeof(uint32_t), NULL);
   gc_runs = gc_reserve(GC_MAXBLK / 2 * sizeof(GcRun) + 64, NULL);
   gc_cap = ((size_t)1 << 33) / sizeof(GcItem);
@@ -420,6 +422,27 @@ void gc_rem_unique(void) {
     if (gc_rem[i] != gc_rem[n - 1]) gc_rem[n++] = gc_rem[i];
   gc_nrem = n;
 }
+void gc_rescan_dirty(void) {
+  for (uintptr_t bi = 0; bi < gc_top; bi++) {
+    if (!gc_dirty[bi]) continue;
+    gc_dirty[bi] = 0;
+    if (!gc_minor) continue;
+    GcBlk *b = gc_blk(bi);
+    uint64_t *al = GC_ALLOC(b), *mk = GC_MARK(b);
+    if (gc_kind[bi] == 2) {
+      if ((al[0] & mk[0] & 1) && !b->atomic) {
+        if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
+        gc_stk[gc_sp++] = (GcItem){gc_objs(b), b->words};
+      }
+    } else if (gc_kind[bi] == 1 && !b->atomic) {
+      for (uint32_t i = 0; i < b->nobj; i++) {
+        if (!(al[i >> 6] & mk[i >> 6] & (1ull << (i & 63)))) continue;
+        if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
+        gc_stk[gc_sp++] = (GcItem){gc_objs(b) + (size_t)i * b->words, b->words};
+      }
+    }
+  }
+}
 __attribute__((noinline)) void gc_collect_locked(void) {
   Thr *me = thr_self;
   struct timespec t0, t1;
@@ -467,6 +490,7 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   for (size_t i = 0; i < gc_nroots; i++) gc_scan(gc_roots[i].p, gc_roots[i].p + gc_roots[i].n);
   for (int i = 0; i < gc_nhooks; i++) gc_hooks[i]();
   gc_rooting = 0;
+  gc_rescan_dirty();
   gc_drain();
   gc_sweep();
   atomic_store(&gc_stopping, 0);
@@ -529,6 +553,55 @@ void thr_register(uintptr_t top) {
   __atomic_store_n(&gc_nthr, gc_nthr + 1, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&gc_lock);
 }
+#define ARR_TAG ((V)0xFFF00)
+#define ARR_HDR(c) (ARR_TAG | (V)(c))
+V arr_alloc(unsigned c) {
+  if (c > 31) bend_fail("an array past the deepest block class 31");
+  V *p = halloc(1 + ((size_t)1 << c));
+  p[0] = ARR_HDR(c);
+  return (V)p;
+}
+V arr_copy(unsigned c, const V *src, int share) {
+  size_t n = (size_t)1 << c;
+  V a = arr_alloc(c);
+  V *d = arr_cells(a);
+  arr_dirty(a);
+  for (size_t i = 0; i < n; i++) {
+    V x = src[i];
+    if (share) bend_share(x);
+    d[i] = x;
+  }
+  return a;
+}
+V arr_new(V depth, V v) {
+  if (depth > 31) bend_fail("an array past the deepest block class 31");
+  unsigned c = (unsigned)depth;
+  size_t n = (size_t)1 << c;
+  V a = arr_alloc(c);
+  V *d = arr_cells(a);
+  if (c > 0) bend_share(v);
+  if (v >= ((V)1 << 32)) arr_dirty(a);
+  for (size_t i = 0; i < n; i++) d[i] = v;
+  return a;
+}
+V arr_node(V l, V r) {
+  unsigned c = arr_cls(l);
+  if (arr_cls(r) != c || c >= 31) bend_fail("runtime fail-stop");
+  size_t n = (size_t)1 << c;
+  V a = arr_alloc(c + 1);
+  V *d = arr_cells(a);
+  int sl = arr_shared(l), sr = arr_shared(r);
+  arr_dirty(a);
+  for (size_t i = 0; i < n; i++) { V x = arr_cells(l)[i]; if (sl) bend_share(x); d[i] = x; }
+  for (size_t i = 0; i < n; i++) { V x = arr_cells(r)[i]; if (sr) bend_share(x); d[n + i] = x; }
+  return a;
+}
+V arr_half(V a, unsigned hi) {
+  unsigned c = arr_cls(a);
+  if (c == 0) bend_fail("runtime fail-stop");
+  return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), arr_shared(a));
+}
+#define ARR_ATOMIC(name, op) static inline V F_Array_datomic_d##name(V a, V i, V v) { return C2(0, a, (V)__atomic_##op(arr_word(a, i), (uint32_t)v, __ATOMIC_SEQ_CST)); }
 V apply(V f, V x) {
   V *c = (V *)f;
   V ar = c[1], n = c[2];
@@ -604,198 +677,20 @@ char *str_to_c(V s, size_t *len) {
   if (len) *len = n;
   return buf;
 }
-#define NAT_BIG ((V)1 << 63)
-V nat_make(const V *d, size_t n) {
-  while (n > 0 && d[n - 1] == 0) n--;
-  if (n == 0) return 0;
-  if (n == 1 && !(d[0] >> 63)) return d[0];
-  V *p = gc_alloc(n + 1, 1);
-  p[0] = n;
-  memcpy(p + 1, d, n * sizeof(V));
-  return (V)(uintptr_t)p | NAT_BIG;
-}
-int nat_cmp3(V a, V b) {
-  if (!((a | b) >> 63)) return a < b ? -1 : a > b;
-  V ba, bb;
-  size_t na, nb;
-  const V *x = nat_limbs(a, &ba, &na), *y = nat_limbs(b, &bb, &nb);
-  if (na != nb) return na < nb ? -1 : 1;
-  for (size_t i = na; i-- > 0;) if (x[i] != y[i]) return x[i] < y[i] ? -1 : 1;
-  return 0;
-}
-V nat_add(V a, V b) {
-  if (!((a | b) >> 63)) {
-    V s = a + b;
-    if (!(s >> 63)) return s;
-    return nat_make(&s, 1);
-  }
-  V ba, bb;
-  size_t na, nb;
-  const V *x = nat_limbs(a, &ba, &na), *y = nat_limbs(b, &bb, &nb);
-  if (na < nb) { const V *t = x; x = y; y = t; size_t u = na; na = nb; nb = u; }
-  V *r = malloc((na + 1) * sizeof(V));
-  unsigned __int128 c = 0;
-  for (size_t i = 0; i < na; i++) {
-    c += (unsigned __int128)x[i] + (i < nb ? y[i] : 0);
-    r[i] = (V)c;
-    c >>= 64;
-  }
-  r[na] = (V)c;
-  V v = nat_make(r, na + 1);
-  free(r);
-  return v;
-}
-V nat_sub(V a, V b) {
-  if (!((a | b) >> 63)) return a > b ? a - b : 0;
-  if (nat_cmp3(a, b) <= 0) return 0;
-  V ba, bb;
-  size_t na, nb;
-  const V *x = nat_limbs(a, &ba, &na), *y = nat_limbs(b, &bb, &nb);
-  V *r = malloc(na * sizeof(V));
-  V borrow = 0;
-  for (size_t i = 0; i < na; i++) {
-    unsigned __int128 d = (unsigned __int128)x[i] - (i < nb ? y[i] : 0) - borrow;
-    r[i] = (V)d;
-    borrow = (V)(d >> 64) ? 1 : 0;
-  }
-  V v = nat_make(r, na);
-  free(r);
-  return v;
-}
-V nat_mul(V a, V b) {
-  if (!((a | b) >> 63)) {
-    unsigned __int128 p = (unsigned __int128)a * b;
-    if (!(p >> 63)) return (V)p;
-    V d[2] = {(V)p, (V)(p >> 64)};
-    return nat_make(d, 2);
-  }
-  V ba, bb;
-  size_t na, nb;
-  const V *x = nat_limbs(a, &ba, &na), *y = nat_limbs(b, &bb, &nb);
-  if (na == 0 || nb == 0) return 0;
-  V *r = calloc(na + nb, sizeof(V));
-  for (size_t i = 0; i < na; i++) {
-    unsigned __int128 c = 0;
-    for (size_t j = 0; j < nb; j++) {
-      c += (unsigned __int128)x[i] * y[j] + r[i + j];
-      r[i + j] = (V)c;
-      c >>= 64;
-    }
-    r[i + nb] = (V)c;
-  }
-  V v = nat_make(r, na + nb);
-  free(r);
-  return v;
-}
-void nat_divlimbs(const V *u, size_t m, const V *v, size_t n, V *q, V *r) {
-  int s = __builtin_clzll(v[n - 1]);
-  V *vn = malloc(n * sizeof(V)), *un = malloc((m + 1) * sizeof(V));
-  for (size_t i = n - 1; i > 0; i--) vn[i] = (v[i] << s) | (s ? v[i - 1] >> (64 - s) : 0);
-  vn[0] = v[0] << s;
-  un[m] = s ? u[m - 1] >> (64 - s) : 0;
-  for (size_t i = m - 1; i > 0; i--) un[i] = (u[i] << s) | (s ? u[i - 1] >> (64 - s) : 0);
-  un[0] = u[0] << s;
-  for (size_t jj = m - n + 1; jj-- > 0;) {
-    size_t j = jj;
-    unsigned __int128 num = ((unsigned __int128)un[j + n] << 64) | un[j + n - 1];
-    unsigned __int128 qhat = num / vn[n - 1], rhat = num % vn[n - 1];
-    while ((qhat >> 64) || qhat * vn[n - 2] > ((rhat << 64) | un[j + n - 2])) {
-      qhat--;
-      rhat += vn[n - 1];
-      if (rhat >> 64) break;
-    }
-    V borrow = 0, carry = 0;
-    for (size_t i = 0; i < n; i++) {
-      unsigned __int128 p = qhat * vn[i] + carry;
-      carry = (V)(p >> 64);
-      unsigned __int128 d = (unsigned __int128)un[i + j] - (V)p - borrow;
-      un[i + j] = (V)d;
-      borrow = (V)(d >> 64) ? 1 : 0;
-    }
-    unsigned __int128 d = (unsigned __int128)un[j + n] - carry - borrow;
-    un[j + n] = (V)d;
-    if ((V)(d >> 64)) {
-      qhat--;
-      unsigned __int128 c = 0;
-      for (size_t i = 0; i < n; i++) {
-        c += (unsigned __int128)un[i + j] + vn[i];
-        un[i + j] = (V)c;
-        c >>= 64;
-      }
-      un[j + n] += (V)c;
-    }
-    q[j] = (V)qhat;
-  }
-  for (size_t i = 0; i < n; i++) r[i] = (un[i] >> s) | (s && i + 1 <= n ? (V)((unsigned __int128)un[i + 1] << (64 - s)) : 0);
-  free(vn);
-  free(un);
-}
-void nat_divmod2(V a, V b, V *qo, V *ro) {
-  if (b == 0) { *qo = 0; *ro = a; return; }
-  if (!((a | b) >> 63)) { *qo = a / b; *ro = a % b; return; }
-  if (nat_cmp3(a, b) < 0) { *qo = 0; *ro = a; return; }
-  V ba, bb;
-  size_t na, nb;
-  const V *x = nat_limbs(a, &ba, &na), *y = nat_limbs(b, &bb, &nb);
-  V *q = calloc(na + 1, sizeof(V)), *r = calloc(nb + 1, sizeof(V));
-  if (nb == 1) {
-    unsigned __int128 rem = 0;
-    for (size_t i = na; i-- > 0;) {
-      rem = (rem << 64) | x[i];
-      q[i] = (V)(rem / y[0]);
-      rem %= y[0];
-    }
-    r[0] = (V)rem;
-  } else {
-    nat_divlimbs(x, na, y, nb, q, r);
-  }
-  *qo = nat_make(q, na);
-  *ro = nat_make(r, nb);
-  free(q);
-  free(r);
+#define NAT_IMM (((V)1 << 48) - 1)
+__attribute__((noreturn, cold, noinline)) void nat_wall(void) {
+  bend_fail("a Nat past the largest immediate 2^48-1");
 }
 V nat_pow(V a, V n) {
   if (a <= 1) return n == 0 ? 1 : a;
-  V bn;
-  size_t nn;
-  const V *e = nat_limbs(n, &bn, &nn);
-  if (nn > 1) bend_fail("out of memory (a Nat.pow result too large)");
-  V r = 1, b = a;
-  for (V k = nn ? e[0] : 0; k; k >>= 1) {
-    if (k & 1) r = nat_mul(r, b);
-    if (k > 1) b = nat_mul(b, b);
-  }
+  V r = 1;
+  for (; n; n--) r = nat_mul(r, a);
   return r;
 }
 char *nat_digits(V x) {
-  if (!(x >> 63)) {
-    char *s = malloc(24);
-    snprintf(s, 24, "%llu", (unsigned long long)x);
-    return s;
-  }
-  V bx;
-  size_t n;
-  const V *d = nat_limbs(x, &bx, &n);
-  V *t = malloc(n * sizeof(V));
-  memcpy(t, d, n * sizeof(V));
-  size_t cap = n * 20 + 2, k = cap - 1;
-  char *out = malloc(cap);
-  out[k] = 0;
-  const V TEN19 = 10000000000000000000ull;
-  while (n > 0) {
-    unsigned __int128 rem = 0;
-    for (size_t i = n; i-- > 0;) {
-      rem = (rem << 64) | t[i];
-      t[i] = (V)(rem / TEN19);
-      rem %= TEN19;
-    }
-    while (n > 0 && t[n - 1] == 0) n--;
-    V chunk = (V)rem;
-    for (int j = 0; j < 19 && (n > 0 || chunk > 0); j++) { out[--k] = (char)('0' + chunk % 10); chunk /= 10; }
-  }
-  free(t);
-  char *s = strdup(out + k);
-  free(out);
+  nat_chk(x / 10);
+  char *s = malloc(24);
+  snprintf(s, 24, "%llu", (unsigned long long)x);
   return s;
 }
 V F_Nat_dshow(V a) {
@@ -1046,6 +941,7 @@ __attribute__((noreturn)) void err_fail(const char *msg) { bend_fail(msg); }
 #define term_sink(e, t) ((void)(e), (void)(t))
 #define cls_fit(n) 0
 #define spare_free(e, c, x) ((void)(e), (void)(c), (void)(x))
+#define f32_unbox(t) FV(t)
 IoEff io_eff_rows[1 << 16];
 u32 io_live;
 int io_argc;
@@ -1155,6 +1051,28 @@ OUTLINE char *io_cstr(Env e, Term s, u64 *len) {
   *len = n;
   return buf;
 }
+OUTLINE char *io_cbuf(Env e, Term s, u64 *len, u64 cons) {
+  (void)e;
+  (void)cons;
+  u64 cap = 64, n = 0, bad = 0;
+  char *buf = io_mem(malloc(cap + 1));
+  while (!(s & 1) && TAG(s) == 1) {
+    if (n + 1 > cap) {
+      cap *= 2;
+      buf = io_mem(realloc(buf, cap + 1));
+    }
+    bad |= FLD(s, 0) > 255;
+    buf[n++] = (char)FLD(s, 0);
+    s = FLD(s, 1);
+  }
+  buf[n] = 0;
+  *len = n;
+  if (bad) {
+    free(buf);
+    return NULL;
+  }
+  return buf;
+}
 OUTLINE void io_errs(Env e, Term s) {
   u64 n = 0;
   char *text = io_cstr(e, s, &n);
@@ -1209,6 +1127,12 @@ Term io_str(Env e, const char *p, u64 n) {
   while (k > 0) { k--; s = SCONS(cps[k], s); }
   free(cps);
   return s;
+}
+Term io_list(Env e, const char *p, u64 n) {
+  (void)e;
+  Term xs = IMM(0);
+  for (u64 i = n; i > 0; i -= 1) xs = C2(1, (uint8_t)p[i - 1], xs);
+  return xs;
 }
 #define io_tup(e, a, b) io_node(e, CID_TUPLE, a, b)
 #define io_done(e, v) io_box(e, CID_DONE, v)
@@ -1518,6 +1442,7 @@ void cli_fail(const char *msg) {
 int bend_start(int argc, char **argv, V (*m)(void), int value) {
   bend_main_fn = m;
   io_argv = calloc((size_t)argc + 1, sizeof(char *));
+  io_argv[io_argc++] = argv[0];  // IO.args starts with the program as invoked
   long thr = 0;
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];

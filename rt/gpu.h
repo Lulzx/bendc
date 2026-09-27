@@ -8,7 +8,7 @@
 // value runs the continuation. Values are the CPU's words. The device reads
 // the CPU heap in place (unified memory) and builds new objects in an arena
 // the host copies the result out of. Anything the device cannot do (an
-// effect, a Nat past 2^63, a full arena or queue, a failed match, a closure
+// effect, a Nat past 2^48 - 1, a full arena or queue, a failed match, a closure
 // it has no code for) sets an error, and the host runs the call on the CPU.
 //
 // bendc generates, after this file, k_frame_size (the frame of each label),
@@ -105,7 +105,7 @@ typedef struct {
 
 // The errors a lane can hit.
 #define KE_FX 2      // an effect, or a closure with no device code
-#define KE_NAT 3     // a Nat past 2^63
+#define KE_NAT 3     // a Nat past 2^48 - 1
 #define KE_HEAP 4
 #define KE_QUEUE 6
 #define KE_MATCH 7
@@ -149,20 +149,12 @@ KINLINE void k_fail(KTHR KCtx *c, KU e) {
 
 // The words of the object at v: in the arena or in the CPU's heap.
 //
-// A Nat on the device is below 2^63: a bignum (bit 63 set; no other value
-// has it) can only come from the CPU, as an argument (the host runs such a
-// call on the CPU) or a word of the CPU's heap, which fails the lane and
-// reads as 0 (so no loop runs on it). Matches and arithmetic on Nats need
-// no check then, and a loop that counts down stays a counted loop.
+// A Nat is a plain word (at most 2^48 - 1, as on the CPU), so a match on one
+// needs no check, and a loop that counts down stays a counted loop.
 KINLINE bool k_in(KTHR KCtx *c, KW v) { return v - c->ab < c->an; }
 KINLINE KW k_word(KTHR KCtx *c, KW v, KW i) {
   if (k_in(c, v)) return c->H[((v - c->ab) >> 3) + i];
-  KW w = c->G[((v - c->gb) >> 3) + i];
-  if (w >> 63) {
-    k_fail(c, KE_NAT);
-    return 0;
-  }
-  return w;
+  return c->G[((v - c->gb) >> 3) + i];
 }
 KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : (k_word(c, v, 0) & ~(KW)0x300000); }
 #define KTAG(v) k_tag(c, v)
@@ -315,8 +307,8 @@ KINLINE KW k_fn_label(KTHR KCtx *c, KW f) {
 // Natives
 // -------
 
-// Nats are below 2^63 (see k_word); a result past it fails, as 0.
-#define KNAT_BIG(x) ((x) >> 63)
+// A Nat result past 2^48 - 1 fails, as 0 (the CPU then stops, as the official runtime).
+#define KNAT_BIG(x) ((x) > (((KW)1 << 48) - 1))
 KINLINE bool k_nge(KTHR KCtx *c, KW x, KW k) { return x >= k; }
 KINLINE bool k_nz(KTHR KCtx *c, KW x) { return x != 0; }
 KINLINE KW k_nat_add(KTHR KCtx *c, KW a, KW b) {
@@ -325,7 +317,7 @@ KINLINE KW k_nat_add(KTHR KCtx *c, KW a, KW b) {
   return s;
 }
 KINLINE KW k_nat_mul(KTHR KCtx *c, KW a, KW b) {
-  if (a != 0 && b > (((KW)1 << 63) - 1) / a) { k_fail(c, KE_NAT); return 0; }
+  if (a != 0 && b > (((KW)1 << 48) - 1) / a) { k_fail(c, KE_NAT); return 0; }
   return a * b;
 }
 KINLINE KW k_cmp3(KW a, KW b) { return a < b ? KIMM(0) : a == b ? KIMM(1) : KIMM(2); }
@@ -358,6 +350,25 @@ KINLINE KW KF_Nat_dpow(KTHR KCtx *c, KW a, KW n) {
   return r;
 }
 KINLINE KW KF_Nat_dshow(KTHR KCtx *c, KW a) { k_fail(c, KE_FX); return 0; }
+// An Array is a host block (see "Arrays" in bendrt.h): the device runs no
+// Array operation, and a call that meets one runs on the CPU.
+KINLINE bool k_arr(KTHR KCtx *c) { k_fail(c, KE_FX); return false; }
+#define KF_ARR(c) (k_fail(c, KE_FX), (KW)0)
+#define KF_Array_dsize(c, ...) KF_ARR(c)
+#define KF_Array_dget(c, ...) KF_ARR(c)
+#define KF_Array_dswap(c, ...) KF_ARR(c)
+#define KF_Array_dset(c, ...) KF_ARR(c)
+#define KF_Array_dnew(c, ...) KF_ARR(c)
+#define KF_Array_dclone(c, ...) KF_ARR(c)
+#define KF_Array_datomic_dadd(c, ...) KF_ARR(c)
+#define KF_Array_datomic_dmin(c, ...) KF_ARR(c)
+#define KF_Array_datomic_dmax(c, ...) KF_ARR(c)
+#define KF_Array_datomic_dand(c, ...) KF_ARR(c)
+#define KF_Array_datomic_dor(c, ...) KF_ARR(c)
+#define KF_Array_datomic_dxor(c, ...) KF_ARR(c)
+#define KF_Array_datomic_dexch(c, ...) KF_ARR(c)
+#define KF_Array_datomic_dcas(c, ...) KF_ARR(c)
+#define KF_Array_datomic_dfadd(c, ...) KF_ARR(c)
 
 #define KU32(x) ((KW)(KU)(x))
 #define KU1(name, expr) KINLINE KW KF_U32_d##name(KTHR KCtx *c, KW a) { return expr; }
@@ -478,14 +489,6 @@ KINLINE KW kr_push(KTHR KW *st, KTHR KW *sp, KW fp, KW ret, KW fs) {
 KINLINE KW k_frame_size(KW l);
 KINLINE void k_cases(KTHR KCtx *c);
 KINLINE KW k_kq(KTHR KCtx *c, KTHR bool *ok);
-
-// Whether one of a KQ_ call's first n arguments is a bignum (bit 63: no
-// other value has it), which the device cannot run.
-KINLINE bool k_big(KTHR KCtx *c, KW n) {
-  KW any = 0;
-  for (KW i = 0; i < n; i++) any |= c->kqa[i];
-  return (any >> 63) != 0;
-}
 
 // Applies closure f to x; the value goes to block ret.
 KINLINE void k_call_clo(KTHR KCtx *c, KW f, KW x, KW ret) {

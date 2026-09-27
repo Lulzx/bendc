@@ -1,7 +1,9 @@
+SOME PROOFS FAIL
 Error:
-- message  : no such file: nope.bend
+- message  : no such file: <repo>/tests/check/nope.bend
 Location:
 1 | import Base
 2>| import ./nope.bend as N
+  |        ^
 3 | 
 exit 1

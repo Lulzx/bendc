@@ -92,13 +92,22 @@ def src.p1() -> String:
   "const F_U32_dlog2 = (n) => BigInt(n <= 1 ? 0 : 31 - Math.clz32(n));  // a Nat\n" ++
   "const F_U32_dto__f32 = (a) => Math.fround(a);\n" ++
   "\n" ++
-  "// Natives: Nat (BigInt, unbounded)\n" ++
-  "// ================================\n" ++
+  "// Natives: Nat (BigInt, up to 2^48 - 1)\n" ++
+  "// ======================================\n" ++
   "\n" ++
-  "const F_Nat_ddouble = (a) => a * 2n;\n" ++
-  "const F_Nat_dadd = (a, b) => a + b;\n" ++
+  "// A Nat past the official runtime's largest immediate stops the program,\n" ++
+  "// as does arithmetic on a negative one (a host's, which upstream traps).\n" ++
+  "function nat_chk(n) {\n" ++
+  "  if (n > 281474976710655n || n < 0n) {\n" ++
+  "    bend_fail(\"a Nat past the largest immediate 2^48-1\");\n" ++
+  "  }\n" ++
+  "  return n;\n" ++
+  "}\n" ++
+  "\n" ++
+  "const F_Nat_ddouble = (a) => nat_chk(a * 2n);\n" ++
+  "const F_Nat_dadd = (a, b) => nat_chk(a + b);\n" ++
   "const F_Nat_dsub = (a, b) => (a > b ? a - b : 0n);\n" ++
-  "const F_Nat_dmul = (a, b) => a * b;\n" ++
+  "const F_Nat_dmul = (a, b) => nat_chk(a * b);\n" ++
   "const nat_divmod = (a, b) => (b === 0n ? { $: \"Tuple\", fst: 0n, snd: a } : { $: \"Tuple\", fst: a / b, snd: a % b });\n" ++
   "const F_Nat_ddivmod = nat_divmod;\n" ++
   "const F_Nat_ddiv = (a, b) => (b === 0n ? 0n : a / b);\n" ++
@@ -112,8 +121,16 @@ def src.p1() -> String:
   "const F_Nat_dis__ge = (a, b) => a >= b;\n" ++
   "const F_Nat_dmin = (a, b) => (a < b ? a : b);\n" ++
   "const F_Nat_dmax = (a, b) => (a < b ? b : a);\n" ++
-  "const F_Nat_dpow = (a, n) => a ** n;\n" ++
-  "const F_Nat_dshow = (a) => a.toString();\n" ++
+  "const F_Nat_dpow = (a, n) => {\n" ++
+  "  if (a <= 1n) return n === 0n ? 1n : a;\n" ++
+  "  let r = 1n;\n" ++
+  "  for (; n > 0n; n--) r = nat_chk(r * a);\n"
+
+def src.p2() -> String:
+  "  return r;\n" ++
+  "};\n" ++
+  "// Base's Nat.show rebuilds each quotient as a successor (checked).\n" ++
+  "const F_Nat_dshow = (a) => (nat_chk(a < 0n ? a : a / 10n), a.toString());\n" ++
   "const F_Map_dbit = (key, pos) => {\n" ++
   "  const n = Number(pos), off = n % 33;\n" ++
   "  let ci = Math.floor(n / 33);\n" ++
@@ -123,10 +140,63 @@ def src.p1() -> String:
   "  return { $: \"Tuple\", fst: key, snd: false };\n" ++
   "};\n" ++
   "\n" ++
-  "// Natives: F32\n" ++
-  "// ============\n"
+  "// Natives: Array\n" ++
+  "// ==============\n" ++
+  "\n" ++
+  "// An Array is a JS array of 2^d cells, as the official JS target's: get,\n" ++
+  "// set, swap and the atomics work on it in place, so a shared one is one\n" ++
+  "// array; a match on ANode slices its halves.\n" ++
+  "function array_new(d, v) {\n" ++
+  "  if (d > 31n) {\n" ++
+  "    bend_fail(\"an array past the deepest block class 31\");\n" ++
+  "  }\n" ++
+  "  return Array(2 ** Number(d)).fill(v);\n" ++
+  "}\n" ++
+  "\n" ++
+  "function array_node(a, b) {\n" ++
+  "  if (a.length !== b.length) {\n" ++
+  "    bend_fail(\"runtime fail-stop\");\n" ++
+  "  }\n" ++
+  "  return a.concat(b);\n" ++
+  "}\n" ++
+  "\n" ++
+  "function array_half(a, hi) {\n" ++
+  "  const h = a.length >> 1;\n" ++
+  "  return hi ? a.slice(h) : a.slice(0, h);\n" ++
+  "}\n" ++
+  "\n" ++
+  "function array_rmw(a, i, f) {\n" ++
+  "  const at = i % a.length;\n" ++
+  "  const old = a[at];\n" ++
+  "  a[at] = f(old);\n" ++
+  "  return { $: \"Tuple\", fst: a, snd: old };\n" ++
+  "}\n" ++
+  "\n" ++
+  "const F_Array_dsize = (a) => ({ $: \"Tuple\", fst: a, snd: a.length >>> 0 });\n" ++
+  "// The checker's memo cells (check.bend's memo.*): a cell's term and its value.\n" ++
+  "const F_Chk_dmemo_dnew = (t) => [undefined, undefined];\n" ++
+  "const F_Chk_dmemo_dhas = (m, v) => m[0] !== undefined && m[0] === v;\n" ++
+  "const F_Chk_dmemo_dget = (m) => m[1];\n" ++
+  "const F_Chk_dmemo_dset = (m, v, x) => (m[1] = x, m[0] = v, x);\n" ++
+  "const F_Array_dget = (a, i) => ({ $: \"Tuple\", fst: a, snd: a[i % a.length] });\n" ++
+  "const F_Array_dswap = (a, i, v) => array_rmw(a, i, () => v);\n" ++
+  "const F_Array_dset = (a, i, v) => ((a[i % a.length] = v), a);\n" ++
+  "const F_Array_dnew = array_new;\n" ++
+  "const F_Array_dclone = (a) => ({ $: \"Tuple\", fst: a, snd: a.slice() });\n" ++
+  "const F_Array_datomic_dadd = (a, i, v) => array_rmw(a, i, (o) => (o + v) >>> 0);\n" ++
+  "const F_Array_datomic_dmin = (a, i, v) => array_rmw(a, i, (o) => Math.min(o, v));\n" ++
+  "const F_Array_datomic_dmax = (a, i, v) => array_rmw(a, i, (o) => Math.max(o, v));\n" ++
+  "const F_Array_datomic_dand = (a, i, v) => array_rmw(a, i, (o) => (o & v) >>> 0);\n"
 
-def src.p2() -> String:
+def src.p3() -> String:
+  "const F_Array_datomic_dor = (a, i, v) => array_rmw(a, i, (o) => (o | v) >>> 0);\n" ++
+  "const F_Array_datomic_dxor = (a, i, v) => array_rmw(a, i, (o) => (o ^ v) >>> 0);\n" ++
+  "const F_Array_datomic_dexch = (a, i, v) => array_rmw(a, i, () => v);\n" ++
+  "const F_Array_datomic_dcas = (a, i, x, v) => array_rmw(a, i, (o) => (o === x ? v : o));\n" ++
+  "const F_Array_datomic_dfadd = (a, i, v) => array_rmw(a, i, (o) => Math.fround(o + v));\n" ++
+  "\n" ++
+  "// Natives: F32\n" ++
+  "// ============\n" ++
   "\n" ++
   "const fr = Math.fround;\n" ++
   "const F_F32_dadd = (a, b) => fr(a + b);\n" ++
@@ -134,7 +204,8 @@ def src.p2() -> String:
   "const F_F32_dmul = (a, b) => fr(a * b);\n" ++
   "const F_F32_ddiv = (a, b) => fr(a / b);\n" ++
   "const F_F32_dmod = (a, b) => fr(a % b);\n" ++
-  "const F_F32_dpow = (a, b) => fr(a ** b);\n" ++
+  "// IEEE's pow(1, y) and pow(-1, inf) are 1; JS's ** says NaN\n" ++
+  "const F_F32_dpow = (a, b) => (a === 1 || (a === -1 && Math.abs(b) === Infinity) ? 1 : fr(a ** b));\n" ++
   "const F_F32_datan2 = (a, b) => fr(Math.atan2(a, b));\n" ++
   "const F_F32_dis__eq = (a, b) => a === b;\n" ++
   "const F_F32_dis__ne = (a, b) => a !== b;\n" ++
@@ -177,18 +248,35 @@ def src.p2() -> String:
   "  }\n" ++
   "  return s;\n" ++
   "}\n" ++
-  "const F_F32_dshow = (a) => f32_show(a);\n" ++
+  "const F_F32_dshow = (a) => f32_show(a);\n"
+
+def src.p4() -> String:
+  "\n" ++
+  "// The binary32 nearest the decimal s, rounded once (as strtof): through\n" ++
+  "// binary64 alone, a text whose binary64 is a binary32 midpoint would round\n" ++
+  "// to the even side, not the text's (Bend 2.0.32's f32_round).\n" ++
+  "function f32_round(s) {\n" ++
+  "  const d = Number(s);\n" ++
+  "  const a = Math.abs(d);\n" ++
+  "  const f = Math.fround(a);\n" ++
+  "  const g = 2 * a - Math.min(f, 2 ** 128);\n" ++
+  "  if (g === f || Math.fround(g) !== g || g === Infinity) return Math.sign(d) * f;\n" ++
+  "  let k = 0;\n" ++
+  "  while (a * 2 ** k % 1 !== 0) k += 1;\n" ++
+  "  const [, i, r, e] = /(\\d*)\\.?(\\d*)(?:e([+-]?\\d+))?$/i.exec(s);\n" ++
+  "  const n = Number(e ?? 0) - r.length;\n" ++
+  "  const x = BigInt(i + r) * 2n ** BigInt(k) * 10n ** BigInt(Math.max(n, 0));\n" ++
+  "  const y = BigInt(a * 2 ** k) * 10n ** BigInt(Math.max(-n, 0));\n" ++
+  "  return Math.sign(d) * (x === y || x > y !== g > f ? f : g);\n" ++
+  "}\n" ++
   "\n" ++
   "function F_F32_dread(s) {\n" ++
   "  const re = /^\\s*[+-]?((\\d+\\.?\\d*|\\.\\d+)(e[+-]?\\d+)?|inf(inity)?|nan)$/i;\n" ++
-  "  const v = Number(s.replace(/inf\\w*/i, \"Infinity\"));\n" ++
-  "  return re.test(s) ? { $: \"Some\", value: Math.fround(v) } : { $: \"None\" };\n" ++
+  "  return re.test(s) ? { $: \"Some\", value: f32_round(s.replace(/inf\\w*/i, \"Infinity\")) } : { $: \"None\" };\n" ++
   "}\n" ++
   "\n" ++
   "// Printing values (a main that is not IO)\n" ++
-  "// =======================================\n"
-
-def src.p3() -> String:
+  "// =======================================\n" ++
   "\n" ++
   "function show_chr(c, q) {\n" ++
   "  const k = { 10: \"n\", 9: \"t\", 13: \"r\", 0: \"0\", 92: \"\\\\\" }[c] ?? (c === q.codePointAt(0) ? q : null);\n" ++
@@ -222,7 +310,9 @@ def src.p3() -> String:
   "  io_out(2, io_bytes(message + \"\\n\"));\n" ++
   "}\n" ++
   "\n" ++
-  "// libc through bun:ffi (the effects that make system calls need Bun).\n" ++
+  "// libc through bun:ffi (the effects that make system calls need Bun).\n"
+
+def src.p5() -> String:
   "function io_sys() {\n" ++
   "  if (globalThis.BEND_SYS === undefined) {\n" ++
   "    const ffi = require(\"bun:ffi\");\n" ++
@@ -248,9 +338,7 @@ def src.p3() -> String:
   "\n" ++
   "function io_fail(code) {\n" ++
   "  let text = \"error \" + code;\n" ++
-  "  try {\n"
-
-def src.p4() -> String:
+  "  try {\n" ++
   "    text = String(io_sys().strerror(code));\n" ++
   "  } catch (e) {\n" ++
   "  }\n" ++
@@ -271,6 +359,22 @@ def src.p4() -> String:
   "\n" ++
   "function io_text(b, n) {\n" ++
   "  return new TextDecoder(\"utf-8\", { ignoreBOM: true }).decode(b.subarray(0, n));\n" ++
+  "}\n" ++
+  "\n" ++
+  "// Bytes cross as they are (0..255), one List cell each, with no UTF-8 in\n" ++
+  "// either direction; io_unlist answers null if a value is past 255.\n" ++
+  "function io_list(b, n) {\n" ++
+  "  let xs = { $: \"Nil\" };\n" ++
+  "  for (let i = n; i > 0; i -= 1) xs = { $: \"Con\", head: b[i - 1], tail: xs };\n" ++
+  "  return xs;\n" ++
+  "}\n" ++
+  "\n" ++
+  "function io_unlist(xs) {\n" ++
+  "  const b = [];\n" ++
+  "  for (; xs.$ === \"Con\"; xs = xs.tail) b.push(xs.head);\n" ++
+  "  return b.some((x) => x > 255) ? null : Uint8Array.from(b);\n"
+
+def src.p6() -> String:
   "}\n" ++
   "\n" ++
   "function io_addr(host, port) {\n" ++
@@ -310,9 +414,7 @@ def src.p4() -> String:
   "  }\n" ++
   "  const now = performance.now();\n" ++
   "  io.waits = io.waits.filter((w) => {\n" ++
-  "    const ready = w.at <= now || (w.fd !== undefined && io.ready !== undefined && io.ready(w));\n"
-
-def src.p5() -> String:
+  "    const ready = w.at <= now || (w.fd !== undefined && io.ready !== undefined && io.ready(w));\n" ++
   "    if (ready) io_push(io_wake, w, false);\n" ++
   "    return !ready;\n" ++
   "  });\n" ++
@@ -332,7 +434,9 @@ def src.p5() -> String:
   "\n" ++
   "function io_run(m) {\n" ++
   "  const io = { runs: [], live: 0, waits: [] };\n" ++
-  "  globalThis.BEND_IO = io;\n" ++
+  "  globalThis.BEND_IO = io;\n"
+
+def src.p7() -> String:
   "  io_push(m(null), (x) => ({ $: \"Emit\", value: x }), true);\n" ++
   "  for (;;) {\n" ++
   "    if (io.runs.length === 0) {\n" ++
@@ -372,17 +476,29 @@ def src.p5() -> String:
   "    }\n" ++
   "  }\n" ++
   "}\n" ++
-  "\n"
-
-def src.p6() -> String:
+  "\n" ++
   "// A request for effect e with arguments args, continued by k.\n" ++
   "function io_req(e, name, args, k) {\n" ++
   "  return { $: \"$REQ\", name, run: e?.run, need: e?.need, args, kont: k };\n" ++
   "}\n" ++
   "\n" ++
+  "// k, checking first that the value a host effect answers has one of its\n" ++
+  "// type's tags (Bend 2.0.32 fail-stops there, #1105).\n" ++
+  "function io_tags(ty, tags, k) {\n" ++
+  "  return (x) => {\n" ++
+  "    if (!tags.includes(x?.$)) {\n" ++
+  "      bend_fail(ty + \" has no tag \" + x?.$ + \" (its tags: \" + tags.join(\", \") + \"); a tag names its\" +\n" ++
+  "        \" constructor as the loading file sees it, which a later version will make the same everywhere (#1105)\");\n" ++
+  "    }\n" ++
+  "    return k(x);\n" ++
+  "  };\n" ++
+  "}\n" ++
+  "\n" ++
   "// Chan\n" ++
   "// ----\n" ++
-  "\n" ++
+  "\n"
+
+def src.p8() -> String:
   "const CHAN_RECV = Symbol();\n" ++
   "\n" ++
   "function chan_wake(row, x) {\n" ++
@@ -409,8 +525,10 @@ def src.p6() -> String:
   "\n" ++
   "let cli_args = [];\n" ++
   "\n" ++
+  "// IO.args starts with the program as invoked (the JS file).\n" ++
   "function cli(argv) {\n" ++
-  "  for (let i = 0; i < argv.length; i += 1) {\n" ++
+  "  cli_args.push(argv[0]);\n" ++
+  "  for (let i = 1; i < argv.length; i += 1) {\n" ++
   "    if (argv[i] === \"--\") {\n" ++
   "      cli_args.push(...argv.slice(i + 1));\n" ++
   "      break;\n" ++
@@ -426,7 +544,7 @@ def src.p6() -> String:
   "}\n" ++
   "\n" ++
   "function bend_run(main) {\n" ++
-  "  cli(process.argv.slice(2));\n" ++
+  "  cli(process.argv.slice(1));\n" ++
   "  let code;\n" ++
   "  try {\n" ++
   "    code = io_run(main());\n" ++
@@ -434,15 +552,15 @@ def src.p6() -> String:
   "    io_errs(e instanceof RangeError ? \"bend: memory fault (machine stack overflow?)\" : String(e));\n" ++
   "    code = 1;\n" ++
   "  }\n" ++
-  "  process.exit(code);\n"
-
-def src.p7() -> String:
+  "  process.exit(code);\n" ++
   "}\n" ++
   "\n" ++
   "function bend_run_value(main, show) {\n" ++
-  "  cli(process.argv.slice(2));\n" ++
+  "  cli(process.argv.slice(1));\n" ++
   "  try {\n" ++
-  "    io_out(1, io_bytes(show(main()) + \"\\n\"));\n" ++
+  "    io_out(1, io_bytes(show(main()) + \"\\n\"));\n"
+
+def src.p9() -> String:
   "  } catch (e) {\n" ++
   "    io_errs(e instanceof RangeError ? \"bend: memory fault (machine stack overflow?)\" : String(e));\n" ++
   "    process.exit(1);\n" ++
@@ -452,4 +570,4 @@ def src.p7() -> String:
   "\n"
 
 def src() -> String:
-  src.p0() ++ src.p1() ++ src.p2() ++ src.p3() ++ src.p4() ++ src.p5() ++ src.p6() ++ src.p7()
+  src.p0() ++ src.p1() ++ src.p2() ++ src.p3() ++ src.p4() ++ src.p5() ++ src.p6() ++ src.p7() ++ src.p8() ++ src.p9()

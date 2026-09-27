@@ -33,7 +33,7 @@ for src in tests/*.bend; do
 done
 # !-calls on the device: the simulator everywhere, Metal on a Mac with a GPU.
 # A run passes when its output matches and no !-call fell back to the CPU
-# but the ones tests/NAME.fallbacks counts (a Nat past 2^63, say). A GPU
+# but the ones tests/NAME.fallbacks counts. A GPU
 # that cannot load the cached kernels (CI's virtual one) compiles them.
 gpu_modes=sim
 [ "$(uname)" = Darwin ] && gpu_modes="sim metal"
@@ -79,6 +79,8 @@ for src in tests/check/*.bend; do
   name=check/$(basename "$src" .bend)
   (cd tests/check && "$BENDC" --check-only "$BASE" "$(basename "$src")" > "$OLDPWD/build/tests/check.txt" 2>&1
    echo "exit $?" >> "$OLDPWD/build/tests/check.txt")
+  # a missing file is named by its absolute path: the .out spells the repo <repo>
+  sed "s|$PWD/|<repo>/|g" build/tests/check.txt > build/tests/check.sed && mv build/tests/check.sed build/tests/check.txt
   if cmp -s build/tests/check.txt "tests/$name.out"; then
     echo "ok   $name"; pass=$((pass+1))
   else

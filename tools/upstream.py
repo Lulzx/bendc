@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # Runs the official Bend repository's tests with a bendc: every test that
-# imports Base, has a main and expects output (its `#|` lines, not an
-# error) is compiled, run from the repository's root under a 5 s alarm, and
+# imports Base, has a main and expects output (its `#|` lines, not a
+# failed check or an error) is compiled, run from the repository's root under a 5 s alarm, and
 # its stdout and stderr compared with those lines as the official gate
 # (gates/test.ts) compares them: trailing spaces and blank ends trimmed, a
-# nonzero exit appended as "exit N" ("timeout" for the alarm).
+# nonzero exit appended as "exit N" ("timeout" for the alarm). With
+# --check, the tests whose check fails (`#|SOME PROOFS FAIL`) go through
+# bendc --check-only instead, its answer compared the same way.
 #
-# Usage: tools/upstream.py BENDC UPSTREAM_CHECKOUT [--js] [-j N] [FILTER..]
+# Usage: tools/upstream.py BENDC UPSTREAM_CHECKOUT [--js | --check] [-j N] [FILTER..]
 # The checkout's bend2/base.bend is the Base; build/upstream/ holds the
 # outputs, and build/upstream/fails.txt the failures.
 import os, re, subprocess, sys
@@ -14,7 +16,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 args = sys.argv[1:]
 js = '--js' in args
-args = [a for a in args if a != '--js']
+check = '--check' in args
+args = [a for a in args if a not in ('--js', '--check')]
 jobs = os.cpu_count() or 4
 if '-j' in args:
     i = args.index('-j'); jobs = int(args[i + 1]); del args[i:i + 2]
@@ -40,8 +43,11 @@ def tests():
             effs = re.findall(r'^\s*import "\./[a-z0-9_]+\.(c|js)"$', src, re.M)
             lanes = [l for l in ('c', 'js') if re.search(r'^import Base$', src, re.M)
                      and (not effs or l in effs)]
-            if not re.search(r'^(def|law) main(\(|:)', src, re.M): continue
-            if want.startswith('Error:') or not (('js' if js else 'c') in lanes): continue
+            if check:
+                if not want.startswith('SOME PROOFS FAIL'): continue
+            else:
+                if not re.search(r'^(def|law) main(\(|:)', src, re.M): continue
+                if re.match(r'(SOME PROOFS FAIL|Error:)', want) or not (('js' if js else 'c') in lanes): continue
             name = d + '_' + f[:-5]
             if filters and not any(x in name for x in filters): continue
             ts.append((name, os.path.join('tests', d, f), want))
@@ -59,6 +65,8 @@ def run(cmd, cwd):
 
 def one(t):
     name, path, want = t
+    if check:
+        return name, 'run', want, run([bendc, '--check-only', base, path], up)
     o = os.path.join(out, name)
     ext = '.js' if js else '.c'
     with open(o + ext, 'w') as f, open(o + '.err', 'w') as e:

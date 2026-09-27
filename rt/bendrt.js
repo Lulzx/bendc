@@ -85,13 +85,22 @@ const F_U32_dpow = (a, n) => {
 const F_U32_dlog2 = (n) => BigInt(n <= 1 ? 0 : 31 - Math.clz32(n));  // a Nat
 const F_U32_dto__f32 = (a) => Math.fround(a);
 
-// Natives: Nat (BigInt, unbounded)
-// ================================
+// Natives: Nat (BigInt, up to 2^48 - 1)
+// ======================================
 
-const F_Nat_ddouble = (a) => a * 2n;
-const F_Nat_dadd = (a, b) => a + b;
+// A Nat past the official runtime's largest immediate stops the program,
+// as does arithmetic on a negative one (a host's, which upstream traps).
+function nat_chk(n) {
+  if (n > 281474976710655n || n < 0n) {
+    bend_fail("a Nat past the largest immediate 2^48-1");
+  }
+  return n;
+}
+
+const F_Nat_ddouble = (a) => nat_chk(a * 2n);
+const F_Nat_dadd = (a, b) => nat_chk(a + b);
 const F_Nat_dsub = (a, b) => (a > b ? a - b : 0n);
-const F_Nat_dmul = (a, b) => a * b;
+const F_Nat_dmul = (a, b) => nat_chk(a * b);
 const nat_divmod = (a, b) => (b === 0n ? { $: "Tuple", fst: 0n, snd: a } : { $: "Tuple", fst: a / b, snd: a % b });
 const F_Nat_ddivmod = nat_divmod;
 const F_Nat_ddiv = (a, b) => (b === 0n ? 0n : a / b);
@@ -105,8 +114,14 @@ const F_Nat_dis__gt = (a, b) => a > b;
 const F_Nat_dis__ge = (a, b) => a >= b;
 const F_Nat_dmin = (a, b) => (a < b ? a : b);
 const F_Nat_dmax = (a, b) => (a < b ? b : a);
-const F_Nat_dpow = (a, n) => a ** n;
-const F_Nat_dshow = (a) => a.toString();
+const F_Nat_dpow = (a, n) => {
+  if (a <= 1n) return n === 0n ? 1n : a;
+  let r = 1n;
+  for (; n > 0n; n--) r = nat_chk(r * a);
+  return r;
+};
+// Base's Nat.show rebuilds each quotient as a successor (checked).
+const F_Nat_dshow = (a) => (nat_chk(a < 0n ? a : a / 10n), a.toString());
 const F_Map_dbit = (key, pos) => {
   const n = Number(pos), off = n % 33;
   let ci = Math.floor(n / 33);
@@ -115,6 +130,59 @@ const F_Map_dbit = (key, pos) => {
   }
   return { $: "Tuple", fst: key, snd: false };
 };
+
+// Natives: Array
+// ==============
+
+// An Array is a JS array of 2^d cells, as the official JS target's: get,
+// set, swap and the atomics work on it in place, so a shared one is one
+// array; a match on ANode slices its halves.
+function array_new(d, v) {
+  if (d > 31n) {
+    bend_fail("an array past the deepest block class 31");
+  }
+  return Array(2 ** Number(d)).fill(v);
+}
+
+function array_node(a, b) {
+  if (a.length !== b.length) {
+    bend_fail("runtime fail-stop");
+  }
+  return a.concat(b);
+}
+
+function array_half(a, hi) {
+  const h = a.length >> 1;
+  return hi ? a.slice(h) : a.slice(0, h);
+}
+
+function array_rmw(a, i, f) {
+  const at = i % a.length;
+  const old = a[at];
+  a[at] = f(old);
+  return { $: "Tuple", fst: a, snd: old };
+}
+
+const F_Array_dsize = (a) => ({ $: "Tuple", fst: a, snd: a.length >>> 0 });
+// The checker's memo cells (check.bend's memo.*): a cell's term and its value.
+const F_Chk_dmemo_dnew = (t) => [undefined, undefined];
+const F_Chk_dmemo_dhas = (m, v) => m[0] !== undefined && m[0] === v;
+const F_Chk_dmemo_dget = (m) => m[1];
+const F_Chk_dmemo_dset = (m, v, x) => (m[1] = x, m[0] = v, x);
+const F_Array_dget = (a, i) => ({ $: "Tuple", fst: a, snd: a[i % a.length] });
+const F_Array_dswap = (a, i, v) => array_rmw(a, i, () => v);
+const F_Array_dset = (a, i, v) => ((a[i % a.length] = v), a);
+const F_Array_dnew = array_new;
+const F_Array_dclone = (a) => ({ $: "Tuple", fst: a, snd: a.slice() });
+const F_Array_datomic_dadd = (a, i, v) => array_rmw(a, i, (o) => (o + v) >>> 0);
+const F_Array_datomic_dmin = (a, i, v) => array_rmw(a, i, (o) => Math.min(o, v));
+const F_Array_datomic_dmax = (a, i, v) => array_rmw(a, i, (o) => Math.max(o, v));
+const F_Array_datomic_dand = (a, i, v) => array_rmw(a, i, (o) => (o & v) >>> 0);
+const F_Array_datomic_dor = (a, i, v) => array_rmw(a, i, (o) => (o | v) >>> 0);
+const F_Array_datomic_dxor = (a, i, v) => array_rmw(a, i, (o) => (o ^ v) >>> 0);
+const F_Array_datomic_dexch = (a, i, v) => array_rmw(a, i, () => v);
+const F_Array_datomic_dcas = (a, i, x, v) => array_rmw(a, i, (o) => (o === x ? v : o));
+const F_Array_datomic_dfadd = (a, i, v) => array_rmw(a, i, (o) => Math.fround(o + v));
 
 // Natives: F32
 // ============
@@ -125,7 +193,8 @@ const F_F32_dsub = (a, b) => fr(a - b);
 const F_F32_dmul = (a, b) => fr(a * b);
 const F_F32_ddiv = (a, b) => fr(a / b);
 const F_F32_dmod = (a, b) => fr(a % b);
-const F_F32_dpow = (a, b) => fr(a ** b);
+// IEEE's pow(1, y) and pow(-1, inf) are 1; JS's ** says NaN
+const F_F32_dpow = (a, b) => (a === 1 || (a === -1 && Math.abs(b) === Infinity) ? 1 : fr(a ** b));
 const F_F32_datan2 = (a, b) => fr(Math.atan2(a, b));
 const F_F32_dis__eq = (a, b) => a === b;
 const F_F32_dis__ne = (a, b) => a !== b;
@@ -170,10 +239,27 @@ function f32_show(x) {
 }
 const F_F32_dshow = (a) => f32_show(a);
 
+// The binary32 nearest the decimal s, rounded once (as strtof): through
+// binary64 alone, a text whose binary64 is a binary32 midpoint would round
+// to the even side, not the text's (Bend 2.0.32's f32_round).
+function f32_round(s) {
+  const d = Number(s);
+  const a = Math.abs(d);
+  const f = Math.fround(a);
+  const g = 2 * a - Math.min(f, 2 ** 128);
+  if (g === f || Math.fround(g) !== g || g === Infinity) return Math.sign(d) * f;
+  let k = 0;
+  while (a * 2 ** k % 1 !== 0) k += 1;
+  const [, i, r, e] = /(\d*)\.?(\d*)(?:e([+-]?\d+))?$/i.exec(s);
+  const n = Number(e ?? 0) - r.length;
+  const x = BigInt(i + r) * 2n ** BigInt(k) * 10n ** BigInt(Math.max(n, 0));
+  const y = BigInt(a * 2 ** k) * 10n ** BigInt(Math.max(-n, 0));
+  return Math.sign(d) * (x === y || x > y !== g > f ? f : g);
+}
+
 function F_F32_dread(s) {
   const re = /^\s*[+-]?((\d+\.?\d*|\.\d+)(e[+-]?\d+)?|inf(inity)?|nan)$/i;
-  const v = Number(s.replace(/inf\w*/i, "Infinity"));
-  return re.test(s) ? { $: "Some", value: Math.fround(v) } : { $: "None" };
+  return re.test(s) ? { $: "Some", value: f32_round(s.replace(/inf\w*/i, "Infinity")) } : { $: "None" };
 }
 
 // Printing values (a main that is not IO)
@@ -258,6 +344,20 @@ function io_bytes(text) {
 
 function io_text(b, n) {
   return new TextDecoder("utf-8", { ignoreBOM: true }).decode(b.subarray(0, n));
+}
+
+// Bytes cross as they are (0..255), one List cell each, with no UTF-8 in
+// either direction; io_unlist answers null if a value is past 255.
+function io_list(b, n) {
+  let xs = { $: "Nil" };
+  for (let i = n; i > 0; i -= 1) xs = { $: "Con", head: b[i - 1], tail: xs };
+  return xs;
+}
+
+function io_unlist(xs) {
+  const b = [];
+  for (; xs.$ === "Con"; xs = xs.tail) b.push(xs.head);
+  return b.some((x) => x > 255) ? null : Uint8Array.from(b);
 }
 
 function io_addr(host, port) {
@@ -363,6 +463,18 @@ function io_req(e, name, args, k) {
   return { $: "$REQ", name, run: e?.run, need: e?.need, args, kont: k };
 }
 
+// k, checking first that the value a host effect answers has one of its
+// type's tags (Bend 2.0.32 fail-stops there, #1105).
+function io_tags(ty, tags, k) {
+  return (x) => {
+    if (!tags.includes(x?.$)) {
+      bend_fail(ty + " has no tag " + x?.$ + " (its tags: " + tags.join(", ") + "); a tag names its" +
+        " constructor as the loading file sees it, which a later version will make the same everywhere (#1105)");
+    }
+    return k(x);
+  };
+}
+
 // Chan
 // ----
 
@@ -392,8 +504,10 @@ function chan_shut(row) {
 
 let cli_args = [];
 
+// IO.args starts with the program as invoked (the JS file).
 function cli(argv) {
-  for (let i = 0; i < argv.length; i += 1) {
+  cli_args.push(argv[0]);
+  for (let i = 1; i < argv.length; i += 1) {
     if (argv[i] === "--") {
       cli_args.push(...argv.slice(i + 1));
       break;
@@ -409,7 +523,7 @@ function cli(argv) {
 }
 
 function bend_run(main) {
-  cli(process.argv.slice(2));
+  cli(process.argv.slice(1));
   let code;
   try {
     code = io_run(main());
@@ -421,7 +535,7 @@ function bend_run(main) {
 }
 
 function bend_run_value(main, show) {
-  cli(process.argv.slice(2));
+  cli(process.argv.slice(1));
   try {
     io_out(1, io_bytes(show(main()) + "\n"));
   } catch (e) {

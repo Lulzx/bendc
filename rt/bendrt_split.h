@@ -5,8 +5,7 @@
 //
 // Values are 64-bit words:
 //  - numbers (U32, Char, F32 bits) are stored raw;
-//  - a Nat below 2^63 is stored raw; a larger one is (1 << 63) | pointer to
-//    a bignum {limb count, limbs...};
+//  - a Nat (up to 2^48 - 1, as the official runtime's) is stored raw;
 //  - nullary constructors are IMM(tag) = (tag << 3) | 1;
 //  - other constructors are pointers to heap nodes {tag, fields...};
 //  - closures are pointers to {fn, arity, nargs, args...}.
@@ -253,6 +252,9 @@ extern __thread Thr *thr_self;
 
 typedef struct { V *p; size_t n; } GcItem;
 extern GcItem *gc_stk;
+// Per block: an Array in it got a pointer stored since the last collection
+// (see arr_put), so a minor one rescans the block's old objects.
+extern uint8_t *gc_dirty;
 extern size_t gc_sp;
 extern size_t gc_cap;
 
@@ -492,6 +494,13 @@ int gc_rem_cmp(const void *a, const void *b);
 // A stack holds many pointers to the same objects: each is kept once.
 void gc_rem_unique(void);
 
+// The old objects of blocks an Array store dirtied, rescanned by a minor
+// collection (a major one scans everything live); the marks are cleared.
+// A store marks its block before it writes, so a collection that stops the
+// thread in between rescans the block, and the value about to be stored is
+// in the thread's registers or stack: marked then, and old after.
+void gc_rescan_dirty(void);
+
 __attribute__((noinline)) void gc_collect_locked(void);
 
 // Collects now (from a thread that runs Bend code).
@@ -545,6 +554,109 @@ static inline V CHN(V t, int n, const V *xs) {
   return (V)p;
 }
 
+// Arrays
+// ------
+//
+// An Array is one node {ARR_HDR(c), 2^c cells}, as the official runtime's
+// flat block: Array.get/set/swap and the atomics work on it in place, so
+// the handles a share (Array.fork, a +a) makes are one array, and a write
+// through one is read through the other. A match on ANode copies the
+// halves; ANode{l, r} copies both into a new array; ALeaf{x} is a 1-cell
+// one. A shared array's cells are shared as they are copied.
+#define ARR_TAG ((V)0xFFF00)
+#define ARR_HDR(c) (ARR_TAG | (V)(c))
+static inline unsigned arr_cls(V a) { return (unsigned)(((V *)a)[0] & 31); }
+static inline V *arr_cells(V a) { return (V *)a + 1; }
+static inline int arr_shared(V a) { return (__atomic_load_n((V *)a, __ATOMIC_RELAXED) & BEND_SH) != 0; }
+
+// Marks a's block dirty before a pointer is stored in it (gc_rescan_dirty).
+static inline void arr_dirty(V a) {
+  uintptr_t bi = ((uintptr_t)a - (uintptr_t)gc_base) >> GC_BLK_SHIFT;
+  if (!__atomic_load_n(&gc_dirty[bi], __ATOMIC_RELAXED)) __atomic_store_n(&gc_dirty[bi], 1, __ATOMIC_RELAXED);
+  BEND_BARRIER();
+}
+static inline void arr_put(V a, V *p, V v) {
+  if (v >= ((V)1 << 32)) arr_dirty(a);
+  *p = v;
+}
+
+V arr_alloc(unsigned c);
+
+// 2^c cells from src (a shared source's are shared) into a new array.
+V arr_copy(unsigned c, const V *src, int share);
+
+V arr_new(V depth, V v);
+
+static inline V arr_leaf(V x) { return arr_new(0, x); }
+
+V arr_node(V l, V r);
+
+V arr_half(V a, unsigned hi);
+
+static inline V *arr_at(V a, V i) { return arr_cells(a) + ((uint32_t)i & (((V)1 << arr_cls(a)) - 1)); }
+
+static inline V F_Array_dsize(V a) { return C2(0, a, (V)((uint64_t)1 << arr_cls(a))); }
+// The checker's memo cells (check.bend's memo.*): an array of a cell's
+// term and, once it is evaluated, its value. The value is stored before
+// the term, so a reader that finds the term finds the value.
+static inline V F_Chk_dmemo_dnew(V t) {
+  (void)t;
+  V a = arr_alloc(1);
+  arr_cells(a)[0] = arr_cells(a)[1] = 0;
+  return a;
+}
+static inline V F_Chk_dmemo_dhas(V m, V v) {
+  V k = __atomic_load_n(&arr_cells(m)[0], __ATOMIC_ACQUIRE);
+  return BOOL(k != 0 && k == v);
+}
+static inline V F_Chk_dmemo_dget(V m) { V x = arr_cells(m)[1]; bend_share(x); return x; }
+static inline V F_Chk_dmemo_dset(V m, V v, V x) {
+  bend_share(x);
+  arr_put(m, &arr_cells(m)[1], x);
+  arr_dirty(m);
+  __atomic_store_n(&arr_cells(m)[0], v, __ATOMIC_RELEASE);
+  return x;
+}
+static inline V F_Array_dget(V a, V i) { V x = *arr_at(a, i); bend_share(x); return C2(0, a, x); }
+static inline V F_Array_dswap(V a, V i, V v) {
+  V *p = arr_at(a, i);
+  V old = *p;
+  arr_put(a, p, v);
+  return C2(0, a, old);
+}
+static inline V F_Array_dset(V a, V i, V v) { arr_put(a, arr_at(a, i), v); return a; }
+static inline V F_Array_dnew(V d, V v) { return arr_new(d, v); }
+static inline V F_Array_dclone(V a) { return C2(0, a, arr_copy(arr_cls(a), arr_cells(a), 1)); }
+
+// The atomics, on a cell's U32 (its low half: the cell is a U32 below 2^32).
+static inline uint32_t *arr_word(V a, V i) { return (uint32_t *)arr_at(a, i); }
+#define ARR_ATOMIC(name, op) static inline V F_Array_datomic_d##name(V a, V i, V v) { return C2(0, a, (V)__atomic_##op(arr_word(a, i), (uint32_t)v, __ATOMIC_SEQ_CST)); }
+ARR_ATOMIC(add, fetch_add)
+ARR_ATOMIC(and, fetch_and)
+ARR_ATOMIC(or, fetch_or)
+ARR_ATOMIC(xor, fetch_xor)
+ARR_ATOMIC(exch, exchange_n)
+static inline V arr_rmw(V a, V i, V v, int k) {
+  uint32_t *w = arr_word(a, i);
+  uint32_t o = __atomic_load_n(w, __ATOMIC_RELAXED), n;
+  for (;;) {
+    union { uint32_t u; float f; } x = {o}, y = {(uint32_t)v};
+    if (k == 0) n = o < (uint32_t)v ? o : (uint32_t)v;
+    else if (k == 1) n = o > (uint32_t)v ? o : (uint32_t)v;
+    else { x.f = x.f + y.f; n = x.u; }
+    if (__atomic_compare_exchange_n(w, &o, n, 1, __ATOMIC_SEQ_CST, __ATOMIC_RELAXED)) break;
+  }
+  return C2(0, a, (V)o);
+}
+static inline V F_Array_datomic_dmin(V a, V i, V v) { return arr_rmw(a, i, v, 0); }
+static inline V F_Array_datomic_dmax(V a, V i, V v) { return arr_rmw(a, i, v, 1); }
+static inline V F_Array_datomic_dfadd(V a, V i, V v) { return arr_rmw(a, i, v, 2); }
+static inline V F_Array_datomic_dcas(V a, V i, V x, V v) {
+  uint32_t o = (uint32_t)x;
+  __atomic_compare_exchange_n(arr_word(a, i), &o, (uint32_t)v, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+  return C2(0, a, (V)o);
+}
+
 static inline V mk_clo(Fn f, V arity, V n, const V *args) {
   V *p = halloc(3 + n);
   p[0] = (V)f; p[1] = arity; p[2] = n;
@@ -578,46 +690,32 @@ __attribute__((noinline)) V str_cache(V *slot, const char *s, size_t n);
 // Encodes a String as a malloc'd UTF-8 buffer.
 char *str_to_c(V s, size_t *len);
 
-// Natives: Nat (unbounded)
-// ------------------------
+// Natives: Nat
+// -------------
 
-#define NAT_BIG ((V)1 << 63)
-static inline V *nat_p(V x) { return (V *)(uintptr_t)(x & ~NAT_BIG); }
-
-// The limbs of x (little-endian); a small x is written to *buf.
-static inline const V *nat_limbs(V x, V *buf, size_t *n) {
-  if (x >> 63) { V *p = nat_p(x); *n = (size_t)p[0]; return p + 1; }
-  *buf = x;
-  *n = x ? 1 : 0;
-  return buf;
+// A Nat is a word up to NAT_IMM = 2^48 - 1, as the official runtime's
+// immediate: a result past it stops the program, as there. A foreign
+// effect's word past it matches as a successor; only results are checked.
+#define NAT_IMM (((V)1 << 48) - 1)
+__attribute__((noreturn, cold, noinline)) void nat_wall(void);
+static inline V nat_chk(V x) { if (UNLIKELY(x > NAT_IMM)) nat_wall(); return x; }
+static inline V nat_add(V a, V b) { return nat_chk(a + b); }
+static inline V nat_sub(V a, V b) { return a > b ? a - b : 0; }
+static inline V nat_mul(V a, V b) {
+  return b != 0 && a > NAT_IMM / b ? (nat_wall(), 0) : a * b;
 }
-
-// A Nat from n limbs (normalized; small when it fits).
-V nat_make(const V *d, size_t n);
-
-int nat_cmp3(V a, V b);
-
-V nat_add(V a, V b);
-
-// a - b, or 0 when b >= a.
-V nat_sub(V a, V b);
-
-V nat_mul(V a, V b);
-
-// Divides u (m limbs) by v (n >= 2 limbs, m >= n): Knuth's algorithm D.
-void nat_divlimbs(const V *u, size_t m, const V *v, size_t n, V *q, V *r);
-
-// (a / b, a % b); dividing by 0 gives (0, a), as Base's Nat.divmod does.
-void nat_divmod2(V a, V b, V *qo, V *ro);
-
+static inline int nat_cmp3(V a, V b) { return a < b ? -1 : a > b; }
+static inline void nat_divmod2(V a, V b, V *qo, V *ro) {
+  if (b == 0) { *qo = 0; *ro = a; } else { *qo = a / b; *ro = a % b; }
+}
 V nat_pow(V a, V n);
-
-// Decimal digits of x (malloc'd, NUL-terminated).
+// Base's Nat.show rebuilds each quotient as a successor, so a word whose
+// first quotient is past the cap stops there.
 char *nat_digits(V x);
 
-static inline V nat_addk(V x, V k) { return LIKELY(!(x >> 63)) && x + k < NAT_BIG ? x + k : nat_add(x, k); }
-static inline V nat_subk(V x, V k) { return LIKELY(!(x >> 63)) ? x - k : nat_sub(x, k); }
-static inline int nat_ge(V x, V k) { return (x >> 63) || x >= k; }
+static inline V nat_addk(V x, V k) { return LIKELY(x + k <= NAT_IMM) ? x + k : (nat_wall(), 0); }
+static inline V nat_subk(V x, V k) { return x - k; }
+static inline int nat_ge(V x, V k) { return x >= k; }
 
 static inline V F_Nat_ddouble(V a) { return nat_add(a, a); }
 static inline V F_Nat_dadd(V a, V b) { return nat_add(a, b); }
@@ -627,14 +725,14 @@ static inline V F_Nat_ddivmod(V a, V b) { V q, r; nat_divmod2(a, b, &q, &r); ret
 static inline V F_Nat_ddiv(V a, V b) { V q, r; nat_divmod2(a, b, &q, &r); return q; }
 static inline V F_Nat_dmod(V a, V b) { V q, r; nat_divmod2(a, b, &q, &r); return r; }
 static inline V F_Nat_dcmp(V a, V b) { int c = nat_cmp3(a, b); return c < 0 ? IMM(0) : c == 0 ? IMM(1) : IMM(2); }
-static inline V F_Nat_dis__eq(V a, V b) { return BOOL(nat_cmp3(a, b) == 0); }
-static inline V F_Nat_dis__ne(V a, V b) { return BOOL(nat_cmp3(a, b) != 0); }
-static inline V F_Nat_dis__lt(V a, V b) { return BOOL(nat_cmp3(a, b) < 0); }
-static inline V F_Nat_dis__le(V a, V b) { return BOOL(nat_cmp3(a, b) <= 0); }
-static inline V F_Nat_dis__gt(V a, V b) { return BOOL(nat_cmp3(a, b) > 0); }
-static inline V F_Nat_dis__ge(V a, V b) { return BOOL(nat_cmp3(a, b) >= 0); }
-static inline V F_Nat_dmin(V a, V b) { return nat_cmp3(a, b) < 0 ? a : b; }
-static inline V F_Nat_dmax(V a, V b) { return nat_cmp3(a, b) < 0 ? b : a; }
+static inline V F_Nat_dis__eq(V a, V b) { return BOOL(a == b); }
+static inline V F_Nat_dis__ne(V a, V b) { return BOOL(a != b); }
+static inline V F_Nat_dis__lt(V a, V b) { return BOOL(a < b); }
+static inline V F_Nat_dis__le(V a, V b) { return BOOL(a <= b); }
+static inline V F_Nat_dis__gt(V a, V b) { return BOOL(a > b); }
+static inline V F_Nat_dis__ge(V a, V b) { return BOOL(a >= b); }
+static inline V F_Nat_dmin(V a, V b) { return a < b ? a : b; }
+static inline V F_Nat_dmax(V a, V b) { return a < b ? b : a; }
 static inline V F_Nat_dpow(V a, V n) { return nat_pow(a, n); }
 V F_Nat_dshow(V a);
 
@@ -661,7 +759,7 @@ static inline V F_Map_dbit(V key, V pos) {
 // ------------
 
 #define U(x) ((uint32_t)(x))
-static inline V nat_low32(V n) { return (n >> 63) ? U(nat_p(n)[1]) : U(n); }
+static inline V nat_low32(V n) { return U(n); }
 static inline V F_U32_dinc(V a) { return U(a + 1); }
 static inline V F_U32_dadd(V a, V b) { return U(a + b); }
 static inline V F_U32_dsub(V a, V b) { return U(a - b); }
@@ -691,9 +789,7 @@ static inline V F_U32_dmin(V a, V b) { return a < b ? a : b; }
 static inline V F_U32_dmax(V a, V b) { return a < b ? b : a; }
 static inline V F_U32_dpow(V a, V n) {
   // a^n mod 2^32; an odd a has an order dividing 2^30, an even one reaches 0.
-  V e;
-  if (n >> 63) { if (!(a & 1)) return 0; e = nat_p(n)[1] & ((1u << 30) - 1); }
-  else e = n;
+  V e = n;
   uint32_t r = 1, b = U(a);
   for (; e; e >>= 1) { if (e & 1) r *= b; b *= b; }
   return r;
@@ -911,6 +1007,7 @@ static inline u64 term_aux(Term t) { return (t & 1) ? ((1u << 16) | (u32)(t >> 3
 #define term_sink(e, t) ((void)(e), (void)(t))
 #define cls_fit(n) 0
 #define spare_free(e, c, x) ((void)(e), (void)(c), (void)(x))
+#define f32_unbox(t) FV(t)
 static inline int ctr_take(Env e, Term t, u32 n, Term *fb) {
   (void)e;
   for (u32 i = 0; i < n; i++) fb[i] = FLD(t, i);
@@ -1006,6 +1103,11 @@ u64 io_utf8(char *buf, u64 c);
 
 OUTLINE char *io_cstr(Env e, Term s, u64 *len);
 
+// A List of bytes (0..255) as they are, with no UTF-8: NULL if a value is
+// past 255. (Strings go through io_cstr: a String's cons and a List's have
+// one id here, so cons says nothing.)
+OUTLINE char *io_cbuf(Env e, Term s, u64 *len, u64 cons);
+
 OUTLINE void io_errs(Env e, Term s);
 
 #define io_nul(s, n) (strlen(s) != (n))
@@ -1017,6 +1119,10 @@ Term io_node(Env e, u64 cid, Term a, Term b);
 // Decodes UTF-8 as WHATWG does: a byte that breaks a sequence yields one
 // U+FFFD and is read again as a lead.
 Term io_str(Env e, const char *p, u64 n);
+
+// Bytes cross as they are (0..255), one List cell each (Con, tag 1, on
+// Nil), with no UTF-8.
+Term io_list(Env e, const char *p, u64 n);
 
 #define io_tup(e, a, b) io_node(e, CID_TUPLE, a, b)
 #define io_done(e, v) io_box(e, CID_DONE, v)

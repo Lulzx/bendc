@@ -43,8 +43,11 @@ jobs:
 
       - name: bendc's checker accepts bendc itself, as the official one does
         run: |
-          ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" bendc.bend > build/ours.txt
-          BEND_NO_TELEMETRY=1 bend bendc.bend --check-only > build/official.txt
+          # bendc has unsafe defs, so both report them and exit 1
+          ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" bendc.bend > build/ours.txt 2>&1 \
+            && echo "exit 0" >> build/ours.txt || echo "exit $?" >> build/ours.txt
+          BEND_NO_TELEMETRY=1 bend bendc.bend --check-only > build/official.txt 2>&1 \
+            && echo "exit 0" >> build/official.txt || echo "exit $?" >> build/official.txt
           cmp build/ours.txt build/official.txt
 
       - name: Full bootstrap (official bend -> stage1 -> stage2 fixpoint)

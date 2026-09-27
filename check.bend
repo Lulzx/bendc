@@ -329,7 +329,7 @@ type Pt is Data:
 # this one.
 type Tm is Data:
   Var{k: String, i: U32, s: Sp}
-  Cel{k: String, s: Sp, v: Tm}
+  Cel{k: String, s: Sp, v: Tm, m: Tm}
   VPl{k: String, s: Sp}
   VRf{k: String, i: U32, s: Sp, r: Tm}
   Ref{k: String, s: Sp, b: Bool}
@@ -371,9 +371,16 @@ type Tld is Data:
   TDef{n: Nat, x: Nat, t: Tm, v: Maybe<&2, Tm>, u: Bool, b: Bool, imps: Maybe<&2, List<&2, String>>}
   TADT{n: Nat, g: Nat, t: Tm, cs: List<&2, CtrD>, b: Bool}
 
+type SB2 is Data:
+  SB2{k: String, v: String}
+
+# A file as parsed: its text, its namespace and its import aliases.
+type FI is Data:
+  FI{src: String, ns: String, al: List<&2, SB2>}
+
 type Book is Data:
   Book{tlds: Map<&2, Tld>, ctrs: Map<&2, CtrD>, order: List<&2, String>, hols: Nat, open: Nat,
-    tmps: Map<&2, String>, tcnt: Map<&2, Nat>}
+    tmps: Map<&2, String>, tcnt: Map<&2, Nat>, files: List<&2, FI>}
 
 type Msg is Data:
   MNone{}
@@ -393,9 +400,6 @@ type SB is Data:
 
 type Cur is Data:
   Cur{rest: String, pos: U32, col: U32, nl: Bool, prev: U32}
-
-type SB2 is Data:
-  SB2{k: String, v: String}
 
 type PS is Data:
   PS{cur: Cur, stk: List<&2, SB>, stn: Nat, frs: U32, book: Book, src: String, ns: String, dir: String,
@@ -431,7 +435,7 @@ def P.pure(-A: Type, x: A) -> P(A):
   ps => Done{(x, ps)}
 
 def book_nil() -> Book:
-  Book{MTip{}, MTip{}, Nil{}, 0n, 0n, MTip{}, MTip{}}
+  Book{MTip{}, MTip{}, Nil{}, 0n, 0n, MTip{}, MTip{}, Nil{}}
 
 def err0(exp: String, obs: Msg, spn: Sp) -> Err:
   Err{book_nil(), Nil{}, MStr{exp}, obs, spn, "", ""}
@@ -467,6 +471,22 @@ def P.fail.go(exp: String, +ps: PS) -> Result<&1, &1, Err, Unit & PS>:
 
 def P.fail(-A: Type, exp: String) -> P(A):
   ps => P.go(Unit, A, P.fail.go(exp, ps), u => P.throw(A, err0("", MNone{}, NoSp{})))
+
+# A failure that quotes the text from beg to end (to the cursor when end is
+# 0), as the official parse_fail does when given a start.
+def P.fail.sp.go(+exp: String, +beg: U32, +end: U32, +ps: PS) -> Result<&1, &1, Err, Unit & PS>:
+  +src = PS.src(ps)
+  +e = Bool.pick(U32, U32.is_zero(end), Cur.pos(PS.cur(ps)), end)
+  Bool.pick(Result<&1, &1, Err, Unit & PS>, U32.is_lt(beg, e),
+    Fail{err0(exp, MStr{"'" ++ String.take(String.drop(src, U32.to_nat(beg)), U32.to_nat((e - beg : U32))) ++ "'"},
+      Sp{src, beg, e})},
+    P.fail.go(exp, ps))
+
+def P.fail.sp(-A: Type, exp: String, +beg: U32, +end: U32) -> P(A):
+  ps => P.go(Unit, A, P.fail.sp.go(exp, beg, end, ps), u => P.throw(A, err0("", MNone{}, NoSp{})))
+
+def P.fail.at(-A: Type, exp: String, +beg: U32) -> P(A):
+  P.fail.sp(A, exp, beg, 0)
 
 def P.eat.if(+s: String, ok: Bool) -> P(Unit):
   match ok:
@@ -673,7 +693,7 @@ def Tm.span(t: Tm) -> Sp:
   match t:
     case Var{k, i, s}:
       s
-    case Cel{k, s, v}:
+    case Cel{k, s, v, m}:
       s
     case VPl{k, s}:
       s
@@ -858,21 +878,35 @@ def P.cur() -> P(Cur):
 def P.set_cur(c: Cur) -> P(Unit):
   ps => Done{(Unit{}, PS.set_cur(ps, c))}
 
-def P.lexeme.dot.c(+k: String, c: Bool) -> P(String):
+def name.word.c(+c: U32, +first: Bool) -> Bool:
+  Bool.or(Bool.or(Bool.and(U32.is_ge(U32.or(c, 32), 97), U32.is_le(U32.or(c, 32), 122)), U32.is_eq(c, 95)),
+    Bool.and(Bool.not(first), Bool.and(U32.is_ge(c, 48), U32.is_le(c, 57))))
+
+# A name is words joined by dots, each a letter or _ then letters, digits
+# and _.
+def name.words(s: String, +first: Bool) -> Bool:
+  match s:
+    case SNil{}:
+      Bool.not(first)
+    case SCon{Chr{+c}, t}:
+      +dot = Bool.and(U32.is_eq(c, 46), Bool.not(first))
+      Bool.and(Bool.or(dot, name.word.c(c, first)), name.words(t, dot))
+
+def P.lexeme.dot.c(+k: String, +beg: U32, c: Bool) -> P(String):
   match c:
     case True{}:
-      P.fail(String, "a name (a name cannot end in '.')")
-    case False{}:
       P.pure(String, k)
+    case False{}:
+      P.fail.at(String, "a name (words joined by dots, got '" ++ k ++ "')", beg)
 
-def P.lexeme.dot(+k: String) -> P(String):
-  P.lexeme.dot.c(k, String.ends_with(k, "."))
+def P.lexeme.dot(+k: String, +beg: U32) -> P(String):
+  P.lexeme.dot.c(k, beg, name.words(k, True{}))
 
-def P.lexeme.fin(r: String & Cur) -> P(String):
+def P.lexeme.fin(r: String & Cur, +beg: U32) -> P(String):
   (k, c) = r
   do P<String>:
     P.set_cur(c)
-    P.lexeme.dot(k)
+    P.lexeme.dot(k, beg)
 
 law Cur.name:
   for +c: Cur
@@ -881,7 +915,7 @@ law Cur.name:
 
 @unsafe
 def P.lexeme.go(+c: Cur) -> P(String):
-  P.lexeme.fin(Cur.name(c, ""))
+  P.lexeme.fin(Cur.name(c, ""), Cur.pos(c))
 
 def P.lexeme.if(+c: Cur, ok: Bool) -> P(String):
   match ok:
@@ -924,11 +958,11 @@ def Map.find(-V: Data, +m: Map<&2, V>, +k: String) -> Maybe<&2, V>:
   Map.find.go(V, m, k)
 
 def book_ctr(+book: Book, +k: String) -> Maybe<&2, CtrD>:
-  Book{tlds, +ctrs, order, hols, open, tmps, tcnt} = book
+  Book{tlds, +ctrs, order, hols, open, tmps, tcnt, files} = book
   Map.find(CtrD, ctrs, k)
 
 def book_tld(+book: Book, +k: String) -> Maybe<&2, Tld>:
-  Book{+tlds, ctrs, order, hols, open, tmps, tcnt} = book
+  Book{+tlds, ctrs, order, hols, open, tmps, tcnt, files} = book
   Map.find(Tld, tlds, k)
 
 def book_has(+book: Book, +k: String) -> Bool:
@@ -971,8 +1005,26 @@ def PS.reso(+ps: PS, +k: String) -> String:
   Bool.pick(String, Bool.or(book_has(PS.book(ps), q), Maybe.is_some(&2, CtrD, book_ctr(PS.book(ps), q))),
     q, k)
 
-def P.reso(+k: String) -> P(String):
+def PS.has(+ps: PS, +k: String) -> Bool:
+  Bool.or(book_has(PS.book(ps), k), Maybe.is_some(&2, CtrD, book_ctr(PS.book(ps), k)))
+
+# An alias may not shadow a name: A.x when A is an alias and both what the
+# alias makes of it and A.x itself are declared.
+@unsafe
+def PS.shadows(+ps: PS, +k: String) -> Bool:
+  +dot = Str.first_dot(k)
+  +q = PS.reso.alias(k, SB2.find(PS.al(ps), String.take(k, dot)), String.drop(k, dot),
+    Nat.is_lt(dot, String.length(k)))
+  Bool.and(Bool.not(String.eq(q, k)), Bool.and(PS.has(ps, q), PS.has(ps, k)))
+
+def P.reso.ok(+k: String) -> P(String):
   +ps => Done{(PS.reso(ps, k), ps)}
+
+def P.reso(+k: String) -> P(String):
+  do P<String>:
+    +bad : Bool <- (+ps => Done{(PS.shadows(ps, k), ps)})
+    P.if(String, bad, P.fail(String, "an unambiguous name (the alias " ++ String.take(k, Str.first_dot(k)) ++
+      " shadows " ++ k ++ ")"), P.reso.ok(k))
 
 def P.fresh_id.go(ps: PS) -> Result<&1, &1, Err, U32 & PS>:
   PS{cur, stk, stn, +frs, book, src, ns, dir, al} = ps
@@ -1053,13 +1105,13 @@ def P.base.word.go(+k: String, +beg: U32, m: Maybe<&2, Nat>) -> P(Tm):
     case Some{4n}:
       P.do(beg)
     case Some{5n}:
-      P.fail(Tm, "a term (a match heads a def body, not a term)")
+      P.fail.at(Tm, "a term (a match heads a def body, not a term)", beg)
     case Some{6n}:
-      P.fail(Tm, "a match heading this case (this case is orphaned)")
+      P.fail.at(Tm, "a match heading this case (this case is orphaned)", beg)
     case Some{7n}:
-      P.fail(Tm, "a do-block heading this return")
+      P.fail.at(Tm, "a do-block heading this return", beg)
     case other:
-      P.if(Tm, Str.has(KEYWORDS(), k), P.fail(Tm, "a term (the keyword '" ++ k ++ "' cannot head one)"),
+      P.if(Tm, Str.has(KEYWORDS(), k), P.fail.at(Tm, "a term (the keyword '" ++ k ++ "' cannot head one)", beg),
         P.base.name(k, beg))
 
 @unsafe
@@ -1344,7 +1396,9 @@ def P.str_lit(+beg: U32) -> P(Tm):
 def P.name.check.c(+k: String, c: Bool) -> P(String):
   match c:
     case True{}:
-      P.fail(String, "a name (got the keyword '" ++ k ++ "')")
+      do P<String>:
+        +pos : U32 <- P.pos()
+        P.fail.at(String, "a name (got the keyword '" ++ k ++ "')", (pos - U32.from_nat(String.length(k)) : U32))
     case False{}:
       P.pure(String, k)
 
@@ -1357,8 +1411,8 @@ def P.name() -> P(String):
     P.name.check(k)
 
 def book_hole(book: Book) -> Book:
-  Book{tlds, ctrs, order, hols, open, tmps, tcnt} = book
-  Book{tlds, ctrs, order, 1n+hols, open, tmps, tcnt}
+  Book{tlds, ctrs, order, hols, open, tmps, tcnt, files} = book
+  Book{tlds, ctrs, order, 1n+hols, open, tmps, tcnt, files}
 
 def PS.set_book(ps: PS, b: Book) -> PS:
   PS{cur, stk, stn, frs, book, src, ns, dir, al} = ps
@@ -2359,7 +2413,7 @@ def term_show.go(t: Tm, +p: U32, +bnd: List<&2, String>, +n: Nat) -> String:
       show.paren(U32.is_gt(p, 1), show.rwt(e, pr, f, bnd, n))
     case Ann{x, ty, s}:
       "{" ++ term_show.go(x, 2, bnd, n) ++ " : " ++ term_show.go(ty, 2, bnd, n) ++ "}"
-    case Cel{k, s, v}:
+    case Cel{k, s, v, m}:
       term_show.go(v, p, bnd, n)
     case VRf{k, i, s, r}:
       term_show.go(r, p, bnd, n)
@@ -2597,13 +2651,13 @@ def F32.is_finite(+f: F32) -> Bool:
   +b = F32.bits(f)
   Bool.not(U32.is_eq((b .&. 2139095040 : U32), 2139095040))
 
-def P.flt.go(+txt: String, m: Maybe<&2, F32>, +s: Sp) -> P(Tm):
+def P.flt.go(+txt: String, m: Maybe<&2, F32>, +s: Sp, +beg: U32) -> P(Tm):
   match m:
     case Some{+f}:
       P.if(Tm, F32.is_finite(f), P.pure(Tm, Ctr{"F32", [word_to_term(F32.bits(f), s)], s}),
-        P.fail(Tm, "a float literal with a finite f32 value (got " ++ txt ++ ")"))
+        P.fail.at(Tm, "a float literal with a finite f32 value (got " ++ txt ++ ")", beg))
     case None{}:
-      P.fail(Tm, "a float literal with a finite f32 value (got " ++ txt ++ ")")
+      P.fail.at(Tm, "a float literal with a finite f32 value (got " ++ txt ++ ")", beg)
 
 law digits.span:
   for s: String
@@ -2629,7 +2683,7 @@ def P.flt(+beg: U32, +ds: String, +r: String) -> P(Tm):
   do P<Tm>:
     P.steps(String.length(txt))
     s : Sp <- P.span(beg)
-    P.flt.go(ds ++ txt, F32.read(ds ++ txt), s)
+    P.flt.go(ds ++ txt, F32.read(ds ++ txt), s, beg)
 
 def P.nat.lit(+beg: U32, +n: Nat) -> P(Tm):
   do P<Tm>:
@@ -2690,7 +2744,7 @@ def P.num.go(+beg: U32, +ds: String, +r: String, kind: Nat) -> P(Tm):
         +c : U32 <- P.peek()
         s : Sp <- P.span(beg)
         P.if(Tm, is_name(c), P.fail(Tm, "a numeric literal (NUMBER is U32, NUMBER n is Nat)"),
-          P.if(Tm, Nat.is_gt(v, 4294967295n), P.fail(Tm, "a u32 literal up to 4294967295 (got " ++ ds ++ ")"),
+          P.if(Tm, Nat.is_gt(v, 4294967295n), P.fail.at(Tm, "a u32 literal up to 4294967295 (got " ++ ds ++ ")", beg),
             P.pure(Tm, u32_to_term(U32.from_nat(v), s))))
     case 1n:
       do P<Tm>:
@@ -2752,15 +2806,25 @@ def P.lt.adt(+out: Tm, a: Tm, +s2: Sp, +lvl: U32) -> P(Tm):
   P.if(Tm, Bool.or(Tm.is_var(out), Tm.is_ref(out)), P.lt.adt.go(out, a, s2, lvl),
     P.fail(Tm, "a family name before <..> (a comparison here needs parens)"))
 
+# A glued < whose first operand stops at a type operator is a type argument
+# that needs parens, since a comparison never types there.
+def lt.type_op(+r: String) -> Bool:
+  Bool.or(Str.prefix(r, "->"), Bool.or(Bool.and(Str.prefix(r, "&"), Bool.not(Str.prefix(r, "&&"))),
+    Bool.and(Str.prefix(r, "|"), Bool.not(Str.prefix(r, "||")))))
+
 # f<A, B> (a family instance), or a < comparison.
 @unsafe
 def P.lt(out, lvl):
   do P<Tm>:
+    +prev : U32 <- P.prev()
     P.bump()
     +pos : U32 <- P.pos()
     +t2 : Sp <- P.span((pos - 1 : U32))
     +a : Tm <- P.term(5)
     P.skip()
+    +r : String <- P.peek_rest()
+    P.if(Unit, Bool.and(Bool.not(Bool.or(is_space(prev), U32.is_zero(prev))), lt.type_op(r)),
+      P.fail(Unit, "'>' or ',' (a compound type argument takes parens: F<(A & B)>)"), P.pure(Unit, Unit{}))
     +s2 : Sp <- span.grow(out)
     gt : Bool <- P.at(">")
     comma : Bool <- P.at(",")
@@ -2778,28 +2842,28 @@ def P.ns.args(xs: List<&2, Tm>, +ty: Tm) -> P(List<&2, Tm>):
         ys : List<&2, Tm> <- P.ns.args(t, ty)
         return y <> ys
 
-# Rebuilds an application; the spans are not needed after parsing.
-def apps.span(f: Tm, ys: List<&2, Tm>, xs: List<&2, Tm>) -> Tm:
-  apps(f, ys, NoSp{})
+# Rebuilds an application at the span it was written at.
+def apps.span(f: Tm, ys: List<&2, Tm>, xs: List<&2, Tm>, +sp: Sp) -> Tm:
+  apps(f, ys, sp)
 
 @unsafe
-def P.ns.op.go(+k: String, hk: String, +s: Sp, b: Bool, +xs: List<&2, Tm>, +ty: Tm) -> P(Tm):
+def P.ns.op.go(+k: String, hk: String, +s: Sp, b: Bool, +xs: List<&2, Tm>, +ty: Tm, +sp: Sp) -> P(Tm):
   do P<Tm>:
     q : String <- P.reso(hk ++ k)
     ys : List<&2, Tm> <- P.ns.args(xs, ty)
-    return apps.span(Ref{q, s, b}, ys, xs)
+    return apps.span(Ref{q, s, b}, ys, xs, sp)
 
 @unsafe
-def P.ns.op(+k: String, +s: Sp, b: Bool, xs: List<&2, Tm>, +ty: Tm, h: Tm) -> P(Tm):
+def P.ns.op(+k: String, +s: Sp, b: Bool, xs: List<&2, Tm>, +ty: Tm, h: Tm, +sp: Sp) -> P(Tm):
   match h:
     case Var{hk, i, hs}:
-      P.ns.op.go(k ++ "", hk, s, b, xs, ty)
+      P.ns.op.go(k ++ "", hk, s, b, xs, ty, sp)
     case VRf{hk, i, hs, r}:
-      P.ns.op.go(k, hk, s, b, xs, ty)
+      P.ns.op.go(k, hk, s, b, xs, ty, sp)
     case Ref{hk, hs, hb}:
-      P.ns.op.go(k, hk, s, b, xs, ty)
+      P.ns.op.go(k, hk, s, b, xs, ty, sp)
     case ADT{hk, hxs, hs, r}:
-      P.ns.op.go(k, hk, s, b, xs, ty)
+      P.ns.op.go(k, hk, s, b, xs, ty, sp)
     case other:
       P.throw(Tm, err0("a type name after : (the operators' namespace)", MNone{}, Tm.span(other)))
 
@@ -2807,26 +2871,26 @@ def term_head(t: Tm) -> Tm:
   Pair.fst(Tm, List<&2, Tm>, term_unapply(t))
 
 @unsafe
-def P.ns.ref(+k: String, +s: Sp, b: Bool, +xs: List<&2, Tm>, +ty: Tm, op: Bool, logic: Bool) -> P(Tm):
+def P.ns.ref(+k: String, +s: Sp, b: Bool, +xs: List<&2, Tm>, +ty: Tm, op: Bool, logic: Bool, +sp: Sp) -> P(Tm):
   match op logic:
     case True{} l:
-      P.ns.op(k, s, b, xs, ty, term_head(ty))
+      P.ns.op(k, s, b, xs, ty, term_head(ty), sp)
     case False{} True{}:
       do P<Tm>:
         ys : List<&2, Tm> <- P.ns.args(xs, ty)
-        return apps.span(Ref{k, s, b}, ys, xs)
+        return apps.span(Ref{k, s, b}, ys, xs, sp)
     case False{} False{}:
-      P.pure(Tm, apps(Ref{k, s, b}, xs, NoSp{}))
+      P.pure(Tm, apps(Ref{k, s, b}, xs, sp))
 
 @unsafe
-def P.ns.app(r: Tm & List<&2, Tm>, ty: Tm) -> P(Tm):
+def P.ns.app(r: Tm & List<&2, Tm>, ty: Tm, +sp: Sp) -> P(Tm):
   (f, xs) = r
   match f:
     case Ref{+k, +s, b}:
       P.ns.ref(k, s, b, xs, ty, Nat.is_eq(Str.last_dot(k), 0n),
-        Str.has(["Bool.and", "Bool.or", "String.append"], k))
+        Str.has(["Bool.and", "Bool.or", "String.append"], k), sp)
     case other:
-      P.pure(Tm, apps(other, xs, NoSp{}))
+      P.pure(Tm, apps(other, xs, sp))
 
 # Operators without a type (".add") take the namespace of the ': T' that
 # annotates them: (a + b : U32) calls U32.add.
@@ -2837,8 +2901,8 @@ def P.ns(tm, ty):
       do P<Tm>:
         b : Tm <- P.ns(syn_body(f), ty)
         return Let{ks, ids, vs, CLet{Nil{}, ids, b}, s, qs}
-    case other:
-      P.ns.app(term_unapply(other), ty)
+    case +other:
+      P.ns.app(term_unapply(other), ty, Tm.span(other))
 
 @unsafe
 def P.args.one(+close: String) -> P(List<&2, Tm>):
@@ -2992,9 +3056,12 @@ def P.do_stmt(m, ts, col):
 def P.row(col, ccol, n, rcol):
   do P<List<&2, Body>>:
     w : Bool <- P.word("case")
+    P.skip()
+    +qbeg : U32 <- P.pos()
     +qs : List<&2, Tm> <- P.terms()
+    +qend : U32 <- P.pos()
     P.if(Unit, Nat.is_eq(List.length(&2, Tm, qs), n), P.pure(Unit, Unit{}),
-      P.fail(Unit, Nat.show(n) ++ " patterns (one per scrutinee)"))
+      P.fail.sp(Unit, Nat.show(n) ++ " patterns (one per scrutinee)", qbeg, (qend - 1 : U32)))
     +n0 : Nat <- P.stn()
     ps : List<&2, Pt> <- P.patts(qs)
     f : Body <- P.body(rcol)
@@ -3426,7 +3493,7 @@ def P.tele.one(+close: String, +tele: List<&2, TC>, +tk: Nat) -> P(List<&2, TC> 
     +beg : U32 <- P.pos()
     +k : String <- P.name()
     P.if(Unit, Bool.and(Bool.not(paren), Str.has(TC.names(tele), k)),
-      P.fail(Unit, "a fresh field name (duplicate declaration: " ++ k ++ ")"), P.pure(Unit, Unit{}))
+      P.fail.at(Unit, "a fresh field name (duplicate declaration: " ++ k ++ ")", beg), P.pure(Unit, Unit{}))
     +s : Sp <- P.span(beg)
     P.skip()
     colon : Bool <- P.at(":")
@@ -3447,11 +3514,38 @@ def P.tele(close, tele, tk):
     done : Bool <- P.take(close)
     P.if(List<&2, TC> & Nat, done, P.pure(List<&2, TC> & Nat, (tele, tk)), P.tele.one(close, tele, tk))
 
-def P.fresh(+k: String) -> P(Unit):
+def SB2.has(xs: List<&2, SB2>, +k: String) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case SB2{+a, v} <> t:
+      Bool.or(String.eq(a, k), SB2.has(t, k))
+
+# The alias a dotted name starts with ("" for a plain one).
+def name.alias(+nm: String) -> String:
+  +i = Str.first_dot(nm)
+  Bool.pick(String, Nat.is_eq(i, String.length(nm)), "", String.take(nm, i))
+
+def P.al() -> P(List<&2, SB2>):
+  +ps => Done{(PS.al(ps), ps)}
+
+# A declared name nm (qualified k) is new, and does not start with an
+# import's alias; a miss quotes the name just read.
+def P.fresh.in(+nm: String, +what: String, taken: Bool) -> P(Unit):
   do P<Unit>:
-    b : Book <- P.book()
-    P.if(Unit, book_has(b, k), P.fail(Unit, "a fresh name (duplicate declaration: " ++ k ++ ")"),
+    al : List<&2, SB2> <- P.al()
+    +a : String = name.alias(nm)
+    +alias : Bool = Bool.and(Bool.not(String.is_empty(a)), SB2.has(al, a))
+    +pos : U32 <- P.pos()
+    P.if(Unit, Bool.or(taken, alias),
+      P.fail.at(Unit, what ++ " (" ++ Bool.pick(String, alias, a ++ " is an import's alias", "duplicate declaration: " ++ nm) ++ ")",
+        (pos - U32.from_nat(String.length(nm)) : U32)),
       P.pure(Unit, Unit{}))
+
+def P.fresh(+nm: String, +k: String) -> P(Unit):
+  do P<Unit>:
+    +b : Book <- P.book()
+    P.fresh.in(nm, "a fresh name", Bool.or(book_has(b, k), book_has(b, nm)))
 
 def ops.text(s: Sp, +k: String) -> String:
   match s:
@@ -3486,8 +3580,8 @@ def P.check_ops(t: Tm) -> P(Unit):
   P.check_ops.c(ops.bare(t))
 
 def book_set(book: Book, k: String, t: Tld) -> Book:
-  Book{tlds, ctrs, order, hols, open, tmps, tcnt} = book
-  Book{Map.set(&2, Tld, tlds, k, t), ctrs, order, hols, open, tmps, tcnt}
+  Book{tlds, ctrs, order, hols, open, tmps, tcnt, files} = book
+  Book{Map.set(&2, Tld, tlds, k, t), ctrs, order, hols, open, tmps, tcnt, files}
 
 def TC.vars(tele: List<&2, TC>) -> List<&2, Pt>:
   match tele:
@@ -3542,8 +3636,8 @@ def P.def.foreign(+k: String) -> P(Unit):
     P.set_book(book_set(b2, k, Tld.with_imps(book_tld(b2, k), ims)))
 
 def book_push(book: Book, k: String) -> Book:
-  Book{tlds, ctrs, order, hols, open, tmps, tcnt} = book
-  Book{tlds, ctrs, k <> order, hols, open, tmps, tcnt}
+  Book{tlds, ctrs, order, hols, open, tmps, tcnt, files} = book
+  Book{tlds, ctrs, k <> order, hols, open, tmps, tcnt, files}
 
 def P.def.body(+k: String, +n0: Nat, +tele: List<&2, TC>) -> P(Unit):
   do P<Unit>:
@@ -3595,8 +3689,10 @@ def P.def.new(u: Bool, +k: String, +n0: Nat, +tele: List<&2, TC>, tk: Nat) -> P(
     P.if(Unit, arrow, P.pure(Unit, Unit{}), P.fail(Unit,
       "'->' (a def with no return type fills a law; no law named " ++ k ++ " is in scope)"))
     ret : Tm <- P.term0()
+    +ty : Tm <- P.pure(Tm, tele_bind(tele, ret))
+    P.check_ops(ty)
     +b : Book <- P.book()
-    P.set_book(book_set(b, k, TDef{List.length(&2, TC, tele), tk, higher0(b, tele_bind(tele, ret)), None{}, u,
+    P.set_book(book_set(b, k, TDef{List.length(&2, TC, tele), tk, higher0(b, ty), None{}, u,
       False{}, None{}}))
     P.def.body(k, n0, tele)
 
@@ -3617,12 +3713,12 @@ def P.def(u: Bool) -> P(Unit):
   do P<Unit>:
     w : Bool <- P.word("def")
     +nm : String <- P.name()
-    qm : Bool <- P.take("?")
     +q : String <- P.reso(nm)
     b : Book <- P.book()
     +lw : Bool <- P.pure(Bool, Tld.open_law(book_tld(b, q)))
     +k : String <- P.if(String, lw, P.pure(String, q), P.qual(nm))
-    P.if(Unit, lw, P.pure(Unit, Unit{}), P.fresh(k))
+    P.if(Unit, lw, P.pure(Unit, Unit{}), P.fresh(nm, k))
+    qm : Bool <- P.take("?")
     +n0 : Nat <- P.stn()
     P.eat("(")
     P.skip()
@@ -3721,9 +3817,9 @@ def P.type.go(+k: String, +n0: Nat, +params: List<&2, TC>) -> P(Unit):
 def P.type() -> P(Unit):
   do P<Unit>:
     w : Bool <- P.word("type")
-    nm : String <- P.name()
+    +nm : String <- P.name()
     +k : String <- P.qual(nm)
-    P.fresh(k)
+    P.fresh(nm, k)
     +n0 : Nat <- P.stn()
     P.skip()
     lt : Bool <- P.take("<")
@@ -3731,8 +3827,8 @@ def P.type() -> P(Unit):
     P.type.go(k, n0, Pair.fst(List<&2, TC>, Nat, r))
 
 def book_set_ctr(book: Book, k: String, c: CtrD) -> Book:
-  Book{tlds, ctrs, order, hols, open, tmps, tcnt} = book
-  Book{tlds, Map.set(&2, CtrD, ctrs, k, c), order, hols, open, tmps, tcnt}
+  Book{tlds, ctrs, order, hols, open, tmps, tcnt, files} = book
+  Book{tlds, Map.set(&2, CtrD, ctrs, k, c), order, hols, open, tmps, tcnt, files}
 
 def TC.params(tele: List<&2, TC>) -> List<&2, Tm>:
   match tele:
@@ -3744,11 +3840,11 @@ def TC.params(tele: List<&2, TC>) -> List<&2, Tm>:
 @unsafe
 def P.ctor(k, params, cs):
   do P<List<&2, CtrD>>:
-    nm : String <- P.name()
+    +nm : String <- P.name()
     +c : String <- P.qual(nm)
-    b : Book <- P.book()
-    P.if(Unit, Maybe.is_some(&2, CtrD, book_ctr(b, c)),
-      P.fail(Unit, "a fresh constructor name (duplicate declaration: " ++ c ++ ")"), P.pure(Unit, Unit{}))
+    +b : Book <- P.book()
+    P.fresh.in(nm, "a fresh constructor name", Bool.or(Maybe.is_some(&2, CtrD, book_ctr(b, c)),
+      Maybe.is_some(&2, CtrD, book_ctr(b, nm))))
     P.eat("{")
     +n1 : Nat <- P.stn()
     r : List<&2, TC> & Nat <- P.tele("}", Nil{}, 0n)
@@ -3812,9 +3908,9 @@ def P.clauses(+cls: List<&2, LC>, +tc: Nat) -> P(List<&2, LC> & Nat):
 def P.law() -> P(Unit):
   do P<Unit>:
     w : Bool <- P.word("law")
-    nm : String <- P.name()
+    +nm : String <- P.name()
     +k : String <- P.qual(nm)
-    P.fresh(k)
+    P.fresh(nm, k)
     P.eat(":")
     +n0 : Nat <- P.stn()
     r : List<&2, LC> & Nat <- P.clauses(Nil{}, 0n)
@@ -4126,11 +4222,11 @@ def Map.find.go(V, m, k):
       Map.find.node(V, lo, hi, k, Pair.snd(String, Bool, Map.bit(k, pos)))
 
 def book_opened(book: Book) -> Book:
-  Book{tlds, ctrs, order, hols, open, tmps, tcnt} = book
-  Book{tlds, ctrs, order, hols, 1n+open, tmps, tcnt}
+  Book{tlds, ctrs, order, hols, open, tmps, tcnt, files} = book
+  Book{tlds, ctrs, order, hols, 1n+open, tmps, tcnt, files}
 
 def book_order(+book: Book) -> List<&2, String>:
-  Book{tlds, ctrs, +order, hols, open, tmps, tcnt} = book
+  Book{tlds, ctrs, +order, hols, open, tmps, tcnt, files} = book
   List.reverse(&2, String, order)
 
 def Sp.is_none(s: Sp) -> Bool:
@@ -4216,7 +4312,7 @@ def u32_bits(w, i, n):
 
 def term_force(t: Tm) -> Tm:
   match t:
-    case Cel{k, s, v}:
+    case Cel{k, s, v, m}:
       term_force(v)
     case VRf{k, i, s, r}:
       term_force(r)
@@ -4235,12 +4331,27 @@ def term_strip.go(t: Tm) -> Tm:
 def term_strip(t):
   term_strip.go(term_force(t))
 
+# A cell's memo: bendc runs these natively, over an array of the cell's
+# term and its value (shared by every copy of the cell); as Bend they
+# keep nothing, and a cell evaluates each time it is read.
+def memo.new(t: Tm) -> Tm:
+  Qnt{NoSp{}}
+
+def memo.has(m: Tm, v: Tm) -> Bool:
+  False{}
+
+def memo.get(m: Tm) -> Tm:
+  m
+
+def memo.set(m: Tm, v: Tm, x: Tm) -> Tm:
+  x
+
 def term_cell(+t: Tm, +k: String) -> Tm:
   match t:
-    case Cel{k2, s, v}:
-      Cel{k2, s, v}
-    case other:
-      Cel{k, Tm.span(other), other}
+    case Cel{k2, s, v, m}:
+      Cel{k2, s, v, m}
+    case +other:
+      Cel{k, Tm.span(other), other, memo.new(other)}
 
 def term_cells(vs: List<&2, Tm>, ks: List<&2, String>) -> List<&2, Tm>:
   match vs ks:
@@ -4251,12 +4362,31 @@ def term_cells(vs: List<&2, Tm>, ks: List<&2, String>) -> List<&2, Tm>:
     case a b:
       Nil{}
 
+def term_cells1(vs: List<&2, Tm>) -> List<&2, Tm>:
+  match vs:
+    case Nil{}:
+      Nil{}
+    case v <> vt:
+      term_cell(v, "_") <> term_cells1(vt)
+
+# A value kept in a cell cells the arms of its match (down the chain of
+# constructors), so the copies it is read as share their evaluation.
+def term_cellv(t: Tm) -> Tm:
+  match t:
+    case Mat{k, h, m, s}:
+      Mat{k, term_cell(h, "_"), term_cellv(m), s}
+    case Ctr{k, xs, s}:
+      Ctr{k, term_cells1(xs), s}
+    case other:
+      other
+
 def term_args(t: Tm) -> List<&2, Tm>:
   Pair.snd(Tm, List<&2, Tm>, term_unapply(t))
 
 #
 # term_wnf is the official stack machine. A frame is an argument (FApp), a
-# match waiting for its scrutinee (FMat) or a quantity minimum (FMna, FMnb).
+# match waiting for its scrutinee (FMat), a quantity minimum (FMna, FMnb)
+# or a cell waiting for its value (FVar).
 # lhs remembers the call a def's body came from (and how many parameters
 # are still to be bound), so a match stuck on a variable gives back the
 # call, not the unfolded body: `x => f(x, 2n)` stays as it is.
@@ -4269,6 +4399,7 @@ type Fr is Data:
   FMat{t: Tm, e: Tm, lhs: LH, s: Sp}
   FMna{b: Tm, s: Sp}
   FMnb{a: Tm, s: Sp}
+  FVar{m: Tm, v: Tm}
 
 law wnf.go:
   for +book: Book
@@ -4361,8 +4492,8 @@ def higher.val(+book: Book, v: Tm, s: Sp) -> Tm:
   match v:
     case EPat{p, env}:
       higher(book, patt_term(p, s), env)
-    case Cel{k, cs, x}:
-      Cel{k, cs, x}
+    case Cel{k, cs, x, m}:
+      Cel{k, cs, x, m}
     case other:
       Tm.respan(other, s)
 
@@ -4617,11 +4748,21 @@ def wnf.ref(+book: Book, tld: Maybe<&2, Tld>, +tm: Tm, +frs: List<&2, Fr>, lhs: 
     case other:
       wnf.back(book, tm, frs)
 
+# A cell evaluates once: its memo keeps the value for every copy of the
+# cell, so the arms of a match a cell holds evaluate once too.
+@unsafe
+def wnf.cel(+book: Book, +v: Tm, +m: Tm, hit: Bool, frs: List<&2, Fr>) -> Tm:
+  match hit:
+    case True{}:
+      wnf.go(book, memo.get(m), frs, LNo{})
+    case False{}:
+      wnf.go(book, v, FVar{m, v} <> frs, LNo{})
+
 @unsafe
 def wnf.go(book, tm, frs, lhs):
   match tm:
-    case Cel{k, s, v}:
-      wnf.go(book, v, frs, LNo{})
+    case Cel{k, s, +v, +m}:
+      wnf.cel(book, v, m, memo.has(m, v), frs)
     case VRf{k, i, s, r}:
       wnf.go(book, r, frs, LNo{})
     case Ann{x, ty, s}:
@@ -4712,6 +4853,8 @@ def wnf.back(book, tm, frs):
       wnf.back(book, wnf.mnb(tm, a, s), rest)
     case FMat{t, e, lhs, s} <> rest:
       wnf.matd(book, lit.to_ctr(tm), t, e, lhs, s, rest)
+    case FVar{m, v} <> rest:
+      wnf.go(book, memo.set(m, v, term_cellv(tm)), rest, LNo{})
 
 @unsafe
 def wnf.mna(book, tm, b, s, rest):
@@ -4738,6 +4881,8 @@ def wnf.walk.mat(
 def wnf.walk(book, k, xs, ctr, w, t, e, lhs, s, rest):
   match w:
     case Ann{x, ty, as}:
+      wnf.walk(book, k, xs, ctr, x, t, e, lhs, s, rest)
+    case Cel{ck, cs, x, cm}:
       wnf.walk(book, k, xs, ctr, x, t, e, lhs, s, rest)
     case Mat{+k2, +h, +m, ms}:
       wnf.walk.mat(book, k, xs, ctr, Mat{k2, h, m, ms}, h, m, t, e, lhs, s, rest, String.eq(k, k2))
@@ -4947,13 +5092,47 @@ def cmp.typ(le: Bool, +book: Book, g: Tm, h: Tm, +dep: U32) -> Bool:
     case True{}:
       cmp.kind(book, term_wnf(book, g), term_wnf(book, h), dep)
 
+def Tld.arity(t: Maybe<&2, Tld>) -> Nat:
+  match t:
+    case Some{TDef{n, x, t, v, u, b, imps}}:
+      n
+    case Some{TADT{n, g, t, cs, b}}:
+      n
+    case None{}:
+      0n
+
+# f applied to n fresh variables from dep up.
+def cmp.fresh(n: Nat, f: Tm, +dep: U32) -> Tm:
+  match n:
+    case 0n:
+      f
+    case 1n+m:
+      cmp.fresh(m, TApp{f, Var{"_", dep, NoSp{}}, NoSp{}}, U32.inc(dep))
+
+# A bare def is under-applied, so a function: two defs convert when they
+# agree on fresh arguments (eta, as for a lambda; #1028).
+@unsafe
+def cmp.ref(+book: Book, +k: String, +k2: String, a: Tm, b: Tm, +dep: U32) -> Bool:
+  +n = Nat.max(Tld.arity(book_tld(book, k)), Tld.arity(book_tld(book, k2)))
+  Lazy.or(String.eq(k, k2), u => Lazy.and(Bool.not(Nat.is_eq(n, 0n)),
+    u => term_compare(False{}, book, cmp.fresh(n, a, dep), cmp.fresh(n, b, dep), U32.add(dep, U32.from_nat(n)))))
+
+# A stuck call is canonical: its head def compares by name, not by eta.
+@unsafe
+def cmp.head(+book: Book, f1: Tm, f2: Tm, +dep: U32) -> Bool:
+  match f1 f2:
+    case Ref{k, s, x} Ref{k2, s2, y}:
+      String.eq(k, k2)
+    case x y:
+      term_compare(False{}, book, x, y, dep)
+
 @unsafe
 def cmp.go(le, book, a, b, dep):
   match a b:
     case Var{k, i, s} Var{k2, j, s2}:
       U32.is_eq(i, j)
-    case Ref{k, s, x} Ref{k2, s2, y}:
-      String.eq(k, k2)
+    case Ref{+k, +s, x} Ref{+k2, +s2, y}:
+      cmp.ref(book, k, k2, Ref{k, s, x}, Ref{k2, s2, y}, dep)
     case Typ{g, s} Typ{h, s2}:
       cmp.typ(le, book, g, h, dep)
     case Qnt{s} Qnt{s2}:
@@ -4966,7 +5145,7 @@ def cmp.go(le, book, a, b, dep):
       +x = {Var{k, dep, NoSp{}} : Tm}
       Lazy.and(Q.eq(q, q2), u => Lazy.and(term_compare(le, book, a2, a1, dep), u => term_compare(le, book, clo_apply(book, b1, [x]), clo_apply(book, b2, [x]), U32.inc(dep))))
     case TApp{f1, x1, s} TApp{f2, x2, s2}:
-      Lazy.and(term_compare(False{}, book, f1, f2, dep), u => term_compare(False{}, book, x1, x2, dep))
+      Lazy.and(cmp.head(book, f1, f2, dep), u => term_compare(False{}, book, x1, x2, dep))
     case ADT{+k, +xs, s, +r} ADT{+k2, +ys, s2, +r2}:
       Lazy.and(Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), List.length(&2, Tm, ys))), u => Lazy.and(Bool.or(le, Nat.is_eq(List.length(&2, String, r), List.length(&2, String, r2))), u => Lazy.and(Str.subset(r2, r), u => cmps(xs, ys, book, dep))))
     case Ctr{+k, +xs, s} Ctr{+k2, +ys, s2}:
@@ -5341,26 +5520,122 @@ def ctx_scope.c(ctx, i, n, c):
 def ctx_scope(+ctx: List<&2, Tm>) -> List<&2, String>:
   ctx_scope.go(ctx, 0, ctx_len(ctx))
 
-def expr_show(+book: Book, m: Msg, +bnd: List<&2, String>) -> String:
+def FI.find(fs: List<&2, FI>, +src: String) -> FI:
+  match fs:
+    case Nil{}:
+      FI{"", "", Nil{}}
+    case FI{+s2, ns, al} <> t:
+      Bool.pick(FI, String.eq(s2, src), FI{s2, ns, al}, FI.find(t, src))
+
+# The file an error's span sits in (none: a file that respells nothing).
+def err.file(+book: Book, sp: Sp) -> FI:
+  Book{tlds, ctrs, order, hols, open, tmps, tcnt, files} = book
+  match sp:
+    case NoSp{}:
+      FI{"", "", Nil{}}
+    case Sp{src, beg, end}:
+      FI.find(files, src)
+
+def name.show.al(al: List<&2, SB2>, +k: String) -> String:
+  match al:
+    case Nil{}:
+      k
+    case SB2{+a, +v} <> t:
+      Bool.pick(String, String.starts_with(k, v ++ "."), a ++ String.drop(k, String.length(v)),
+        name.show.al(t, k))
+
+# A key as a file spells it: its own names bare, an imported file's through
+# its alias; any other key as is.
+def name.show(+fi: FI, +k: String) -> String:
+  FI{src, +ns, al} = fi
+  Bool.pick(String, Bool.and(Bool.not(String.is_empty(ns)), String.starts_with(k, ns ++ ".")),
+    String.drop(k, 1n+String.length(ns)), name.show.al(List.reverse(&2, SB2, al), k))
+
+law Tm.respell:
+  for +fi: FI
+  for t: Tm
+  Tm
+
+law Tm.respell.xs:
+  for +fi: FI
+  for xs: List<&2, Tm>
+  List<&2, Tm>
+
+@unsafe
+def Tm.respell.xs(fi, xs):
+  match xs:
+    case Nil{}:
+      Nil{}
+    case x <> t:
+      Tm.respell(fi, x) <> Tm.respell.xs(fi, t)
+
+def name.show.xs(+fi: FI, ks: List<&2, String>) -> List<&2, String>:
+  match ks:
+    case Nil{}:
+      Nil{}
+    case k <> t:
+      name.show(fi, k) <> name.show.xs(fi, t)
+
+# A lowered term with its names spelled as fi spells them.
+@unsafe
+def Tm.respell(fi, t):
+  match t:
+    case Ref{k, s, b}:
+      Ref{name.show(fi, k), s, b}
+    case ADT{k, xs, s, r}:
+      ADT{name.show(fi, k), Tm.respell.xs(fi, xs), s, name.show.xs(fi, r)}
+    case Ctr{k, xs, s}:
+      Ctr{name.show(fi, k), Tm.respell.xs(fi, xs), s}
+    case Mat{k, h, m, s}:
+      Mat{name.show(fi, k), Tm.respell(fi, h), Tm.respell(fi, m), s}
+    case Sub{i, pt, f, s}:
+      Sub{i, pt, Tm.respell(fi, f), s}
+    case Let{ks, ids, vs, f, s, qs}:
+      Let{ks, ids, Tm.respell.xs(fi, vs), Tm.respell(fi, f), s, qs}
+    case Typ{g, s}:
+      Typ{Tm.respell(fi, g), s}
+    case Min{a, b, s}:
+      Min{Tm.respell(fi, a), Tm.respell(fi, b), s}
+    case All{q, k, i, a, b, s}:
+      All{q, k, i, Tm.respell(fi, a), Tm.respell(fi, b), s}
+    case Lam{k, i, f, s, q}:
+      Lam{k, i, Tm.respell(fi, f), s, q}
+    case TApp{f, x, s}:
+      TApp{Tm.respell(fi, f), Tm.respell(fi, x), s}
+    case Eql{a, b, ty, s}:
+      Eql{Tm.respell(fi, a), Tm.respell(fi, b), Tm.respell(fi, ty), s}
+    case Rwt{e, pr, f, s}:
+      Rwt{Tm.respell(fi, e), Tm.respell(fi, pr), Tm.respell(fi, f), s}
+    case Ann{x, ty, s}:
+      Ann{Tm.respell(fi, x), Tm.respell(fi, ty), s}
+    case Cel{k, s, v, m}:
+      Cel{k, s, Tm.respell(fi, v), m}
+    case VRf{k, i, s, r}:
+      VRf{k, i, s, Tm.respell(fi, r)}
+    case CSyn{env, i, b}:
+      CSyn{env, i, Tm.respell(fi, b)}
+    case CLet{env, ids, b}:
+      CLet{env, ids, Tm.respell(fi, b)}
+    case other:
+      other
+
+def expr_show(+fi: FI, +book: Book, m: Msg, +bnd: List<&2, String>) -> String:
   match m:
     case MNone{}:
       ""
     case MStr{s}:
       s
     case MTm{t}:
-      term_show(term_lower(book, term_snf(book, t), U32.from_nat(List.length(&2, String, bnd))), 0,
+      term_show(Tm.respell(fi, term_lower(book, term_snf(book, t), U32.from_nat(List.length(&2, String, bnd)))), 0,
         List.reverse(&2, String, bnd))
 
 def typeless.note(+book: Book, tm: Tm) -> String:
   match tm:
     case Ctr{+k, xs, s}:
-      Bool.pick(String, Tld.is_adt(book_tld(book, k)), " (" ++ k ++
-        " is a datatype: write its arguments as <>)", "")
+      Bool.pick(String, Tld.is_adt(book_tld(book, k)), "Note: " ++ k ++
+        " is a datatype: write its arguments as <>", "")
     case other:
       ""
-
-def typeless_show(+book: Book, +ctx: List<&2, Tm>, +tm: Tm) -> String:
-  "non-inferrable term '" ++ expr_show(book, MTm{tm}, ctx_scope(ctx)) ++ "'" ++ typeless.note(book, tm)
 
 def List.take_strn(n: Nat, xs: List<&2, String>) -> List<&2, String>:
   match n xs:
@@ -5386,15 +5661,15 @@ def ctx_width(ctx: List<&2, Tm>) -> Nat:
     case x <> t:
       ctx_width(t)
 
-def err.ctx_lines(+book: Book, ctx: List<&2, Tm>, +bnd: List<&2, String>, +wid: Nat) -> String:
+def err.ctx_lines(+fi: FI, +book: Book, ctx: List<&2, Tm>, +bnd: List<&2, String>, +wid: Nat) -> String:
   match ctx:
     case Nil{}:
       ""
     case CB{+i, q, k, ty} <> t:
-      "\n- " ++ Str.pad(k, wid) ++ " : " ++ term_show(term_lower(book, term_snf(book, ty), i), 0,
-        List.reverse(&2, String, List.take_str(bnd, i))) ++ err.ctx_lines(book, t, bnd, wid)
+      "\n- " ++ Str.pad(k, wid) ++ " : " ++ term_show(Tm.respell(fi, term_lower(book, term_snf(book, ty), i)), 0,
+        List.reverse(&2, String, List.take_str(bnd, i))) ++ err.ctx_lines(fi, book, t, bnd, wid)
     case x <> t:
-      err.ctx_lines(book, t, bnd, wid)
+      err.ctx_lines(fi, book, t, bnd, wid)
 
 def List.drop_str(xs: List<&2, String>, n: Nat) -> List<&2, String>:
   match xs n:
@@ -5406,60 +5681,98 @@ def List.drop_str(xs: List<&2, String>, n: Nat) -> List<&2, String>:
       Nil{}
 
 law err.lines.one:
-  for l: String
+  for +l: String
   for t: List<&2, String>
   for +i: Nat
   for +end: Nat
   for +at: Nat
   for +w: Nat
+  for +car: String
   for past: Bool
   String
 
 @unsafe
-def err.lines.each(lns: List<&2, String>, +i: Nat, +end: Nat, +at: Nat, +w: Nat) -> String:
+def err.lines.each(lns: List<&2, String>, +i: Nat, +end: Nat, +at: Nat, +w: Nat, +car: String) -> String:
   match lns:
     case Nil{}:
       ""
     case l <> t:
-      err.lines.one(l, t, i, end, at, w, Nat.is_gt(i, end))
+      err.lines.one(l, t, i, end, at, w, car, Nat.is_gt(i, end))
 
-def err.lines.go(+lns: List<&2, String>, +at: Nat) -> String:
+# Blanks for a line's text (a tab stays a tab, so the caret lines up).
+def err.blank(s: String) -> String:
+  match s:
+    case SNil{}:
+      SNil{}
+    case SCon{Chr{+c}, t}:
+      SCon{Chr{Bool.pick(U32, U32.is_eq(c, 9), 9, 32)}, err.blank(t)}
+
+def err.last(ls: List<&2, String>) -> String:
+  match ls:
+    case Nil{}:
+      ""
+    case l <> Nil{}:
+      l
+    case l <> t:
+      err.last(t)
+
+def err.nth(ls: List<&2, String>, n: Nat) -> String:
+  match ls n:
+    case l <> t 0n:
+      l
+    case l <> t 1n+m:
+      err.nth(t, m)
+    case Nil{} k:
+      ""
+
+# The caret line under the span's line: blanks for the text before the
+# span, then a ^ per character of it (one at least, none past the line).
+def err.car(+w: Nat, +lft: String, +line: String, +n: Nat) -> String:
+  String.repeat(" ", w) ++ " | " ++ err.blank(lft) ++
+    String.repeat("^", Nat.max(1n, Nat.min(n, Nat.sub(String.length(line), String.length(lft)))))
+
+def err.lines.go(+lns: List<&2, String>, +at: Nat, +lft: String, +n: Nat) -> String:
   +beg = Nat.max(1n, Nat.sub(at, 1n))
   +end = Nat.min(List.length(&2, String, lns), Nat.add(at, 1n))
   +w = String.length(Nat.show(end))
-  err.lines.each(List.drop_str(lns, Nat.sub(beg, 1n)), beg, end, at, w)
+  err.lines.each(List.drop_str(lns, Nat.sub(beg, 1n)), beg, end, at, w,
+    err.car(w, lft, err.nth(lns, Nat.sub(at, 1n)), n))
 
-# The source lines around a span (the official three-line excerpt).
+# The source lines around a span (the official three-line excerpt), the
+# span's own underlined.
 def err.lines(s: Sp) -> String:
   match s:
     case NoSp{}:
       ""
-    case Sp{+src, +beg, end}:
-      err.lines.go(String.split(src, '\n'), Nat.add(1n, Str.count_nl(String.take(src, U32.to_nat(beg)))))
+    case Sp{+src, +beg, +end}:
+      +pre = String.take(src, U32.to_nat(beg))
+      err.lines.go(String.split(src, '\n'), Nat.add(1n, Str.count_nl(pre)), err.last(String.split(pre, '\n')),
+        U32.to_nat((end - beg : U32)))
 
 @unsafe
-def err.lines.one(l, t, i, end, at, w, past):
+def err.lines.one(l, t, i, end, at, w, car, past):
   match past:
     case True{}:
       ""
     case False{}:
-      "\n" ++ Str.padl(Nat.show(i), w) ++ Bool.pick(String, Nat.is_eq(i, at), ">| ", " | ") ++ l ++
-        err.lines.each(t, 1n+i, end, at, w)
+      "\n" ++ Str.padl(Nat.show(i), w) ++ Bool.pick(String, Nat.is_eq(i, at), ">| " ++ l ++ "\n" ++ car, " | " ++ l) ++
+        err.lines.each(t, 1n+i, end, at, w, car)
 
-def err.msg(+book: Book, exp: Msg, obs: Msg, +bnd: List<&2, String>) -> String:
+def err.msg(+fi: FI, +book: Book, exp: Msg, obs: Msg, +bnd: List<&2, String>) -> String:
   match obs:
     case MNone{}:
-      "\n- message  : " ++ expr_show(book, exp, bnd)
+      "\n- message  : " ++ expr_show(fi, book, exp, bnd)
     case other:
-      "\n- expected : " ++ expr_show(book, exp, bnd) ++ "\n- observed : " ++ expr_show(book, other, bnd)
+      "\n- expected : " ++ expr_show(fi, book, exp, bnd) ++ "\n- observed : " ++ expr_show(fi, book, other, bnd)
 
 def err_show(e: Err) -> String:
-  Err{+bok, +ctx, exp, obs, spn, +dn, +nte} = e
+  Err{+bok, +ctx, exp, obs, +spn, +dn, +nte} = e
+  +fi = err.file(bok, spn)
   +bnd = ctx_scope(ctx)
-  +msg = err.msg(bok, exp, obs, bnd)
-  +cl = err.ctx_lines(bok, ctx_sorted(ctx), bnd, ctx_width(ctx))
+  +msg = err.msg(fi, bok, exp, obs, bnd)
+  +cl = err.ctx_lines(fi, bok, ctx_sorted(ctx), bnd, ctx_width(ctx))
   +sp = err.lines(spn)
-  +df = Bool.pick(String, String.is_empty(dn), "", " " ++ dn)
+  +df = Bool.pick(String, String.is_empty(dn), "", " " ++ name.show(fi, dn))
   "Error:" ++ msg ++ Bool.pick(String, Lst.empty(&2, Tm, ctx), "", "\nContext:") ++ cl ++
     Bool.pick(String, Bool.and(String.is_empty(df), String.is_empty(sp)), "", "\nLocation:" ++ df ++ sp) ++
     Bool.pick(String, String.is_empty(nte), "", "\n" ++ nte)
@@ -6239,7 +6552,7 @@ def infer.var.go(+t: Tm, +i: U32, +qt: Q, +ctx: List<&2, Tm>, +s: Sp, +l: CL, m:
 def infer.var(+t: Tm, +i: U32, +qt: Q, +ctx: List<&2, Tm>, +s: Sp, +l: CL) -> K(IR):
   infer.var.go(t, i, qt, ctx, s, l, ctx_get(ctx, i))
 
-def infer.fail(+l: CL, +tm: Tm, +ctx: List<&2, Tm>) -> K(IR):
+def infer.fail.go(+l: CL, +tm: Tm, +ctx: List<&2, Tm>) -> K(IR):
   do K<IR>:
     book : Book <- K.book()
     +t : Tm <- K.pure(Tm, lit.to_ctr(tm))
@@ -6247,6 +6560,15 @@ def infer.fail(+l: CL, +tm: Tm, +ctx: List<&2, Tm>) -> K(IR):
       Bool.not(Maybe.is_some(&2, CtrD, book_ctr(book, Tm.name(t))))))
     K.err(IR, ctx, MStr{Bool.pick(String, undeclared, "a declared constructor", "an annotated term (cannot infer)")},
       MTm{tm}, Tm.span(tm), CL.dn(l))
+
+# A +x outside a binder names no variable: the official parser leaves it
+# unbound, so it shows at index -1.
+def infer.fail(+l: CL, +tm: Tm, +ctx: List<&2, Tm>) -> K(IR):
+  match tm:
+    case VPl{+k, +s}:
+      K.err(IR, ctx, MStr{"a bound variable"}, MStr{k ++ "^-1"}, s, CL.dn(l))
+    case other:
+      infer.fail.go(l, other, ctx)
 
 def Tld.x_of(t: Tld) -> Nat:
   match t:
@@ -6372,6 +6694,54 @@ law infer.adt:
   for +d: U32
   K(IR)
 
+def Sp.eq(a: Sp, b: Sp) -> Bool:
+  match a b:
+    case NoSp{} NoSp{}:
+      True{}
+    case Sp{x, b1, e1} Sp{y, b2, e2}:
+      Bool.and(U32.is_eq(b1, b2), U32.is_eq(e1, e2))
+    case p q:
+      False{}
+
+def Msg.is_kind(m: Msg, +kind: Tm) -> Bool:
+  match m kind:
+    case MTm{Typ{TQua{q, s}, s2}} Typ{TQua{q2, t}, t2}:
+      Bool.and(Q.eq(q, q2), Sp.eq(s, t))
+    case x y:
+      False{}
+
+def check_kind.nte(+k: String, +q: Q, +nte: String) -> String:
+  Bool.pick(String, Q.is_many(q), "Note: +" ++ k ++ " can be used many times, so its type must be Data.", nte)
+
+# A miss of the kind itself is reported at s, and a + binder's says why it
+# needs Data.
+def check_kind.err(e: Err, +kind: Tm, +k: String, +q: Q, +s: Sp) -> Err:
+  Err{bok, ctx, +exp, obs, +spn, dn, +nte} = e
+  +hit = Msg.is_kind(exp, kind)
+  Err{bok, ctx, exp, obs, Bool.pick(Sp, hit, Sp.or(s, spn), spn), dn, Bool.pick(String, hit, check_kind.nte(k, q, nte), nte)}
+
+def check_kind.go(r: Result<&1, &1, Err, List<&2, Us> & Book>, +kind: Tm, +k: String, +q: Q, +s: Sp) -> Result<&1, &1, Err, Unit & Book>:
+  match r:
+    case Done{v}:
+      Done{(Unit{}, Pair.snd(List<&2, Us>, Book, v))}
+    case Fail{e}:
+      Fail{check_kind.err(e, kind, k, q, s)}
+
+law check_kind:
+  for +l: CL
+  for +t: Tm
+  for +k: String
+  for +q: Q
+  for +ctx: List<&2, Tm>
+  for +d: U32
+  for +s: Sp
+  K(Unit)
+
+@unsafe
+def check_kind(l, t, k, q, ctx, d, s):
+  +kind = {Typ{TQua{lhs_kind(l, q), s}, s} : Tm}
+  b => check_kind.go(term_check(l, t, QNone{}, kind, ctx, d)(b), kind, k, q, s)
+
 law term_infer:
   for +l: CL
   for tm: Tm
@@ -6384,7 +6754,7 @@ law term_infer:
 @unsafe
 def term_infer(l, tm, qt, ctx, d, sp):
   match tm:
-    case Cel{k, s, v}:
+    case Cel{k, s, v, m}:
       term_infer(l, v, qt, ctx, d, sp)
     case Var{+k, +i, +s}:
       infer.var(Var{k, i, s}, i, qt, ctx, s, l)
@@ -6409,7 +6779,7 @@ def term_infer(l, tm, qt, ctx, d, sp):
         return IR{Qnt{s}, uses_add(ua, ub), 0n}
     case All{+q, +k, i, +a, b, +s}:
       do K<IR>:
-        ua : List<&2, Us> <- term_check(l, a, QNone{}, typ(lhs_kind(l, q)), ctx, d)
+        check_kind(l, a, k, q, ctx, d, Sp.or(Tm.span(a), s))
         book : Book <- K.book()
         ub : List<&2, Us> <- term_check(l, clo_apply(book, b, [Var{k, d, NoSp{}}]), QNone{}, typ(QLone{}),
           ctx_bind(ctx, d, q, k, a), U32.inc(d))
@@ -6505,47 +6875,6 @@ def Tld.is_def(t: Tld) -> Bool:
     case other:
       False{}
 
-def Sp.eq(a: Sp, b: Sp) -> Bool:
-  match a b:
-    case NoSp{} NoSp{}:
-      True{}
-    case Sp{x, b1, e1} Sp{y, b2, e2}:
-      Bool.and(U32.is_eq(b1, b2), U32.is_eq(e1, e2))
-    case p q:
-      False{}
-
-def Msg.is_kind(m: Msg, +kind: Tm) -> Bool:
-  match m kind:
-    case MTm{Typ{TQua{q, s}, s2}} Typ{TQua{q2, t}, t2}:
-      Bool.and(Q.eq(q, q2), Sp.eq(s, t))
-    case x y:
-      False{}
-
-def check_kind.err(e: Err, +kind: Tm, +s: Sp) -> Err:
-  Err{bok, ctx, +exp, obs, spn, dn, nte} = e
-  Err{bok, ctx, exp, obs, Bool.pick(Sp, Msg.is_kind(exp, kind), s, spn), dn, nte}
-
-def check_kind.go(r: Result<&1, &1, Err, List<&2, Us> & Book>, +kind: Tm, +s: Sp) -> Result<&1, &1, Err, Unit & Book>:
-  match r:
-    case Done{v}:
-      Done{(Unit{}, Pair.snd(List<&2, Us>, Book, v))}
-    case Fail{e}:
-      Fail{check_kind.err(e, kind, s)}
-
-law check_kind:
-  for +l: CL
-  for +t: Tm
-  for q: Q
-  for +ctx: List<&2, Tm>
-  for +d: U32
-  for +s: Sp
-  K(Unit)
-
-@unsafe
-def check_kind(l, t, q, ctx, d, s):
-  +kind = {Typ{TQua{lhs_kind(l, q), s}, s} : Tm}
-  b => check_kind.go(term_check(l, t, QNone{}, kind, ctx, d)(b), kind, s)
-
 def check.infer.cmp(+l: CL, +tm: Tm, xi: IR, +ty: Tm, +ctx: List<&2, Tm>, +d: U32, ok: Bool) -> K(List<&2, Us>):
   IR{xty, xus, x} = xi
   match ok:
@@ -6565,15 +6894,15 @@ def check.infer(+l: CL, +tm: Tm, +qt: Q, +ty: Tm, +ctx: List<&2, Tm>, +d: U32) -
 @unsafe
 def check.lets(
   +l: CL, ks: List<&2, String>, vs: List<&2, Tm>, qs: List<&2, Q>, +qt: Q, +ctx0: List<&2, Tm>, fctx: List<&2, Tm>,
-  +d: U32, +j: U32, us: List<&2, Us>
+  +d: U32, +j: U32, us: List<&2, Us>, +s: Sp
 ) -> K(List<&2, Tm> & List<&2, Us>):
   match ks vs qs:
     case +k <> kt v <> vt +q <> qt2:
       do K<List<&2, Tm> & List<&2, Us>>:
         +vi : IR <- term_infer(l, v, quant_dem(q, qt), ctx0, d, Nil{})
-        check_kind(l, IR.ty(vi), q, ctx0, d, NoSp{})
+        check_kind(l, IR.ty(vi), k, q, ctx0, d, s)
         check.lets(l, kt, vt, qt2, qt, ctx0, ctx_bind(fctx, (d + j : U32), q, k, IR.ty(vi)), d, U32.inc(j),
-          uses_add(us, IR.us(vi)))
+          uses_add(us, IR.us(vi)), s)
     case a b c:
       K.pure(List<&2, Tm> & List<&2, Us>, (fctx, us))
 
@@ -6609,9 +6938,7 @@ def check.let.body(
     return uses_add(us, fu2)
 
 def check.typeless(-A: Type, +l: CL, +tm: Tm, +ty: Tm, +ctx: List<&2, Tm>, +s: Sp) -> K(A):
-  do K<A>:
-    book : Book <- K.book()
-    K.err(A, ctx, MTm{ty}, MStr{typeless_show(book, ctx, tm)}, s, CL.dn(l))
+  +b => Fail{Err{b, ctx, MTm{ty}, MStr{"non-inferrable term"}, s, CL.dn(l), typeless.note(b, tm)}}
 
 def check.rfl(+l: CL, +s: Sp, tw: Tm, +ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K(List<&2, Us>):
   match tw:
@@ -6634,6 +6961,7 @@ law check.mat:
   for +axs: List<&2, Tm>
   for +r: List<&2, String>
   for c: Maybe<&2, CtrD>
+  for last: Bool
   for +qt: Q
   for +ty: Tm
   for +ctx: List<&2, Tm>
@@ -6653,7 +6981,7 @@ def check.elim.go(
           K.err(List<&2, Us>, ctx, MStr{"cases for " ++ String.join(CtrD.names(rem), ", ")}, MTm{Efq{es}}, s, CL.dn(l)),
           K.pure(List<&2, Us>, Nil{}))
     case Mat{+k, h, m, ms}:
-      check.mat(l, k, h, m, s, tall, ak, axs, r, ctrs_find(rem, k), qt, ty, ctx, d)
+      check.mat(l, k, h, m, s, tall, ak, axs, r, ctrs_find(rem, k), Nat.is_eq(List.length(&2, CtrD, rem), 1n), qt, ty, ctx, d)
     case other:
       K.pure(List<&2, Us>, Nil{})
 
@@ -6735,7 +7063,7 @@ law check.rwt:
 @unsafe
 def term_check(l, tm, qt, ty, ctx, d):
   match tm:
-    case Cel{k, s, v}:
+    case Cel{k, s, v, m}:
       term_check(l, v, qt, ty, ctx, d)
     case Lam{+k, i, f, +s, q}:
       do K<List<&2, Us>>:
@@ -6743,7 +7071,7 @@ def term_check(l, tm, qt, ty, ctx, d):
         check.lam(l, k, f, s, q, term_wnf(book, ty), qt, ty, ctx, d)
     case Let{+ks, ids, +vs, f, +s, +qs}:
       do K<List<&2, Us>>:
-        r : List<&2, Tm> & List<&2, Us> <- check.lets(l, ks, vs, qs, qt, ctx, ctx, d, 0, Nil{})
+        r : List<&2, Tm> & List<&2, Us> <- check.lets(l, ks, vs, qs, qt, ctx, ctx, d, 0, Nil{}, s)
         check.let.body(l, ks, vs, f, s, qs, qt, ty, ctx, d, r)
     case Ctr{+k, +xs, +s}:
       do K<List<&2, Us>>:
@@ -6794,7 +7122,7 @@ def check.lam(l, k, f, s, lq, tw, qt, ty, ctx, d):
       +many = Bool.and(Q.is_many(lq), Q.is_lone(q))
       +q2 = Bool.pick(Q, many, QMany{}, q)
       do K<List<&2, Us>>:
-        K.if(Unit, many, check_kind(l, a, q2, ctx, d, s), K.pure(Unit, Unit{}))
+        K.if(Unit, many, check_kind(l, a, k, q2, ctx, d, s), K.pure(Unit, Unit{}))
         fl : CL <- CL.under(l, x)
         +book : Book <- K.book()
         +u : List<&2, Us> <- term_check(fl, clo_apply(book, f, [x]), qt, clo_apply(book, b, [x]),
@@ -6865,13 +7193,10 @@ def Lit.v(t: Tm) -> LV:
       LNat{0n}
 
 # Whether the datatype is Base's (its literal needs no expansion).
-def check.lit.base_adt(cs: List<&2, CtrD>) -> Bool:
-  True{}
-
 def check.lit.base(t: Maybe<&2, Tld>, +r: List<&2, String>, +c: String) -> Bool:
   match t:
     case Some{TADT{n, g, ty, +cs, tbase}}:
-      Bool.and(check.lit.base_adt(cs), Maybe.is_some(&2, CtrD, ctrs_find(ctrs_drop(cs, r), c)))
+      Bool.and(tbase, Maybe.is_some(&2, CtrD, ctrs_find(ctrs_drop(cs, r), c)))
     case other:
       False{}
 
@@ -6911,8 +7236,18 @@ def CL.ext(+l: CL, +k: String, +n: Nat) -> K(CL):
         book : Book <- K.book()
         return CL{lhs_ext(book, t, k, n, Nil{}), Nat.add(m, n), dn, qs, u, z}
 
+# Past a datatype's last constructor the rest of a match is dead: a default
+# there (a flattened fallback) is \{}, unvisited (#1091); a case still checks.
 @unsafe
-def check.mat(l, k, h, m, s, tall, ak, axs, r, c, qt, ty, ctx, d):
+def check.mat.rest(+l: CL, m: Tm, last: Bool, +qt: Q, ty: Tm, +ctx: List<&2, Tm>, +d: U32) -> K(List<&2, Us>):
+  match m:
+    case Mat{k, h, n, s}:
+      term_check(l, Mat{k, h, n, s}, qt, ty, ctx, d)
+    case other:
+      K.if(List<&2, Us>, last, K.pure(List<&2, Us>, Nil{}), term_check(l, other, qt, ty, ctx, d))
+
+@unsafe
+def check.mat(l, k, h, m, s, tall, ak, axs, r, c, last, qt, ty, ctx, d):
   match c:
     case None{}:
       K.err(List<&2, Us>, ctx, MStr{"a constructor of " ++ ak ++ " (missing, or already matched)"},
@@ -6924,7 +7259,7 @@ def check.mat(l, k, h, m, s, tall, ak, axs, r, c, qt, ty, ctx, d):
         book : Book <- K.book()
         uh : List<&2, Us> <- term_check(hl, h, qt, mat_goal(book, tel, n, Nil{}, All.b(tall), k, s, All.q(tall), ctx,
           CL.dn(l)), ctx, d)
-        um : List<&2, Us> <- term_check(l, m, qt, All{All.q(tall), All.k(tall), 0, ADT{ak, axs, s,
+        um : List<&2, Us> <- check.mat.rest(l, m, last, qt, All{All.q(tall), All.k(tall), 0, ADT{ak, axs, s,
           List.append(&2, String, r, [k])}, All.b(tall), s}, ctx, d)
         return uses_join(uh, um)
 
@@ -7019,18 +7354,173 @@ def term_key(t):
     case other:
       "_"
 
+# The length of a lowered term as the official checker's key spells it
+# (its JSON, spans left out), which bounds how far a ~ argument may grow.
+def jl.str(+s: String) -> Nat:
+  2n+String.length(s)
+
+def jl.num(+i: U32) -> Nat:
+  String.length(U32.show(i))
+
+# A field: a comma, its quoted name, a colon and its value.
+def jl.fld(+k: String, +v: Nat) -> Nat:
+  Nat.add(4n+String.length(k), v)
+
+# An object: braces around its "$" tag and its fields.
+def jl.obj(+tag: String, +fs: Nat) -> Nat:
+  Nat.add(8n+String.length(tag), fs)
+
+def jl.arr(+sum: Nat, +n: Nat) -> Nat:
+  Nat.add(2n+sum, Nat.sub(n, 1n))
+
+def jl.strs(ks: List<&2, String>) -> Nat:
+  match ks:
+    case Nil{}:
+      0n
+    case k <> t:
+      Nat.add(jl.str(k), jl.strs(t))
+
+def jl.nums(ns: List<&2, U32>) -> Nat:
+  match ns:
+    case Nil{}:
+      0n
+    case i <> t:
+      Nat.add(jl.num(i), jl.nums(t))
+
+def jl.q(q: Q) -> Nat:
+  12n
+
+law jl.pat:
+  for p: Pt
+  Nat
+
+law jl.pats:
+  for ps: List<&2, Pt>
+  Nat
+
+@unsafe
+def jl.pats(ps):
+  match ps:
+    case Nil{}:
+      0n
+    case p <> t:
+      Nat.add(jl.pat(p), jl.pats(t))
+
+@unsafe
+def jl.pat(p):
+  match p:
+    case PVar{+k, +i, q, s}:
+      jl.obj("PVar", Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("i", jl.num(i)), jl.fld("q", 12n))))
+    case PCtr{+k, +xs, s}:
+      +n = List.length(&2, Pt, xs)
+      jl.obj("PCtr", Nat.add(jl.fld("k", jl.str(k)), jl.fld("x", jl.arr(jl.pats(xs), n))))
+
+law term_jlen:
+  for t: Tm
+  Nat
+
+law term_jlen.list:
+  for xs: List<&2, Tm>
+  Nat
+
+@unsafe
+def term_jlen.list(xs):
+  match xs:
+    case Nil{}:
+      0n
+    case x <> t:
+      Nat.add(term_jlen(x), term_jlen.list(t))
+
+@unsafe
+def jl.xs(+xs: List<&2, Tm>) -> Nat:
+  jl.arr(term_jlen.list(xs), List.length(&2, Tm, xs))
+
+@unsafe
+def jl.two(+tag: String, +a: String, x: Tm, +b: String, y: Tm) -> Nat:
+  jl.obj(tag, Nat.add(jl.fld(a, term_jlen(x)), jl.fld(b, term_jlen(y))))
+
+@unsafe
+def jl.three(+tag: String, +a: String, x: Tm, +b: String, y: Tm, +c: String, z: Tm) -> Nat:
+  jl.obj(tag, Nat.add(jl.fld(a, term_jlen(x)), Nat.add(jl.fld(b, term_jlen(y)), jl.fld(c, term_jlen(z)))))
+
+def jl.lam_q(q: Q) -> Nat:
+  match q:
+    case QUnd{}:
+      0n
+    case other:
+      jl.fld("q", 12n)
+
+@unsafe
+def term_jlen(t):
+  match t:
+    case Var{+k, +i, s}:
+      jl.obj("Var", Nat.add(jl.fld("k", jl.str(k)), jl.fld("i", jl.num(i))))
+    case Ref{+k, s, b}:
+      jl.obj("Ref", Nat.add(jl.fld("k", jl.str(k)), Bool.pick(Nat, b, jl.fld("b", 4n), 0n)))
+    case Sub{+i, pt, f, s}:
+      jl.obj("Sub", Nat.add(jl.fld("i", jl.num(i)), Nat.add(jl.fld("v", jl.pat(pt)), jl.fld("f", term_jlen(f)))))
+    case Let{+ks, +ids, +vs, f, s, +qs}:
+      +n = List.length(&2, String, ks)
+      jl.obj("Let", Nat.add(jl.fld("k", jl.arr(jl.strs(ks), n)), Nat.add(jl.fld("i", jl.arr(jl.nums(ids), n)),
+        Nat.add(jl.fld("q", jl.arr(Nat.mul(12n, n), n)), Nat.add(jl.fld("v", jl.xs(vs)), jl.fld("f", term_jlen(syn_body(f))))))))
+    case Typ{g, s}:
+      jl.obj("Typ", jl.fld("g", term_jlen(g)))
+    case Qnt{s}:
+      jl.obj("Qnt", 0n)
+    case TQua{q, s}:
+      jl.obj("Qua", jl.fld("q", 12n))
+    case Min{a, b, s}:
+      jl.two("Min", "a", a, "b", b)
+    case All{q, +k, +i, a, b, s}:
+      jl.obj("All", Nat.add(jl.fld("q", 12n), Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("i", jl.num(i)),
+        Nat.add(jl.fld("A", term_jlen(a)), jl.fld("B", term_jlen(syn_body(b))))))))
+    case Lam{+k, +i, f, s, q}:
+      jl.obj("Lam", Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("i", jl.num(i)),
+        Nat.add(jl.fld("f", term_jlen(syn_body(f))), jl.lam_q(q)))))
+    case TApp{f, x, s}:
+      jl.two("App", "f", f, "x", x)
+    case ADT{+k, +xs, s, +r}:
+      jl.obj("ADT", Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("x", jl.xs(xs)),
+        jl.fld("r", jl.arr(jl.strs(r), List.length(&2, String, r))))))
+    case Ctr{+k, +xs, s}:
+      jl.obj("Ctr", Nat.add(jl.fld("k", jl.str(k)), jl.fld("x", jl.xs(xs))))
+    case Lit{LNat{+n}, s}:
+      jl.obj("Lit", Nat.add(jl.fld("k", 5n), jl.fld("v", String.length(Nat.show(n)))))
+    case Lit{LStr{+x}, s}:
+      jl.obj("Lit", Nat.add(jl.fld("k", 8n), jl.fld("v", jl.str(x))))
+    case Mat{+k, h, m, s}:
+      jl.obj("Mat", Nat.add(jl.fld("k", jl.str(k)), Nat.add(jl.fld("h", term_jlen(h)), jl.fld("m", term_jlen(m)))))
+    case Efq{s}:
+      jl.obj("Efq", 0n)
+    case Eql{a, b, ty, s}:
+      jl.three("Eql", "a", a, "b", b, "T", ty)
+    case Rfl{s}:
+      jl.obj("Rfl", 0n)
+    case Rwt{e, p, f, s}:
+      jl.three("Rwt", "e", e, "p", p, "f", f)
+    case Hol{+k, s}:
+      jl.obj("Hol", jl.fld("k", jl.str(k)))
+    case Ann{x, ty, s}:
+      jl.two("Ann", "x", x, "T", ty)
+    case Cel{k, s, v, m}:
+      term_jlen(v)
+    case VRf{k, i, s, r}:
+      term_jlen(r)
+    case other:
+      0n
+
 def Book.tmp(+book: Book, +key: String) -> Maybe<&2, String>:
-  Book{tlds, ctrs, order, hols, open, +tmps, tcnt} = book
+  Book{tlds, ctrs, order, hols, open, +tmps, tcnt, files} = book
   Map.find(String, tmps, key)
 
 def Book.tcnt(+book: Book, +k: String) -> Nat:
-  Book{tlds, ctrs, order, hols, open, tmps, +tcnt} = book
+  Book{tlds, ctrs, order, hols, open, tmps, +tcnt, files} = book
   Maybe.default(&2, Nat, Map.find(Nat, tcnt, k), 0n)
 
 def Book.add_tmp(book: Book, +k: String, key: String, o: String) -> Book:
-  Book{tlds, ctrs, order, hols, open, tmps, +tcnt} = book
+  Book{tlds, ctrs, order, hols, open, tmps, +tcnt, files} = book
   +n = Maybe.default(&2, Nat, Map.find(Nat, tcnt, k), 0n)
-  Book{tlds, ctrs, order, hols, open, Map.set(&2, String, tmps, key, o), Map.set(&2, Nat, tcnt, k, 1n+n)}
+  Book{tlds, ctrs, order, hols, open, Map.set(&2, String, tmps, key, o), Map.set(&2, Nat, tcnt, k, 1n+n), files}
 
 def inst.closed.err.go(e: Err, obs: Msg, +bok: Book, +l: CL, +tm: Tm, +ctx: List<&2, Tm>, +d: U32) -> Err:
   match obs:
@@ -7115,7 +7605,7 @@ def def_check.tmpl(+k: String, +x: Nat, t: Tm, v: Tm, ty: Tm) -> K(Tm & Tm & Tm)
         +h : Tm <- tele_head(ty, Nil{}, k, NoSp{})
         +o : String <- K.pure(String, k ++ "~" ++ All.k(h))
         +book : Book <- K.book()
-        K.if(Unit, book_has(book, o), K.err(Unit, Nil{}, MStr{"a fresh ~ binder name"}, MStr{All.k(h)}, NoSp{}, ""),
+        K.if(Unit, book_has(book, o), K.err(Unit, Nil{}, MStr{"a fresh ~ binder name"}, MStr{All.k(h)}, Tm.span(h), ""),
           K.pure(Unit, Unit{}))
         K.set_book(book_set(book, o, TDef{0n, 0n, All.a(h), None{}, False{}, True{}, None{}}))
         +b2 : Book <- K.book()
@@ -7184,8 +7674,9 @@ def def_inst.go(+l: CL, +tm: Tm, +tld: Tld, +xs: List<&2, Tm>, +ctx: List<&2, Tm
   do K<String>:
     +ty : Tm <- inst.args(l, tm, Tld.t(tld), xs, ctx, d)
     +book : Book <- K.book()
-    +key : String <- K.pure(String, term_key.list(lowers(book, xs, 0)))
-    K.if(Unit, Nat.is_gt(String.length(key), 32768n),
+    +lxs : List<&2, Tm> = lowers(book, xs, 0)
+    +key : String <- K.pure(String, term_key.list(lxs))
+    K.if(Unit, Nat.is_gt(Nat.add(term_jlen.list(lxs), Nat.sub(List.length(&2, Tm, lxs), 1n)), 32768n),
       K.err(Unit, ctx, MStr{"a ~ argument that stops growing"}, MTm{tm}, Tm.span(tm), CL.dn(l)), K.pure(Unit, Unit{}))
     def_inst.find(l, tm, tld, xs, ty, Tm.name(tm) ++ "\n" ++ key, ctx, Book.tmp(book, Tm.name(tm) ++ "\n" ++ key))
 
@@ -7226,8 +7717,8 @@ def Tlds.dec(m: Map<&2, Tld>) -> Map<&2, Tld>:
 # any order; a def's body joins at its event, and a live call to a def below
 # still meets it bodiless (an unfilled law) unless the def is @unsafe.
 def book_reset(b: Book) -> Book:
-  Book{tlds, ctrs, order, hols, open, tmps, tcnt} = b
-  Book{Tlds.dec(tlds), ctrs, order, hols, open, tmps, tcnt}
+  Book{tlds, ctrs, order, hols, open, tmps, tcnt, files} = b
+  Book{Tlds.dec(tlds), ctrs, order, hols, open, tmps, tcnt, files}
 
 def Tld.imps(t: Tld) -> Maybe<&2, List<&2, String>>:
   match t:
@@ -7487,7 +7978,7 @@ def book_valid.jobs(ks, full, b, acc):
         rest, full, b, acc)
 
 def Book.ntmps(+b: Book) -> Nat:
-  Book{tlds, ctrs, order, hols, open, +tmps, tcnt} = b
+  Book{tlds, ctrs, order, hols, open, +tmps, tcnt, files} = b
   Map.size(&2, String, tmps)
 
 # A check's outcome: 0 passes, 1 passes but makes template instances, 2 fails.
@@ -7706,6 +8197,15 @@ def header.imp.go(
   +beg = U32.from_nat(Nat.add(off, Str.index_of(l, pp, 0n)))
   header.go.next(src, t, Nat.add(off, 1n+String.length(l)), "" <> done, List.append(&2, Imp, imps, [Imp{pp, a, beg}]))
 
+# Where a malformed import is reported: at its one word (import Wat), else
+# at the line.
+def header.bad.at(+l: String, ws: List<&2, String>, +at: Nat) -> Nat:
+  match ws:
+    case [w]:
+      Nat.add(Nat.add(at, 6n), Str.index_of(String.drop(l, Nat.add(at, 6n)), w, 0n))
+    case other:
+      at
+
 @unsafe
 def header.imp(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>, +tl: String,
@@ -7713,7 +8213,8 @@ def header.imp(
 ) -> Hdr:
   match m:
     case None{}:
-      +beg = U32.from_nat(Nat.add(off, Str.index_of(l, tl, 0n)))
+      +at = Str.index_of(l, tl, 0n)
+      +beg = U32.from_nat(Nat.add(off, header.bad.at(l, Str.until_hash(Str.words(String.drop(tl, 6n))), at)))
       Hdr{Nil{}, Nil{}, Some{err0("an import ('import Base', or 'import <path> as <Name>')", MStr{"'" ++ tl ++ "'"},
         Sp{src, beg, beg})}}
     case Some{v}:
@@ -7756,9 +8257,14 @@ def parse_file.fin(r: Result<&1, &1, Err, Unit & PS>) -> Result<&1, &1, Err, Boo
 
 # Parses a file's text into the book: ns qualifies its names, al maps its
 # import aliases to namespaces, dir resolves its effect files.
-def parse_file(book: Book, +src: String, text: String, ns: String, dir: String, al: List<&2, SB2>) ->
+def book_add_file(b: Book, f: FI) -> Book:
+  Book{tlds, ctrs, order, hols, open, tmps, tcnt, files} = b
+  Book{tlds, ctrs, order, hols, open, tmps, tcnt, f <> files}
+
+def parse_file(book: Book, +src: String, text: String, +ns: String, dir: String, +al: List<&2, SB2>) ->
   Result<&1, &1, Err, Book>:
-  parse_file.fin(P.decls()(PS{Cur{text, 0, 1, True{}, 0}, Nil{}, 0n, 0, book, src, ns, dir, al}))
+  parse_file.fin(P.decls()(PS{Cur{text, 0, 1, True{}, 0}, Nil{}, 0n, 0,
+    book_add_file(book, FI{src, ns, al}), src, ns, dir, al}))
 
 def book_len(+b: Book) -> Nat:
   List.length(&2, String, book_order(b))
@@ -7787,7 +8293,7 @@ def mark_base(+b: Book, +n0: Nat) -> Book:
   mark_base.go(book_order(b), 0n, n0, b)
 
 def Book.holes(+b: Book) -> Nat:
-  Book{tlds, ctrs, order, +hols, +open, tmps, tcnt} = b
+  Book{tlds, ctrs, order, +hols, +open, tmps, tcnt, files} = b
   Nat.add(hols, open)
 
 def check_book.holes(+b: Book) -> Result<&1, &1, Err, Book>:
@@ -7835,7 +8341,7 @@ def term_refs(t: Tm, acc: List<&2, String>) -> List<&2, String>:
       k <> acc
     case ADT{k, xs, s, r}:
       refs.list(xs, k <> acc)
-    case Cel{k, s, v}:
+    case Cel{k, s, v, m}:
       term_refs(v, acc)
     case VRf{k, i, s, r}:
       term_refs(r, acc)
@@ -8019,7 +8525,7 @@ def List.drop_str2(xs: List<&2, String>, n: Nat) -> List<&2, String>:
       Nil{}
 
 def Book.tlds(+b: Book) -> Map<&2, Tld>:
-  Book{+tlds, ctrs, order, hols, open, tmps, tcnt} = b
+  Book{+tlds, ctrs, order, hols, open, tmps, tcnt, files} = b
   tlds
 
 def report.umap.add(+m: Map<&2, List<&2, String>>, +r: String, by: String) -> Map<&2, List<&2, String>>:
@@ -8122,40 +8628,19 @@ def Tld.base(t: Maybe<&2, Tld>) -> Bool:
     case None{}:
       False{}
 
-law report.laws:
-  for +b: Book
-  for ks: List<&2, String>
-  for met: Set()
-  List<&2, String>
-
-@unsafe
-def report.laws.met(+b: Book, +k: String, t: List<&2, String>, met: Set(), hit: Bool) -> List<&2, String>:
-  match hit:
-    case True{}:
-      Str.filter_in.if(k, report.laws(b, t, met), Bool.not(Tld.base(book_tld(b, k))))
-    case False{}:
-      report.laws(b, t, Set.add(met, k))
-
-def report.laws.if(+b: Book, +k: String, t: List<&2, String>, r: Set() & Bool) -> List<&2, String>:
-  (met, hit) = r
-  report.laws.met(b, k, t, met, hit)
-
-# The laws outside Base: a law is ordered twice, declared and then filled
-# (an open one fails wherever it is, so every file's laws are claims).
-@unsafe
-def report.laws(b, ks, met):
+# The defs outside Base, in order.
+def report.own(+b: Book, ks: List<&2, String>) -> List<&2, String>:
   match ks:
     case Nil{}:
       Nil{}
     case +k <> t:
-      report.laws.if(b, k, t, Set.has(met, k))
+      Str.filter_in.if(k, report.own(b, t), Bool.not(Tld.base(book_tld(b, k))))
 
-# The claims that rely on unsafe or foreign code: the file's own defs
-# (those after the first n0) and every law outside Base.
+# The claims that rely on unsafe or foreign code: the defs outside Base
+# (laws and types too), imports included.
 @unsafe
-def report(+b: Book, +n0: Nat) -> List<&2, String>:
-  +order = book_order(b)
-  +own = Str.unique(List.append(&2, String, List.drop_str2(order, n0), report.laws(b, order, Set.new())), Nil{})
+def report(+b: Book) -> List<&2, String>:
+  +own = Str.unique(report.own(b, book_order(b)), Nil{})
   +bad = report.bad_all(b, Map.keys(&2, Tld, Book.tlds(b)))
   report.go(b, own, bad, Lst.empty(&2, String, bad))
 
@@ -8164,17 +8649,21 @@ def report_lines(ks: List<&2, String>) -> String:
     case Nil{}:
       ""
     case k <> t:
-      "- " ++ k ++ "\n" ++ report_lines(t)
+      "\n- " ++ k ++ report_lines(t)
 
-# The official report line for the file's unsafe or foreign defs.
+# The verdict's head when a check fails.
+def verdict_fail() -> String:
+  "SOME PROOFS FAIL\n"
+
+# The official verdict on unsafe or foreign defs (none: every proof checks).
 def report_text(ks: List<&2, String>) -> String:
   match ks:
     case Nil{}:
-      ""
+      "ALL PROOFS CHECK\nUse --verdict for mathematical validity.\n"
     case +h <> +t:
       +n = List.length(&2, String, h <> t)
-      "All terms check, but " ++ Nat.show(n) ++ " def" ++ Bool.pick(String, Nat.is_eq(n, 1n), " relies", "s rely") ++
-        " on unsafe or foreign code:\n" ++ report_lines(h <> t)
+      verdict_fail() ++ "Error: " ++ Nat.show(n) ++ " def" ++ Bool.pick(String, Nat.is_eq(n, 1n), " relies", "s rely") ++
+        " on unsafe or foreign code:" ++ report_lines(h <> t)
 
 def has_fun.cs(t: Maybe<&2, Tld>) -> List<&2, CtrD>:
   match t:

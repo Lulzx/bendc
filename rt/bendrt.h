@@ -2,8 +2,7 @@
 //
 // Values are 64-bit words:
 //  - numbers (U32, Char, F32 bits) are stored raw;
-//  - a Nat below 2^63 is stored raw; a larger one is (1 << 63) | pointer to
-//    a bignum {limb count, limbs...};
+//  - a Nat (up to 2^48 - 1, as the official runtime's) is stored raw;
 //  - nullary constructors are IMM(tag) = (tag << 3) | 1;
 //  - other constructors are pointers to heap nodes {tag, fields...};
 //  - closures are pointers to {fn, arity, nargs, args...}.
@@ -260,6 +259,9 @@ static __thread Thr *thr_self;
 
 typedef struct { V *p; size_t n; } GcItem;
 static GcItem *gc_stk;
+// Per block: an Array in it got a pointer stored since the last collection
+// (see arr_put), so a minor one rescans the block's old objects.
+static uint8_t *gc_dirty;
 static size_t gc_sp, gc_cap;
 
 static void *gc_reserve(size_t bytes, void *hint) {
@@ -273,6 +275,7 @@ static void gc_init(void) {
   gc_base = gc_reserve(GC_MAXBLK << GC_BLK_SHIFT, (void *)((uintptr_t)1 << 44));
   if ((uintptr_t)gc_base < ((uintptr_t)1 << 32)) bend_fail("the heap must be above 4 GB (bend_share)");
   gc_kind = gc_reserve(GC_MAXBLK, NULL);
+  gc_dirty = gc_reserve(GC_MAXBLK, NULL);
   gc_back = gc_reserve(GC_MAXBLK * sizeof(uint32_t), NULL);
   gc_runs = gc_reserve(GC_MAXBLK / 2 * sizeof(GcRun) + 64, NULL);
   gc_cap = ((size_t)1 << 33) / sizeof(GcItem);
@@ -792,6 +795,33 @@ static void gc_rem_unique(void) {
   gc_nrem = n;
 }
 
+// The old objects of blocks an Array store dirtied, rescanned by a minor
+// collection (a major one scans everything live); the marks are cleared.
+// A store marks its block before it writes, so a collection that stops the
+// thread in between rescans the block, and the value about to be stored is
+// in the thread's registers or stack: marked then, and old after.
+static void gc_rescan_dirty(void) {
+  for (uintptr_t bi = 0; bi < gc_top; bi++) {
+    if (!gc_dirty[bi]) continue;
+    gc_dirty[bi] = 0;
+    if (!gc_minor) continue;
+    GcBlk *b = gc_blk(bi);
+    uint64_t *al = GC_ALLOC(b), *mk = GC_MARK(b);
+    if (gc_kind[bi] == 2) {
+      if ((al[0] & mk[0] & 1) && !b->atomic) {
+        if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
+        gc_stk[gc_sp++] = (GcItem){gc_objs(b), b->words};
+      }
+    } else if (gc_kind[bi] == 1 && !b->atomic) {
+      for (uint32_t i = 0; i < b->nobj; i++) {
+        if (!(al[i >> 6] & mk[i >> 6] & (1ull << (i & 63)))) continue;
+        if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
+        gc_stk[gc_sp++] = (GcItem){gc_objs(b) + (size_t)i * b->words, b->words};
+      }
+    }
+  }
+}
+
 __attribute__((noinline)) static void gc_collect_locked(void) {
   Thr *me = thr_self;
   struct timespec t0, t1;
@@ -839,6 +869,7 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
   for (size_t i = 0; i < gc_nroots; i++) gc_scan(gc_roots[i].p, gc_roots[i].p + gc_roots[i].n);
   for (int i = 0; i < gc_nhooks; i++) gc_hooks[i]();
   gc_rooting = 0;
+  gc_rescan_dirty();
   gc_drain();
   gc_sweep();
   atomic_store(&gc_stopping, 0);
@@ -948,6 +979,150 @@ static inline V CHN(V t, int n, const V *xs) {
   return (V)p;
 }
 
+// Arrays
+// ------
+//
+// An Array is one node {ARR_HDR(c), 2^c cells}, as the official runtime's
+// flat block: Array.get/set/swap and the atomics work on it in place, so
+// the handles a share (Array.fork, a +a) makes are one array, and a write
+// through one is read through the other. A match on ANode copies the
+// halves; ANode{l, r} copies both into a new array; ALeaf{x} is a 1-cell
+// one. A shared array's cells are shared as they are copied.
+#define ARR_TAG ((V)0xFFF00)
+#define ARR_HDR(c) (ARR_TAG | (V)(c))
+static inline unsigned arr_cls(V a) { return (unsigned)(((V *)a)[0] & 31); }
+static inline V *arr_cells(V a) { return (V *)a + 1; }
+static inline int arr_shared(V a) { return (__atomic_load_n((V *)a, __ATOMIC_RELAXED) & BEND_SH) != 0; }
+
+// Marks a's block dirty before a pointer is stored in it (gc_rescan_dirty).
+static inline void arr_dirty(V a) {
+  uintptr_t bi = ((uintptr_t)a - (uintptr_t)gc_base) >> GC_BLK_SHIFT;
+  if (!__atomic_load_n(&gc_dirty[bi], __ATOMIC_RELAXED)) __atomic_store_n(&gc_dirty[bi], 1, __ATOMIC_RELAXED);
+  BEND_BARRIER();
+}
+static inline void arr_put(V a, V *p, V v) {
+  if (v >= ((V)1 << 32)) arr_dirty(a);
+  *p = v;
+}
+
+static V arr_alloc(unsigned c) {
+  if (c > 31) bend_fail("an array past the deepest block class 31");
+  V *p = halloc(1 + ((size_t)1 << c));
+  p[0] = ARR_HDR(c);
+  return (V)p;
+}
+
+// 2^c cells from src (a shared source's are shared) into a new array.
+static V arr_copy(unsigned c, const V *src, int share) {
+  size_t n = (size_t)1 << c;
+  V a = arr_alloc(c);
+  V *d = arr_cells(a);
+  arr_dirty(a);
+  for (size_t i = 0; i < n; i++) {
+    V x = src[i];
+    if (share) bend_share(x);
+    d[i] = x;
+  }
+  return a;
+}
+
+static V arr_new(V depth, V v) {
+  if (depth > 31) bend_fail("an array past the deepest block class 31");
+  unsigned c = (unsigned)depth;
+  size_t n = (size_t)1 << c;
+  V a = arr_alloc(c);
+  V *d = arr_cells(a);
+  if (c > 0) bend_share(v);
+  if (v >= ((V)1 << 32)) arr_dirty(a);
+  for (size_t i = 0; i < n; i++) d[i] = v;
+  return a;
+}
+
+static inline V arr_leaf(V x) { return arr_new(0, x); }
+
+static V arr_node(V l, V r) {
+  unsigned c = arr_cls(l);
+  if (arr_cls(r) != c || c >= 31) bend_fail("runtime fail-stop");
+  size_t n = (size_t)1 << c;
+  V a = arr_alloc(c + 1);
+  V *d = arr_cells(a);
+  int sl = arr_shared(l), sr = arr_shared(r);
+  arr_dirty(a);
+  for (size_t i = 0; i < n; i++) { V x = arr_cells(l)[i]; if (sl) bend_share(x); d[i] = x; }
+  for (size_t i = 0; i < n; i++) { V x = arr_cells(r)[i]; if (sr) bend_share(x); d[n + i] = x; }
+  return a;
+}
+
+static V arr_half(V a, unsigned hi) {
+  unsigned c = arr_cls(a);
+  if (c == 0) bend_fail("runtime fail-stop");
+  return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), arr_shared(a));
+}
+
+static inline V *arr_at(V a, V i) { return arr_cells(a) + ((uint32_t)i & (((V)1 << arr_cls(a)) - 1)); }
+
+static inline V F_Array_dsize(V a) { return C2(0, a, (V)((uint64_t)1 << arr_cls(a))); }
+// The checker's memo cells (check.bend's memo.*): an array of a cell's
+// term and, once it is evaluated, its value. The value is stored before
+// the term, so a reader that finds the term finds the value.
+static inline V F_Chk_dmemo_dnew(V t) {
+  (void)t;
+  V a = arr_alloc(1);
+  arr_cells(a)[0] = arr_cells(a)[1] = 0;
+  return a;
+}
+static inline V F_Chk_dmemo_dhas(V m, V v) {
+  V k = __atomic_load_n(&arr_cells(m)[0], __ATOMIC_ACQUIRE);
+  return BOOL(k != 0 && k == v);
+}
+static inline V F_Chk_dmemo_dget(V m) { V x = arr_cells(m)[1]; bend_share(x); return x; }
+static inline V F_Chk_dmemo_dset(V m, V v, V x) {
+  bend_share(x);
+  arr_put(m, &arr_cells(m)[1], x);
+  arr_dirty(m);
+  __atomic_store_n(&arr_cells(m)[0], v, __ATOMIC_RELEASE);
+  return x;
+}
+static inline V F_Array_dget(V a, V i) { V x = *arr_at(a, i); bend_share(x); return C2(0, a, x); }
+static inline V F_Array_dswap(V a, V i, V v) {
+  V *p = arr_at(a, i);
+  V old = *p;
+  arr_put(a, p, v);
+  return C2(0, a, old);
+}
+static inline V F_Array_dset(V a, V i, V v) { arr_put(a, arr_at(a, i), v); return a; }
+static inline V F_Array_dnew(V d, V v) { return arr_new(d, v); }
+static inline V F_Array_dclone(V a) { return C2(0, a, arr_copy(arr_cls(a), arr_cells(a), 1)); }
+
+// The atomics, on a cell's U32 (its low half: the cell is a U32 below 2^32).
+static inline uint32_t *arr_word(V a, V i) { return (uint32_t *)arr_at(a, i); }
+#define ARR_ATOMIC(name, op) static inline V F_Array_datomic_d##name(V a, V i, V v) { return C2(0, a, (V)__atomic_##op(arr_word(a, i), (uint32_t)v, __ATOMIC_SEQ_CST)); }
+ARR_ATOMIC(add, fetch_add)
+ARR_ATOMIC(and, fetch_and)
+ARR_ATOMIC(or, fetch_or)
+ARR_ATOMIC(xor, fetch_xor)
+ARR_ATOMIC(exch, exchange_n)
+static inline V arr_rmw(V a, V i, V v, int k) {
+  uint32_t *w = arr_word(a, i);
+  uint32_t o = __atomic_load_n(w, __ATOMIC_RELAXED), n;
+  for (;;) {
+    union { uint32_t u; float f; } x = {o}, y = {(uint32_t)v};
+    if (k == 0) n = o < (uint32_t)v ? o : (uint32_t)v;
+    else if (k == 1) n = o > (uint32_t)v ? o : (uint32_t)v;
+    else { x.f = x.f + y.f; n = x.u; }
+    if (__atomic_compare_exchange_n(w, &o, n, 1, __ATOMIC_SEQ_CST, __ATOMIC_RELAXED)) break;
+  }
+  return C2(0, a, (V)o);
+}
+static inline V F_Array_datomic_dmin(V a, V i, V v) { return arr_rmw(a, i, v, 0); }
+static inline V F_Array_datomic_dmax(V a, V i, V v) { return arr_rmw(a, i, v, 1); }
+static inline V F_Array_datomic_dfadd(V a, V i, V v) { return arr_rmw(a, i, v, 2); }
+static inline V F_Array_datomic_dcas(V a, V i, V x, V v) {
+  uint32_t o = (uint32_t)x;
+  __atomic_compare_exchange_n(arr_word(a, i), &o, (uint32_t)v, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+  return C2(0, a, (V)o);
+}
+
 static inline V mk_clo(Fn f, V arity, V n, const V *args) {
   V *p = halloc(3 + n);
   p[0] = (V)f; p[1] = arity; p[2] = n;
@@ -1045,230 +1220,44 @@ static char *str_to_c(V s, size_t *len) {
   return buf;
 }
 
-// Natives: Nat (unbounded)
-// ------------------------
+// Natives: Nat
+// -------------
 
-#define NAT_BIG ((V)1 << 63)
-static inline V *nat_p(V x) { return (V *)(uintptr_t)(x & ~NAT_BIG); }
-
-// The limbs of x (little-endian); a small x is written to *buf.
-static inline const V *nat_limbs(V x, V *buf, size_t *n) {
-  if (x >> 63) { V *p = nat_p(x); *n = (size_t)p[0]; return p + 1; }
-  *buf = x;
-  *n = x ? 1 : 0;
-  return buf;
+// A Nat is a word up to NAT_IMM = 2^48 - 1, as the official runtime's
+// immediate: a result past it stops the program, as there. A foreign
+// effect's word past it matches as a successor; only results are checked.
+#define NAT_IMM (((V)1 << 48) - 1)
+__attribute__((noreturn, cold, noinline)) static void nat_wall(void) {
+  bend_fail("a Nat past the largest immediate 2^48-1");
 }
-
-// A Nat from n limbs (normalized; small when it fits).
-static V nat_make(const V *d, size_t n) {
-  while (n > 0 && d[n - 1] == 0) n--;
-  if (n == 0) return 0;
-  if (n == 1 && !(d[0] >> 63)) return d[0];
-  V *p = gc_alloc(n + 1, 1);
-  p[0] = n;
-  memcpy(p + 1, d, n * sizeof(V));
-  return (V)(uintptr_t)p | NAT_BIG;
+static inline V nat_chk(V x) { if (UNLIKELY(x > NAT_IMM)) nat_wall(); return x; }
+static inline V nat_add(V a, V b) { return nat_chk(a + b); }
+static inline V nat_sub(V a, V b) { return a > b ? a - b : 0; }
+static inline V nat_mul(V a, V b) {
+  return b != 0 && a > NAT_IMM / b ? (nat_wall(), 0) : a * b;
 }
-
-static int nat_cmp3(V a, V b) {
-  if (!((a | b) >> 63)) return a < b ? -1 : a > b;
-  V ba, bb;
-  size_t na, nb;
-  const V *x = nat_limbs(a, &ba, &na), *y = nat_limbs(b, &bb, &nb);
-  if (na != nb) return na < nb ? -1 : 1;
-  for (size_t i = na; i-- > 0;) if (x[i] != y[i]) return x[i] < y[i] ? -1 : 1;
-  return 0;
+static inline int nat_cmp3(V a, V b) { return a < b ? -1 : a > b; }
+static inline void nat_divmod2(V a, V b, V *qo, V *ro) {
+  if (b == 0) { *qo = 0; *ro = a; } else { *qo = a / b; *ro = a % b; }
 }
-
-static V nat_add(V a, V b) {
-  if (!((a | b) >> 63)) {
-    V s = a + b;
-    if (!(s >> 63)) return s;
-    return nat_make(&s, 1);
-  }
-  V ba, bb;
-  size_t na, nb;
-  const V *x = nat_limbs(a, &ba, &na), *y = nat_limbs(b, &bb, &nb);
-  if (na < nb) { const V *t = x; x = y; y = t; size_t u = na; na = nb; nb = u; }
-  V *r = malloc((na + 1) * sizeof(V));
-  unsigned __int128 c = 0;
-  for (size_t i = 0; i < na; i++) {
-    c += (unsigned __int128)x[i] + (i < nb ? y[i] : 0);
-    r[i] = (V)c;
-    c >>= 64;
-  }
-  r[na] = (V)c;
-  V v = nat_make(r, na + 1);
-  free(r);
-  return v;
-}
-
-// a - b, or 0 when b >= a.
-static V nat_sub(V a, V b) {
-  if (!((a | b) >> 63)) return a > b ? a - b : 0;
-  if (nat_cmp3(a, b) <= 0) return 0;
-  V ba, bb;
-  size_t na, nb;
-  const V *x = nat_limbs(a, &ba, &na), *y = nat_limbs(b, &bb, &nb);
-  V *r = malloc(na * sizeof(V));
-  V borrow = 0;
-  for (size_t i = 0; i < na; i++) {
-    unsigned __int128 d = (unsigned __int128)x[i] - (i < nb ? y[i] : 0) - borrow;
-    r[i] = (V)d;
-    borrow = (V)(d >> 64) ? 1 : 0;
-  }
-  V v = nat_make(r, na);
-  free(r);
-  return v;
-}
-
-static V nat_mul(V a, V b) {
-  if (!((a | b) >> 63)) {
-    unsigned __int128 p = (unsigned __int128)a * b;
-    if (!(p >> 63)) return (V)p;
-    V d[2] = {(V)p, (V)(p >> 64)};
-    return nat_make(d, 2);
-  }
-  V ba, bb;
-  size_t na, nb;
-  const V *x = nat_limbs(a, &ba, &na), *y = nat_limbs(b, &bb, &nb);
-  if (na == 0 || nb == 0) return 0;
-  V *r = calloc(na + nb, sizeof(V));
-  for (size_t i = 0; i < na; i++) {
-    unsigned __int128 c = 0;
-    for (size_t j = 0; j < nb; j++) {
-      c += (unsigned __int128)x[i] * y[j] + r[i + j];
-      r[i + j] = (V)c;
-      c >>= 64;
-    }
-    r[i + nb] = (V)c;
-  }
-  V v = nat_make(r, na + nb);
-  free(r);
-  return v;
-}
-
-// Divides u (m limbs) by v (n >= 2 limbs, m >= n): Knuth's algorithm D.
-static void nat_divlimbs(const V *u, size_t m, const V *v, size_t n, V *q, V *r) {
-  int s = __builtin_clzll(v[n - 1]);
-  V *vn = malloc(n * sizeof(V)), *un = malloc((m + 1) * sizeof(V));
-  for (size_t i = n - 1; i > 0; i--) vn[i] = (v[i] << s) | (s ? v[i - 1] >> (64 - s) : 0);
-  vn[0] = v[0] << s;
-  un[m] = s ? u[m - 1] >> (64 - s) : 0;
-  for (size_t i = m - 1; i > 0; i--) un[i] = (u[i] << s) | (s ? u[i - 1] >> (64 - s) : 0);
-  un[0] = u[0] << s;
-  for (size_t jj = m - n + 1; jj-- > 0;) {
-    size_t j = jj;
-    unsigned __int128 num = ((unsigned __int128)un[j + n] << 64) | un[j + n - 1];
-    unsigned __int128 qhat = num / vn[n - 1], rhat = num % vn[n - 1];
-    while ((qhat >> 64) || qhat * vn[n - 2] > ((rhat << 64) | un[j + n - 2])) {
-      qhat--;
-      rhat += vn[n - 1];
-      if (rhat >> 64) break;
-    }
-    V borrow = 0, carry = 0;
-    for (size_t i = 0; i < n; i++) {
-      unsigned __int128 p = qhat * vn[i] + carry;
-      carry = (V)(p >> 64);
-      unsigned __int128 d = (unsigned __int128)un[i + j] - (V)p - borrow;
-      un[i + j] = (V)d;
-      borrow = (V)(d >> 64) ? 1 : 0;
-    }
-    unsigned __int128 d = (unsigned __int128)un[j + n] - carry - borrow;
-    un[j + n] = (V)d;
-    if ((V)(d >> 64)) {
-      qhat--;
-      unsigned __int128 c = 0;
-      for (size_t i = 0; i < n; i++) {
-        c += (unsigned __int128)un[i + j] + vn[i];
-        un[i + j] = (V)c;
-        c >>= 64;
-      }
-      un[j + n] += (V)c;
-    }
-    q[j] = (V)qhat;
-  }
-  for (size_t i = 0; i < n; i++) r[i] = (un[i] >> s) | (s && i + 1 <= n ? (V)((unsigned __int128)un[i + 1] << (64 - s)) : 0);
-  free(vn);
-  free(un);
-}
-
-// (a / b, a % b); dividing by 0 gives (0, a), as Base's Nat.divmod does.
-static void nat_divmod2(V a, V b, V *qo, V *ro) {
-  if (b == 0) { *qo = 0; *ro = a; return; }
-  if (!((a | b) >> 63)) { *qo = a / b; *ro = a % b; return; }
-  if (nat_cmp3(a, b) < 0) { *qo = 0; *ro = a; return; }
-  V ba, bb;
-  size_t na, nb;
-  const V *x = nat_limbs(a, &ba, &na), *y = nat_limbs(b, &bb, &nb);
-  V *q = calloc(na + 1, sizeof(V)), *r = calloc(nb + 1, sizeof(V));
-  if (nb == 1) {
-    unsigned __int128 rem = 0;
-    for (size_t i = na; i-- > 0;) {
-      rem = (rem << 64) | x[i];
-      q[i] = (V)(rem / y[0]);
-      rem %= y[0];
-    }
-    r[0] = (V)rem;
-  } else {
-    nat_divlimbs(x, na, y, nb, q, r);
-  }
-  *qo = nat_make(q, na);
-  *ro = nat_make(r, nb);
-  free(q);
-  free(r);
-}
-
 static V nat_pow(V a, V n) {
   if (a <= 1) return n == 0 ? 1 : a;
-  V bn;
-  size_t nn;
-  const V *e = nat_limbs(n, &bn, &nn);
-  if (nn > 1) bend_fail("out of memory (a Nat.pow result too large)");
-  V r = 1, b = a;
-  for (V k = nn ? e[0] : 0; k; k >>= 1) {
-    if (k & 1) r = nat_mul(r, b);
-    if (k > 1) b = nat_mul(b, b);
-  }
+  V r = 1;
+  for (; n; n--) r = nat_mul(r, a);
   return r;
 }
-
-// Decimal digits of x (malloc'd, NUL-terminated).
+// Base's Nat.show rebuilds each quotient as a successor, so a word whose
+// first quotient is past the cap stops there.
 static char *nat_digits(V x) {
-  if (!(x >> 63)) {
-    char *s = malloc(24);
-    snprintf(s, 24, "%llu", (unsigned long long)x);
-    return s;
-  }
-  V bx;
-  size_t n;
-  const V *d = nat_limbs(x, &bx, &n);
-  V *t = malloc(n * sizeof(V));
-  memcpy(t, d, n * sizeof(V));
-  size_t cap = n * 20 + 2, k = cap - 1;
-  char *out = malloc(cap);
-  out[k] = 0;
-  const V TEN19 = 10000000000000000000ull;
-  while (n > 0) {
-    unsigned __int128 rem = 0;
-    for (size_t i = n; i-- > 0;) {
-      rem = (rem << 64) | t[i];
-      t[i] = (V)(rem / TEN19);
-      rem %= TEN19;
-    }
-    while (n > 0 && t[n - 1] == 0) n--;
-    V chunk = (V)rem;
-    for (int j = 0; j < 19 && (n > 0 || chunk > 0); j++) { out[--k] = (char)('0' + chunk % 10); chunk /= 10; }
-  }
-  free(t);
-  char *s = strdup(out + k);
-  free(out);
+  nat_chk(x / 10);
+  char *s = malloc(24);
+  snprintf(s, 24, "%llu", (unsigned long long)x);
   return s;
 }
 
-static inline V nat_addk(V x, V k) { return LIKELY(!(x >> 63)) && x + k < NAT_BIG ? x + k : nat_add(x, k); }
-static inline V nat_subk(V x, V k) { return LIKELY(!(x >> 63)) ? x - k : nat_sub(x, k); }
-static inline int nat_ge(V x, V k) { return (x >> 63) || x >= k; }
+static inline V nat_addk(V x, V k) { return LIKELY(x + k <= NAT_IMM) ? x + k : (nat_wall(), 0); }
+static inline V nat_subk(V x, V k) { return x - k; }
+static inline int nat_ge(V x, V k) { return x >= k; }
 
 static inline V F_Nat_ddouble(V a) { return nat_add(a, a); }
 static inline V F_Nat_dadd(V a, V b) { return nat_add(a, b); }
@@ -1278,14 +1267,14 @@ static inline V F_Nat_ddivmod(V a, V b) { V q, r; nat_divmod2(a, b, &q, &r); ret
 static inline V F_Nat_ddiv(V a, V b) { V q, r; nat_divmod2(a, b, &q, &r); return q; }
 static inline V F_Nat_dmod(V a, V b) { V q, r; nat_divmod2(a, b, &q, &r); return r; }
 static inline V F_Nat_dcmp(V a, V b) { int c = nat_cmp3(a, b); return c < 0 ? IMM(0) : c == 0 ? IMM(1) : IMM(2); }
-static inline V F_Nat_dis__eq(V a, V b) { return BOOL(nat_cmp3(a, b) == 0); }
-static inline V F_Nat_dis__ne(V a, V b) { return BOOL(nat_cmp3(a, b) != 0); }
-static inline V F_Nat_dis__lt(V a, V b) { return BOOL(nat_cmp3(a, b) < 0); }
-static inline V F_Nat_dis__le(V a, V b) { return BOOL(nat_cmp3(a, b) <= 0); }
-static inline V F_Nat_dis__gt(V a, V b) { return BOOL(nat_cmp3(a, b) > 0); }
-static inline V F_Nat_dis__ge(V a, V b) { return BOOL(nat_cmp3(a, b) >= 0); }
-static inline V F_Nat_dmin(V a, V b) { return nat_cmp3(a, b) < 0 ? a : b; }
-static inline V F_Nat_dmax(V a, V b) { return nat_cmp3(a, b) < 0 ? b : a; }
+static inline V F_Nat_dis__eq(V a, V b) { return BOOL(a == b); }
+static inline V F_Nat_dis__ne(V a, V b) { return BOOL(a != b); }
+static inline V F_Nat_dis__lt(V a, V b) { return BOOL(a < b); }
+static inline V F_Nat_dis__le(V a, V b) { return BOOL(a <= b); }
+static inline V F_Nat_dis__gt(V a, V b) { return BOOL(a > b); }
+static inline V F_Nat_dis__ge(V a, V b) { return BOOL(a >= b); }
+static inline V F_Nat_dmin(V a, V b) { return a < b ? a : b; }
+static inline V F_Nat_dmax(V a, V b) { return a < b ? b : a; }
 static inline V F_Nat_dpow(V a, V n) { return nat_pow(a, n); }
 static V F_Nat_dshow(V a) {
   char *s = nat_digits(a);
@@ -1317,7 +1306,7 @@ static inline V F_Map_dbit(V key, V pos) {
 // ------------
 
 #define U(x) ((uint32_t)(x))
-static inline V nat_low32(V n) { return (n >> 63) ? U(nat_p(n)[1]) : U(n); }
+static inline V nat_low32(V n) { return U(n); }
 static inline V F_U32_dinc(V a) { return U(a + 1); }
 static inline V F_U32_dadd(V a, V b) { return U(a + b); }
 static inline V F_U32_dsub(V a, V b) { return U(a - b); }
@@ -1347,9 +1336,7 @@ static inline V F_U32_dmin(V a, V b) { return a < b ? a : b; }
 static inline V F_U32_dmax(V a, V b) { return a < b ? b : a; }
 static inline V F_U32_dpow(V a, V n) {
   // a^n mod 2^32; an odd a has an order dividing 2^30, an even one reaches 0.
-  V e;
-  if (n >> 63) { if (!(a & 1)) return 0; e = nat_p(n)[1] & ((1u << 30) - 1); }
-  else e = n;
+  V e = n;
   uint32_t r = 1, b = U(a);
   for (; e; e >>= 1) { if (e & 1) r *= b; b *= b; }
   return r;
@@ -1738,6 +1725,7 @@ static inline u64 term_aux(Term t) { return (t & 1) ? ((1u << 16) | (u32)(t >> 3
 #define term_sink(e, t) ((void)(e), (void)(t))
 #define cls_fit(n) 0
 #define spare_free(e, c, x) ((void)(e), (void)(c), (void)(x))
+#define f32_unbox(t) FV(t)
 static inline int ctr_take(Env e, Term t, u32 n, Term *fb) {
   (void)e;
   for (u32 i = 0; i < n; i++) fb[i] = FLD(t, i);
@@ -1916,6 +1904,32 @@ OUTLINE char *io_cstr(Env e, Term s, u64 *len) {
   return buf;
 }
 
+// A List of bytes (0..255) as they are, with no UTF-8: NULL if a value is
+// past 255. (Strings go through io_cstr: a String's cons and a List's have
+// one id here, so cons says nothing.)
+OUTLINE char *io_cbuf(Env e, Term s, u64 *len, u64 cons) {
+  (void)e;
+  (void)cons;
+  u64 cap = 64, n = 0, bad = 0;
+  char *buf = io_mem(malloc(cap + 1));
+  while (!(s & 1) && TAG(s) == 1) {
+    if (n + 1 > cap) {
+      cap *= 2;
+      buf = io_mem(realloc(buf, cap + 1));
+    }
+    bad |= FLD(s, 0) > 255;
+    buf[n++] = (char)FLD(s, 0);
+    s = FLD(s, 1);
+  }
+  buf[n] = 0;
+  *len = n;
+  if (bad) {
+    free(buf);
+    return NULL;
+  }
+  return buf;
+}
+
 OUTLINE void io_errs(Env e, Term s) {
   u64 n = 0;
   char *text = io_cstr(e, s, &n);
@@ -1976,6 +1990,15 @@ static Term io_str(Env e, const char *p, u64 n) {
   while (k > 0) { k--; s = SCONS(cps[k], s); }
   free(cps);
   return s;
+}
+
+// Bytes cross as they are (0..255), one List cell each (Con, tag 1, on
+// Nil), with no UTF-8.
+static Term io_list(Env e, const char *p, u64 n) {
+  (void)e;
+  Term xs = IMM(0);
+  for (u64 i = n; i > 0; i -= 1) xs = C2(1, (uint8_t)p[i - 1], xs);
+  return xs;
 }
 
 #define io_tup(e, a, b) io_node(e, CID_TUPLE, a, b)
@@ -2341,6 +2364,7 @@ static void cli_fail(const char *msg) {
 static int bend_start(int argc, char **argv, V (*m)(void), int value) {
   bend_main_fn = m;
   io_argv = calloc((size_t)argc + 1, sizeof(char *));
+  io_argv[io_argc++] = argv[0];  // IO.args starts with the program as invoked
   long thr = 0;
   for (int i = 1; i < argc; i++) {
     const char *a = argv[i];

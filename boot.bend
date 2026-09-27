@@ -9,4 +9,4 @@ import ./bendc.bend as B
 def main() -> IO(Unit):
   do IO<Unit>:
     args : List<String> <- IO.args()
-    B.Main.boot(B.IO.list2(args))
+    B.Main.boot(B.Main.args(B.IO.list2(args)))

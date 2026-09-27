@@ -18,7 +18,7 @@ def serve.conn(r: Listener & Result<&1, &1, U32 & String, Socket>) -> IO(String)
 
 def serve(port: U32) -> IO(String):
   do IO<String>:
-    l : Listener <- IO.try(Listener, TCP.listen(port))
+    l : Listener <- IO.try(Listener, TCP.listen("127.0.0.1", port))
     r : Listener & Result<&1, &1, U32 & String, Socket> <- TCP.accept(l)
     serve.conn(r)
 

@@ -9,11 +9,11 @@
 # install.sh (curl -fsSL https://bend-lang.com/install.sh | head -25).
 set -eu
 
-VER="2.0.31"
-SHA_DARWIN_ARM64="f7334bc36cba76a9d3484b092cf2f3d2ffc36f83cb939f2b142411a3a19e1bc4"
-SHA_DARWIN_X64="ee2d6aca00ea4cca79213fdf653039b9a86262232586217432aa8c5ac71a869b"
-SHA_LINUX_ARM64="c20ffee201e94b0a6ee6d52008e69379286cf546089b38d5bac09189f2667ed1"
-SHA_LINUX_X64="f7dbecc8ef5991fe15d9953b8b33911bc62a120c735e2e5902aa031e22055bad"
+VER="2.0.32"
+SHA_DARWIN_ARM64="d7debc002f59264f648dc94e45c2a9fab23e4b1ee0a390bf2acd8b1673e0cf55"
+SHA_DARWIN_X64="6c3fea18ade9912e3015472fe76a2b1372acbf72b82404b3dea1a1243c5ed09e"
+SHA_LINUX_ARM64="f57776d20c0b6aabf47bc9d4523522c10ecd2acde98a2615049b094bb9241523"
+SHA_LINUX_X64="5c365ddb12954d0933cef751802e0f7d9875f842edcb80f9661f89cd1a9ff7b6"
 
 if [ "${1:-}" = latest ]; then
   curl -fsSL https://bend-lang.com/install.sh | sh

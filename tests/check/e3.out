@@ -1,8 +1,10 @@
+SOME PROOFS FAIL
 Error:
 - expected : cases for Con
 - observed : \{}
 Location: f
 3 | def f(xs: List<U32>) -> U32:
 4>|   match xs:
+  |   ^^^^^^^^^
 5 |     case Nil{}:
 exit 1
