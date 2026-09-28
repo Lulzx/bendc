@@ -7,6 +7,7 @@ import ./check.bend as Chk
 import ./core.bend as Core
 import ./rt/rtjs.bend as RtJs
 import ./rt/rtchan.bend as RtChan
+import ./asm.bend as As
 
 # Utilities
 # =========
@@ -9316,14 +9317,14 @@ def Main.emit_value(js: Bool, v: String) -> IO(Unit):
         "\\n\", stdout);\n  return 0;\n}\n")
 
 def Main.usage() -> IO(Unit):
-  IO.die(Unit, 1, "usage: bendc [--check-only | --no-check | --js | -o <binary>] <base.bend> <input.bend> | --tokens <file> | --ast <file>")
+  IO.die(Unit, 1, "usage: bendc [--check-only | --no-check | --js | -o <binary> | --native -o <binary>] <base.bend> <input.bend> | --tokens <file> | --ast <file>")
 
 # The option an argument names (0: none). The driver matches on this number,
 # not on string patterns, which the official compiler expands char by char.
 def Main.code(+s: String) -> Nat:
   Bool.pick(Nat, Str.eq(s, "--tokens"), 1n, Bool.pick(Nat, Str.eq(s, "--ast"), 2n, Bool.pick(Nat,
     Str.eq(s, "--check-only"), 3n, Bool.pick(Nat, Str.eq(s, "--no-check"), 4n, Bool.pick(Nat, Str.eq(s, "--js"), 5n,
-    Bool.pick(Nat, Str.eq(s, "-o"), 6n, 0n))))))
+    Bool.pick(Nat, Str.eq(s, "-o"), 6n, Bool.pick(Nat, Str.eq(s, "--native"), 7n, 0n)))))))
 
 # bendc -o: what bendc writes goes to a C file (Cc.begin), which Cc.end
 # compiles into the binary out against the runtime compiled once (rt/cc.c).
@@ -9332,6 +9333,17 @@ def Cc.begin() -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./rt/cc.js"
 
 def Cc.end(out: String) -> IO(Result<&1, &1, U32 & String, Unit>):
+  import "./rt/cc.c"
+  import "./rt/cc.js"
+
+# bendc --native: whether objects are ELF (1, on Linux) or Mach-O (0).
+def Cc.elf() -> IO(Result<&1, &1, U32 & String, U32>):
+  import "./rt/cc.c"
+  import "./rt/cc.js"
+
+# bendc --native: links out.o (the program's code) with the effects' C that
+# bendc wrote (Cc.begin) and the runtime (rt/cc.c).
+def Cc.link(out: String) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./rt/cc.c"
   import "./rt/cc.js"
 
@@ -13666,6 +13678,1957 @@ def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool) -> COut:
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
 
+# Native code generation
+# ======================
+#
+# bendc --native writes a program's code as AArch64 machine code, with the
+# assembler and object writer of asm.bend: no C compiler sees it. It starts
+# from the same lowered defs as the C generator (Lo.program), and keeps the
+# runtime's value representation (see "Runtime" in the README) and the
+# platform's calling convention (AAPCS64), so the code calls the runtime
+# (build/bendrt.o, and rt/native.c's names for its inline natives) as C does.
+#
+# The code is simple: every value lives in a slot of the function's frame
+# ([sp + 8 i]), an expression leaves its value in x0, and the operands of a
+# call are loaded from their slots into x0..x7 just before it. A def with at
+# most 8 kept parameters takes them in x0..x7; a wider one takes x0, the
+# address of its arguments in a row. A tail call to itself stores the new
+# arguments over the parameters and jumps back; one to another narrow def
+# pops the frame and branches. What it does not do, against the C backend:
+# freeing on match (it runs as BEND_NO_FREE), parallel lets (they run in
+# order), destination passing, and !-calls on the device (they run on the
+# CPU).
+
+# An operand: a frame slot or a constant.
+type NO is Data:
+  NOS{s: U32}
+  NOK{k: U32}
+
+type NB is Data:
+  NB{name: String, o: NO}
+
+def NEnv() -> Data:
+  List<&2, NB>
+
+def NEnv.find(env: NEnv(), +x: String) -> Maybe<&2, NO>:
+  match env:
+    case Nil{}:
+      None{}
+    case NB{+n, o} <> t:
+      Bool.pick(Unit -> Maybe<&2, NO>, String.eq(n, x), u => Some{o}, u => NEnv.find(t, x))(Unit{})
+
+def NEnv.has(+env: NEnv(), +x: String) -> Bool:
+  Maybe.is_some(&2, NO, NEnv.find(env, x))
+
+# Where a statement's value goes: returned, or stored in a slot, then a jump
+# to the join label.
+type NT is Data:
+  NTRet{}
+  NTSet{s: U32, join: String}
+
+# The def being generated: its name, parameter mask and the label after its
+# prologue (a tail call to itself jumps there).
+type NSelf is Data:
+  NSelf{name: String, mask: List<&2, Bool>, top: String}
+
+def NSelf.none() -> NSelf:
+  NSelf{"", Nil{}, ""}
+
+# The generator's state: a counter for fresh names, the current frame's next
+# slot and its most, the finished functions, the defs referenced since the
+# last def, errors, the data slots used (string literal caches), the literal
+# bytes (after the code), printers made, effect sources and effect ids.
+type NSt is Data:
+  NSt{n: U32, slot: U32, max: U32, out: As.Code, refs: List<&2, String>, errs: List<&2, String>,
+    data: U32, lits: As.Code, memo: List<&2, Bind>, effs: List<&2, String>, eids: Map<&2, U32>}
+
+def NG(-A: Type) -> Type:
+  NSt -> A & NSt
+
+def NG.go(-A: Type, -B: Type, r: A & NSt, f: A -> NG(B)) -> B & NSt:
+  (a, st) = r
+  f(a, st)
+
+def NG.bind(-A: Type, -B: Type, m: NG(A), f: A -> NG(B)) -> NG(B):
+  st => NG.go(A, B, m(st), f)
+
+def NG.pure(-A: Type, x: A) -> NG(A):
+  st => (x, st)
+
+def N.fresh.go(st: NSt) -> U32 & NSt:
+  NSt{+n, slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  (n, NSt{U32.inc(n), slot, max, out, refs, errs, data, lits, memo, effs, eids})
+
+def N.fresh() -> NG(U32):
+  st => N.fresh.go(st)
+
+# A fresh local label.
+def N.label() -> NG(String):
+  do NG<String>:
+    +k : U32 <- N.fresh()
+    return ".L" ++ U32.show(k)
+
+def N.slots.go(+k: U32, st: NSt) -> U32 & NSt:
+  NSt{n, +slot, +max, out, refs, errs, data, lits, memo, effs, eids} = st
+  +top = (slot + k : U32)
+  (slot, NSt{n, top, U32.max(max, top), out, refs, errs, data, lits, memo, effs, eids})
+
+# k new slots of the frame: the first one's index.
+def N.slots(+k: U32) -> NG(U32):
+  st => N.slots.go(k, st)
+
+def N.mark.go(st: NSt) -> U32 & NSt:
+  NSt{n, +slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  (slot, NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids})
+
+def N.mark() -> NG(U32):
+  st => N.mark.go(st)
+
+def N.release.go(+s: U32, st: NSt) -> Unit & NSt:
+  NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  (Unit{}, NSt{n, s, max, out, refs, errs, data, lits, memo, effs, eids})
+
+# Frees the slots from s up (the temporaries of an expression, a case's).
+def N.release(+s: U32) -> NG(Unit):
+  st => N.release.go(s, st)
+
+def N.enter.go(st: NSt) -> (U32 & U32) & NSt:
+  NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  ((slot, max), NSt{n, 0, 0, out, refs, errs, data, lits, memo, effs, eids})
+
+# A new frame (a lambda's inside a def's): the old one's counts.
+def N.enter() -> NG(U32 & U32):
+  st => N.enter.go(st)
+
+def N.leave.go(saved: U32 & U32, st: NSt) -> U32 & NSt:
+  (s0, m0) = saved
+  NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  (max, NSt{n, s0, m0, out, refs, errs, data, lits, memo, effs, eids})
+
+# Back to the frame before: the slots the inner one used.
+def N.leave(saved: U32 & U32) -> NG(U32):
+  st => N.leave.go(saved, st)
+
+def N.emit.go(c: As.Code, st: NSt) -> Unit & NSt:
+  NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  (Unit{}, NSt{n, slot, max, As.CCat{out, c}, refs, errs, data, lits, memo, effs, eids})
+
+# Appends a finished function.
+def N.emit(c: As.Code) -> NG(Unit):
+  st => N.emit.go(c, st)
+
+def N.ref.go(name: String, st: NSt) -> Unit & NSt:
+  NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  (Unit{}, NSt{n, slot, max, out, name <> refs, errs, data, lits, memo, effs, eids})
+
+def N.ref(name: String) -> NG(Unit):
+  st => N.ref.go(name, st)
+
+def N.take_refs.go(st: NSt) -> List<&2, String> & NSt:
+  NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  (refs, NSt{n, slot, max, out, Nil{}, errs, data, lits, memo, effs, eids})
+
+def N.take_refs() -> NG(List<&2, String>):
+  st => N.take_refs.go(st)
+
+def N.error.go(msg: String, st: NSt) -> Unit & NSt:
+  NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  (Unit{}, NSt{n, slot, max, out, refs, ("native: " ++ msg) <> errs, data, lits, memo, effs, eids})
+
+def N.error(msg: String) -> NG(Unit):
+  st => N.error.go(msg, st)
+
+def N.dslot.go(st: NSt) -> U32 & NSt:
+  NSt{n, slot, max, out, refs, errs, +data, lits, memo, effs, eids} = st
+  (data, NSt{n, slot, max, out, refs, errs, U32.inc(data), lits, memo, effs, eids})
+
+# A new data slot (a literal's cache).
+def N.dslot() -> NG(U32):
+  st => N.dslot.go(st)
+
+def N.lit.go(+l: String, s: String, st: NSt) -> Unit & NSt:
+  NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  (Unit{}, NSt{n, slot, max, out, refs, errs, data,
+    As.CCat{lits, As.CCat{As.COne{As.ILab{l}}, As.Code.ws(As.cstr(s))}}, memo, effs, eids})
+
+def N.lit(+l: String, s: String) -> NG(Unit):
+  st => N.lit.go(l, s, st)
+
+# The label of a NUL-terminated copy of s's UTF-8 bytes (after the code).
+def N.cstr(s: String) -> NG(String):
+  do NG<String>:
+    +k : U32 <- N.fresh()
+    +l : String <- NG.pure(String, ".C" ++ U32.show(k))
+    N.lit(l, s)
+    return l
+
+def N.memo.find.go(+k: String, st: NSt) -> Maybe<&2, String> & NSt:
+  NSt{n, slot, max, out, refs, errs, data, lits, +memo, effs, eids} = st
+  (Env.find(memo, k), NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids})
+
+def N.memo.find(+k: String) -> NG(Maybe<&2, String>):
+  st => N.memo.find.go(k, st)
+
+def N.memo.add.go(b: Bind, st: NSt) -> Unit & NSt:
+  NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  (Unit{}, NSt{n, slot, max, out, refs, errs, data, lits, b <> memo, effs, eids})
+
+def N.memo.add(b: Bind) -> NG(Unit):
+  st => N.memo.add.go(b, st)
+
+def N.effs.go(ims: List<&2, String>, st: NSt) -> Unit & NSt:
+  NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids} = st
+  (Unit{}, NSt{n, slot, max, out, refs, errs, data, lits, memo, List.append(&2, String, Gen.effs.c(ims), effs), eids})
+
+# Records the C files an effect imports (compiled apart: see Cc.link).
+def N.effs(ims: List<&2, String>) -> NG(Unit):
+  st => N.effs.go(ims, st)
+
+def N.eid.go(+name: String, st: NSt) -> U32 & NSt:
+  NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, +eids} = st
+  (Pair.snd(Map<&2, U32>, U32, Map.get(U32, 0, eids, name)), NSt{n, slot, max, out, refs, errs, data, lits, memo, effs, eids})
+
+# An effect's id, as Gen.cids numbers them: (3 << 16) | its index.
+def N.eid(+name: String) -> NG(U32):
+  st => N.eid.go(name, st)
+
+def N.eids(ds: List<&2, Decl>, +i: U32, m: Map<&2, U32>) -> Map<&2, U32>:
+  match ds:
+    case Nil{}:
+      m
+    case DEff{+n, ps, ims} <> t:
+      N.eids(t, U32.inc(i), Map.set(&2, U32, m, n, (196608 .|. i : U32)))
+    case d <> t:
+      N.eids(t, i, m)
+
+# Instructions
+# ------------
+
+def N.w(+w: U32) -> As.Code:
+  As.Code.w(w)
+
+def N.ws(ws: List<&2, U32>) -> As.Code:
+  As.Code.ws(ws)
+
+def N.cat(xs: List<&2, As.Code>) -> As.Code:
+  As.Code.list(xs)
+
+def N.one(i: As.Ins) -> As.Code:
+  As.COne{i}
+
+def N.k(+r: U32, +k: U32) -> As.Code:
+  N.ws(As.mov32(r, k))
+
+# rd = rn + k (k below 2^24).
+def N.addk(+rd: U32, +rn: U32, +k: U32) -> As.Code:
+  Bool.pick(As.Code, U32.is_lt(k, 4096), N.w(As.addi(rd, rn, k)),
+    N.ws([As.addh(rd, rn, (k >> 12n : U32)), As.addi(rd, rd, (k .&. 4095 : U32))]))
+
+# ldr/str r at sp + off (x17 holds the high part past 32 KiB).
+def N.ldx(+r: U32, +off: U32) -> As.Code:
+  Bool.pick(As.Code, U32.is_lt(off, 32768), N.w(As.ldr(r, 31, off)),
+    N.ws([As.addh(17, 31, (off >> 12n : U32)), As.ldr(r, 17, (off .&. 4095 : U32))]))
+
+def N.stx(+r: U32, +off: U32) -> As.Code:
+  Bool.pick(As.Code, U32.is_lt(off, 32768), N.w(As.str(r, 31, off)),
+    N.ws([As.addh(17, 31, (off >> 12n : U32)), As.str(r, 17, (off .&. 4095 : U32))]))
+
+def N.ld(+r: U32, +s: U32) -> As.Code:
+  N.ldx(r, (s * 8 : U32))
+
+def N.st(+r: U32, +s: U32) -> As.Code:
+  N.stx(r, (s * 8 : U32))
+
+# An operand into register r.
+def N.lo(o: NO, +r: U32) -> As.Code:
+  match o:
+    case NOS{+s}:
+      N.ld(r, s)
+    case NOK{+k}:
+      N.k(r, k)
+
+# Operands into registers r, r + 1, ...
+def N.lregs(os: List<&2, NO>, +r: U32) -> As.Code:
+  match os:
+    case Nil{}:
+      As.CNil{}
+    case o <> t:
+      As.CCat{N.lo(o, r), N.lregs(t, U32.inc(r))}
+
+# The index of the last operand computed into its own slot (slot base + i),
+# or n when there is none.
+def N.lastc(os: List<&2, NO>, +base: U32, +i: U32, +j: U32) -> U32:
+  match os:
+    case Nil{}:
+      j
+    case o <> t:
+      match o:
+        case NOS{+s}:
+          N.lastc(t, base, U32.inc(i), Bool.pick(U32, U32.is_eq(s, (base + i : U32)), i, j))
+        case NOK{k}:
+          N.lastc(t, base, U32.inc(i), j)
+
+# Operands into registers r, r + 1, ..., but not the one for register j.
+def N.lregs.skip(os: List<&2, NO>, +r: U32, +j: U32) -> As.Code:
+  match os:
+    case Nil{}:
+      As.CNil{}
+    case o <> t:
+      As.CCat{Bool.pick(As.Code, U32.is_eq(r, j), As.CNil{}, N.lo(o, r)), N.lregs.skip(t, U32.inc(r), j)}
+
+# Operands evaluated from slot base up into x0, x1, ...: the last one
+# computed first, right after the store that ends its code, so that the
+# peephole (As.peep) turns its load into a move.
+def N.lregs.b(+os: List<&2, NO>, +base: U32) -> As.Code:
+  +j = N.lastc(os, base, 0, 4294967295)
+  Bool.pick(As.Code, U32.is_eq(j, 4294967295), N.lregs(os, 0),
+    As.CCat{N.ld(j, (base + j : U32)), N.lregs.skip(os, 0, j)})
+
+# The frame of a function whose slots number max, in bytes (a multiple of 16).
+def N.frame(+max: U32) -> U32:
+  (((max * 8 : U32) + 15 : U32) .&. 4294967280 : U32)
+
+def N.prologue(+max: U32) -> As.Code:
+  +f = N.frame(max)
+  N.cat([N.ws([As.push_fp(), As.set_fp()]),
+    Bool.pick(As.Code, U32.is_lt(f, 4096), N.w(As.subi(31, 31, f)),
+      N.ws([As.subh(31, 31, (f >> 12n : U32)), As.subi(31, 31, (f .&. 4095 : U32))]))])
+
+def N.pop() -> As.Code:
+  N.ws([As.sp_fp(), As.pop_fp()])
+
+def N.epilogue() -> As.Code:
+  N.ws([As.sp_fp(), As.pop_fp(), As.ret()])
+
+def N.call(s: String) -> As.Code:
+  N.one(As.ICall{As.bl(), s})
+
+def N.bl(l: String) -> As.Code:
+  N.one(As.IB{As.bl(), l})
+
+def N.b(l: String) -> As.Code:
+  N.one(As.IB{As.b(), l})
+
+def N.lab(l: String) -> As.Code:
+  N.one(As.ILab{l})
+
+def N.adr(+r: U32, l: String) -> As.Code:
+  N.one(As.IAdr{r, l})
+
+# x0 = a new block of w words (bn_alloc, in rt/native.c).
+def N.alloc(+w: U32) -> As.Code:
+  As.CCat{N.k(0, w), N.call("bn_alloc")}
+
+# Stores operands at [x0 + off], [x0 + off + 8], ... (through x9).
+def N.fields(os: List<&2, NO>, +off: U32) -> As.Code:
+  match os:
+    case Nil{}:
+      As.CNil{}
+    case o <> t:
+      N.cat([N.lo(o, 9), N.w(As.str(9, 0, off)), N.fields(t, (off + 8 : U32))])
+
+# x0 = TAG(x0): the tag of a nullary constructor (v >> 3) or of a node (its
+# first word, without the sharing bits).
+def N.tag() -> As.Code:
+  N.ws([(As.tbnz(0, 0) .|. 128 : U32), As.ldr(0, 0, 0), As.andsh(0, 0), (As.b() .|. 2 : U32),
+    As.lsri(0, 0, 3)])
+
+# x0 = x0 + k, stopping at the Nat wall (NAT_IMM = 2^48 - 1).
+def N.natk(+k: U32) -> As.Code:
+  N.cat([N.k(9, k), N.w(As.add(0, 0, 9)), N.ws(As.mov64(9, 4294967295, 65535)),
+    N.w(As.cmp(0, 9)), N.w((As.bc(As.ls()) .|. 64 : U32)), N.call("nat_wall")])
+
+# A closure {fn, arity, n, args...} of the function at label f.
+def N.clo(+f: String, +arity: U32, +os: List<&2, NO>) -> As.Code:
+  +n = U32.from_nat(List.length(&2, NO, os))
+  N.cat([N.alloc((n + 3 : U32)), N.adr(9, f), N.w(As.str(9, 0, 0)), N.k(9, arity), N.w(As.str(9, 0, 8)),
+    N.k(9, n), N.w(As.str(9, 0, 16)), N.fields(os, 24)])
+
+# x0 = the address of data slot d.
+def N.dslot.at(+d: U32) -> As.Code:
+  As.CCat{N.one(As.IAdrS{0, "bn_slots"}), N.addk(0, 0, (d * 8 : U32))}
+
+# A string literal: built once (str_cache), then loaded from its slot.
+def N.str(+s: String) -> NG(As.Code):
+  do NG<As.Code>:
+    +d : U32 <- N.dslot()
+    +l : String <- N.cstr(s)
+    +slow : String <- N.label()
+    +done : String <- N.label()
+    return N.cat([N.dslot.at(d), N.w(As.ldar(9, 0)), N.one(As.IBc{As.cbz(9), slow}), N.w(As.mov(0, 9)),
+      N.b(done), N.lab(slow), N.adr(1, l), N.k(2, As.len32(As.bytes(s))), N.call("str_cache"), N.lab(done)])
+
+# A float literal, read once (bn_flt, in rt/native.c, reads as C does). Its
+# slot holds a number, not a pointer, so a plain load will do.
+def N.flt(s: String) -> NG(As.Code):
+  do NG<As.Code>:
+    +d : U32 <- N.dslot()
+    +l : String <- N.cstr(s)
+    +slow : String <- N.label()
+    +done : String <- N.label()
+    return N.cat([N.dslot.at(d), N.w(As.ldr(9, 0, 0)), N.one(As.IBc{As.cbz(9), slow}), N.w(As.ubfm(0, 9, 0, 31)),
+      N.b(done), N.lab(slow), N.adr(1, l), N.call("bn_flt"), N.lab(done)])
+
+# Patterns
+# --------
+
+# A place in a value a pattern looks at: an operand, a field, a Nat minus
+# k, a word's low bit (as a Bool) or the rest of it, an array's half.
+type NPa is Data:
+  NPO{o: NO}
+  NPF{p: NPa, i: U32}
+  NPK{p: NPa, k: U32}
+  NPB{p: NPa}
+  NPW{p: NPa}
+  NPH{p: NPa, hi: U32}
+
+# A test: equal to a word, not zero, at least k, a tag, an array's leaf or
+# node, a float literal, never.
+type NCo is Data:
+  NCEq{p: NPa, k: U32}
+  NCNz{p: NPa}
+  NCGe{p: NPa, k: U32}
+  NCTag{p: NPa, tag: U32}
+  NCLeaf{p: NPa}
+  NCNode{p: NPa}
+  NCFlt{p: NPa, s: String}
+  NCNo{}
+
+type NBd is Data:
+  NBd{name: String, p: NPa}
+
+type NPr is Data:
+  NPr{conds: List<&2, NCo>, binds: List<&2, NBd>}
+
+def N.pat.var(+x: String, path: NPa, r: NPr) -> NPr:
+  NPr{conds, +binds} = r
+  NPr{conds, Bool.pick(List<&2, NBd>, Str.eq(x, "_"), binds, NBd{x, path} <> binds)}
+
+def N.pat.cond(c: NCo, r: NPr) -> NPr:
+  NPr{conds, binds} = r
+  NPr{c <> conds, binds}
+
+def N.pat.tag(single: Bool, c: NCo, r: NPr) -> NPr:
+  match single:
+    case True{}:
+      r
+    case False{}:
+      N.pat.cond(c, r)
+
+def N.imm(+t: U32) -> U32:
+  ((t * 8 : U32) + 1 : U32)
+
+def N.fld(+path: NPa, +i: U32) -> NPa:
+  Bool.pick(NPa, U32.is_eq(i, 99), path, NPF{path, i})
+
+# Gen.pat.go, on places (see there for the stages).
+def N.pat.go(
+  p: Pat, st: Nat, +g: G, +path: NPa, +i: U32, info: Maybe<&2, CInfo>, k: Nat, r: NPr
+) -> NPr:
+  match p:
+    case PCtor{+name, args}:
+      match args:
+        case Nil{}:
+          match st:
+            case 0n:
+              r
+            case 1n:
+              match info:
+                case None{}:
+                  r
+                case Some{CInfo{+tag, +ar, kind, +single}}:
+                  match k:
+                    case 0n:
+                      N.pat.tag(single, NCTag{path, tag}, r)
+                    case 1n:
+                      N.pat.tag(single, NCEq{path, N.imm(tag)}, r)
+                    case 2n:
+                      r
+                    case 3n:
+                      N.pat.cond(NCEq{path, 0}, r)
+                    case 4n:
+                      N.pat.cond(NCNz{path}, r)
+                    case 5n:
+                      N.pat.cond(NCLeaf{path}, r)
+                    case 6n+q:
+                      N.pat.cond(NCNode{path}, r)
+            case 2n:
+              match info:
+                case None{}:
+                  N.pat.cond(NCNo{}, r)
+                case Some{CInfo{+tag, +ar, +kind, +single}}:
+                  match k:
+                    case 2n+q:
+                      N.pat.go(PCtor{name, Nil{}}, 1n, g, path, 0, Some{CInfo{tag, ar, kind, single}}, U32.to_nat(kind), r)
+                    case other:
+                      r
+            case 3n:
+              N.pat.go(PCtor{name, Nil{}}, 2n, g, path, 0, G.ctor(g, name), P.which(name, ["U32", "F32"]), r)
+            case 4n:
+              match k:
+                case 0n:
+                  r
+                case 1n:
+                  r
+                case 2n+q:
+                  N.pat.go(PCtor{name, Nil{}}, 2n, g, path, 0, G.ctor(g, name), P.which(name, ["U32", "F32"]), r)
+            case other:
+              r
+        case +a <> Nil{}:
+          match st:
+            case 0n:
+              N.pat.go(PCtor{name, Nil{}}, 0n, g, path, U32.inc(i), None{}, 0n,
+                N.pat.go(a, 3n, g, N.fld(path, i), 0, None{}, 0n, r))
+            case 1n:
+              match info:
+                case None{}:
+                  r
+                case Some{CInfo{+tag, +ar, kind, +single}}:
+                  match k:
+                    case 0n:
+                      N.pat.go(PCtor{name, [a]}, 0n, g, path, 0, None{}, 0n,
+                        N.pat.tag(single, NCTag{path, tag}, r))
+                    case 1n:
+                      N.pat.tag(single, NCEq{path, N.imm(tag)}, r)
+                    case 2n:
+                      N.pat.go(PCtor{name, [a]}, 0n, g, path, 99, None{}, 0n, r)
+                    case 3n:
+                      N.pat.cond(NCEq{path, 0}, r)
+                    case 4n:
+                      N.pat.go(PCtor{name, [a]}, 0n, g, NPK{path, 1}, 99, None{}, 0n,
+                        N.pat.cond(NCNz{path}, r))
+                    case 5n:
+                      N.pat.go(PCtor{name, [a]}, 0n, g, path, 0, None{}, 0n, N.pat.cond(NCLeaf{path}, r))
+                    case 6n+q:
+                      N.pat.cond(NCNode{path}, r)
+            case 2n:
+              match info:
+                case None{}:
+                  N.pat.cond(NCNo{}, r)
+                case Some{CInfo{+tag, +ar, +kind, +single}}:
+                  match k:
+                    case 2n+q:
+                      N.pat.go(PCtor{name, [a]}, 1n, g, path, 0, Some{CInfo{tag, ar, kind, single}}, U32.to_nat(kind), r)
+                    case other:
+                      N.pat.go(a, 4n, g, path, 0, None{}, Pat.wordk(a), r)
+            case 3n:
+              N.pat.go(PCtor{name, [a]}, 2n, g, path, 0, G.ctor(g, name), P.which(name, ["U32", "F32"]), r)
+            case 4n:
+              match k:
+                case 0n:
+                  r
+                case 1n:
+                  r
+                case 2n+q:
+                  N.pat.go(PCtor{name, [a]}, 2n, g, path, 0, G.ctor(g, name), P.which(name, ["U32", "F32"]), r)
+            case other:
+              r
+        case +a <> +b <> Nil{}:
+          match st:
+            case 0n:
+              N.pat.go(PCtor{name, [b]}, 0n, g, path, U32.inc(i), None{}, 0n,
+                N.pat.go(a, 3n, g, N.fld(path, i), 0, None{}, 0n, r))
+            case 1n:
+              match info:
+                case None{}:
+                  r
+                case Some{CInfo{+tag, +ar, kind, +single}}:
+                  match k:
+                    case 0n:
+                      N.pat.go(PCtor{name, [a, b]}, 0n, g, path, 0, None{}, 0n,
+                        N.pat.tag(single, NCTag{path, tag}, r))
+                    case 1n:
+                      N.pat.tag(single, NCEq{path, N.imm(tag)}, r)
+                    case 2n:
+                      N.pat.go(PCtor{name, [a, b]}, 0n, g, path, 99, None{}, 0n, r)
+                    case 3n:
+                      N.pat.cond(NCEq{path, 0}, r)
+                    case 4n:
+                      N.pat.go(PCtor{name, [a, b]}, 0n, g, NPK{path, 1}, 99, None{}, 0n,
+                        N.pat.cond(NCNz{path}, r))
+                    case 5n:
+                      N.pat.go(PCtor{name, [a, b]}, 0n, g, path, 0, None{}, 0n, N.pat.cond(NCLeaf{path}, r))
+                    case 6n+q:
+                      N.pat.go(b, 3n, g, NPH{path, 1}, 0, None{}, 0n,
+                        N.pat.go(a, 3n, g, NPH{path, 0}, 0, None{}, 0n,
+                          N.pat.cond(NCNode{path}, r)))
+            case 2n:
+              match info:
+                case None{}:
+                  N.pat.cond(NCNo{}, r)
+                case Some{CInfo{+tag, +ar, +kind, +single}}:
+                  match k:
+                    case 2n+q:
+                      N.pat.go(PCtor{name, [a, b]}, 1n, g, path, 0, Some{CInfo{tag, ar, kind, single}}, U32.to_nat(kind), r)
+                    case other:
+                      r
+            case 3n:
+              N.pat.go(PCtor{name, [a, b]}, 2n, g, path, 0, G.ctor(g, name), P.which(name, ["U32", "F32"]), r)
+            case 4n:
+              match k:
+                case 0n:
+                  N.pat.go(b, 4n, g, NPW{path}, 0, None{}, Pat.wordk(b),
+                    N.pat.go(a, 3n, g, NPB{path}, 0, None{}, 0n, r))
+                case 1n:
+                  r
+                case 2n+q:
+                  N.pat.go(PCtor{name, [a, b]}, 2n, g, path, 0, G.ctor(g, name), P.which(name, ["U32", "F32"]), r)
+            case other:
+              r
+        case +h <> +t:
+          match st:
+            case 0n:
+              N.pat.go(PCtor{name, t}, 0n, g, path, U32.inc(i), None{}, 0n,
+                N.pat.go(h, 3n, g, N.fld(path, i), 0, None{}, 0n, r))
+            case 1n:
+              match info:
+                case None{}:
+                  r
+                case Some{CInfo{+tag, +ar, kind, +single}}:
+                  match k:
+                    case 0n:
+                      N.pat.go(PCtor{name, h <> t}, 0n, g, path, 0, None{}, 0n,
+                        N.pat.tag(single, NCTag{path, tag}, r))
+                    case 1n:
+                      N.pat.tag(single, NCEq{path, N.imm(tag)}, r)
+                    case 2n:
+                      N.pat.go(PCtor{name, h <> t}, 0n, g, path, 99, None{}, 0n, r)
+                    case 3n:
+                      N.pat.cond(NCEq{path, 0}, r)
+                    case 4n:
+                      N.pat.go(PCtor{name, h <> t}, 0n, g, NPK{path, 1}, 99, None{}, 0n,
+                        N.pat.cond(NCNz{path}, r))
+                    case 5n:
+                      N.pat.go(PCtor{name, h <> t}, 0n, g, path, 0, None{}, 0n, N.pat.cond(NCLeaf{path}, r))
+                    case 6n+q:
+                      N.pat.cond(NCNode{path}, r)
+            case 2n:
+              match info:
+                case None{}:
+                  N.pat.cond(NCNo{}, r)
+                case Some{CInfo{+tag, +ar, +kind, +single}}:
+                  match k:
+                    case 2n+q:
+                      N.pat.go(PCtor{name, h <> t}, 1n, g, path, 0, Some{CInfo{tag, ar, kind, single}}, U32.to_nat(kind), r)
+                    case other:
+                      r
+            case 3n:
+              N.pat.go(PCtor{name, h <> t}, 2n, g, path, 0, G.ctor(g, name), P.which(name, ["U32", "F32"]), r)
+            case 4n:
+              match k:
+                case 0n:
+                  r
+                case 1n:
+                  r
+                case 2n+q:
+                  N.pat.go(PCtor{name, h <> t}, 2n, g, path, 0, G.ctor(g, name), P.which(name, ["U32", "F32"]), r)
+            case other:
+              r
+    case PVar{+x}:
+      match st:
+        case 0n:
+          r
+        case 1n:
+          r
+        case 2n:
+          r
+        case 3n:
+          N.pat.var(x, path, r)
+        case 4n:
+          match k:
+            case 2n+z:
+              N.pat.var(x, path, r)
+            case other:
+              r
+        case other:
+          r
+    case PNat{+n}:
+      match st:
+        case 0n:
+          r
+        case 1n:
+          r
+        case 2n:
+          r
+        case 3n:
+          N.pat.cond(NCEq{path, n}, r)
+        case 4n:
+          match k:
+            case 2n+z:
+              N.pat.cond(NCEq{path, n}, r)
+            case other:
+              r
+        case other:
+          r
+    case PSucc{+j, q}:
+      match st:
+        case 0n:
+          r
+        case 1n:
+          r
+        case 2n:
+          r
+        case 3n:
+          N.pat.go(q, 3n, g, NPK{path, j}, 0, None{}, 0n, N.pat.cond(NCGe{path, j}, r))
+        case 4n:
+          match k:
+            case 2n+z:
+              N.pat.go(q, 3n, g, NPK{path, j}, 0, None{}, 0n, N.pat.cond(NCGe{path, j}, r))
+            case other:
+              r
+        case other:
+          r
+    case PNum{+n}:
+      match st:
+        case 0n:
+          r
+        case 1n:
+          r
+        case 2n:
+          r
+        case 3n:
+          N.pat.cond(NCEq{path, n}, r)
+        case 4n:
+          match k:
+            case 2n+z:
+              N.pat.cond(NCEq{path, n}, r)
+            case other:
+              r
+        case other:
+          r
+    case PFlt{+f}:
+      match st:
+        case 0n:
+          r
+        case 1n:
+          r
+        case 2n:
+          r
+        case 3n:
+          N.pat.cond(NCFlt{path, f}, r)
+        case 4n:
+          match k:
+            case 2n+z:
+              N.pat.cond(NCFlt{path, f}, r)
+            case other:
+              r
+        case other:
+          r
+
+def N.pat(+g: G, p: Pat, +path: NPa, r: NPr) -> NPr:
+  N.pat.go(p, 3n, g, path, 0, None{}, 0n, r)
+
+def N.pats(+g: G, ps: List<&2, Pat>, os: List<&2, NO>, r: NPr) -> NPr:
+  match ps os:
+    case p <> pt o <> ot:
+      N.pats(g, pt, ot, N.pat(g, p, NPO{o}, r))
+    case pl ol:
+      r
+
+# The value at a place into x0 (x9 is scratch; arr_half is a call).
+def N.path(p: NPa) -> As.Code:
+  match p:
+    case NPO{o}:
+      N.lo(o, 0)
+    case NPF{q, +i}:
+      As.CCat{N.path(q), N.w(As.ldr(0, 0, ((i + 1 : U32) * 8 : U32)))}
+    case NPK{q, +k}:
+      N.cat([N.path(q), N.k(9, k), N.w(As.sub(0, 0, 9))])
+    case NPB{q}:
+      N.cat([N.path(q), N.ws([As.and1(0, 0), As.lsli(0, 0, 3), As.orr1(0, 0)])])
+    case NPW{q}:
+      As.CCat{N.path(q), N.w(As.ubfm(0, 0, 1, 31))}
+    case NPH{q, +hi}:
+      N.cat([N.path(q), N.k(1, hi), N.call("arr_half")])
+
+# A test, branching to no when it fails.
+def N.cond(c: NCo, +no: String) -> NG(As.Code):
+  match c:
+    case NCEq{p, +k}:
+      NG.pure(As.Code, N.cat([N.path(p), N.k(9, k), N.w(As.cmp(0, 9)), N.one(As.IBc{As.bc(As.ne()), no})]))
+    case NCNz{p}:
+      NG.pure(As.Code, As.CCat{N.path(p), N.one(As.IBc{As.cbz(0), no})})
+    case NCGe{p, +k}:
+      NG.pure(As.Code, N.cat([N.path(p), N.k(9, k), N.w(As.cmp(0, 9)), N.one(As.IBc{As.bc(As.lo()), no})]))
+    case NCTag{p, +tag}:
+      NG.pure(As.Code, N.cat([N.path(p), N.tag(), N.k(9, tag), N.w(As.cmp(0, 9)),
+        N.one(As.IBc{As.bc(As.ne()), no})]))
+    case NCLeaf{p}:
+      NG.pure(As.Code, N.cat([N.path(p), N.w(As.ldr(0, 0, 0)), N.k(9, 31), N.w(As.and(0, 0, 9)),
+        N.one(As.IBc{As.cbnz(0), no})]))
+    case NCNode{p}:
+      NG.pure(As.Code, N.cat([N.path(p), N.w(As.ldr(0, 0, 0)), N.k(9, 31), N.w(As.and(0, 0, 9)),
+        N.one(As.IBc{As.cbz(0), no})]))
+    case NCFlt{p, s}:
+      do NG<As.Code>:
+        f : As.Code <- N.flt(s)
+        return N.cat([f, N.w(As.mov(11, 0)), N.path(p), N.w(As.cmp(0, 11)), N.one(As.IBc{As.bc(As.ne()), no})])
+    case NCNo{}:
+      NG.pure(As.Code, N.b(no))
+
+def N.conds(cs: List<&2, NCo>, +no: String) -> NG(As.Code):
+  match cs:
+    case Nil{}:
+      NG.pure(As.Code, As.CNil{})
+    case c <> t:
+      do NG<As.Code>:
+        a : As.Code <- N.cond(c, no)
+        b : As.Code <- N.conds(t, no)
+        return As.CCat{a, b}
+
+# A pattern's bindings: a place that is an operand is bound to it, any
+# other is loaded into a slot from base up.
+def N.binds.n(bs: List<&2, NBd>) -> U32:
+  match bs:
+    case Nil{}:
+      0
+    case NBd{x, p} <> t:
+      match p:
+        case NPO{o}:
+          N.binds.n(t)
+        case other:
+          U32.inc(N.binds.n(t))
+
+def N.binds.env(bs: List<&2, NBd>, +base: U32, env: NEnv()) -> NEnv():
+  match bs:
+    case Nil{}:
+      env
+    case NBd{x, p} <> t:
+      match p:
+        case NPO{o}:
+          N.binds.env(t, base, NB{x, o} <> env)
+        case other:
+          N.binds.env(t, U32.inc(base), NB{x, NOS{base}} <> env)
+
+def N.binds.code(bs: List<&2, NBd>, +base: U32) -> As.Code:
+  match bs:
+    case Nil{}:
+      As.CNil{}
+    case NBd{x, p} <> t:
+      match p:
+        case NPO{o}:
+          N.binds.code(t, base)
+        case other:
+          N.cat([N.path(other), N.st(0, base), N.binds.code(t, U32.inc(base))])
+
+# Operands
+# --------
+
+def N.simple.var(m: Maybe<&2, NO>, +x: String) -> Maybe<&2, NO>:
+  match m:
+    case Some{o}:
+      Some{o}
+    case None{}:
+      Bool.pick(Maybe<&2, NO>, Str.eq(x, "_"), Some{NOK{0}}, None{})
+
+# An expression that needs no code: a variable in a slot, a constant.
+def N.simple(+env: NEnv(), e: Expr) -> Maybe<&2, NO>:
+  match e:
+    case EVar{+x}:
+      N.simple.var(NEnv.find(env, x), x)
+    case ENum{n}:
+      Some{NOK{n}}
+    case ENat{n}:
+      Some{NOK{n}}
+    case ETy{n, a}:
+      Some{NOK{0}}
+    case other:
+      None{}
+
+def N.op.or(m: Maybe<&2, NO>, +s: U32) -> NO:
+  match m:
+    case Some{o}:
+      o
+    case None{}:
+      NOS{s}
+
+# The operands of arguments evaluated from slot base up (see NSArgs).
+def N.ops(+env: NEnv(), xs: List<&2, Expr>, +base: U32) -> List<&2, NO>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case x <> t:
+      N.op.or(N.simple(env, x), base) <> N.ops(env, t, U32.inc(base))
+
+# Operands into slots base, base + 1, ... (a wide call's arguments in a row).
+def N.row(os: List<&2, NO>, +base: U32) -> As.Code:
+  match os:
+    case Nil{}:
+      As.CNil{}
+    case o <> t:
+      match o:
+        case NOS{+s}:
+          As.CCat{Bool.pick(As.Code, U32.is_eq(s, base), As.CNil{}, As.CCat{N.ld(9, s), N.st(9, base)}),
+            N.row(t, U32.inc(base))}
+        case NOK{+k}:
+          N.cat([N.k(9, k), N.st(9, base), N.row(t, U32.inc(base))])
+
+def N.kept(mask: List<&2, Bool>) -> U32:
+  match mask:
+    case Nil{}:
+      0
+    case True{} <> t:
+      U32.inc(N.kept(t))
+    case False{} <> t:
+      N.kept(t)
+
+# A def's parameters: kept ones in slots 0, 1, ..., erased ones 0.
+def N.params(ps: List<&2, Param>, mask: List<&2, Bool>, +i: U32, env: NEnv()) -> NEnv():
+  match ps mask:
+    case Param{x, m, t} <> pt True{} <> mt:
+      N.params(pt, mt, U32.inc(i), NB{x, NOS{i}} <> env)
+    case Param{x, m, t} <> pt False{} <> mt:
+      N.params(pt, mt, i, NB{x, NOK{0}} <> env)
+    case pl ml:
+      env
+
+# The prologue's stores of the parameters: from x0..x7, or from the row x0
+# points at (a wide def).
+def N.params.in(k: Nat, +i: U32, +wide: Bool) -> As.Code:
+  match k:
+    case 0n:
+      As.CNil{}
+    case 1n+j:
+      As.CCat{Bool.pick(As.Code, wide, As.CCat{N.w(As.ldr(9, 0, (i * 8 : U32))), N.st(9, i)}, N.st(i, i)),
+        N.params.in(j, U32.inc(i), wide)}
+
+def N.split.kept(s: Split) -> List<&2, Expr>:
+  Split{kept, all, extra, full} = s
+  kept
+
+def N.split0(mask: List<&2, Bool>, args: List<&2, Expr>) -> Split:
+  Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}})
+
+# Natives inlined: their operands in x0 and x1, their result in x0.
+type NI is Data:
+  NI{name: String, code: As.Code}
+
+# BOOL(c) of the flags.
+def N.bool(+c: U32) -> List<&2, U32>:
+  [As.cset(0, c), As.lsli(0, 0, 3), As.orr1(0, 0)]
+
+def N.fop(+w: U32) -> As.Code:
+  N.ws([As.fmovsw(0, 0), As.fmovsw(1, 1), w, As.fmovws(0, 0)])
+
+def N.fcmp(+c: U32) -> As.Code:
+  N.ws(As.fmovsw(0, 0) <> As.fmovsw(1, 1) <> As.fcmp(0, 1) <> N.bool(c))
+
+def N.ucmp(+c: U32) -> As.Code:
+  N.ws(As.cmp(0, 1) <> N.bool(c))
+
+def N.inlines() -> List<&2, NI>:
+  [NI{"U32.add", N.w(As.addw(0, 0, 1))}, NI{"U32.sub", N.w(As.subw(0, 0, 1))},
+   NI{"U32.mul", N.w(As.mulw(0, 0, 1))}, NI{"U32.inc", As.CCat{N.k(1, 1), N.w(As.addw(0, 0, 1))}},
+   NI{"U32.and", N.w(As.and(0, 0, 1))}, NI{"U32.or", N.w(As.orr(0, 0, 1))}, NI{"U32.xor", N.w(As.eor(0, 0, 1))},
+   NI{"U32.is_eq", N.ucmp(As.eq())}, NI{"U32.is_ne", N.ucmp(As.ne())}, NI{"U32.is_lt", N.ucmp(As.lo())},
+   NI{"U32.is_le", N.ucmp(As.ls())}, NI{"U32.is_gt", N.ucmp(As.hi())}, NI{"U32.is_ge", N.ucmp(As.hs())},
+   NI{"U32.is_zero", N.ws(As.cmpi(0, 0) <> N.bool(As.eq()))}, NI{"U32.to_nat", As.CNil{}},
+   NI{"U32.to_f32", N.ws([As.ucvtf(0, 0), As.fmovws(0, 0)])},
+   NI{"Nat.is_eq", N.ucmp(As.eq())}, NI{"Nat.is_ne", N.ucmp(As.ne())}, NI{"Nat.is_lt", N.ucmp(As.lo())},
+   NI{"Nat.is_le", N.ucmp(As.ls())}, NI{"Nat.is_gt", N.ucmp(As.hi())}, NI{"Nat.is_ge", N.ucmp(As.hs())},
+   NI{"Nat.add", N.cat([N.w(As.add(0, 0, 1)), N.ws(As.mov64(9, 4294967295, 65535)), N.w(As.cmp(0, 9)),
+     N.w((As.bc(As.ls()) .|. 64 : U32)), N.call("nat_wall")])},
+   NI{"Nat.sub", N.ws([As.cmp(0, 1), As.sub(0, 0, 1), As.csel(0, 0, 31, As.hi())])},
+   NI{"F32.add", N.fop(As.fadd(0, 0, 1))}, NI{"F32.sub", N.fop(As.fsub(0, 0, 1))},
+   NI{"F32.mul", N.fop(As.fmul(0, 0, 1))}, NI{"F32.div", N.fop(As.fdiv(0, 0, 1))},
+   NI{"F32.is_eq", N.fcmp(As.eq())}, NI{"F32.is_ne", N.fcmp(As.ne())}, NI{"F32.is_lt", N.fcmp(As.mi())},
+   NI{"F32.is_le", N.fcmp(As.ls())}, NI{"F32.is_gt", N.fcmp(As.gt())}, NI{"F32.is_ge", N.fcmp(As.ge())},
+   NI{"F32.neg", N.ws([As.fmovsw(0, 0), As.fneg(0, 0), As.fmovws(0, 0)])}]
+
+def N.inline.find(xs: List<&2, NI>, +name: String) -> Maybe<&2, As.Code>:
+  match xs:
+    case Nil{}:
+      None{}
+    case NI{+n, c} <> t:
+      Bool.pick(Unit -> Maybe<&2, As.Code>, String.eq(n, name), u => Some{c}, u => N.inline.find(t, name))(Unit{})
+
+def N.inline.or(m: Maybe<&2, As.Code>, +w: U32, +name: String) -> As.Code:
+  match m:
+    case Some{c}:
+      c
+    case None{}:
+      N.one(As.ICall{w, "N_" ++ Gen.mangle(name)})
+
+# A call's branch: to a native's name in rt/native.c, or to a def here.
+def N.target(native: Bool, +w: U32, +name: String) -> As.Code:
+  match native:
+    case True{}:
+      N.one(As.ICall{w, "N_" ++ Gen.mangle(name)})
+    case False{}:
+      N.one(As.IB{w, Gen.f(name)})
+
+# A call: a native inlined when it can be (its code in place of the branch).
+def N.ncall(native: Bool, +name: String) -> As.Code:
+  match native:
+    case True{}:
+      N.inline.or(N.inline.find(N.inlines(), name), As.bl(), name)
+    case False{}:
+      N.one(As.IB{As.bl(), Gen.f(name)})
+
+def N.ntail.go(m: Maybe<&2, As.Code>, +name: String) -> As.Code:
+  match m:
+    case Some{c}:
+      As.CCat{c, N.epilogue()}
+    case None{}:
+      As.CCat{N.pop(), N.one(As.ICall{As.b(), "N_" ++ Gen.mangle(name)})}
+
+# A tail call's end: an inlined native, then the epilogue; else pop the frame
+# and branch.
+def N.ntail(native: Bool, +name: String) -> As.Code:
+  match native:
+    case True{}:
+      N.ntail.go(N.inline.find(N.inlines(), name), name)
+    case False{}:
+      As.CCat{N.pop(), N.one(As.IB{As.b(), Gen.f(name)})}
+
+# The operands of a call into x0..x7, or (a wide call) into the row from
+# slot base up, whose address goes in x0.
+def N.callops(+os: List<&2, NO>, +base: U32, +n: U32) -> As.Code:
+  Bool.pick(As.Code, U32.is_le(n, 8), N.lregs.b(os, base), As.CCat{N.row(os, base), N.addk(0, 31, (base * 8 : U32))})
+
+def N.fin(t: NT) -> As.Code:
+  match t:
+    case NTRet{}:
+      N.epilogue()
+    case NTSet{+s, j}:
+      As.CCat{N.st(0, s), N.b(j)}
+
+def N.is_ret(t: NT) -> Bool:
+  match t:
+    case NTRet{}:
+      True{}
+    case NTSet{s, j}:
+      False{}
+
+def N.is_tail(+env: NEnv(), +self: NSelf, +tgt: NT, +name: String, +args: List<&2, Expr>) -> Bool:
+  NSelf{+sn, +mask, top} = self
+  Bool.and(Bool.and(N.is_ret(tgt), Str.eq(sn, name)), Bool.and(
+    Bool.not(NEnv.has(env, name)),
+    Nat.is_eq(List.length(&2, Bool, mask), List.length(&2, Expr, args))))
+
+def N.can_tail.info(i: DInfo, +n: Nat) -> Bool:
+  DInfo{+kind, +mask} = i
+  Bool.and(Bool.and(U32.is_le(kind, 2), Nat.is_eq(List.length(&2, Bool, mask), n)), U32.is_le(N.kept(mask), 8))
+
+# A call in tail position that can pop the frame and branch: to a narrow
+# def, with all its arguments.
+def N.can_tail(+g: G, +env: NEnv(), +name: String, +args: List<&2, Expr>) -> Bool:
+  Bool.and(Bool.and(Bool.not(NEnv.has(env, name)), Bool.not(Str.eq(name, "%gpu"))),
+    N.can_tail.info(G.def(g, name), List.length(&2, Expr, args)))
+
+# Slots i, i + 1, ... as operands.
+def N.seq(k: Nat, +i: U32) -> List<&2, NO>:
+  match k:
+    case 0n:
+      Nil{}
+    case 1n+j:
+      NOS{i} <> N.seq(j, U32.inc(i))
+
+# Slot from + i into slot to + i, for k of them.
+def N.copy(k: Nat, +from: U32, +to: U32) -> As.Code:
+  match k:
+    case 0n:
+      As.CNil{}
+    case 1n+j:
+      N.cat([N.ld(9, from), N.st(9, to), N.copy(j, U32.inc(from), U32.inc(to))])
+
+# The new arguments of a tail call to itself over the parameters: through
+# registers, or (past 8) through the temporaries.
+def N.tail.move(+os: List<&2, NO>, +base: U32, +n: U32) -> As.Code:
+  Bool.pick(As.Code, U32.is_le(n, 8), As.CCat{N.lregs.b(os, base), N.params.in(U32.to_nat(n), 0, False{})},
+    As.CCat{N.row(os, base), N.copy(U32.to_nat(n), base, 0)})
+
+# A constructor's value from its fields' operands, by kind (see G.ctor_kind).
+def N.ctor.code(kind: Nat, +tag: U32, +os: List<&2, NO>) -> As.Code:
+  match kind:
+    case 0n:
+      +n = U32.from_nat(List.length(&2, NO, os))
+      N.cat([N.alloc(U32.inc(n)), N.k(9, tag), N.w(As.str(9, 0, 0)), N.fields(os, 8)])
+    case 1n:
+      N.k(0, N.imm(tag))
+    case 2n:
+      N.lregs(os, 0)
+    case 3n:
+      N.k(0, 0)
+    case 4n:
+      As.CCat{N.lregs(os, 0), N.natk(1)}
+    case 5n:
+      N.cat([N.lregs(os, 1), N.k(0, 0), N.call("arr_new")])
+    case 6n+q:
+      As.CCat{N.lregs(os, 0), N.call("arr_node")}
+
+def N.caps.put(x: String, m: Maybe<&2, NO>, rest: NEnv()) -> NEnv():
+  match m:
+    case None{}:
+      rest
+    case Some{o}:
+      NB{x, o} <> rest
+
+# A lambda's captures: the free variables the environment has.
+def N.caps(names: List<&2, String>, +env: NEnv()) -> NEnv():
+  match names:
+    case Nil{}:
+      Nil{}
+    case +x <> t:
+      N.caps.put(x, NEnv.find(env, x), N.caps(t, env))
+
+def N.caps.inner(caps: NEnv(), +i: U32) -> NEnv():
+  match caps:
+    case Nil{}:
+      Nil{}
+    case NB{x, o} <> t:
+      NB{x, NOS{i}} <> N.caps.inner(t, U32.inc(i))
+
+def N.caps.ops(caps: NEnv()) -> List<&2, NO>:
+  match caps:
+    case Nil{}:
+      Nil{}
+    case NB{x, o} <> t:
+      o <> N.caps.ops(t)
+
+def NPr.binds(r: NPr) -> List<&2, NBd>:
+  NPr{conds, binds} = r
+  binds
+
+def NPr.conds(r: NPr) -> List<&2, NCo>:
+  NPr{conds, binds} = r
+  List.reverse(&2, NCo, conds)
+
+def NPr.none() -> NPr:
+  NPr{Nil{}, Nil{}}
+
+# The generator is one def, N.rec, over a selector, as Gen.rec: each NS..
+# names a step and carries its arguments; every step gives code. Fuel
+# bounds the recursion.
+type NS is Data:
+  NSExpr{g: G, env: NEnv(), e: Expr}
+  NSVarFound{g: G, name: String, m: Maybe<&2, NO>}
+  NSVar{g: G, name: String, info: DInfo}
+  NSVarKind{name: String, kind: Nat, total: U32}
+  NSArg{g: G, env: NEnv(), x: Expr, base: U32, m: Maybe<&2, NO>}
+  NSArgs{g: G, env: NEnv(), xs: List<&2, Expr>, base: U32}
+  NSApp{g: G, env: NEnv(), xs: List<&2, Expr>, r: U32}
+  NSApply{g: G, env: NEnv(), f: Expr, args: List<&2, Expr>}
+  NSCallFull{g: G, env: NEnv(), name: String, native: Bool, mask: List<&2, Bool>, kept: List<&2, Expr>,
+    all: List<&2, Expr>, extra: List<&2, Expr>, full: Bool}
+  NSCallSplit{g: G, env: NEnv(), name: String, native: Bool, mask: List<&2, Bool>, s: Split}
+  NSCallKind{g: G, env: NEnv(), name: String, kind: Nat, mask: List<&2, Bool>, args: List<&2, Expr>}
+  NSCallDef{g: G, env: NEnv(), name: String, info: DInfo, args: List<&2, Expr>}
+  NSCallVar{g: G, env: NEnv(), name: String, args: List<&2, Expr>, local: Bool}
+  NSCallGpu{g: G, env: NEnv(), args: List<&2, Expr>}
+  NSCallName{g: G, env: NEnv(), name: String, args: List<&2, Expr>, gpu: Bool}
+  NSCall{g: G, env: NEnv(), f: Expr, args: List<&2, Expr>}
+  NSBitsGo{g: G, env: NEnv(), k: Nat, e: Expr}
+  NSBits{g: G, env: NEnv(), e: Expr}
+  NSCtorBits{g: G, env: NEnv(), args: List<&2, Expr>}
+  NSCtorGo{g: G, env: NEnv(), tag: U32, kind: U32, args: List<&2, Expr>}
+  NSCtorKind{g: G, env: NEnv(), tag: U32, kind: U32, args: List<&2, Expr>, w: Nat}
+  NSCtorInfo{g: G, env: NEnv(), name: String, info: Maybe<&2, CInfo>, args: List<&2, Expr>}
+  NSCtor{g: G, env: NEnv(), name: String, args: List<&2, Expr>}
+  NSLam{g: G, env: NEnv(), p: Pat, body: Expr}
+  NSBlock{g: G, env: NEnv(), e: Expr}
+  NSTailSelf{g: G, env: NEnv(), self: NSelf, args: List<&2, Expr>}
+  NSTailGo{g: G, env: NEnv(), name: String, info: DInfo, args: List<&2, Expr>}
+  NSTailCall{g: G, env: NEnv(), name: String, args: List<&2, Expr>, ok: Bool}
+  NSStmtCallTo{g: G, env: NEnv(), tgt: NT, name: String, args: List<&2, Expr>}
+  NSStmtCall{g: G, env: NEnv(), self: NSelf, tgt: NT, name: String, args: List<&2, Expr>, tail: Bool}
+  NSLetVar{g: G, env: NEnv(), self: NSelf, tgt: NT, x: String, v: Expr, body: Expr, m: Maybe<&2, NO>}
+  NSLetHole{g: G, env: NEnv(), self: NSelf, tgt: NT, v: Expr, body: Expr}
+  NSLetPat{g: G, env: NEnv(), self: NSelf, tgt: NT, p: Pat, v: Expr, body: Expr}
+  NSLets{g: G, env0: NEnv(), env: NEnv(), self: NSelf, tgt: NT, ps: List<&2, Pat>, vs: List<&2, Expr>,
+    body: Expr}
+  NSLetPar{g: G, env: NEnv(), self: NSelf, tgt: NT, ps: List<&2, Pat>, v: Expr, body: Expr}
+  NSLetCtor{g: G, env: NEnv(), self: NSelf, tgt: NT, name: String, ps: List<&2, Pat>, v: Expr,
+    body: Expr, par: Bool}
+  NSLet{g: G, env: NEnv(), self: NSelf, tgt: NT, p: Pat, v: Expr, body: Expr}
+  NSCaseGo{g: G, env: NEnv(), self: NSelf, tgt: NT, os: List<&2, NO>, cs: List<&2, NCo>,
+    binds: List<&2, NBd>, body: Expr, rest: List<&2, Expr>}
+  NSCases{g: G, env: NEnv(), self: NSelf, tgt: NT, os: List<&2, NO>, cases: List<&2, Expr>}
+  NSMatch{g: G, env: NEnv(), self: NSelf, tgt: NT, scrs: List<&2, Expr>, cases: List<&2, Expr>}
+  NSStmt{g: G, env: NEnv(), self: NSelf, tgt: NT, e: Expr}
+
+def NS.starve() -> NG(As.Code):
+  do NG<As.Code>:
+    N.error("out of fuel")
+    return As.CNil{}
+
+def N.rec(n: Nat, k: NS) -> NG(As.Code):
+  match n:
+    case 0n:
+      NS.starve()
+    case 1n+ +fu:
+      match k:
+        case NSExpr{+g, +env, e}:
+          match e:
+            case EVar{+name}:
+              N.rec(fu, NSVarFound{g, name, N.simple(env, EVar{name})})
+            case ENum{+n}:
+              NG.pure(As.Code, N.k(0, n))
+            case ENat{+n}:
+              NG.pure(As.Code, N.k(0, n))
+            case EFlt{s}:
+              N.flt(s)
+            case EStr{s}:
+              N.str(s)
+            case ECall{f, args}:
+              do NG<As.Code>:
+                +m : U32 <- N.mark()
+                c : As.Code <- N.rec(fu, NSCall{g, env, f, args})
+                N.release(m)
+                return c
+            case ECtor{name, args}:
+              do NG<As.Code>:
+                +m : U32 <- N.mark()
+                c : As.Code <- N.rec(fu, NSCtor{g, env, name, args})
+                N.release(m)
+                return c
+            case ELam{p, body}:
+              N.rec(fu, NSLam{g, env, p, body})
+            case ELet{p, v, body}:
+              N.rec(fu, NSBlock{g, env, ELet{p, v, body}})
+            case EMatch{scrs, cases}:
+              N.rec(fu, NSBlock{g, env, EMatch{scrs, cases}})
+            case ESucc{+j, x}:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSExpr{g, env, x})
+                return As.CCat{c, N.natk(j)}
+            case ETy{n, targs}:
+              NG.pure(As.Code, N.k(0, 0))
+            case EErr{m}:
+              do NG<As.Code>:
+                N.error("parse error: " ++ m)
+                return As.CNil{}
+            case other:
+              do NG<As.Code>:
+                N.error("unexpected expression: " ++ Expr.show(other))
+                return As.CNil{}
+        case NSVarFound{+g, +name, m}:
+          match m:
+            case Some{o}:
+              NG.pure(As.Code, N.lo(o, 0))
+            case None{}:
+              N.rec(fu, NSVar{g, name, G.def(g, name)})
+        case NSVar{+g, +name, info}:
+          match info:
+            case DInfo{kind, mask}:
+              N.rec(fu, NSVarKind{name, U32.to_nat(kind), U32.from_nat(List.length(&2, Bool, mask))})
+        case NSVarKind{+name, kind, +total}:
+          match kind:
+            case 3n:
+              NG.pure(As.Code, N.k(0, 0))
+            case 4n:
+              do NG<As.Code>:
+                N.error("unknown name: " ++ name)
+                return As.CNil{}
+            case other:
+              do NG<As.Code>:
+                N.ref(name)
+                return Bool.pick(As.Code, U32.is_zero(total), N.target(Nat.is_eq(other, 2n), As.bl(), name),
+                  N.clo(Gen.w(name), total, Nil{}))
+        case NSArg{+g, +env, x, +base, m}:
+          match m:
+            case Some{o}:
+              NG.pure(As.Code, As.CNil{})
+            case None{}:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSExpr{g, env, x})
+                return As.CCat{c, N.st(0, base)}
+        case NSArgs{+g, +env, xs, +base}:
+          match xs:
+            case Nil{}:
+              NG.pure(As.Code, As.CNil{})
+            case +x <> t:
+              do NG<As.Code>:
+                a : As.Code <- N.rec(fu, NSArg{g, env, x, base, N.simple(env, x)})
+                b : As.Code <- N.rec(fu, NSArgs{g, env, t, U32.inc(base)})
+                return As.CCat{a, b}
+        # Applies the value in x0 (kept in slot r) to each argument.
+        case NSApp{+g, +env, xs, +r}:
+          match xs:
+            case Nil{}:
+              NG.pure(As.Code, As.CNil{})
+            case x <> t:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSExpr{g, env, x})
+                rest : As.Code <- N.rec(fu, NSApp{g, env, t, r})
+                return N.cat([N.st(0, r), c, N.w(As.mov(1, 0)), N.ld(0, r), N.call("apply"), rest])
+        case NSApply{+g, +env, f, args}:
+          do NG<As.Code>:
+            +r : U32 <- N.slots(1)
+            c : As.Code <- N.rec(fu, NSExpr{g, env, f})
+            x : As.Code <- N.rec(fu, NSApp{g, env, args, r})
+            return As.CCat{c, x}
+        case NSCallFull{+g, +env, +name, +native, +mask, +kept, +all, extra, full}:
+          match full:
+            case True{}:
+              +n = U32.from_nat(List.length(&2, Expr, kept))
+              do NG<As.Code>:
+                +base : U32 <- N.slots(n)
+                a : As.Code <- N.rec(fu, NSArgs{g, env, kept, base})
+                +r : U32 <- N.slots(1)
+                x : As.Code <- N.rec(fu, NSApp{g, env, extra, r})
+                return N.cat([a, N.callops(N.ops(env, kept, base), base, n), N.ncall(native, name), x])
+            case False{}:
+              +n = U32.from_nat(List.length(&2, Expr, all))
+              do NG<As.Code>:
+                +base : U32 <- N.slots(n)
+                a : As.Code <- N.rec(fu, NSArgs{g, env, all, base})
+                return As.CCat{a, N.clo(Gen.w(name), U32.from_nat(List.length(&2, Bool, mask)), N.ops(env, all, base))}
+        case NSCallSplit{+g, +env, +name, +native, +mask, s}:
+          match s:
+            case Split{kept, all, extra, full}:
+              N.rec(fu, NSCallFull{g, env, name, native, mask, kept, all, extra, full})
+        case NSCallKind{+g, +env, +name, kind, +mask, +args}:
+          match kind:
+            case 3n:
+              NG.pure(As.Code, N.k(0, 0))
+            case 4n:
+              do NG<As.Code>:
+                N.error("unknown function: " ++ name)
+                return As.CNil{}
+            case other:
+              do NG<As.Code>:
+                N.ref(name)
+                N.rec(fu, NSCallSplit{g, env, name, Nat.is_eq(other, 2n), mask, N.split0(mask, args)})
+        case NSCallDef{+g, +env, +name, info, args}:
+          match info:
+            case DInfo{kind, mask}:
+              N.rec(fu, NSCallKind{g, env, name, U32.to_nat(kind), mask, args})
+        case NSCallVar{+g, +env, +name, args, local}:
+          match local:
+            case True{}:
+              N.rec(fu, NSApply{g, env, EVar{name}, args})
+            case False{}:
+              N.rec(fu, NSCallDef{g, env, name, G.def(g, name), args})
+        # f!(args) runs on the CPU here.
+        case NSCallGpu{+g, +env, args}:
+          match args:
+            case f <> xs:
+              N.rec(fu, NSCall{g, env, f, xs})
+            case Nil{}:
+              NG.pure(As.Code, N.k(0, 0))
+        case NSCallName{+g, +env, +name, args, gpu}:
+          match gpu:
+            case True{}:
+              N.rec(fu, NSCallGpu{g, env, args})
+            case False{}:
+              N.rec(fu, NSCallVar{g, env, name, args, NEnv.has(env, name)})
+        case NSCall{+g, +env, f, args}:
+          match f:
+            case EVar{+name}:
+              N.rec(fu, NSCallName{g, env, name, args, Str.eq(name, "%gpu")})
+            case other:
+              N.rec(fu, NSApply{g, env, other, args})
+        # U32{..} and F32{..} of a word's structural view: word_con, as the C
+        # backend's (the head's low bit, the tail shifted up).
+        case NSBitsGo{+g, +env, k, e}:
+          match k:
+            case 0n:
+              match e:
+                case ECtor{c, a <> b <> Nil{}}:
+                  do NG<As.Code>:
+                    +r : U32 <- N.slots(1)
+                    cb : As.Code <- N.rec(fu, NSBits{g, env, b})
+                    ca : As.Code <- N.rec(fu, NSExpr{g, env, a})
+                    return N.cat([cb, N.st(0, r), ca, N.k(9, 9), N.w(As.cmp(0, 9)), N.w(As.cset(0, As.eq())),
+                      N.ld(9, r), N.ws([As.lsli(9, 9, 1), As.ubfm(9, 9, 0, 31), As.orr(0, 0, 9)])])
+                case other:
+                  N.rec(fu, NSExpr{g, env, other})
+            case 1n:
+              NG.pure(As.Code, N.k(0, 0))
+            case 2n+q:
+              N.rec(fu, NSExpr{g, env, e})
+        case NSBits{+g, +env, +e}:
+          N.rec(fu, NSBitsGo{g, env, Expr.wordk(e), e})
+        case NSCtorBits{+g, +env, args}:
+          match args:
+            case a <> Nil{}:
+              N.rec(fu, NSBits{g, env, a})
+            case other:
+              do NG<As.Code>:
+                N.error("a word with more than one field")
+                return As.CNil{}
+        case NSCtorGo{+g, +env, +tag, +kind, +args}:
+          +n = U32.from_nat(List.length(&2, Expr, args))
+          do NG<As.Code>:
+            +base : U32 <- N.slots(n)
+            a : As.Code <- N.rec(fu, NSArgs{g, env, args, base})
+            return As.CCat{a, N.ctor.code(U32.to_nat(kind), tag, N.ops(env, args, base))}
+        case NSCtorKind{+g, +env, +tag, +kind, args, w}:
+          match w:
+            case 0n:
+              N.rec(fu, NSCtorBits{g, env, args})
+            case 1n:
+              N.rec(fu, NSCtorBits{g, env, args})
+            case 2n+q:
+              N.rec(fu, NSCtorGo{g, env, tag, kind, args})
+        case NSCtorInfo{+g, +env, +name, info, args}:
+          match info:
+            case None{}:
+              do NG<As.Code>:
+                N.error("unknown constructor: " ++ name)
+                return As.CNil{}
+            case Some{CInfo{tag, ar, kind, single}}:
+              N.rec(fu, NSCtorKind{g, env, tag, kind, args, P.which(name, ["U32", "F32"])})
+        case NSCtor{+g, +env, +name, args}:
+          N.rec(fu, NSCtorInfo{g, env, name, G.ctor(g, name), args})
+        # A lambda: a function L_k(V *a) with its captures at a[0..n-1] and
+        # its argument at a[n], all copied into its slots; its closure holds
+        # the captures.
+        case NSLam{+g, +env, +p, +body}:
+          +caps = N.caps(FV.expr(body, Pat.vars(p, Nil{}), Nil{}), env)
+          +n = U32.from_nat(List.length(&2, NB, caps))
+          +binds = NPr.binds(N.pat(g, p, NPO{NOS{n}}, NPr.none()))
+          do NG<As.Code>:
+            +k : U32 <- N.fresh()
+            +name : String <- NG.pure(String, "L_" ++ U32.show(k))
+            saved : U32 & U32 <- N.enter()
+            +a0 : U32 <- N.slots(U32.inc(n))
+            +bb : U32 <- N.slots(N.binds.n(binds))
+            b : As.Code <- N.rec(fu, NSStmt{g, N.binds.env(binds, bb, N.caps.inner(caps, 0)), NSelf.none(), NTRet{}, body})
+            +max : U32 <- N.leave(saved)
+            N.emit(N.cat([N.one(As.ISym{name, False{}}), N.prologue(max), N.params.in(U32.to_nat(U32.inc(n)), 0, True{}),
+              N.binds.code(binds, bb), b]))
+            return N.clo(name, U32.inc(n), N.caps.ops(caps))
+        # A statement as a value: its arms store it in a slot and jump to the
+        # join label.
+        case NSBlock{+g, +env, e}:
+          do NG<As.Code>:
+            +s : U32 <- N.slots(1)
+            +j : String <- N.label()
+            b : As.Code <- N.rec(fu, NSStmt{g, env, NSelf.none(), NTSet{s, j}, e})
+            return N.cat([b, N.lab(j), N.ld(0, s)])
+        case NSTailSelf{+g, +env, self, args}:
+          match self:
+            case NSelf{sn, +mask, +top}:
+              +kept = N.split.kept(N.split0(mask, args))
+              +n = U32.from_nat(List.length(&2, Expr, kept))
+              do NG<As.Code>:
+                +base : U32 <- N.slots(n)
+                a : As.Code <- N.rec(fu, NSArgs{g, env, kept, base})
+                return N.cat([a, N.tail.move(N.ops(env, kept, base), base, n), N.b(top)])
+        case NSTailGo{+g, +env, +name, info, args}:
+          match info:
+            case DInfo{+kind, +mask}:
+              +kept = N.split.kept(N.split0(mask, args))
+              +n = U32.from_nat(List.length(&2, Expr, kept))
+              do NG<As.Code>:
+                N.ref(name)
+                +base : U32 <- N.slots(n)
+                a : As.Code <- N.rec(fu, NSArgs{g, env, kept, base})
+                return N.cat([a, N.lregs.b(N.ops(env, kept, base), base), N.ntail(U32.is_eq(kind, 2), name)])
+        case NSTailCall{+g, +env, +name, +args, ok}:
+          match ok:
+            case True{}:
+              N.rec(fu, NSTailGo{g, env, name, G.def(g, name), args})
+            case False{}:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSExpr{g, env, ECall{EVar{name}, args}})
+                return As.CCat{c, N.epilogue()}
+        case NSStmtCall{+g, +env, +self, tgt, +name, +args, tail}:
+          match tail:
+            case True{}:
+              N.rec(fu, NSTailSelf{g, env, self, args})
+            case False{}:
+              N.rec(fu, NSStmtCallTo{g, env, tgt, name, args})
+        case NSStmtCallTo{+g, +env, tgt, +name, +args}:
+          match tgt:
+            case NTRet{}:
+              N.rec(fu, NSTailCall{g, env, name, args, N.can_tail(g, env, name, args)})
+            case NTSet{+s, +j}:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSExpr{g, env, ECall{EVar{name}, args}})
+                return As.CCat{c, N.fin(NTSet{s, j})}
+        case NSLetVar{+g, +env, +self, +tgt, +x, v, body, m}:
+          match m:
+            case Some{o}:
+              N.rec(fu, NSStmt{g, NB{x, o} <> env, self, tgt, body})
+            case None{}:
+              do NG<As.Code>:
+                +s : U32 <- N.slots(1)
+                c : As.Code <- N.rec(fu, NSExpr{g, env, v})
+                b : As.Code <- N.rec(fu, NSStmt{g, NB{x, NOS{s}} <> env, self, tgt, body})
+                return N.cat([c, N.st(0, s), b])
+        case NSLetHole{+g, +env, +self, +tgt, v, body}:
+          do NG<As.Code>:
+            c : As.Code <- N.rec(fu, NSExpr{g, env, v})
+            b : As.Code <- N.rec(fu, NSStmt{g, env, self, tgt, body})
+            return As.CCat{c, b}
+        case NSLetPat{+g, +env, +self, +tgt, +p, v, body}:
+          do NG<As.Code>:
+            +s : U32 <- N.slots(1)
+            c : As.Code <- N.rec(fu, NSExpr{g, env, v})
+            +binds : List<&2, NBd> = NPr.binds(N.pat(g, p, NPO{NOS{s}}, NPr.none()))
+            +bb : U32 <- N.slots(N.binds.n(binds))
+            b : As.Code <- N.rec(fu, NSStmt{g, N.binds.env(binds, bb, env), self, tgt, body})
+            return N.cat([c, N.st(0, s), N.binds.code(binds, bb), b])
+        # A parallel let, in order: each value in the environment before it.
+        case NSLets{+g, +env0, +env, +self, +tgt, ps, vs, body}:
+          match ps vs:
+            case +p <> pt v <> vt:
+              do NG<As.Code>:
+                +s : U32 <- N.slots(1)
+                c : As.Code <- N.rec(fu, NSExpr{g, env0, v})
+                +binds : List<&2, NBd> = NPr.binds(N.pat(g, p, NPO{NOS{s}}, NPr.none()))
+                +bb : U32 <- N.slots(N.binds.n(binds))
+                b : As.Code <- N.rec(fu, NSLets{g, env0, N.binds.env(binds, bb, env), self, tgt, pt, vt, body})
+                return N.cat([c, N.st(0, s), N.binds.code(binds, bb), b])
+            case pl vl:
+              N.rec(fu, NSStmt{g, env, self, tgt, body})
+        case NSLetPar{+g, +env, +self, +tgt, ps, v, body}:
+          match v:
+            case ECtor{n, vs}:
+              N.rec(fu, NSLets{g, env, env, self, tgt, ps, vs, body})
+            case other:
+              N.rec(fu, NSLets{g, env, env, self, tgt, ps, [other], body})
+        case NSLetCtor{+g, +env, +self, +tgt, name, ps, v, body, par}:
+          match par:
+            case True{}:
+              N.rec(fu, NSLetPar{g, env, self, tgt, ps, v, body})
+            case False{}:
+              N.rec(fu, NSLetPat{g, env, self, tgt, PCtor{name, ps}, v, body})
+        case NSLet{+g, +env, +self, +tgt, p, +v, +body}:
+          match p:
+            case PVar{+x}:
+              Bool.pick(Unit -> NG(As.Code), Str.eq(x, "_"),
+                u => N.rec(fu, NSLetHole{g, env, self, tgt, v, body}),
+                u => N.rec(fu, NSLetVar{g, env, self, tgt, x, v, body, N.simple(env, v)}))(Unit{})
+            case PCtor{+name, ps}:
+              N.rec(fu, NSLetCtor{g, env, self, tgt, name, ps, v, body, Str.eq(name, "%par")})
+            case other:
+              N.rec(fu, NSLetPat{g, env, self, tgt, other, v, body})
+        # A case: its tests (a failing one jumps to the next case), its
+        # bindings, its body, each in slots freed after it.
+        case NSCaseGo{+g, +env, +self, +tgt, +os, cs, +binds, body, rest}:
+          match cs:
+            case Nil{}:
+              do NG<As.Code>:
+                +m : U32 <- N.mark()
+                +bb : U32 <- N.slots(N.binds.n(binds))
+                b : As.Code <- N.rec(fu, NSStmt{g, N.binds.env(binds, bb, env), self, tgt, body})
+                N.release(m)
+                return As.CCat{N.binds.code(binds, bb), b}
+            case c <> t:
+              do NG<As.Code>:
+                +no : String <- N.label()
+                cc : As.Code <- N.conds(c <> t, no)
+                +m : U32 <- N.mark()
+                +bb : U32 <- N.slots(N.binds.n(binds))
+                b : As.Code <- N.rec(fu, NSStmt{g, N.binds.env(binds, bb, env), self, tgt, body})
+                N.release(m)
+                more : As.Code <- N.rec(fu, NSCases{g, env, self, tgt, os, rest})
+                return N.cat([cc, N.binds.code(binds, bb), b, N.lab(no), more])
+        case NSCases{+g, +env, +self, +tgt, +os, cases}:
+          match cases:
+            case Nil{}:
+              do NG<As.Code>:
+                +l : String <- N.cstr("runtime fail-stop")
+                return As.CCat{N.adr(0, l), N.call("bend_fail")}
+            case ECase{+ps, body} <> t:
+              +pr = N.pats(g, ps, os, NPr.none())
+              N.rec(fu, NSCaseGo{g, env, self, tgt, os, NPr.conds(pr), NPr.binds(pr), body, t})
+            case other <> t:
+              N.rec(fu, NSCases{g, env, self, tgt, os, t})
+        case NSMatch{+g, +env, +self, +tgt, +scrs, cases}:
+          +n = U32.from_nat(List.length(&2, Expr, scrs))
+          do NG<As.Code>:
+            +base : U32 <- N.slots(n)
+            a : As.Code <- N.rec(fu, NSArgs{g, env, scrs, base})
+            c : As.Code <- N.rec(fu, NSCases{g, env, self, tgt, N.ops(env, scrs, base), cases})
+            return As.CCat{a, c}
+        case NSStmt{+g, +env, +self, +tgt, e}:
+          match e:
+            case ELet{p, v, body}:
+              N.rec(fu, NSLet{g, env, self, tgt, p, v, body})
+            case EMatch{scrs, cases}:
+              N.rec(fu, NSMatch{g, env, self, tgt, scrs, cases})
+            case ECall{EVar{+name}, +args}:
+              N.rec(fu, NSStmtCall{g, env, self, tgt, name, args, N.is_tail(env, self, tgt, name, args)})
+            case other:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSExpr{g, env, other})
+                return As.CCat{c, N.fin(tgt)}
+
+def N.stmt(+g: G, +env: NEnv(), +self: NSelf, +tgt: NT, e: Expr) -> NG(As.Code):
+  N.rec(Fuel.max(), NSStmt{g, env, self, tgt, e})
+
+# Defs
+# ----
+
+# W_name(V *a): the closure entry, with every parameter at a[i]: loads the
+# kept ones into x0..x7 and branches to the def; a wide def gets them in a
+# row of its own frame.
+def N.wargs(mask: List<&2, Bool>, +j: U32, +i: U32, +wide: Bool) -> As.Code:
+  match mask:
+    case Nil{}:
+      As.CNil{}
+    case True{} <> t:
+      As.CCat{Bool.pick(As.Code, wide, As.CCat{N.w(As.ldr(9, 10, (j * 8 : U32))), N.st(9, i)},
+        N.w(As.ldr(i, 10, (j * 8 : U32)))), N.wargs(t, U32.inc(j), U32.inc(i), wide)}
+    case False{} <> t:
+      N.wargs(t, U32.inc(j), i, wide)
+
+def N.wrapper(+name: String, +mask: List<&2, Bool>, +native: Bool) -> NG(Unit):
+  +n = N.kept(mask)
+  N.emit(As.CCat{N.one(As.ISym{Gen.w(name), False{}}),
+    Bool.pick(As.Code, U32.is_le(n, 8),
+      N.cat([N.w(As.mov(10, 0)), N.wargs(mask, 0, 0, False{}), N.target(native, As.b(), name)]),
+      N.cat([N.prologue(n), N.w(As.mov(10, 0)), N.wargs(mask, 0, 0, True{}), N.w(As.addi(0, 31, 0)),
+        N.target(native, As.bl(), name), N.epilogue()]))})
+
+def N.def.body(+g: G, +name: String, +mask: List<&2, Bool>, ps: List<&2, Param>, body: Expr) -> NG(Unit):
+  +n = N.kept(mask)
+  do NG<Unit>:
+    saved : U32 & U32 <- N.enter()
+    +p0 : U32 <- N.slots(n)
+    +top : String <- N.label()
+    b : As.Code <- N.stmt(g, N.params(ps, mask, 0, Nil{}), NSelf{name, mask, top}, NTRet{}, R.ops(body, "Nat"))
+    +max : U32 <- N.leave(saved)
+    N.emit(N.cat([N.one(As.ISym{Gen.f(name), False{}}), N.prologue(max),
+      N.params.in(U32.to_nat(n), 0, U32.is_gt(n, 8)), N.lab(top), b]))
+    N.wrapper(name, mask, False{})
+
+# a[j] into the request's field j (x10 holds a, x0 the node).
+def N.eff.args(k: Nat, +j: U32) -> As.Code:
+  match k:
+    case 0n:
+      As.CNil{}
+    case 1n+q:
+      As.CCat{N.ws([As.ldr(9, 10, (j * 8 : U32)), As.str(9, 0, (U32.inc(j) * 8 : U32))]), N.eff.args(q, U32.inc(j))}
+
+# Effects: F builds the closure R => k => {args..., k}; E, its code, the
+# request node the event loop answers (io_req in bendrt.h).
+def N.def.eff(+name: String, +mask: List<&2, Bool>, ims: List<&2, String>) -> NG(Unit):
+  +n = N.kept(mask)
+  +e = "E_" ++ Gen.mangle(name)
+  do NG<Unit>:
+    N.effs(ims)
+    +cid : U32 <- N.eid(name)
+    N.emit(N.cat([N.one(As.ISym{Gen.f(name), False{}}), N.prologue(n), N.params.in(U32.to_nat(n), 0, U32.is_gt(n, 8)),
+      N.clo(e, (n + 2 : U32), N.seq(U32.to_nat(n), 0)), N.epilogue()]))
+    N.emit(N.cat([N.one(As.ISym{e, False{}}), N.prologue(1), N.st(0, 0), N.alloc((n + 2 : U32)), N.ld(10, 0),
+      N.k(9, (cid .|. (U32.inc(n) << 24n : U32) : U32)), N.w(As.str(9, 0, 0)),
+      N.eff.args(U32.to_nat(n), 0), N.w(As.ldr(9, 10, (U32.inc(n) * 8 : U32))),
+      N.w(As.str(9, 0, (U32.inc(n) * 8 : U32))), N.epilogue()]))
+    N.wrapper(name, mask, False{})
+
+def N.def.native(+g: G, +name: String, +mask: List<&2, Bool>, ps: List<&2, Param>, body: Expr, native: Bool) ->
+  NG(Unit):
+  match native:
+    case True{}:
+      N.wrapper(name, mask, True{})
+    case False{}:
+      N.def.body(g, name, mask, ps, body)
+
+def N.def.law(+name: String, +mask: List<&2, Bool>, native: Bool) -> NG(Unit):
+  match native:
+    case True{}:
+      N.wrapper(name, mask, True{})
+    case False{}:
+      NG.pure(Unit, Unit{})
+
+def N.def.decl(+g: G, +name: String, info: DInfo, d: Decl) -> NG(Unit):
+  DInfo{+kind, +mask} = info
+  match d:
+    case DDef{n, ps, body, ret}:
+      N.def.native(g, name, mask, ps, body, U32.is_eq(kind, 2))
+    case DEff{n, ps, ims}:
+      N.def.eff(name, mask, ims)
+    case other:
+      N.def.law(name, mask, U32.is_eq(kind, 2))
+
+def N.def(+g: G, +name: String) -> NG(Unit):
+  N.def.decl(g, name, G.def(g, name), G.body(g, name))
+
+def N.all.go(n: Nat, +g: G, queue: List<&2, String>, +done: Set()) -> NG(Unit):
+  match n:
+    case 0n:
+      N.error("out of fuel")
+    case 1n+ +fu:
+      match queue:
+        case Nil{}:
+          NG.pure(Unit, Unit{})
+        case +h <> +t:
+          Bool.pick(Unit -> NG(Unit), Pair.snd(Set(), Bool, Set.has(done, h)),
+            u => N.all.go(fu, g, t, done),
+            u => do NG<Unit>:
+              N.def(g, h)
+              refs : List<&2, String> <- N.take_refs()
+              N.all.go(fu, g, List.append(&2, String, refs, t), Set.add(done, h)))(Unit{})
+
+# Printers
+# --------
+
+# pr_s of a literal.
+def N.prs(s: String) -> NG(As.Code):
+  do NG<As.Code>:
+    +l : String <- N.cstr(s)
+    return As.CCat{N.adr(0, l), N.call("pr_s")}
+
+# The printers of values of a type, as Gen.printer's: P_k(V v), with v in
+# slot 0 (and a loop's index in slot 1).
+type NPS is Data:
+  NPSPrinter{ty0: Expr}
+  NPSTuple{xs: List<&2, Expr>, path: NPa}
+  NPSFields{sub: List<&2, TB>, fs: List<&2, Field>, nt: Bool, i: U32}
+  NPSCtor{sub: List<&2, TB>, name: String, fields: List<&2, Field>, info: Maybe<&2, CInfo>}
+  NPSCtors{sub: List<&2, TB>, cs: List<&2, Ctor>}
+  NPSAdt{ty: Expr, d: Decl}
+  NPSArr{e: String, leaf: Maybe<&2, CInfo>}
+  NPSHead{ty: Expr, k: Nat}
+  NPSBody{ty: Expr, h: String}
+  NPSMemo{ty: Expr, key: String, m: Maybe<&2, String>}
+
+def NPS.ty(k: NPS) -> Type:
+  match k:
+    case NPSPrinter{ty0}:
+      String
+    case NPSMemo{ty, key, m}:
+      String
+    case other:
+      As.Code
+
+def NPS.none(k: NPS) -> NPS.ty(k):
+  match k:
+    case NPSPrinter{ty0}:
+      ""
+    case NPSTuple{xs, path}:
+      As.CNil{}
+    case NPSFields{sub, fs, nt, i}:
+      As.CNil{}
+    case NPSCtor{sub, name, fields, info}:
+      As.CNil{}
+    case NPSCtors{sub, cs}:
+      As.CNil{}
+    case NPSAdt{ty, d}:
+      As.CNil{}
+    case NPSArr{e, leaf}:
+      As.CNil{}
+    case NPSHead{ty, k}:
+      As.CNil{}
+    case NPSBody{ty, h}:
+      As.CNil{}
+    case NPSMemo{ty, key, m}:
+      ""
+
+def NPS.starve(k: NPS) -> NG(NPS.ty(k)):
+  do NG<NPS.ty(k)>:
+    N.error("out of fuel")
+    return NPS.none(k)
+
+# v's test for a constructor: none (the only one), v == IMM(tag), or a node
+# with the tag.
+def N.pr.test(+kind: U32, +tag: U32, single: Bool, +no: String) -> As.Code:
+  Bool.pick(As.Code, single, As.CNil{},
+    Bool.pick(As.Code, U32.is_eq(kind, 1), N.cat([N.ld(0, 0), N.k(9, N.imm(tag)), N.w(As.cmp(0, 9)),
+      N.one(As.IBc{As.bc(As.ne()), no})]),
+      N.cat([N.ld(0, 0), N.w(As.and1(9, 0)), N.one(As.IBc{As.cbnz(9), no}), N.tag(), N.k(9, tag), N.w(As.cmp(0, 9)),
+        N.one(As.IBc{As.bc(As.ne()), no})])))
+
+def N.pr.rec(n: Nat, +g: G, s: NPS) -> NG(NPS.ty(s)):
+  match n:
+    case 0n:
+      NPS.starve(s)
+    case 1n+ +fu:
+      match s:
+        case NPSPrinter{ty0}:
+          +ty = Ty.norm(g, ty0, 16n)
+          +key = Expr.show(ty)
+          do NG<String>:
+            m : Maybe<&2, String> <- N.memo.find(key)
+            N.pr.rec(fu, g, NPSMemo{ty, key, m})
+        case NPSTuple{xs, +path}:
+          match xs:
+            case Nil{}:
+              NG.pure(As.Code, As.CNil{})
+            case h <> Nil{}:
+              do NG<As.Code>:
+                f : String <- N.pr.rec(fu, g, NPSPrinter{h})
+                return As.CCat{N.path(path), N.bl(f)}
+            case h <> t:
+              do NG<As.Code>:
+                f : String <- N.pr.rec(fu, g, NPSPrinter{h})
+                sep : As.Code <- N.prs(", ")
+                rest : As.Code <- N.pr.rec(fu, g, NPSTuple{t, NPF{path, 1}})
+                return N.cat([N.path(NPF{path, 0}), N.bl(f), sep, rest])
+        case NPSFields{+sub, fs, +nt, +i}:
+          match fs:
+            case Nil{}:
+              NG.pure(As.Code, As.CNil{})
+            case Field{fname, t} <> rest:
+              do NG<As.Code>:
+                f : String <- N.pr.rec(fu, g, NPSPrinter{Ty.subst(t, sub)})
+                sep : As.Code <- Bool.pick(NG(As.Code), U32.is_zero(i), NG.pure(As.Code, As.CNil{}), N.prs(", "))
+                more : As.Code <- N.pr.rec(fu, g, NPSFields{sub, rest, nt, U32.inc(i)})
+                return N.cat([sep, N.path(Bool.pick(NPa, nt, NPO{NOS{0}}, NPF{NPO{NOS{0}}, i})), N.bl(f), more])
+        case NPSCtor{+sub, +name, fields, info}:
+          match info:
+            case None{}:
+              NG.pure(As.Code, As.CNil{})
+            case Some{CInfo{+tag, ar, +kind, +single}}:
+              do NG<As.Code>:
+                +no : String <- N.label()
+                open : As.Code <- N.prs(name ++ "{")
+                fs : As.Code <- N.pr.rec(fu, g, NPSFields{sub, fields, U32.is_eq(kind, 2), 0})
+                close : As.Code <- N.prs("}")
+                return N.cat([N.pr.test(kind, tag, single, no), open, fs, close, N.epilogue(), N.lab(no)])
+        case NPSCtors{+sub, cs}:
+          match cs:
+            case Nil{}:
+              NG.pure(As.Code, As.CNil{})
+            case Ctor{+name, fields} <> t:
+              do NG<As.Code>:
+                one : As.Code <- N.pr.rec(fu, g, NPSCtor{sub, name, fields, G.ctor(g, name)})
+                rest : As.Code <- N.pr.rec(fu, g, NPSCtors{sub, t})
+                return As.CCat{one, rest}
+        case NPSAdt{+ty, d}:
+          match d:
+            case DType{name, ps, cs}:
+              do NG<As.Code>:
+                b : As.Code <- N.pr.rec(fu, g, NPSCtors{Ty.bind(ps, Ty.args(ty)), cs})
+                q : As.Code <- N.prs("?")
+                return As.CCat{b, q}
+            case other:
+              N.prs("?")
+        # An array prints its cells in order, as a list.
+        case NPSArr{+e, leaf}:
+          match leaf:
+            case Some{CInfo{tag, ar, kind, single}}:
+              do NG<As.Code>:
+                +loop : String <- N.label()
+                +skip : String <- N.label()
+                +done : String <- N.label()
+                ob : As.Code <- N.prs("[")
+                sep : As.Code <- N.prs(", ")
+                cb : As.Code <- N.prs("]")
+                return N.cat([ob, N.k(9, 0), N.st(9, 1), N.lab(loop), N.ld(0, 0), N.w(As.ldr(9, 0, 0)), N.k(10, 31),
+                  N.w(As.and(9, 9, 10)), N.k(10, 1), N.w(As.lslv(10, 10, 9)), N.ld(9, 1), N.w(As.cmp(9, 10)),
+                  N.one(As.IBc{As.bc(As.hs()), done}), N.one(As.IBc{As.cbz(9), skip}), sep, N.lab(skip),
+                  N.ld(0, 0), N.ld(9, 1), N.ws([As.lsli(9, 9, 3), As.add(0, 0, 9), As.ldr(0, 0, 8)]), N.bl(e),
+                  N.ld(9, 1), N.w(As.addi(9, 9, 1)), N.st(9, 1), N.b(loop), N.lab(done), cb])
+            case None{}:
+              N.prs("[]")
+        case NPSHead{+ty, k}:
+          match k:
+            case 0n:
+              NG.pure(As.Code, As.CCat{N.ld(0, 0), N.call("pr_u32")})
+            case 1n:
+              NG.pure(As.Code, As.CCat{N.ld(0, 0), N.call("pr_nat")})
+            case 2n:
+              NG.pure(As.Code, As.CCat{N.ld(0, 0), N.call("pr_f32")})
+            case 3n:
+              NG.pure(As.Code, As.CCat{N.ld(0, 0), N.call("pr_char")})
+            case 4n:
+              NG.pure(As.Code, As.CCat{N.ld(0, 0), N.call("pr_str")})
+            case 5n:
+              do NG<As.Code>:
+                e : String <- N.pr.rec(fu, g, NPSPrinter{P.last(Ty.args(ty))})
+                +loop : String <- N.label()
+                +skip : String <- N.label()
+                +done : String <- N.label()
+                ob : As.Code <- N.prs("[")
+                sep : As.Code <- N.prs(", ")
+                cb : As.Code <- N.prs("]")
+                return N.cat([ob, N.k(9, 0), N.st(9, 1), N.lab(loop), N.ld(0, 0), N.tag(), N.k(9, 1), N.w(As.cmp(0, 9)),
+                  N.one(As.IBc{As.bc(As.ne()), done}), N.ld(9, 1), N.one(As.IBc{As.cbz(9), skip}), sep, N.lab(skip),
+                  N.k(9, 1), N.st(9, 1), N.ld(0, 0), N.w(As.ldr(0, 0, 8)), N.bl(e), N.ld(0, 0), N.w(As.ldr(0, 0, 16)),
+                  N.st(0, 0), N.b(loop), N.lab(done), cb])
+            case 6n:
+              do NG<As.Code>:
+                ob : As.Code <- N.prs("(")
+                parts : As.Code <- N.pr.rec(fu, g, NPSTuple{Ty.tuple(ty), NPO{NOS{0}}})
+                cb : As.Code <- N.prs(")")
+                return N.cat([ob, parts, cb])
+            case 7n:
+              N.prs("<function>")
+            case 8n:
+              do NG<As.Code>:
+                e : String <- N.pr.rec(fu, g, NPSPrinter{P.last(Ty.args(ty))})
+                N.pr.rec(fu, g, NPSArr{e, G.ctor(g, "ALeaf")})
+            case 9n:
+              N.prs("{==}")
+            case 10n+p:
+              N.pr.rec(fu, g, NPSAdt{ty, G.body(g, "%" ++ Ty.head(ty))})
+        case NPSBody{+ty, +h}:
+          N.pr.rec(fu, g, NPSHead{ty, P.which(Ty.alias(h), ["U32", "Nat", "F32", "Char", "String",
+            "List", "&", "->", "Array", "=="])})
+        case NPSMemo{+ty, +key, m}:
+          match m:
+            case Some{f}:
+              NG.pure(String, f)
+            case None{}:
+              do NG<String>:
+                +k : U32 <- N.fresh()
+                +f : String <- NG.pure(String, "P_" ++ U32.show(k))
+                N.memo.add(Bind{key, f})
+                b : As.Code <- N.pr.rec(fu, g, NPSBody{ty, Ty.head(ty)})
+                N.emit(N.cat([N.one(As.ISym{f, False{}}), N.prologue(2), N.st(0, 0), b, N.epilogue()]))
+                return f
+
+def N.printer(+g: G, +ty: Expr) -> NG(String):
+  N.pr.rec(Fuel.max(), g, NPSPrinter{ty})
+
+# Programs
+# --------
+
+# main: bend_run(argc, argv, F_main), or bend_run_value with the printer of
+# main's type.
+def N.entry.head() -> As.Code:
+  N.cat([N.one(As.ISym{"main", True{}}), N.adr(2, Gen.f("main"))])
+
+def N.entry.ty(+g: G, +ret: Expr, io: Bool) -> NG(As.Code):
+  match io:
+    case True{}:
+      NG.pure(As.Code, As.CCat{N.entry.head(), N.one(As.ICall{As.b(), "bend_run"})})
+    case False{}:
+      do NG<As.Code>:
+        p : String <- N.printer(g, ret)
+        return N.cat([N.entry.head(), N.adr(3, p), N.one(As.ICall{As.b(), "bend_run_value"})])
+
+def N.entry.ret(+g: G, +ret: Expr) -> NG(As.Code):
+  N.entry.ty(g, ret, Str.eq(Ty.head(ret), "IO"))
+
+def N.entry(+g: G, d: Decl) -> NG(As.Code):
+  match d:
+    case DDef{n, ps, b, ret}:
+      N.entry.ret(g, Ty.norm(g, ret, 16n))
+    case other:
+      do NG<As.Code>:
+        N.error("no main definition")
+        return As.CNil{}
+
+def N.program.m(+g: G) -> NG(As.Code):
+  do NG<As.Code>:
+    N.all.go(Fuel.max(), g, ["main"], Set.new())
+    N.entry(g, G.body(g, "main"))
+
+# A program's object, and the C around its effects (their ids, the
+# runtime's header, their sources: see Main.native).
+type NOut is Data:
+  NOut{head: String, effs: List<&2, String>, obj: As.Obj, errs: List<&2, String>}
+
+def N.program.fin(elf: Bool, cids: String, r: As.Code & NSt) -> NOut:
+  (entry, st) = r
+  NSt{n, slot, max, out, refs, errs, +data, lits, memo, effs, eids} = st
+  NOut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#include \"bendrt_split.h\"\n\n",
+    Gen.dedup(List.reverse(&2, String, effs), Nil{}), As.object(N.cat([out, entry, lits]), U32.max(data, 1), elf), errs}
+
+# (An ELF object for Linux, else Mach-O.)
+def N.program(+ds0: List<&2, Decl>, elf: Bool) -> NOut:
+  +ds = Lo.program(Pick.decls(ds0))
+  +g = G.new(ds)
+  N.program.fin(elf, Gen.cids(g, ds, 0), N.program.m(g)(NSt{0, 0, 0, As.CNil{}, Nil{}, Nil{}, 0, As.CNil{}, Nil{}, Nil{},
+    N.eids(ds, 0, Map.new(&2, U32))}))
+
+# The bytes of little-endian words.
+def N.bytes(ws: List<&2, U32>) -> List<&2, U32>:
+  match ws:
+    case Nil{}:
+      Nil{}
+    case +w <> t:
+      (w .&. 255 : U32) <> ((w >> 8n : U32) .&. 255 : U32) <> ((w >> 16n : U32) .&. 255 : U32) <> (w >> 24n : U32) <>
+        N.bytes(t)
+
 # C for a program: matches free what they open unless BEND_NO_FREE is set
 # (bendc builds itself so: a compiler's heap is mostly shared, short-lived
 # data, which tracing handles for less).
@@ -13818,6 +15781,105 @@ def Main.run4(code: Nat, +out: String, +base_path: String, +user_path: String) -
     case other:
       Main.usage()
 
+# bendc --native -o out base.bend input.bend
+# ------------------------------------------
+#
+# The object goes to out.o; what bendc writes (Cc.begin) is the C of the
+# program's effects (their sources, from Base's effs/*.c, with the ids they
+# name), which Cc.link compiles and links with out.o and the runtime.
+
+def Main.native.fin(r: File & Result<&1, &1, U32 & String, Unit>) -> IO(Unit):
+  (f, res) = r
+  File.close(f)
+
+def Main.native.write(+path: String, ws: List<&2, U32>) -> IO(Unit):
+  do IO<Unit>:
+    f : File <- IO.try(File, File.open(path, "w"))
+    r : File & Result<&1, &1, U32 & String, Unit> <- File.write_bytes(f, N.bytes(ws))
+    Main.native.fin(r)
+
+def Main.native.obj(+out: String, o: As.Obj) -> IO(Unit):
+  As.Obj{ws, es} = o
+  match es:
+    case Nil{}:
+      Main.native.write(out ++ ".o", ws)
+    case e <> t:
+      do IO<Unit>:
+        IO.print_err(String.join(List.reverse(&2, String, e <> t), "\n"))
+        IO.die(Unit, 1, "bendc: assembly failed")
+
+def Main.native.ok(+ds: List<&2, Decl>, +out: String, head: String, effs: List<&2, String>, obj: As.Obj) -> IO(Unit):
+  do IO<Unit>:
+    +srcs : String <- Main.effs(effs, ds, Main.ids.known(ds), "")
+    IO.write(head ++ srcs ++ Ctors.def(Ctors.scan(srcs)))
+    Main.native.obj(out, obj)
+
+def Main.native.emit(+ds: List<&2, Decl>, +out: String, r: NOut) -> IO(Unit):
+  NOut{head, effs, obj, errs} = r
+  match errs:
+    case Nil{}:
+      Main.native.ok(ds, out, head, effs, obj)
+    case e <> t:
+      do IO<Unit>:
+        IO.print_err(String.join(List.reverse(&2, String, e <> t), "\n"))
+        IO.die(Unit, 1, "bendc: compilation failed")
+
+def Main.native.to(+ds: List<&2, Decl>, +out: String, elf: Bool) -> IO(Unit):
+  Main.native.emit(ds, out, N.program(ds, elf))
+
+def Main.native.compile(+out: String, elf: Bool, base: Result<&2, &2, String, List<&2, Decl>>,
+  user: Result<&2, &2, String, List<&2, Decl>>
+) -> IO(Unit):
+  match base user:
+    case Fail{e} u:
+      IO.die(Unit, 1, "bendc: parse error in base: " ++ e)
+    case Done{b} Fail{e}:
+      IO.die(Unit, 1, "bendc: parse error: " ++ e)
+    case Done{b} Done{u}:
+      +ds = List.append(&2, Decl, b, u)
+      Main.native.to(LM.decls(ds, ds), out, elf)
+
+def Main.native.build(+out: String, elf: Bool, +base_path: String, user_path: String) -> IO(Unit):
+  do IO<Unit>:
+    base : String <- IO.read_file(base_path)
+    user : List<&2, Decl> <- Main.load(64n, user_path)
+    Main.native.compile(out, elf, Main.resolve(Mod.dir(base_path), Main.parse(base)), Done{user})
+
+# A value main the checker normalized: main puts the text.
+def Main.native.value(+out: String, elf: Bool, v: String) -> IO(Unit):
+  do IO<Unit>:
+    IO.write("")
+    Main.native.obj(out, As.object(N.cat([N.one(As.ISym{"main", True{}}), N.ws([As.push_fp(), As.set_fp()]),
+      N.adr(0, ".V"), N.call("puts"), N.k(0, 0), N.epilogue(), N.lab(".V"), N.ws(As.cstr(v))]), 1, elf))
+
+def Main.native.checked.go(+out: String, +elf: Bool, +base_path: String, user_path: String, +bk: Chk.Book,
+  norm: Bool) -> IO(Unit):
+  match norm:
+    case True{}:
+      Main.native.value(out, elf, Chk.show_main(bk))
+    case False{}:
+      Main.native.build(out, elf, base_path, user_path)
+
+def Main.native.checked(+out: String, +elf: Bool, +base_path: String, user_path: String, r: Chk.Book & Nat) ->
+  IO(Unit):
+  (b, n0) = r
+  +bk = b
+  Main.native.checked.go(out, elf, base_path, user_path, bk, Main.normalized(bk))
+
+# bendc --native -o out base.bend input.bend: the program as machine code
+# (see "Native code generation"), linked into out.
+def Main.run5(code: Nat, o: Nat, +out: String, +base_path: String, +user_path: String) -> IO(Unit):
+  match code o:
+    case 7n 6n:
+      do IO<Unit>:
+        k : U32 <- IO.try(U32, Cc.elf())
+        u : Unit <- IO.try(Unit, Cc.begin())
+        r : Chk.Book & Nat <- Main.check(base_path, user_path)
+        Main.native.checked(out, U32.is_eq(k, 1), base_path, user_path, r)
+        IO.try(Unit, Cc.link(out))
+    case c k:
+      Main.usage()
+
 def Main.run(args: List<&2, String>) -> IO(Unit):
   match args:
     case +a <> +b <> Nil{}:
@@ -13826,6 +15888,8 @@ def Main.run(args: List<&2, String>) -> IO(Unit):
       Main.run3(Main.code(a), b, c)
     case +a <> +b <> +c <> +d <> Nil{}:
       Main.run4(Main.code(a), b, c, d)
+    case +a <> +b <> +c <> +d <> +e <> Nil{}:
+      Main.run5(Main.code(a), Main.code(b), c, d, e)
     case other:
       Main.usage()
 
