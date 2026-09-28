@@ -429,14 +429,27 @@ ELF on Linux (`Cc.elf` asks the host which). The system linker then links it wit
 - **Same runtime, same ABI.** The code starts from the same lowered defs as the C generator and keeps
   the runtime's value representation (see [How it works](#how-it-works)) and AAPCS64, so it calls
   the runtime's functions (`apply`, `str_cache`, the allocator, the effect loop) as C does.
-- **Code shape.** Every value lives in a frame slot and an expression leaves its value in `x0`. A
-  def with at most 8 kept parameters takes them in `x0`..`x7`; a wider one takes the address of a
-  row of arguments. A self tail call stores the new arguments over the parameters and branches back,
-  and a tail call to another narrow def pops the frame and branches. Integer, `U32` and `F32`
-  natives are inlined (`add`, compares, shifts, `fadd`, `fmul`, `fcmp`, `ucvtf`, ...); the others
-  call their `N_` name in `rt/native.c`. A peephole pass turns a reload right after a store to the
-  same slot into a register move. String literals are cached in data slots as the C backend does.
-- **Coverage.** All 26 programs in `tests/` pass with `--native` on macOS (arm64) and on Linux
+- **Code shape.** Every value lives in a frame slot and an expression leaves its value in `x0`.
+  The first 10 slots are the callee-saved registers `x19`..`x28`, handed out in order, so a def's
+  parameters and its longest-lived values stay in registers across calls; the collector scans
+  registers as it scans the stack. A def with at most 8 kept parameters takes them in `x0`..`x7`;
+  a wider one takes the address of a row of arguments. A self tail call moves the new arguments
+  over the parameters and branches back, and a tail call to another narrow def pops the frame and
+  branches. Integer, `U32` and `F32` natives are inlined (`add`, compares, shifts, `fadd`, `fmul`,
+  `fcmp`, `ucvtf`, ...; by a constant, one instruction); the others call their `N_` name in
+  `rt/native.c`. A peephole pass turns a reload right after a store to the same slot into a
+  register move. String literals are cached in data slots, and float literals are constants.
+- **As the C backend does.** Matches free the nodes they open (`bend_take`, `bend_share`;
+  `BEND_NO_FREE=1` turns it off). Parallel lets fork on the runtime's pool (`par_fork`,
+  `par_join`), with a sequential clone for a def that stops forking below a depth. A def like
+  `merge`, that builds a constructor around a call to its group, stores its result through a
+  destination pointer and loops, with the node's hole written as `BEND_HOLE` until it is filled.
+  `x * k + b`, for a power-of-two literal `k`, is one `fmadd` when the product is a normal float.
+- **Float registers.** Nested `F32` operations compute in FP registers with no trip through the
+  integer registers. A def that calls itself in tail position keeps its `F32` parameters (of its
+  first four) in `s8`..`s11` as well as in their slots, so a float loop like `leaves`' reads and
+  writes them in place.
+- **Coverage.** All 33 programs in `tests/` pass with `--native` on macOS (arm64) and on Linux
   (arm64, in Docker), and `run_tests.sh` runs them there. bendc compiles itself with `--native`:
   the native bendc prints the same C for `bendc.bend` as the C build, and the object it writes for
   itself is the one the C build writes, byte for byte. `tools/ddc.sh` has this as a third leg: the
@@ -445,34 +458,38 @@ ELF on Linux (`Cc.elf` asks the host which). The system linker then links it wit
 
 What it does not do, against the C backend:
 
-- Matches do not free what they open (programs run as with `BEND_NO_FREE=1`), so allocation-heavy
-  programs rely on the collector alone.
-- Parallel lets run in order, on one thread, and `!`-calls run on the CPU.
-- No destination passing: a def like `merge` recurses on the stack.
-- No register allocation: every value goes through memory, which is what the numbers below mostly
-  measure.
+- `!`-calls run on the CPU.
+- No inlining of defs into one another, and no shrink-wrapping: a function saves every callee-saved
+  register it uses on entry, even on a path that uses few, which is most of the gap on `forks`.
+- An allocation is a call (`bn_alloc2` and the like, in `rt/native.c`), where C inlines the
+  allocator's fast path.
 - AArch64 only. The target is picked by the host, so there is no cross-compiling.
 
-Against the C backend (clang `-O2`), interleaved runs, best of 3, on an Apple M4 Pro that was
-running other heavy jobs at the time (load average near 50), so only the ratios mean much:
+With tcc (`tools/tcc.sh`), the chain has no clang or GCC in it: tcc builds the runtime and
+`natives.o`, and bendc writes the program's machine code.
+
+Against the C backend (clang `-O2`), interleaved runs, best of 7, on an Apple M4 Pro that was
+running other heavy jobs at the time (load average between 60 and 150), so only the ratios mean
+much, and those move by about 0.2 from run to run:
 
 | program | C backend | native | native / C |
 |---|---|---|---|
-| `forks 24` (1 thread) | 0.034s | 0.062s | 1.8 |
-| `leaves 12` (1 thread) | 5.68s | 39.2s | 6.9 |
-| `sort 1000000` (1 thread) | 0.314s | 0.535s | 1.7 |
-| `forks 24` (C: all threads) | 0.011s | 0.060s | 5.7 |
-| `leaves 12` (C: all threads) | 0.849s | 41.5s | 49 |
-| `sort 1000000` (C: all threads) | 0.114s | 0.527s | 4.6 |
-| bendc compiling `bendc.bend` to C | 1.52s | 2.73s | 1.8 |
-| bendc checking `bendc.bend` | 3.16s | 6.87s | 2.2 |
+| `forks 24` | 0.014s | 0.016s | 1.14 |
+| `forks 24` (1 thread) | 0.034s | 0.054s | 1.59 |
+| `leaves 12` | 2.75s | 3.19s | 1.16 |
+| `leaves 12` (1 thread) | 10.07s | 11.79s | 1.17 |
+| `sort 1000000` | 0.748s | 0.765s | 1.02 |
+| `sort 1000000` (1 thread) | 1.77s | 1.41s | 0.80 |
+| bendc compiling `bendc.bend` to C | 3.31s | 5.02s | 1.51 |
+| bendc checking `bendc.bend` | 3.65s | 4.39s | 1.20 |
 
-On one thread, and for bendc itself, the native code takes 1.7 to 2.2 times as long, but for
-`leaves`, a float loop, where it takes 7 times as long: clang keeps `x` in a float register and fuses `x * x * 0.5 + c` into
-two instructions, while the native loop moves every value through its frame slot and between
-integer and float registers. On all threads the gap is the missing parallel lets. Building is
-where it wins: `bendc --native` builds bendc (check, code generation, assembly, link) in 3.5s,
-where `bendc -o` takes 20s, most of it clang compiling 59,000 lines of C.
+`sort` and `leaves` are within 1.2 of the C backend on one thread and on all threads. `forks` on
+one thread is 1.6: each call saves and restores callee-saved pairs that clang's inlined code does
+not need. bendc itself is 1.2 to 1.5; with less load, compiling `bendc.bend` measured 2.20s
+against 1.70s (1.30). Most of what is left there is allocation, which native reaches through a
+call into the runtime. Building is where it wins: `bendc --native` builds bendc (check, code
+generation, assembly, link) in 3.5s, where `bendc -o` takes 20s, most of it clang compiling
+59,000 lines of C.
 
 ## Benchmarks
 
@@ -641,8 +658,8 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 
 ## Limitations
 
-- The native backend (`--native`) is AArch64 only, does not free on match, runs parallel lets in
-  order, and has no destination passing (see [The native backend](#the-native-backend)).
+- The native backend (`--native`) is AArch64 only and runs `!`-calls on the CPU (see [The native
+  backend](#the-native-backend)).
 - The GPU backend targets Metal only; elsewhere `f!(x)` runs on the CPU threads (or on the
   simulator, with `BEND_GPU=sim`).
 - No windowing effects (Base's `Window`).
