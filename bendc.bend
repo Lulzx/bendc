@@ -16570,8 +16570,9 @@ def N.pp.tr() -> U32:
   (511 .|. (N.ra.slots() .|. N.ra.free() : U32) : U32)
 
 # The argument registers x0..x8 are followed too: a call reads them all
-# and changes x0..x18, a return reads x0, a branch out reads them all, and
-# so does an encoding du does not know.
+# and changes x0..x18, a return reads x0, a branch out of the function (to
+# a label not in labs) reads them all, and so does an encoding du does not
+# know.
 def N.pp.ret(i: As.Ins) -> Bool:
   match i:
     case As.IW{+w}:
@@ -16579,21 +16580,22 @@ def N.pp.ret(i: As.Ins) -> Bool:
     case other:
       False{}
 
-def N.pp.use.go(x: As.Use, +unk: Bool, +ret: Bool) -> As.Use:
-  As.Use{+d, +u, +kind, l, off, n} = x
-  +out = Bool.or(Bool.or(unk, U32.is_eq(kind, 1)), Bool.or(U32.is_eq(kind, 3), U32.is_eq(kind, 4)))
+def N.pp.use.go(x: As.Use, +unk: Bool, +ret: Bool, +labs: Map<&2, List<&2, As.Ins>>) -> As.Use:
+  As.Use{+d, +u, +kind, +l, off, n} = x
+  +away = Bool.and(U32.is_eq(kind, 3), Bool.not(Pair.snd(Map<&2, List<&2, As.Ins>>, Bool, Map.has(&2, List<&2, As.Ins>, labs, l))))
+  +out = Bool.or(Bool.or(unk, U32.is_eq(kind, 1)), Bool.or(away, U32.is_eq(kind, 4)))
   As.Use{Bool.pick(U32, U32.is_eq(kind, 1), (d .|. 524287 : U32), d),
     (u .|. Bool.pick(U32, ret, 1, Bool.pick(U32, out, 511, 0)) : U32), kind, l, off, n}
 
-def N.pp.use(+i: As.Ins) -> As.Use:
-  N.pp.use.go(As.use(i, (N.ra.slots() .|. N.ra.free() : U32), N.epi.w()), N.sw.cp.unk(i), N.pp.ret(i))
+def N.pp.use(+i: As.Ins, +labs: Map<&2, List<&2, As.Ins>>) -> As.Use:
+  N.pp.use.go(As.use(i, (N.ra.slots() .|. N.ra.free() : U32), N.epi.w()), N.sw.cp.unk(i), N.pp.ret(i), labs)
 
-def N.pp.uses(ins: List<&2, As.Ins>, acc: List<&2, As.Use>) -> List<&2, As.Use>:
+def N.pp.uses(ins: List<&2, As.Ins>, +labs: Map<&2, List<&2, As.Ins>>, acc: List<&2, As.Use>) -> List<&2, As.Use>:
   match ins:
     case Nil{}:
       acc
     case i <> t:
-      N.pp.uses(t, N.pp.use(i) <> acc)
+      N.pp.uses(t, labs, N.pp.use(i, labs) <> acc)
 
 # The registers of tr live after each instruction, in order (m: the labels'
 # sets once they stay the same).
@@ -16657,6 +16659,24 @@ def N.pp.fwd(+i: As.Ins, +a: U32, +o: U32) -> Bool:
   Bool.and(Bool.and(As.du.bit(N.use.u(u), b), Bool.not(As.du.bit(N.use.d(u), b))),
     Bool.and(Bool.not(As.du.bit(o, b)), U32.is_lt(N.use.kind(u), 4)))
 
+def N.pp.alu(+w: U32) -> Bool:
+  +x = As.du(w)
+  Bool.and(Bool.and(U32.is_zero((x .&. 7936 : U32)), Bool.not(As.mem.ls(w))),
+    Bool.and(U32.is_zero(((x .&. 15 : U32) .&. ((x >> 4n : U32) .&. 15 : U32) : U32)),
+      Bool.and(U32.is_ne(w, N.epi.w()), U32.is_ne(w, N.pop.w()))))
+
+# i that writes only a (by rd), then mov b, a, and a is not read after:
+# i writing b.
+def N.pp.back(+w1: U32, +w2: U32, +o: U32) -> Bool:
+  +a = (w1 .&. 31 : U32)
+  Bool.and(Bool.and(Bool.and(N.pp.alu(w1), U32.is_eq((As.du(w1) .&. 15 : U32), 1)),
+    Bool.and(Bool.and(U32.is_lt(a, 29), As.du.bit(N.pp.tr(), As.reg.bit(a))),
+      Bool.and(U32.is_lt(N.pp.mv(w2), 99), U32.is_eq(((w2 >> 16n : U32) .&. 31 : U32), a)))),
+    Bool.not(As.du.bit(o, As.reg.bit(a))))
+
+def N.pp.b.w(+w1: U32, +w2: U32) -> U32:
+  As.ren.fields(w1, 1, (w1 .&. 31 : U32), [(w2 .&. 31 : U32)])
+
 def N.pp.go(k: Nat, ins: List<&2, As.Ins>, outs: List<&2, U32>) -> List<&2, As.Ins>:
   match k:
     case 0n:
@@ -16671,7 +16691,9 @@ def N.pp.go(k: Nat, ins: List<&2, As.Ins>, outs: List<&2, U32>) -> List<&2, As.I
             z => N.pp.go(j, t, ot),
             z => Bool.pick(Unit -> List<&2, As.Ins>, Bool.and(U32.is_lt(a, 99), N.pp.fwd(i2, a, o2)),
               y => N.pp.go(j, As.ren(i2, a, [N.pp.src(i)]) <> List.tail(&2, As.Ins, t), ot),
-              y => i <> N.pp.go(j, t, ot))(Unit{}))(Unit{})
+              y => Bool.pick(Unit -> List<&2, As.Ins>, N.pp.back(N.pp.w(i), N.pp.w(i2), o2),
+                x => N.pp.go(j, As.IW{N.pp.b.w(N.pp.w(i), N.pp.w(i2))} <> List.tail(&2, As.Ins, t), ot),
+                x => i <> N.pp.go(j, t, ot))(Unit{}))(Unit{}))(Unit{})
         case il ol:
           il
 
@@ -16681,12 +16703,6 @@ def N.pp.go(k: Nat, ins: List<&2, As.Ins>, outs: List<&2, U32>) -> List<&2, As.I
 # - mov a, b then i that reads a and writes only a: i reading b.
 # - i that writes only a (by rd), mov b, a, then such a j that writes a and
 #   does not read it: i writing b, then j.
-def N.pp.alu(+w: U32) -> Bool:
-  +x = As.du(w)
-  Bool.and(Bool.and(U32.is_zero((x .&. 7936 : U32)), Bool.not(As.mem.ls(w))),
-    Bool.and(U32.is_zero(((x .&. 15 : U32) .&. ((x >> 4n : U32) .&. 15 : U32) : U32)),
-      Bool.and(U32.is_ne(w, N.epi.w()), U32.is_ne(w, N.pop.w()))))
-
 def N.pp.wr(+w: U32) -> U32:
   As.reg.fields(w, (As.du(w) .&. 15 : U32))
 
@@ -16707,9 +16723,6 @@ def N.pp.b(+w1: U32, +w2: U32, +w3: U32) -> Bool:
   Bool.and(Bool.and(Bool.and(N.pp.alu(w1), U32.is_eq((As.du(w1) .&. 15 : U32), 1)),
     Bool.and(U32.is_lt(a, 29), Bool.and(U32.is_lt(N.pp.mv(w2), 99), U32.is_eq(((w2 >> 16n : U32) .&. 31 : U32), a)))),
     Bool.and(N.pp.alu(w3), Bool.and(As.du.bit(N.pp.wr(w3), ab), Bool.not(As.du.bit(N.pp.rd(w3), ab)))))
-
-def N.pp.b.w(+w1: U32, +w2: U32) -> U32:
-  As.ren.fields(w1, 1, (w1 .&. 31 : U32), [(w2 .&. 31 : U32)])
 
 def N.pp.loc(k: Nat, ins: List<&2, As.Ins>) -> List<&2, As.Ins>:
   match k:
@@ -16806,7 +16819,7 @@ def N.pp.all(+ins: List<&2, As.Ins>) -> List<&2, As.Ins>:
   N.nz(N.pp.loc((1n + Nat.double(List.length(&2, As.Ins, ins)) : Nat), ins))
 
 def N.pp(+ins: List<&2, As.Ins>) -> List<&2, As.Ins>:
-  +us = N.pp.uses(ins, Nil{})
+  +us = N.pp.uses(ins, N.sw.labs(ins, Map.new(&2, List<&2, As.Ins>)), Nil{})
   Bool.pick(Unit -> List<&2, As.Ins>, N.pp.bad(us), z => ins,
     z => Maybe.default(&2, List<&2, As.Ins>, Maybe.bind(&2, NRa, List<&2, As.Ins>,
       N.ra.live(8n, N.pp.tr(), us, NRa{Map.new(&2, U32), False{}, Nil{}, 0, 0}),
