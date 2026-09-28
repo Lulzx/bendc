@@ -17,6 +17,18 @@
 #include "bendrt_split.h"
 
 V *bn_alloc(V words) { return halloc((size_t)words); }
+V *bn_alloc_hole(V words) { return halloc_hole((size_t)words); }
+
+// The common sizes, each with its size class known here, as the C
+// backend's CN2, CN3, ... know theirs.
+#define BN_ALLOC(n) \
+  V *bn_alloc##n(void) { return halloc(n); } \
+  V *bn_alloc_hole##n(void) { return halloc_hole(n); }
+BN_ALLOC(2)
+BN_ALLOC(3)
+BN_ALLOC(4)
+BN_ALLOC(5)
+BN_ALLOC(6)
 
 // A float literal's bits, read once as C reads it (the slot holds them
 // with bit 32 set: a read 0.0 is then not an empty slot).
@@ -58,3 +70,18 @@ N1(Array_dsize) N2(Array_dget) N3(Array_dswap) N3(Array_dset) N2(Array_dnew) N1(
 N3(Array_datomic_dadd) N3(Array_datomic_dmin) N3(Array_datomic_dmax) N3(Array_datomic_dand)
 N3(Array_datomic_dor) N3(Array_datomic_dxor) N3(Array_datomic_dexch) N4(Array_datomic_dcas)
 N3(Array_datomic_dfadd)
+
+// Freeing on match (see bendrt.h): the nodes a match opens, and the values
+// bound to variables used twice.
+V bn_take(V v, V w) { return (V)bend_take(v, (unsigned)w); }
+void bn_share(V v) { bend_share(v); }
+
+// Parallel lets fork with par_fork and par_join; a seq def's (see
+// GSParFront in bendc.bend) run in order at the frontier: bn_front is 1
+// there, else it counts the fork's depth, which bn_back undoes.
+V bn_front(void) {
+  if (par_depth >= par_front) return 1;
+  par_depth += 1;
+  return 0;
+}
+void bn_back(void) { par_depth -= 1; }

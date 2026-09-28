@@ -61,6 +61,39 @@ def Code.go(c: Code, acc: List<&2, Ins>) -> List<&2, Ins>:
 def Code.flat(c: Code) -> List<&2, Ins>:
   Code.go(c, Nil{})
 
+# An instruction's word (0 when it is not an encoded word).
+def Ins.word(i: Ins) -> U32:
+  match i:
+    case IW{w}:
+      w
+    case ILab{l}:
+      0
+    case ISym{l, e}:
+      0
+    case IB{w, l}:
+      0
+    case IBc{w, l}:
+      0
+    case IBt{w, l}:
+      0
+    case IAdr{r, l}:
+      0
+    case ICall{w, x}:
+      0
+    case IAdrS{r, x}:
+      0
+
+# c with each word a replaced by the code x, and each word b by y.
+def Code.subst(c: Code, +a: U32, +x: Code, +b: U32, +y: Code) -> Code:
+  match c:
+    case CNil{}:
+      CNil{}
+    case COne{+i}:
+      +w = Ins.word(i)
+      Bool.pick(Code, U32.is_eq(w, a), x, Bool.pick(Code, U32.is_eq(w, b), y, COne{i}))
+    case CCat{l, r}:
+      CCat{Code.subst(l, a, x, b, y), Code.subst(r, a, x, b, y)}
+
 def Code.list(xs: List<&2, Code>) -> Code:
   match xs:
     case Nil{}:
@@ -192,6 +225,10 @@ def cset(+rd: U32, +c: U32) -> U32:
 def csel(+rd: U32, +rn: U32, +rm: U32, +c: U32) -> U32:
   (reg3(2592079872, rd, rn, rm) .|. (c << 12n : U32) : U32)
 
+# lsl wd, wn, wm (1AC02000).
+def lslvw(+rd: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(448798720, rd, rn, rm)
+
 # ldr rt, [rn, #k] and str rt, [rn, #k], k a multiple of 8 below 32768
 # (F9400000, F9000000).
 def ldr(+rt: U32, +rn: U32, +k: U32) -> U32:
@@ -214,6 +251,21 @@ def push_fp() -> U32:
 
 def pop_fp() -> U32:
   2831252477
+
+# stp rt, rt2, [rn, #off] and ldp rt, rt2, [rn, #off]: a signed offset, a
+# multiple of 8 in -512..504 (A9000000, A9400000).
+def stpo(+rt: U32, +rt2: U32, +rn: U32, +off: U32) -> U32:
+  (2835349504 .|. ((((off >> 3n : U32) .&. 127 : U32) << 15n : U32) .|. ((rt2 << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32) : U32)
+
+def ldpo(+rt: U32, +rt2: U32, +rn: U32, +off: U32) -> U32:
+  (2839543808 .|. ((((off >> 3n : U32) .&. 127 : U32) << 15n : U32) .|. ((rt2 << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32) : U32)
+
+# The same for FP registers dt, dt2 (6D000000, 6D400000).
+def stpd(+rt: U32, +rt2: U32, +rn: U32, +off: U32) -> U32:
+  (1828716544 .|. ((((off >> 3n : U32) .&. 127 : U32) << 15n : U32) .|. ((rt2 << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32) : U32)
+
+def ldpd(+rt: U32, +rt2: U32, +rn: U32, +off: U32) -> U32:
+  (1832910848 .|. ((((off >> 3n : U32) .&. 127 : U32) << 15n : U32) .|. ((rt2 << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32) : U32)
 
 # mov x29, sp (910003FD)
 def set_fp() -> U32:
@@ -263,6 +315,29 @@ def fneg(+rd: U32, +rn: U32) -> U32:
 
 def ucvtf(+rd: U32, +rn: U32) -> U32:
   reg3(505610240, rd, rn, 0)
+
+# fmadd sd, sn, sm, sa (1F000000): sn * sm + sa, rounded once; fmov sd, sn
+# (1E204000).
+def fmadd(+rd: U32, +rn: U32, +rm: U32, +ra: U32) -> U32:
+  (reg3(520093696, rd, rn, rm) .|. (ra << 10n : U32) : U32)
+
+def fmovss(+rd: U32, +rn: U32) -> U32:
+  reg3(505430016, rd, rn, 0)
+
+# lsl wd, wn, #k (ubfm wd, wn, #(32 - k) % 32, #31 - k: 53000000); add and
+# sub wd, wn, #k, k below 4096 (11000000, 51000000).
+def lslwi(+rd: U32, +rn: U32, +k: U32) -> U32:
+  (1392508928 .|. (((((32 - k : U32) .&. 31 : U32)) << 16n : U32) .|. (((31 - k : U32) << 10n : U32) .|. ((rn << 5n : U32) .|. rd : U32) : U32) : U32) : U32)
+
+def addwi(+rd: U32, +rn: U32, +k: U32) -> U32:
+  (285212672 .|. ((k << 10n : U32) .|. ((rn << 5n : U32) .|. rd : U32) : U32) : U32)
+
+def subwi(+rd: U32, +rn: U32, +k: U32) -> U32:
+  (1358954496 .|. ((k << 10n : U32) .|. ((rn << 5n : U32) .|. rd : U32) : U32) : U32)
+
+# ubfx wd, wn, #lsb, #w (53000000).
+def ubfxw(+rd: U32, +rn: U32, +lsb: U32, +w: U32) -> U32:
+  (1392508928 .|. ((lsb << 16n : U32) .|. ((((lsb + w : U32) - 1 : U32) << 10n : U32) .|. ((rn << 5n : U32) .|. rd : U32) : U32) : U32) : U32)
 
 # Branch bases: b (14000000), bl (94000000), b.cond (54000000), cbz
 # (B4000000), cbnz (B5000000), tbz (36000000), tbnz (37000000).
@@ -790,7 +865,8 @@ def object.lay(elf: Bool, +ins: List<&2, Ins>, +nslots: U32, l: Lay) -> Obj:
 # ========
 #
 # A reload right after a store to the same frame slot (str rt, [sp, #k];
-# ldr ru, [sp, #k]) is dropped when ru is rt, else it becomes mov ru, rt.
+# ldr ru, [sp, #k]) is dropped when ru is rt, else it becomes mov ru, rt;
+# a move back (mov a, b; mov b, a) is dropped.
 # Labels are instructions of their own, so nothing jumps between the two.
 
 def peep.hit(+s: U32, +l: U32) -> Bool:
@@ -798,11 +874,23 @@ def peep.hit(+s: U32, +l: U32) -> Bool:
     Bool.and(U32.is_eq((l .&. 4290773984 : U32), 4181722080),
       U32.is_eq((s .&. 4193280 : U32), (l .&. 4193280 : U32))))
 
-def peep.ps(+l: U32, +s: U32, +r: List<&2, Ins>) -> List<&2, Ins>:
+def peep.mov(+w: U32) -> Bool:
+  U32.is_eq((w .&. 4292935648 : U32), 2852127712)
+
+# mov a, b then mov b, a: the second does nothing.
+def peep.back(+s: U32, +l: U32) -> Bool:
+  Bool.and(Bool.and(peep.mov(s), peep.mov(l)),
+    Bool.and(U32.is_eq((l .&. 31 : U32), ((s >> 16n : U32) .&. 31 : U32)),
+      U32.is_eq(((l >> 16n : U32) .&. 31 : U32), (s .&. 31 : U32))))
+
+def peep.ps.go(+l: U32, +s: U32, +r: List<&2, Ins>) -> List<&2, Ins>:
   Bool.pick(List<&2, Ins>, peep.hit(s, l),
     Bool.pick(List<&2, Ins>, U32.is_eq((s .&. 31 : U32), (l .&. 31 : U32)), IW{s} <> r,
       IW{mov((l .&. 31 : U32), (s .&. 31 : U32))} <> IW{s} <> r),
     IW{l} <> IW{s} <> r)
+
+def peep.ps(+l: U32, +s: U32, +r: List<&2, Ins>) -> List<&2, Ins>:
+  Bool.pick(List<&2, Ins>, peep.back(s, l), IW{s} <> r, peep.ps.go(l, s, r))
 
 def peep.pa(+l: U32, a: Ins, r: List<&2, Ins>) -> List<&2, Ins>:
   match a:

@@ -50,7 +50,7 @@ legs="a b"
 case $(uname -m) in arm64|aarch64) native=1;; *) native=0;; esac
 if [ $native = 1 ]; then
   echo "[C] seed (GCC) --native: bendc.bend -> build/ddc/native"
-  BENDC_RT=$PWD/rt CC=$GCC ./build/ddc/seed --native -o build/ddc/native "$BASE" bendc.bend > /dev/null
+  BEND_NO_FREE=1 BENDC_RT=$PWD/rt CC=$GCC ./build/ddc/seed --native -o build/ddc/native "$BASE" bendc.bend > /dev/null
   echo "[C] native bendc: bendc.bend -> build/ddc/c.c"
   BEND_NO_FREE=1 ./build/ddc/native --no-check "$BASE" bendc.bend > build/ddc/c.c
   legs="a b c"
