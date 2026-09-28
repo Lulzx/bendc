@@ -241,9 +241,8 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    erased program gives. Then full calls of a monad's `bind`, `pure`,
    `go` and `go.done` (the parser's, the generator's, the checker's) are inlined. The callee is
    renamed apart, each argument takes its parameter's place when that moves no work into a lambda,
-   and the places it lands are reduced: an applied lambda becomes a `let`, and a `let` or `match` of
-   a known constructor takes its case (a `match` only when that case binds the fields to variables:
-   a field pattern that fails moves on to the next case). A `do` block becomes one closure, and the
+   and the places it lands are reduced: an applied lambda becomes a `let`, and a `let` of a known
+   constructor binds its fields. A `do` block becomes one closure, and the
    checker, which runs on these monads, runs 9% fewer instructions. Last, `Core.Def.red` turns
    every lambda applied to one argument, `(p => b)(a)`, into `let p = a; b`, anywhere in the def.
    [`REDPROOF.bend`](REDPROOF.bend) proves the law in [`RED.bend`](RED.bend): if a run does not run
@@ -252,10 +251,18 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    so the proof shows that more fuel does not change a result that did not run out (`L.mono`), and
    that in one program the application and the let give the same result (`L.beta.law`). Like
    erasure's proof, it assumes that the natives commute with the pass (`ok`); it also assumes that
-   a native gives one value or fails (`one`). The proven function is the one bendc runs. The
-   inliner's own rules (the substitution of arguments, the known-constructor rules, applications
-   of more than one argument) are not proven, nor are lowering, raising back to an `Expr`, or code
-   generation. Both checkers verify both proofs in CI.
+   a native gives one value or fails (`one`). Then `Core.Def.known` resolves each `match` on a
+   known constructor `K{as}`: it drops each case whose pattern is another constructor's, and when
+   the first case left is `K`'s with a variable for each field, it makes the match one on `as`
+   with that case alone, which bendc compiles as lets (no `K` is built). A field pattern that can
+   fail keeps the match, since its case can move on to the next. [`KNOWNPROOF.bend`](KNOWNPROOF.bend)
+   proves the law in [`KNOWN.bend`](KNOWN.bend), `known_ok` (and `known_prog`), stated as
+   `red_ok` is, with the same assumptions; the resolved match takes no more steps than the source,
+   and in one program the two give the same result (`K.mat`). The proven functions are the ones
+   bendc runs; the inliner no longer resolves matches itself. The inliner's own rules (the
+   substitution of arguments, a `let` of a known constructor, applications of more than one
+   argument) are not proven, nor are lowering, raising back to an `Expr`, or code generation. Both
+   checkers verify the three proofs in CI.
 6. **Code generation.** A state monad threads fresh names, emitted C, references and errors through
    the generator. Only defs reachable from `main` are emitted.
    - Each def becomes a C function, and self tail calls become `goto` loops.
@@ -546,6 +553,7 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`core.bend`](core.bend) | the core IR between the front end and code generation: terms with relevance-marked arguments, erasure, and a semantics |
 | [`LAWS.bend`](LAWS.bend), [`PROOF.bend`](PROOF.bend) | the law that erasure preserves the core IR's semantics, and its proof (induction on the fuel, one case per step) |
 | [`RED.bend`](RED.bend), [`REDPROOF.bend`](REDPROOF.bend) | the law that reducing applied lambdas to lets (`Core.Def.red`) preserves the core IR's semantics, and its proof |
+| [`KNOWN.bend`](KNOWN.bend), [`KNOWNPROOF.bend`](KNOWNPROOF.bend) | the law that resolving matches on known constructors (`Core.Def.known`) preserves the core IR's semantics, and its proof |
 | [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, arrays, native `Nat`, `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
 | [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the kernel cache, the simulator, copying results back |
 | [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
