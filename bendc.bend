@@ -13373,8 +13373,22 @@ def Inl.app(f: Core.Tm, as: List<&2, Core.Tm>) -> Core.Tm:
     case a <> t:
       Core.CApp{f, a <> t}
 
+# Whether every pattern is a variable (a let of each always binds).
+def Inl.vars(ps: List<&2, Core.Pt>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case p <> r:
+      match p:
+        case Core.PtVar{x}:
+          Inl.vars(r)
+        case other:
+          False{}
+
 # The case of a match on K{as} (the first case whose pattern is K's, or a
-# variable), as lets; t itself when a case needs more than that.
+# variable), as lets; t itself when a case needs more than that: its fields'
+# patterns are not all variables (a field that does not match goes on to the
+# next case, a let would fail).
 def Inl.known(+k: String, +as: List<&2, Core.Tm>, cases: List<&2, Core.Tm>, +t: Core.Tm) -> Core.Tm:
   match cases:
     case Nil{}:
@@ -13389,7 +13403,7 @@ def Inl.known(+k: String, +as: List<&2, Core.Tm>, cases: List<&2, Core.Tm>, +t: 
                   Core.CLet{Core.PtVar{x}, Core.CCtr{k, as}, b}
                 case Core.PtCtr{+k2, +qs}:
                   Bool.pick(Unit -> Core.Tm, String.eq(k, k2),
-                    u => Bool.pick(Core.Tm, Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as)), Inl.lets(qs, as, b), t),
+                    u => Bool.pick(Core.Tm, Bool.and(Inl.vars(qs), Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as))), Inl.lets(qs, as, b), t),
                     u => Inl.known(k, as, r, t))(Unit{})
                 case other:
                   t
@@ -13642,13 +13656,14 @@ def Inl.def(+c: Map<&2, Core.Def>, d: Core.Def) -> Core.Def:
         u => Inl.go(Fuel.max(), c, IAll{}, body), u => body)(Unit{}), ret}
 
 # The program through the core IR: each def lowered, erased, with monadic
-# binds inlined, and raised; a type-level def (a Type, Data, Quant or Kind)
-# keeps its body, which the printers unfold.
+# binds inlined, its redexes reduced (Core.Def.red, which REDPROOF.bend
+# proves correct), and raised; a type-level def (a Type, Data, Quant or
+# Kind) keeps its body, which the printers unfold.
 def Lo.pass(+g: G, +c: Map<&2, Core.Def>, d: Decl) -> Decl:
   match d:
     case DDef{+name, +ps, +body, +ret}:
       Bool.pick(Unit -> Decl, G.erased_ty(Ty.head(ret)), u => DDef{name, ps, body, ret},
-        u => Up.def(Inl.def(c, Core.Def.erase(Lo.def(g, name, ps, body, ret)))))(Unit{})
+        u => Up.def(Core.Def.red(Inl.def(c, Core.Def.erase(Lo.def(g, name, ps, body, ret))))))(Unit{})
     case other:
       other
 
