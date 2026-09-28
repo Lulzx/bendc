@@ -16649,6 +16649,10 @@ def N.takes(bs: NEnv(), +kind: String) -> As.Code:
       As.CCat{Bool.pick(As.Code, Str.eq(Gen.take.kind(x), kind),
         N.cat([N.lo(o, 0), N.k(1, N.num(Gen.take.words(x), 0)), N.call("bn_take")]), As.CNil{}), N.takes(t, kind)}
 
+# bn_share(v), unless v is below 2^32 (a number: no node is).
+def N.share(o: NO) -> As.Code:
+  N.cat([N.lo(o, 0), N.ws([As.lsri(9, 0, 32), (As.cbz(9) .|. 64 : U32)]), N.call("bn_share")])
+
 # bend_share for each variable body uses twice (a constant is no node).
 def N.shares(bs: NEnv(), +body: Expr) -> As.Code:
   match bs:
@@ -16656,7 +16660,7 @@ def N.shares(bs: NEnv(), +body: Expr) -> As.Code:
       As.CNil{}
     case NB{+x, +o} <> t:
       As.CCat{Bool.pick(As.Code, Bool.and(Bool.not(Bool.or(Gen.is_take(x), Str.eq(x, "_"))),
-        Bool.and(N.is_slot(o), U32.is_le(2, Use.n(x, body)))), As.CCat{N.lo(o, 0), N.call("bn_share")}, As.CNil{}),
+        Bool.and(N.is_slot(o), U32.is_le(2, Use.n(x, body)))), N.share(o), As.CNil{}),
         N.shares(t, body)}
 
 def N.shares.if(free: Bool, bs: NEnv(), +body: Expr) -> As.Code:
@@ -16967,6 +16971,8 @@ def N.ucmp(+c: U32) -> As.Code:
 def N.inlines() -> List<&2, NI>:
   [NI{"U32.add", N.w(As.addw(0, 0, 1))}, NI{"U32.sub", N.w(As.subw(0, 0, 1))},
    NI{"U32.mul", N.w(As.mulw(0, 0, 1))}, NI{"U32.inc", As.CCat{N.k(1, 1), N.w(As.addw(0, 0, 1))}},
+   NI{"U32.shrn", N.ws([As.cmpi(1, 32), As.lsrv(0, 0, 1), As.csel(0, 0, 31, As.lo())])},
+   NI{"U32.shln", N.ws([As.cmpi(1, 32), As.lslvw(0, 0, 1), As.csel(0, 0, 31, As.lo())])},
    NI{"U32.and", N.w(As.and(0, 0, 1))}, NI{"U32.or", N.w(As.orr(0, 0, 1))}, NI{"U32.xor", N.w(As.eor(0, 0, 1))},
    NI{"U32.is_eq", N.ucmp(As.eq())}, NI{"U32.is_ne", N.ucmp(As.ne())}, NI{"U32.is_lt", N.ucmp(As.lo())},
    NI{"U32.is_le", N.ucmp(As.ls())}, NI{"U32.is_gt", N.ucmp(As.hi())}, NI{"U32.is_ge", N.ucmp(As.hs())},

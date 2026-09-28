@@ -225,6 +225,10 @@ def cset(+rd: U32, +c: U32) -> U32:
 def csel(+rd: U32, +rn: U32, +rm: U32, +c: U32) -> U32:
   (reg3(2592079872, rd, rn, rm) .|. (c << 12n : U32) : U32)
 
+# lsl wd, wn, wm (1AC02000).
+def lslvw(+rd: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(448798720, rd, rn, rm)
+
 # ldr rt, [rn, #k] and str rt, [rn, #k], k a multiple of 8 below 32768
 # (F9400000, F9000000).
 def ldr(+rt: U32, +rn: U32, +k: U32) -> U32:
