@@ -245,6 +245,7 @@ typedef struct GcHot {
   uint64_t *abits, *cand;
   int mt;
   int rc;  // reference counting (a program compiled with BEND_RC=1): no collections
+  int rcmt; // rc and mt: a slot's allocation bit is set atomically
 } GcHot;
 extern GcHot gc_hot;
 extern GcRange *gc_roots;
@@ -299,7 +300,7 @@ GcBlk *gc_new_small(int atomic, unsigned c);
 // slots of the block as it is handed out, so with threads running the bit
 // is set in one instruction (a plain one could lose their frees).
 static inline void gc_setbit(uint64_t *w, uint64_t bit) {
-  if (UNLIKELY(gc_hot.rc & gc_hot.mt)) __atomic_fetch_or(w, bit, __ATOMIC_RELAXED);
+  if (UNLIKELY(gc_hot.rcmt)) __atomic_fetch_or(w, bit, __ATOMIC_RELAXED);
   else *w |= bit;
 }
 
@@ -1022,6 +1023,30 @@ static inline V F_Map_dbit(V key, V pos) {
   }
   V x = ((V *)s)[1];
   return C2(0, key, off == 0 ? IMM(1) : (((uint32_t)x >> (32 - off)) & 1) ? IMM(1) : IMM(0));
+}
+#endif
+
+// String.cmp(a, b) and String.eq(a, b), by code point. Base's String.cmp
+// rebuilds both strings to hand them back, which copies a shared string
+// (and, counted, frees the copy right after: String.eq drops it); here
+// the strings themselves go back, and String.eq drops them.
+#ifdef BEND_NATIVE_STR
+static inline V str_cmp(V a, V b) {
+  for (;;) {
+    if (a == SNIL) return b == SNIL ? IMM(1) : IMM(0);
+    if (b == SNIL) return IMM(2);
+    uint32_t x = (uint32_t)((V *)a)[1], y = (uint32_t)((V *)b)[1];
+    if (x != y) return x < y ? IMM(0) : IMM(2);
+    a = ((V *)a)[2];
+    b = ((V *)b)[2];
+  }
+}
+static inline V F_String_dcmp(V a, V b) { return C2(0, C2(0, a, b), str_cmp(a, b)); }
+static inline V F_String_deq(V a, V b) {
+  V r = BOOL(str_cmp(a, b) == IMM(1));
+  bend_drop(a);
+  bend_drop(b);
+  return r;
 }
 #endif
 

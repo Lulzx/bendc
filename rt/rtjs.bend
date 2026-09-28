@@ -139,6 +139,20 @@ def src.p2() -> String:
   "  }\n" ++
   "  return { $: \"Tuple\", fst: key, snd: false };\n" ++
   "};\n" ++
+  "// String.cmp and String.eq, by code point (Base's String.cmp rebuilds\n" ++
+  "// both strings to hand them back).\n" ++
+  "const str_cmp = (a, b) => {\n" ++
+  "  const x = a[Symbol.iterator](), y = b[Symbol.iterator]();\n" ++
+  "  for (;;) {\n" ++
+  "    const p = x.next(), q = y.next();\n" ++
+  "    if (p.done) return q.done ? \"EQ\" : \"LT\";\n" ++
+  "    if (q.done) return \"GT\";\n" ++
+  "    const c = p.value.codePointAt(0), d = q.value.codePointAt(0);\n" ++
+  "    if (c !== d) return c < d ? \"LT\" : \"GT\";\n" ++
+  "  }\n" ++
+  "};\n" ++
+  "const F_String_dcmp = (a, b) => ({ $: \"Tuple\", fst: { $: \"Tuple\", fst: a, snd: b }, snd: { $: str_cmp(a, b) } });\n" ++
+  "const F_String_deq = (a, b) => a === b;\n" ++
   "\n" ++
   "// Natives: Array\n" ++
   "// ==============\n" ++
@@ -172,7 +186,9 @@ def src.p2() -> String:
   "  return { $: \"Tuple\", fst: a, snd: old };\n" ++
   "}\n" ++
   "\n" ++
-  "const F_Array_dsize = (a) => ({ $: \"Tuple\", fst: a, snd: a.length >>> 0 });\n" ++
+  "const F_Array_dsize = (a) => ({ $: \"Tuple\", fst: a, snd: a.length >>> 0 });\n"
+
+def src.p3() -> String:
   "// The checker's memo cells (check.bend's memo.*): a cell's term and its value.\n" ++
   "const F_Chk_dmemo_dnew = (t) => [undefined, undefined];\n" ++
   "const F_Chk_dmemo_dhas = (m, v) => m[0] !== undefined && m[0] === v;\n" ++
@@ -186,9 +202,7 @@ def src.p2() -> String:
   "const F_Array_datomic_dadd = (a, i, v) => array_rmw(a, i, (o) => (o + v) >>> 0);\n" ++
   "const F_Array_datomic_dmin = (a, i, v) => array_rmw(a, i, (o) => Math.min(o, v));\n" ++
   "const F_Array_datomic_dmax = (a, i, v) => array_rmw(a, i, (o) => Math.max(o, v));\n" ++
-  "const F_Array_datomic_dand = (a, i, v) => array_rmw(a, i, (o) => (o & v) >>> 0);\n"
-
-def src.p3() -> String:
+  "const F_Array_datomic_dand = (a, i, v) => array_rmw(a, i, (o) => (o & v) >>> 0);\n" ++
   "const F_Array_datomic_dor = (a, i, v) => array_rmw(a, i, (o) => (o | v) >>> 0);\n" ++
   "const F_Array_datomic_dxor = (a, i, v) => array_rmw(a, i, (o) => (o ^ v) >>> 0);\n" ++
   "const F_Array_datomic_dexch = (a, i, v) => array_rmw(a, i, () => v);\n" ++
@@ -234,7 +248,9 @@ def src.p3() -> String:
   "const F_F32_dtrunc = (a) => fr(Math.trunc(a));\n" ++
   "const F_F32_dbits = (a) => new Uint32Array(new Float32Array([a]).buffer)[0];\n" ++
   "const f32_of_bits = (u) => new Float32Array(new Uint32Array([u]).buffer)[0];\n" ++
-  "const word_con = (b, r) => ((r << 1) | (b ? 1 : 0)) >>> 0;\n" ++
+  "const word_con = (b, r) => ((r << 1) | (b ? 1 : 0)) >>> 0;\n"
+
+def src.p4() -> String:
   "const F_F32_dto__u32 = (a) => (!(a > 0) || a >= 4294967296 ? 0 : Math.trunc(a) >>> 0);\n" ++
   "\n" ++
   "// The shortest text that reads back.\n" ++
@@ -248,9 +264,7 @@ def src.p3() -> String:
   "  }\n" ++
   "  return s;\n" ++
   "}\n" ++
-  "const F_F32_dshow = (a) => f32_show(a);\n"
-
-def src.p4() -> String:
+  "const F_F32_dshow = (a) => f32_show(a);\n" ++
   "\n" ++
   "// The binary32 nearest the decimal s, rounded once (as strtof): through\n" ++
   "// binary64 alone, a text whose binary64 is a binary32 midpoint would round\n" ++
@@ -296,7 +310,9 @@ def src.p4() -> String:
   "function io_out(fd, data) {\n" ++
   "  const fs = require(\"fs\");\n" ++
   "  let at = 0;\n" ++
-  "  while (at < data.length) {\n" ++
+  "  while (at < data.length) {\n"
+
+def src.p5() -> String:
   "    try {\n" ++
   "      at += fs.writeSync(fd, data, at, data.length - at);\n" ++
   "    } catch (e) {\n" ++
@@ -310,9 +326,7 @@ def src.p4() -> String:
   "  io_out(2, io_bytes(message + \"\\n\"));\n" ++
   "}\n" ++
   "\n" ++
-  "// libc through bun:ffi (the effects that make system calls need Bun).\n"
-
-def src.p5() -> String:
+  "// libc through bun:ffi (the effects that make system calls need Bun).\n" ++
   "function io_sys() {\n" ++
   "  if (globalThis.BEND_SYS === undefined) {\n" ++
   "    const ffi = require(\"bun:ffi\");\n" ++
@@ -358,7 +372,9 @@ def src.p5() -> String:
   "}\n" ++
   "\n" ++
   "function io_text(b, n) {\n" ++
-  "  return new TextDecoder(\"utf-8\", { ignoreBOM: true }).decode(b.subarray(0, n));\n" ++
+  "  return new TextDecoder(\"utf-8\", { ignoreBOM: true }).decode(b.subarray(0, n));\n"
+
+def src.p6() -> String:
   "}\n" ++
   "\n" ++
   "// Bytes cross as they are (0..255), one List cell each, with no UTF-8 in\n" ++
@@ -372,9 +388,7 @@ def src.p5() -> String:
   "function io_unlist(xs) {\n" ++
   "  const b = [];\n" ++
   "  for (; xs.$ === \"Con\"; xs = xs.tail) b.push(xs.head);\n" ++
-  "  return b.some((x) => x > 255) ? null : Uint8Array.from(b);\n"
-
-def src.p6() -> String:
+  "  return b.some((x) => x > 255) ? null : Uint8Array.from(b);\n" ++
   "}\n" ++
   "\n" ++
   "function io_addr(host, port) {\n" ++
@@ -420,7 +434,9 @@ def src.p6() -> String:
   "  });\n" ++
   "  io.ready = undefined;\n" ++
   "}\n" ++
-  "\n" ++
+  "\n"
+
+def src.p7() -> String:
   "// Resumes k with more's value; undefined means re-parked.\n" ++
   "function io_wake(w) {\n" ++
   "  const x = w.more();\n" ++
@@ -434,9 +450,7 @@ def src.p6() -> String:
   "\n" ++
   "function io_run(m) {\n" ++
   "  const io = { runs: [], live: 0, waits: [] };\n" ++
-  "  globalThis.BEND_IO = io;\n"
-
-def src.p7() -> String:
+  "  globalThis.BEND_IO = io;\n" ++
   "  io_push(m(null), (x) => ({ $: \"Emit\", value: x }), true);\n" ++
   "  for (;;) {\n" ++
   "    if (io.runs.length === 0) {\n" ++
@@ -482,7 +496,9 @@ def src.p7() -> String:
   "  return { $: \"$REQ\", name, run: e?.run, need: e?.need, args, kont: k };\n" ++
   "}\n" ++
   "\n" ++
-  "// k, checking first that the value a host effect answers has one of its\n" ++
+  "// k, checking first that the value a host effect answers has one of its\n"
+
+def src.p8() -> String:
   "// type's tags (Bend 2.0.32 fail-stops there, #1105).\n" ++
   "function io_tags(ty, tags, k) {\n" ++
   "  return (x) => {\n" ++
@@ -496,9 +512,7 @@ def src.p7() -> String:
   "\n" ++
   "// Chan\n" ++
   "// ----\n" ++
-  "\n"
-
-def src.p8() -> String:
+  "\n" ++
   "const CHAN_RECV = Symbol();\n" ++
   "\n" ++
   "function chan_wake(row, x) {\n" ++
@@ -544,7 +558,9 @@ def src.p8() -> String:
   "}\n" ++
   "\n" ++
   "function bend_run(main) {\n" ++
-  "  cli(process.argv.slice(1));\n" ++
+  "  cli(process.argv.slice(1));\n"
+
+def src.p9() -> String:
   "  let code;\n" ++
   "  try {\n" ++
   "    code = io_run(main());\n" ++
@@ -558,9 +574,7 @@ def src.p8() -> String:
   "function bend_run_value(main, show) {\n" ++
   "  cli(process.argv.slice(1));\n" ++
   "  try {\n" ++
-  "    io_out(1, io_bytes(show(main()) + \"\\n\"));\n"
-
-def src.p9() -> String:
+  "    io_out(1, io_bytes(show(main()) + \"\\n\"));\n" ++
   "  } catch (e) {\n" ++
   "    io_errs(e instanceof RangeError ? \"bend: memory fault (machine stack overflow?)\" : String(e));\n" ++
   "    process.exit(1);\n" ++

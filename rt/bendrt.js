@@ -130,6 +130,20 @@ const F_Map_dbit = (key, pos) => {
   }
   return { $: "Tuple", fst: key, snd: false };
 };
+// String.cmp and String.eq, by code point (Base's String.cmp rebuilds
+// both strings to hand them back).
+const str_cmp = (a, b) => {
+  const x = a[Symbol.iterator](), y = b[Symbol.iterator]();
+  for (;;) {
+    const p = x.next(), q = y.next();
+    if (p.done) return q.done ? "EQ" : "LT";
+    if (q.done) return "GT";
+    const c = p.value.codePointAt(0), d = q.value.codePointAt(0);
+    if (c !== d) return c < d ? "LT" : "GT";
+  }
+};
+const F_String_dcmp = (a, b) => ({ $: "Tuple", fst: { $: "Tuple", fst: a, snd: b }, snd: { $: str_cmp(a, b) } });
+const F_String_deq = (a, b) => a === b;
 
 // Natives: Array
 // ==============

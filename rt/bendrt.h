@@ -255,6 +255,7 @@ typedef struct GcHot {
   uint64_t *abits, *cand;
   int mt;
   int rc;  // reference counting (a program compiled with BEND_RC=1): no collections
+  int rcmt; // rc and mt: a slot's allocation bit is set atomically
 } GcHot;
 static GcHot gc_hot;
 static GcRange *gc_roots;
@@ -311,7 +312,7 @@ static void gc_init(void) {
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
-  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req};
+  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -375,7 +376,7 @@ static GcBlk *gc_new_small(int atomic, unsigned c) {
 // slots of the block as it is handed out, so with threads running the bit
 // is set in one instruction (a plain one could lose their frees).
 static inline void gc_setbit(uint64_t *w, uint64_t bit) {
-  if (UNLIKELY(gc_hot.rc & gc_hot.mt)) __atomic_fetch_or(w, bit, __ATOMIC_RELAXED);
+  if (UNLIKELY(gc_hot.rcmt)) __atomic_fetch_or(w, bit, __ATOMIC_RELAXED);
   else *w |= bit;
 }
 
@@ -1662,6 +1663,30 @@ static inline V F_Map_dbit(V key, V pos) {
 }
 #endif
 
+// String.cmp(a, b) and String.eq(a, b), by code point. Base's String.cmp
+// rebuilds both strings to hand them back, which copies a shared string
+// (and, counted, frees the copy right after: String.eq drops it); here
+// the strings themselves go back, and String.eq drops them.
+#ifdef BEND_NATIVE_STR
+static inline V str_cmp(V a, V b) {
+  for (;;) {
+    if (a == SNIL) return b == SNIL ? IMM(1) : IMM(0);
+    if (b == SNIL) return IMM(2);
+    uint32_t x = (uint32_t)((V *)a)[1], y = (uint32_t)((V *)b)[1];
+    if (x != y) return x < y ? IMM(0) : IMM(2);
+    a = ((V *)a)[2];
+    b = ((V *)b)[2];
+  }
+}
+static inline V F_String_dcmp(V a, V b) { return C2(0, C2(0, a, b), str_cmp(a, b)); }
+static inline V F_String_deq(V a, V b) {
+  V r = BOOL(str_cmp(a, b) == IMM(1));
+  bend_drop(a);
+  bend_drop(b);
+  return r;
+}
+#endif
+
 // Natives: U32
 // ------------
 
@@ -1955,6 +1980,7 @@ static void par_start(void) {
   if (!atomic_load(&par_started)) {
     gc_mt = 1;
     gc_hot.mt = 1;
+    gc_hot.rcmt = gc_hot.rc;
     for (int i = 1; i < par_nthreads; i++) {
       pthread_attr_t attr;
       pthread_attr_init(&attr);

@@ -138,7 +138,7 @@ void gc_init(void) {
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
-  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req};
+  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -816,6 +816,8 @@ V F_Nat_dshow(V a) {
 }
 #ifdef BEND_NATIVE_MAP_BIT
 #endif
+#ifdef BEND_NATIVE_STR
+#endif
 #define U(x) ((uint32_t)(x))
 #define F2(name, expr) static inline V F_F32_d##name(V a, V b) { float x = FV(a), y = FV(b); return expr; }
 #define F1(name, expr) static inline V F_F32_d##name(V a) { float x = FV(a); return expr; }
@@ -963,6 +965,7 @@ void par_start(void) {
   if (!atomic_load(&par_started)) {
     gc_mt = 1;
     gc_hot.mt = 1;
+    gc_hot.rcmt = gc_hot.rc;
     for (int i = 1; i < par_nthreads; i++) {
       pthread_attr_t attr;
       pthread_attr_init(&attr);
