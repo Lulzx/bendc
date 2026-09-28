@@ -255,7 +255,9 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
      goes into them. A match on a known constructor or literal takes the first case whose patterns
      match, and stops at one that may not. Lets float out of matches and applications. A match on
      a match whose cases all end in constructors goes into those cases (case of case), when the
-     copies are small. An applied lambda becomes a let. Parallel lets stay parallel.
+     copies are small. An applied lambda becomes a let. Parallel lets stay parallel. A comparison
+     of literals folds, and a comparison of a match whose cases give literals goes into the cases
+     (`U32.is_zero(b2u(c))` is a match on `c`).
    - `p` specializes a higher-order def. A call that passes a closed function (a lambda with no
      free variables, as every `~f` template argument is, or a def's name) for a parameter the
      callee passes unchanged to its own calls calls a copy instead. In the copy the function takes
@@ -270,8 +272,16 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
      Fused defs that nothing calls are dropped.
 
    [`OPT.bend`](OPT.bend) states these rewrites as laws on the instances the optimizer meets
-   (map/map, foldr/map, foldl/map, length/map, a fused consumer, a specialized copy, case of case)
-   and proves each by induction. Both checkers verify it in CI.
+   (map/map, foldr/map, foldl/map, length/map, a fused consumer, a specialized copy, case of case,
+   a folded comparison) and proves each by induction. Both checkers verify it in CI. These are laws
+   about instances, not a proof that the passes on `Core.Tm` preserve meaning.
+
+   Instructions (single thread) with each pass added, bendc building itself and checking itself:
+   none 12.3G / 26.1G; `i..` 9.2G / 20.7G; `i..s` 9.3G / 20.1G; `i..sp` 8.0G / 20.1G;
+   `i..spf` 8.0G / 20.1G. Its C grows 2.6%. On `bench/pipe.bend` the passes take 47.9G to 8.2G
+   (specialization to 19.7G, fusion the rest). On the official benchmarks the instruction counts
+   stay within 1%, except kmeans, where inlining small defs into a loop with many live values
+   makes clang spill: 12% more instructions, about 5% more time.
 6. **Code generation.** A state monad threads fresh names, emitted C, references and errors through
    the generator. Only defs reachable from `main` are emitted.
    - Each def becomes a C function, and self tail calls become `goto` loops.
