@@ -12792,7 +12792,10 @@ def Gen.gpu.tail(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> String:
 # IR's semantics); Inl inlines monadic binds; Core.Tm.red makes each lambda
 # applied to one argument a let (REDPROOF.bend proves that this preserves
 # the semantics too); Core.Tm.known resolves each match on a known
-# constructor (KNOWNPROOF.bend); Up raises the result back to an Expr.
+# constructor (KNOWNPROOF.bend); Core.Tm.lit puts the numbers lets bind in
+# the place of their variables' lookups (LITPROOF.bend); Core.Tm.dead drops
+# lets of variables no lookup reaches (DEADPROOF.bend); Up raises the
+# result back to an Expr.
 
 def Lo.pt.push(a: Core.Pt, p: Core.Pt) -> Core.Pt:
   match p:
@@ -13077,8 +13080,10 @@ def Up.def(d: Core.Def) -> Decl:
 # callee's body, renamed apart and inlined in turn, takes each argument in
 # place of its parameter when that moves no work into a lambda (else a let
 # binds it), and each place an argument lands is reduced: an applied lambda
-# becomes a let, and a let of a known constructor takes its fields (a match
-# of one is Core.Tm.known's, after the inliner).
+# becomes a let, and a let of a known constructor takes its fields, as a
+# match on them with one case (they are evaluated before any is bound, so
+# none sees another's name; a match of one is Core.Tm.known's, after the
+# inliner).
 # A do block becomes one closure. The callee's names are fresh (a suffix
 # per depth), so no substitution captures, and each expansion walks only
 # the callee's body: the pass is linear in the program.
@@ -13344,17 +13349,6 @@ def Inl.pars.len(ps: List<&2, Core.Par>) -> Nat:
       1n+Inl.pars.len(r)
 
 # Lets binding each pattern to its term, around b.
-def Inl.lets(ps: List<&2, Core.Pt>, ts: List<&2, Core.Tm>, b: Core.Tm) -> Core.Tm:
-  match ps:
-    case Nil{}:
-      b
-    case p <> pr:
-      match ts:
-        case Nil{}:
-          b
-        case t <> tr:
-          Core.CLet{p, t, Inl.lets(pr, tr, b)}
-
 def Inl.hit(+d: Core.Def, +f: String, +as: List<&2, Core.Arg>) -> Bool:
   match d:
     case Core.Def{+name, ps, b, ret}:
@@ -13539,7 +13533,7 @@ def Inl.go(+n: Nat, +c: Map<&2, Core.Def>, mode: IM, +t: Core.Tm) -> Core.Tm:
                   match v:
                     case Core.CCtr{+k2, +as}:
                       Bool.pick(Unit -> Core.Tm, Bool.and(Bool.and(String.eq(k, k2), Bool.not(String.eq(k, "%par"))), Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as))),
-                        u => Inl.lets(qs, as, b),
+                        u => Core.CMat{as, [Core.CCse{qs, b}]},
                         u => Core.CLet{Core.PtCtr{k, qs}, Core.CCtr{k2, as}, b})(Unit{})
                     case other:
                       Core.CLet{Core.PtCtr{k, qs}, other, b}
@@ -13786,7 +13780,7 @@ def Opt.ctx(+flags: String, +names: Set(), +rank: Map<&2, U32>, ds: List<&2, OD>
 def Opt.inl(+c: Map<&2, Core.Def>, d: OD) -> OD:
   match d:
     case OCore{cd}:
-      OCore{Core.Def.known(Core.Def.red(Inl.def(c, cd)))}
+      OCore{Core.Def.dead(Core.Def.lit(Core.Def.known(Core.Def.red(Inl.def(c, cd)))))}
     case OKeep{k}:
       OKeep{k}
 

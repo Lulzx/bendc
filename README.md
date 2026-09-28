@@ -261,16 +261,37 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    fail keeps the match, since its case can move on to the next. [`KNOWNPROOF.bend`](KNOWNPROOF.bend)
    proves the law in [`KNOWN.bend`](KNOWN.bend), `known_ok` (and `known_prog`), stated as
    `red_ok` is, with the same assumptions; the resolved match takes no more steps than the source,
-   and in one program the two give the same result (`K.mat`). The proven functions are the ones
-   bendc runs; the inliner no longer resolves matches itself. The inliner's own rules (the
-   substitution of arguments, a `let` of a known constructor, applications of more than one
+   and in one program the two give the same result (`K.mat`). Last, `Core.Def.dead` drops each
+   `let` of a variable that no lookup in its body reaches (none, or each one past a nearer binding
+   of the name), which makes the generated C of bendc 0.9% smaller.
+   [`DEADPROOF.bend`](DEADPROOF.bend) proves the law in [`DEAD.bend`](DEAD.bend). The two programs
+   do not give the same values here: a closure made past a dropped let lacks that binding in its
+   scope. So `dead_ok` relates states and results instead: values are related when they are the
+   same with the pass taken, except that a closure's scope may lack bindings no lookup of its body
+   reaches. From related states, with as much fuel or more, the program without dead lets gives a
+   related result, unless the source fails (the dropped value may have been the one to fail or
+   run out of fuel). `dead_prog` says that when `main`'s result holds no closure (and is not a
+   failure), the program without dead lets gives exactly that result with the pass taken. The
+   dropped let's steps are the source's alone, so the proof follows the source's fuel and lets the
+   other program wait at the let's body. Before dropping dead lets, `Core.Def.lit` puts a number (a
+   `U32`, `I32`, `Nat` or `F32` literal) in place of each lookup of a variable let-bound to it,
+   unless a nearer binding of the name hides it; the let is then dead.
+   [`LITPROOF.bend`](LITPROOF.bend) proves the law in [`LIT.bend`](LIT.bend), `lit_ok` (and
+   `lit_prog`), stated as `dead_ok` is (a source that fails is related to anything). A closure made
+   past a substituted let keeps the binding in its scope, but its body no longer looks it up, so
+   values are related when the pass, run with the lets known at the closure (a list of names, each
+   with its number or none), takes one body to the other, and the scope holds those bindings. The
+   let is taken as a relation step rather than by running the source ahead. The proven functions
+   are the ones bendc runs; the inliner no longer resolves matches itself. The inliner's own rules
+   (the substitution of arguments, a `let` of a known constructor, applications of more than one
    argument) are not proven, nor are lowering, raising back to an `Expr`, or code generation. Both
-   checkers verify the three proofs in CI.
+   checkers verify the five proofs in CI.
 
    Then the optimizer (`Opt` in `bendc.bend`) works on the whole program in the core IR. The
-   inlining of monadic binds, `Core.Def.red` and `Core.Def.known` always run first, on every def;
-   the passes below come after, and their own case of a known constructor or literal resolves what
-   the proven one leaves (literal patterns, nested patterns, matches that inlining exposes).
+   inlining of monadic binds, `Core.Def.red`, `Core.Def.known`, `Core.Def.lit` and `Core.Def.dead`
+   always run first, on every def; the passes below come after, and their own case of a known
+   constructor or literal resolves what the proven ones leave (literal patterns, nested patterns,
+   matches that inlining exposes).
    `BEND_OPT` names its passes by letter: the default is `i..spf`, and `BEND_OPT=` turns it off.
    - `i` inlines small defs: a body of size at most 4 plus 2 per `.` (8 for `i..`) that calls only
      defs declared before it (so inlining ends), and is neither native nor `IO`. Most of the gain
@@ -685,6 +706,8 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`LAWS.bend`](LAWS.bend), [`PROOF.bend`](PROOF.bend) | the law that erasure preserves the core IR's semantics, and its proof (induction on the fuel, one case per step) |
 | [`RED.bend`](RED.bend), [`REDPROOF.bend`](REDPROOF.bend) | the law that reducing applied lambdas to lets (`Core.Def.red`) preserves the core IR's semantics, and its proof |
 | [`KNOWN.bend`](KNOWN.bend), [`KNOWNPROOF.bend`](KNOWNPROOF.bend) | the law that resolving matches on known constructors (`Core.Def.known`) preserves the core IR's semantics, and its proof |
+| [`DEAD.bend`](DEAD.bend), [`DEADPROOF.bend`](DEADPROOF.bend) | the law that dropping dead lets (`Core.Def.dead`) gives related results (equal ones without closures), and its proof |
+| [`LIT.bend`](LIT.bend), [`LITPROOF.bend`](LITPROOF.bend) | the law that putting let-bound numbers in place of their lookups (`Core.Def.lit`) gives related results (equal ones without closures), and its proof |
 | [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, arrays, native `Nat`, `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
 | [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the kernel cache, the simulator, copying results back |
 | [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
