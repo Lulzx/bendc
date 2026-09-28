@@ -13991,6 +13991,35 @@ def N.lregs(os: List<&2, NO>, +r: U32) -> As.Code:
     case o <> t:
       As.CCat{N.lo(o, r), N.lregs(t, U32.inc(r))}
 
+# The index of the last operand computed into its own slot (slot base + i),
+# or n when there is none.
+def N.lastc(os: List<&2, NO>, +base: U32, +i: U32, +j: U32) -> U32:
+  match os:
+    case Nil{}:
+      j
+    case o <> t:
+      match o:
+        case NOS{+s}:
+          N.lastc(t, base, U32.inc(i), Bool.pick(U32, U32.is_eq(s, (base + i : U32)), i, j))
+        case NOK{k}:
+          N.lastc(t, base, U32.inc(i), j)
+
+# Operands into registers r, r + 1, ..., but not the one for register j.
+def N.lregs.skip(os: List<&2, NO>, +r: U32, +j: U32) -> As.Code:
+  match os:
+    case Nil{}:
+      As.CNil{}
+    case o <> t:
+      As.CCat{Bool.pick(As.Code, U32.is_eq(r, j), As.CNil{}, N.lo(o, r)), N.lregs.skip(t, U32.inc(r), j)}
+
+# Operands evaluated from slot base up into x0, x1, ...: the last one
+# computed first, right after the store that ends its code, so that the
+# peephole (As.peep) turns its load into a move.
+def N.lregs.b(+os: List<&2, NO>, +base: U32) -> As.Code:
+  +j = N.lastc(os, base, 0, 4294967295)
+  Bool.pick(As.Code, U32.is_eq(j, 4294967295), N.lregs(os, 0),
+    As.CCat{N.ld(j, (base + j : U32)), N.lregs.skip(os, 0, j)})
+
 # The frame of a function whose slots number max, in bytes (a multiple of 16).
 def N.frame(+max: U32) -> U32:
   (((max * 8 : U32) + 15 : U32) .&. 4294967280 : U32)
@@ -14065,14 +14094,15 @@ def N.str(+s: String) -> NG(As.Code):
     return N.cat([N.dslot.at(d), N.w(As.ldar(9, 0)), N.one(As.IBc{As.cbz(9), slow}), N.w(As.mov(0, 9)),
       N.b(done), N.lab(slow), N.adr(1, l), N.k(2, As.len32(As.bytes(s))), N.call("str_cache"), N.lab(done)])
 
-# A float literal, read once (bn_flt, in rt/native.c, reads as C does).
+# A float literal, read once (bn_flt, in rt/native.c, reads as C does). Its
+# slot holds a number, not a pointer, so a plain load will do.
 def N.flt(s: String) -> NG(As.Code):
   do NG<As.Code>:
     +d : U32 <- N.dslot()
     +l : String <- N.cstr(s)
     +slow : String <- N.label()
     +done : String <- N.label()
-    return N.cat([N.dslot.at(d), N.w(As.ldar(9, 0)), N.one(As.IBc{As.cbz(9), slow}), N.w(As.ubfm(0, 9, 0, 31)),
+    return N.cat([N.dslot.at(d), N.w(As.ldr(9, 0, 0)), N.one(As.IBc{As.cbz(9), slow}), N.w(As.ubfm(0, 9, 0, 31)),
       N.b(done), N.lab(slow), N.adr(1, l), N.call("bn_flt"), N.lab(done)])
 
 # Patterns
@@ -14690,7 +14720,7 @@ def N.ntail(native: Bool, +name: String) -> As.Code:
 # The operands of a call into x0..x7, or (a wide call) into the row from
 # slot base up, whose address goes in x0.
 def N.callops(+os: List<&2, NO>, +base: U32, +n: U32) -> As.Code:
-  Bool.pick(As.Code, U32.is_le(n, 8), N.lregs(os, 0), As.CCat{N.row(os, base), N.addk(0, 31, (base * 8 : U32))})
+  Bool.pick(As.Code, U32.is_le(n, 8), N.lregs.b(os, base), As.CCat{N.row(os, base), N.addk(0, 31, (base * 8 : U32))})
 
 def N.fin(t: NT) -> As.Code:
   match t:
@@ -14741,7 +14771,7 @@ def N.copy(k: Nat, +from: U32, +to: U32) -> As.Code:
 # The new arguments of a tail call to itself over the parameters: through
 # registers, or (past 8) through the temporaries.
 def N.tail.move(+os: List<&2, NO>, +base: U32, +n: U32) -> As.Code:
-  Bool.pick(As.Code, U32.is_le(n, 8), As.CCat{N.lregs(os, 0), N.params.in(U32.to_nat(n), 0, False{})},
+  Bool.pick(As.Code, U32.is_le(n, 8), As.CCat{N.lregs.b(os, base), N.params.in(U32.to_nat(n), 0, False{})},
     As.CCat{N.row(os, base), N.copy(U32.to_nat(n), base, 0)})
 
 # A constructor's value from its fields' operands, by kind (see G.ctor_kind).
@@ -15122,7 +15152,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
                 N.ref(name)
                 +base : U32 <- N.slots(n)
                 a : As.Code <- N.rec(fu, NSArgs{g, env, kept, base})
-                return N.cat([a, N.lregs(N.ops(env, kept, base), 0), N.ntail(U32.is_eq(kind, 2), name)])
+                return N.cat([a, N.lregs.b(N.ops(env, kept, base), base), N.ntail(U32.is_eq(kind, 2), name)])
         case NSTailCall{+g, +env, +name, +args, ok}:
           match ok:
             case True{}:

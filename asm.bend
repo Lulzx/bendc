@@ -675,7 +675,84 @@ def object.lay(+ins: List<&2, Ins>, +nslots: U32, l: Lay) -> Obj:
   Lay{+m, +ss, size} = l
   object.enc(ss, nslots, enc(ins, 0, m, Enc{Nil{}, Nil{}, Nil{}}))
 
+# Peephole
+# ========
+#
+# A reload right after a store to the same frame slot (str rt, [sp, #k];
+# ldr ru, [sp, #k]) is dropped when ru is rt, else it becomes mov ru, rt.
+# Labels are instructions of their own, so nothing jumps between the two.
+
+def peep.hit(+s: U32, +l: U32) -> Bool:
+  Bool.and(U32.is_eq((s .&. 4290773984 : U32), 4177527776),
+    Bool.and(U32.is_eq((l .&. 4290773984 : U32), 4181722080),
+      U32.is_eq((s .&. 4193280 : U32), (l .&. 4193280 : U32))))
+
+def peep.ps(+l: U32, +s: U32, +r: List<&2, Ins>) -> List<&2, Ins>:
+  Bool.pick(List<&2, Ins>, peep.hit(s, l),
+    Bool.pick(List<&2, Ins>, U32.is_eq((s .&. 31 : U32), (l .&. 31 : U32)), IW{s} <> r,
+      IW{mov((l .&. 31 : U32), (s .&. 31 : U32))} <> IW{s} <> r),
+    IW{l} <> IW{s} <> r)
+
+def peep.pa(+l: U32, a: Ins, r: List<&2, Ins>) -> List<&2, Ins>:
+  match a:
+    case IW{s}:
+      peep.ps(l, s, r)
+    case ILab{x}:
+      IW{l} <> ILab{x} <> r
+    case ISym{x, e}:
+      IW{l} <> ISym{x, e} <> r
+    case IB{w, x}:
+      IW{l} <> IB{w, x} <> r
+    case IBc{w, x}:
+      IW{l} <> IBc{w, x} <> r
+    case IBt{w, x}:
+      IW{l} <> IBt{w, x} <> r
+    case IAdr{d, x}:
+      IW{l} <> IAdr{d, x} <> r
+    case ICall{w, x}:
+      IW{l} <> ICall{w, x} <> r
+    case IAdrS{d, x}:
+      IW{l} <> IAdrS{d, x} <> r
+
+def peep.pw(+l: U32, acc: List<&2, Ins>) -> List<&2, Ins>:
+  match acc:
+    case Nil{}:
+      [IW{l}]
+    case a <> r:
+      peep.pa(l, a, r)
+
+def peep.push(h: Ins, acc: List<&2, Ins>) -> List<&2, Ins>:
+  match h:
+    case IW{l}:
+      peep.pw(l, acc)
+    case ILab{x}:
+      ILab{x} <> acc
+    case ISym{x, e}:
+      ISym{x, e} <> acc
+    case IB{w, x}:
+      IB{w, x} <> acc
+    case IBc{w, x}:
+      IBc{w, x} <> acc
+    case IBt{w, x}:
+      IBt{w, x} <> acc
+    case IAdr{d, x}:
+      IAdr{d, x} <> acc
+    case ICall{w, x}:
+      ICall{w, x} <> acc
+    case IAdrS{d, x}:
+      IAdrS{d, x} <> acc
+
+def peep.go(xs: List<&2, Ins>, acc: List<&2, Ins>) -> List<&2, Ins>:
+  match xs:
+    case Nil{}:
+      List.reverse(&2, Ins, acc)
+    case h <> t:
+      peep.go(t, peep.push(h, acc))
+
+def peep(xs: List<&2, Ins>) -> List<&2, Ins>:
+  peep.go(xs, Nil{})
+
 # The object file for code with nslots data slots.
 def object(c: Code, +nslots: U32) -> Obj:
-  +ins = Code.flat(c)
+  +ins = peep(Code.flat(c))
   object.lay(ins, nslots, lay(ins, 0, Map.new(&2, U32), Nil{}))
