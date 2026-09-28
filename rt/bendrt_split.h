@@ -111,8 +111,13 @@ static inline V TAG(V v) {
   }
   return t & ~BEND_SH_BITS;
 }
+#define IS_N(v, t) (!((v) & 1) && TAG(v) == (t))
 #else
 static inline V TAG(V v) { return (v & 1) ? (v >> 3) : ((V *)v)[0] & ~BEND_SH_BITS; }
+// A match's test for a constructor with fields: an immediate (a nullary
+// constructor) never is one, and a node's tag word is loaded without a
+// select, so a match's cases share one load.
+static inline int IS_N(V v, V t) { return !(v & 1) && (((V *)v)[0] & ~BEND_SH_BITS) == t; }
 #endif
 
 __attribute__((noreturn)) void bend_fail(const char *msg);
@@ -263,8 +268,24 @@ void tls_init(void);
 TlsSlots *tls_get(void);
 #define thr_self (*(Thr **)&tls_get()->self)
 #define par_depth (tls_get()->par_depth)
+#define thr_set(t) (thr_self = (t))
+#elif defined(__APPLE__) && defined(__aarch64__)
+// A Mach-O thread-local is reached through a call (every allocation reads
+// thr_self); a pthread key's slot is one load off the thread's TSD base,
+// which is what pthread_getspecific reads.
+// (The key is made before main: a thread not registered reads NULL.)
+extern pthread_key_t thr_key;
+__attribute__((constructor)) void thr_key_init(void);
+static inline Thr *thr_get(void) {
+  uintptr_t tsd;
+  __asm__("mrs %0, tpidrro_el0" : "=r"(tsd));
+  return ((Thr **)(tsd & ~(uintptr_t)7))[thr_key];
+}
+#define thr_self (thr_get())
+#define thr_set(t) pthread_setspecific(thr_key, (t))
 #else
 extern __thread Thr *thr_self;
+#define thr_set(t) (thr_self = (t))
 #endif
 
 typedef struct { V *p; size_t n; } GcItem;

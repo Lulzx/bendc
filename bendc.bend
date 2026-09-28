@@ -4198,7 +4198,7 @@ def Gen.pat.go(
                     case 0n:
                       Gen.pat.go(PCtor{name, Nil{}}, 0n, g, path, 0, None{}, 0n,
                         Gen.pat.node(False{}, ar, path,
-                          Gen.pat.tag(single, "TAG(" ++ path ++ ") == " ++ U32.show(tag), r)))
+                          Gen.pat.tag(single, "IS_N(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)))
                     case 1n:
                       Gen.pat.tag(single, "(" ++ path ++ ") == IMM(" ++ U32.show(tag) ++ ")", r)
                     case 2n:
@@ -4249,7 +4249,7 @@ def Gen.pat.go(
                     case 0n:
                       Gen.pat.go(PCtor{name, [a]}, 0n, g, path, 0, None{}, 0n,
                         Gen.pat.node(True{}, ar, path,
-                          Gen.pat.tag(single, "TAG(" ++ path ++ ") == " ++ U32.show(tag), r)))
+                          Gen.pat.tag(single, "IS_N(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)))
                     case 1n:
                       Gen.pat.tag(single, "(" ++ path ++ ") == IMM(" ++ U32.show(tag) ++ ")", r)
                     case 2n:
@@ -4300,7 +4300,7 @@ def Gen.pat.go(
                     case 0n:
                       Gen.pat.go(PCtor{name, [a, b]}, 0n, g, path, 0, None{}, 0n,
                         Gen.pat.node(True{}, ar, path,
-                          Gen.pat.tag(single, "TAG(" ++ path ++ ") == " ++ U32.show(tag), r)))
+                          Gen.pat.tag(single, "IS_N(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)))
                     case 1n:
                       Gen.pat.tag(single, "(" ++ path ++ ") == IMM(" ++ U32.show(tag) ++ ")", r)
                     case 2n:
@@ -4354,7 +4354,7 @@ def Gen.pat.go(
                     case 0n:
                       Gen.pat.go(PCtor{name, h <> t}, 0n, g, path, 0, None{}, 0n,
                         Gen.pat.node(True{}, ar, path,
-                          Gen.pat.tag(single, "TAG(" ++ path ++ ") == " ++ U32.show(tag), r)))
+                          Gen.pat.tag(single, "IS_N(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)))
                     case 1n:
                       Gen.pat.tag(single, "(" ++ path ++ ") == IMM(" ++ U32.show(tag) ++ ")", r)
                     case 2n:

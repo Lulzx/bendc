@@ -39,6 +39,7 @@ void bend_debug_show(uint64_t n) {
   fprintf(stderr, "freed from:\n");
   backtrace_symbols_fd(bend_debug_stk[n], k, 2);
 }
+#define IS_N(v, t) (!((v) & 1) && TAG(v) == (t))
 #else
 #endif
 __attribute__((noreturn)) void bend_fail(const char *msg) {
@@ -113,8 +114,15 @@ TlsSlots *tls_get(void) {
 }
 #define thr_self (*(Thr **)&tls_get()->self)
 #define par_depth (tls_get()->par_depth)
+#define thr_set(t) (thr_self = (t))
+#elif defined(__APPLE__) && defined(__aarch64__)
+pthread_key_t thr_key;
+__attribute__((constructor)) void thr_key_init(void) { pthread_key_create(&thr_key, NULL); }
+#define thr_self (thr_get())
+#define thr_set(t) pthread_setspecific(thr_key, (t))
 #else
 __thread Thr *thr_self;
+#define thr_set(t) (thr_self = (t))
 #endif
 GcItem *gc_stk;
 uint8_t *gc_dirty;
@@ -583,7 +591,7 @@ void thr_register(uintptr_t top) {
   t->live = 1;
   t->rng = (uint32_t)(uintptr_t)t ^ 0x9e3779b9u;
   t->dq = pdq_new();
-  thr_self = t;
+  thr_set(t);
   pthread_mutex_lock(&gc_lock);
   if (gc_nthr == GC_MAXTHR) bend_fail("too many threads");
   gc_thrs[gc_nthr] = t;
