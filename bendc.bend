@@ -16028,6 +16028,10 @@ def N.ra.cross(+st: NRa) -> U32:
   NRa{m, ch, ig, cross, v} = st
   cross
 
+def N.ra.m(st: NRa) -> Map<&2, U32>:
+  NRa{m, ch, ig, cross, v} = st
+  m
+
 # The registers live after an instruction of kind k: out after it in
 # order, lab at its label, raw at its offset.
 def N.ra.succ(+k: U32, +out: U32, +lab: U32, +raw: U32) -> U32:
@@ -16061,17 +16065,17 @@ def N.ra.note(+d: U32, +s: U32, call: Bool, st: NRa) -> NRa:
 
 # One backward pass over the code (reversed): out, the registers live after
 # the instruction.
-def N.ra.pass(us: List<&2, As.Use>, +out: U32, +win: List<&2, U32>, +st: NRa) -> NRa:
+def N.ra.pass(us: List<&2, As.Use>, +tr: U32, +out: U32, +win: List<&2, U32>, +st: NRa) -> NRa:
   match us:
     case Nil{}:
       st
     case As.Use{+d, +u, +kind, +l, +off, +n} <> +t:
       +st1 = N.ra.look(kind, l, st)
       +s = N.ra.succ(kind, out, N.ra.v(st1), N.ra.at(win, off))
-      +live = (((s .&. (d .^. 4294967295 : U32) : U32) .|. u : U32) .&. N.ra.slots() : U32)
+      +live = (((s .&. (d .^. 4294967295 : U32) : U32) .|. u : U32) .&. tr : U32)
       Bool.pick(Unit -> NRa, U32.is_eq(kind, 8),
-        z => N.ra.pass(t, out, win, N.ra.label(l, out, st)),
-        z => N.ra.pass(t, live, N.ra.win(live, n, win), N.ra.note(d, s, U32.is_eq(kind, 1), st1)))(Unit{})
+        z => N.ra.pass(t, tr, out, win, N.ra.label(l, out, st)),
+        z => N.ra.pass(t, tr, live, N.ra.win(live, n, win), N.ra.note(d, s, U32.is_eq(kind, 1), st1)))(Unit{})
 
 def N.ra.zeros(k: Nat) -> List<&2, U32>:
   match k:
@@ -16085,13 +16089,13 @@ def N.ra.reset(st: NRa) -> NRa:
   NRa{m, False{}, N.ra.zeros(10n), 0, 0}
 
 # Passes until no label's set changes (None past k of them).
-def N.ra.live(k: Nat, +us: List<&2, As.Use>, st: NRa) -> Maybe<&2, NRa>:
+def N.ra.live(k: Nat, +tr: U32, +us: List<&2, As.Use>, st: NRa) -> Maybe<&2, NRa>:
   match k:
     case 0n:
       None{}
     case 1n+j:
-      +r = N.ra.pass(us, 0, Nil{}, N.ra.reset(st))
-      Bool.pick(Unit -> Maybe<&2, NRa>, N.ra.ch(r), z => N.ra.live(j, us, r), z => Some{r})(Unit{})
+      +r = N.ra.pass(us, tr, 0, Nil{}, N.ra.reset(st))
+      Bool.pick(Unit -> Maybe<&2, NRa>, N.ra.ch(r), z => N.ra.live(j, tr, us, r), z => Some{r})(Unit{})
 
 # The instructions as uses, reversed; whether one cannot be followed; the
 # registers named.
@@ -16161,39 +16165,410 @@ def N.ra.top(cs: List<&2, U32>, +i: U32, +named: U32, +acc: U32) -> U32:
       N.ra.top(t, U32.inc(i), named, Bool.pick(U32,
         Bool.and(As.du.bit(named, As.reg.bit((19 + i : U32))), U32.is_ge(c, 19)), U32.max(acc, (c - 18 : U32)), acc))
 
-def N.ra.ren(ins: List<&2, As.Ins>, +cs: List<&2, U32>) -> As.Code:
+def N.ra.ren(ins: List<&2, As.Ins>, +cs: List<&2, U32>) -> List<&2, As.Ins>:
   match ins:
     case Nil{}:
-      As.CNil{}
+      Nil{}
     case i <> t:
-      As.CCat{As.COne{As.ren(i, 19, cs)}, N.ra.ren(t, cs)}
+      As.ren(i, 19, cs) <> N.ra.ren(t, cs)
 
-def N.ra.fin(+ins: List<&2, As.Ins>, +named: U32, +max: U32, r: Maybe<&2, NRa>) -> As.Code & U32:
+def N.ra.fin(+ins: List<&2, As.Ins>, +named: U32, +max: U32, r: Maybe<&2, NRa>) -> List<&2, As.Ins> & U32:
   match r:
     case None{}:
-      (N.ra.ren(ins, Nil{}), N.pairs(max))
+      (ins, N.pairs(max))
     case Some{+st}:
       +cs = N.ra.colors(10n, 0, N.ra.igs(st), N.ra.cross(st), (named .&. N.ra.slots() : U32),
         U32.is_zero((named .&. N.ra.free() : U32)), Nil{})
       (N.ra.ren(ins, cs), (U32.inc(N.ra.top(cs, 0, named, 0)) >> 1n : U32))
 
-# A function's body with its registers given, and the pairs of x19.. its
-# prologue saves.
-def N.ra(body: As.Code, +max: U32) -> As.Code & U32:
-  +ins = As.Code.flat(body)
+# Branches by offset (N.tag's, the share guard's, the fused multiply's) as
+# branches to labels (the function's name, .r and the word they reach), so
+# that N.ra and N.sw follow them as any other.
+def N.ra.none() -> U32:
+  4294967295
+
+def N.ra.tgt(i: As.Ins, +pc: U32) -> U32:
+  match i:
+    case As.IW{+w}:
+      Bool.pick(U32, As.du.bit(As.du(w), 3072), (pc + As.du.off(w) : U32), N.ra.none())
+    case other:
+      N.ra.none()
+
+def N.ra.pc(+i: As.Ins, +pc: U32) -> U32:
+  (pc + (As.Ins.size(i) >> 2n : U32) : U32)
+
+def N.ra.tgts(ins: List<&2, As.Ins>, +pc: U32, +acc: List<&2, U32>) -> List<&2, U32>:
+  match ins:
+    case Nil{}:
+      acc
+    case +i <> t:
+      +x = N.ra.tgt(i, pc)
+      N.ra.tgts(t, N.ra.pc(i, pc), Bool.pick(List<&2, U32>, U32.is_eq(x, N.ra.none()), acc, x <> acc))
+
+def N.ra.has(xs: List<&2, U32>, +x: U32) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case y <> t:
+      Bool.or(U32.is_eq(y, x), N.ra.has(t, x))
+
+def N.ra.lab(+name: String, +q: U32) -> String:
+  name ++ ".r" ++ U32.show(q)
+
+def N.ra.conv1(i: As.Ins, +pc: U32, +name: String) -> As.Ins:
+  match i:
+    case As.IW{+w}:
+      +x = As.du(w)
+      +l = N.ra.lab(name, (pc + As.du.off(w) : U32))
+      Bool.pick(As.Ins, As.du.bit(x, 2048), As.IB{(w .&. 4227858432 : U32), l},
+        Bool.pick(As.Ins, As.du.bit(x, 1024),
+          Bool.pick(As.Ins, As.du.is(w, 2113929216, 905969664), As.IBt{(w .&. 4294443039 : U32), l},
+            As.IBc{(w .&. 4278190111 : U32), l}),
+          As.IW{w}))
+    case other:
+      other
+
+def N.ra.conv(ins: List<&2, As.Ins>, +pc: U32, +tg: List<&2, U32>, +name: String) -> List<&2, As.Ins>:
+  match ins:
+    case Nil{}:
+      Nil{}
+    case +i <> t:
+      +rest = {N.ra.conv1(i, pc, name) <> N.ra.conv(t, N.ra.pc(i, pc), tg, name) : List<&2, As.Ins>}
+      Bool.pick(List<&2, As.Ins>, Bool.and(U32.is_ne(As.Ins.size(i), 0), N.ra.has(tg, pc)),
+        As.ILab{N.ra.lab(name, pc)} <> rest, rest)
+
+def N.ra.go(+ins: List<&2, As.Ins>, +max: U32) -> List<&2, As.Ins> & U32:
   +us = N.ra.uses(ins, Nil{})
   N.ra.fin(ins, N.ra.named(us, 0), max, Bool.pick(Unit -> Maybe<&2, NRa>, N.ra.bad(us), z => None{},
-    z => N.ra.live(8n, us, NRa{Map.new(&2, U32), False{}, Nil{}, 0, 0}))(Unit{}))
+    z => N.ra.live(8n, N.ra.slots(), us, NRa{Map.new(&2, U32), False{}, Nil{}, 0, 0}))(Unit{}))
 
-def N.func.ra(+name: String, +max: U32, +fp: Bool, r: As.Code & U32) -> As.Code:
-  (body, +np) = r
-  N.cat([N.one(As.ISym{name, False{}}), N.prologue.fp(max, np, fp), N.fix.fp(body, np, fp)])
+# A function's body with its registers given, and the pairs of x19.. its
+# prologue saves.
+def N.ra(+name: String, body: As.Code, +max: U32) -> List<&2, As.Ins> & U32:
+  +ins = As.Code.flat(body)
+  +tg = N.ra.tgts(ins, 0, Nil{})
+  N.ra.go(Bool.pick(List<&2, As.Ins>, List.is_empty(&2, U32, tg), ins, N.ra.conv(ins, 0, tg, name)), max)
+
+# Shrink-wrapping
+# ---------------
+#
+# A function with a path from its entry to a return (or a tail call) that
+# calls nothing and touches no frame slot, as forks's case 0n, gets that
+# path first, without the frame: its callee-saved registers renamed to
+# scratch ones it does not use, and every branch off it going to the whole
+# function after it (at label full), which starts over. So a branch may
+# leave the path only while the arguments (x0..x8) are as they came and
+# nothing is stored (clean). N.sw.walk tries the branches' next
+# instruction first, then their label.
+
+def N.use.d(+u: As.Use) -> U32:
+  As.Use{d, uu, k, l, off, n} = u
+  d
+
+def N.use.kind(+u: As.Use) -> U32:
+  As.Use{d, uu, k, l, off, n} = u
+  k
+
+def N.use.u(+u: As.Use) -> U32:
+  As.Use{d, uu, k, l, off, n} = u
+  uu
+
+def N.use.regs(+u: As.Use) -> U32:
+  As.Use{d, uu, k, l, off, n} = u
+  (d .|. uu : U32)
+
+# A conditional branch the other way (b.cond, cbz and cbnz, tbz and tbnz).
+def N.sw.inv(+w: U32) -> U32:
+  Bool.pick(U32, As.du.is(w, 4278190096, 1409286144), (w .^. 1 : U32), (w .^. 16777216 : U32))
+
+def N.sw.label(+labs: Map<&2, List<&2, As.Ins>>, +l: String) -> Maybe<&2, List<&2, As.Ins>>:
+  Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, Pair.snd(Map<&2, List<&2, As.Ins>>, Bool, Map.has(&2, List<&2, As.Ins>, labs, l)),
+    z => Some{Pair.snd(Map<&2, List<&2, As.Ins>>, List<&2, As.Ins>, Map.get(List<&2, As.Ins>, Nil{}, labs, l))},
+    z => None{})(Unit{})
+
+def N.sw.done(+path: List<&2, As.Ins>) -> Maybe<&2, List<&2, As.Ins>>:
+  Some{List.reverse(&2, As.Ins, path)}
+
+def N.sw.or(+a: Maybe<&2, List<&2, As.Ins>>, b: Unit -> Maybe<&2, List<&2, As.Ins>>) -> Maybe<&2, List<&2, As.Ins>>:
+  Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, Maybe.is_some(&2, List<&2, As.Ins>, a), z => a, b)(Unit{})
+
+# Whether a word keeps the path clean: no store, nothing written to x0..x8.
+def N.sw.clean(+w: U32, +d: U32) -> Bool:
+  Bool.and(Bool.not(As.mem.st(w)), U32.is_zero((d .&. 511 : U32)))
+
+def N.sw.walk(k: Nat, ins: List<&2, As.Ins>, +labs: Map<&2, List<&2, As.Ins>>, +path: List<&2, As.Ins>, +clean: Bool,
+  +full: String
+) -> Maybe<&2, List<&2, As.Ins>>:
+  match k:
+    case 0n:
+      None{}
+    case 1n+ +j:
+      match ins:
+        case Nil{}:
+          None{}
+        case +i <> +t:
+          match i:
+            case As.IW{+w}:
+              +u = As.use.word(w, 0, N.epi.w())
+              +kind = N.use.kind(u)
+              Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, U32.is_eq(w, N.epi.w()),
+                z => N.sw.done(As.IW{As.ret()} <> path),
+                z => Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, U32.is_eq(w, N.pop.w()),
+                  y => N.sw.walk(j, t, labs, path, clean, full),
+                  y => Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, Bool.or(U32.is_ne(kind, 0), As.mem.sp(w)),
+                    x => None{},
+                    x => N.sw.walk(j, t, labs, As.IW{w} <> path, Bool.and(clean, N.sw.clean(w, N.use.d(u))), full))(Unit{}))(
+                  Unit{}))(Unit{})
+            case As.ILab{l}:
+              N.sw.walk(j, t, labs, path, clean, full)
+            case As.ISym{l, e}:
+              None{}
+            case As.IB{+w, +l}:
+              +m = N.sw.label(labs, l)
+              Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, U32.is_eq(w, As.bl()), z => None{},
+                z => Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, Maybe.is_some(&2, List<&2, As.Ins>, m),
+                  y => N.sw.walk(j, Maybe.default(&2, List<&2, As.Ins>, m, Nil{}), labs, path, clean, full),
+                  y => N.sw.done(As.IB{w, l} <> path))(Unit{}))(Unit{})
+            case As.IBc{+w, +l}:
+              Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, clean,
+                z => N.sw.or(N.sw.walk(j, t, labs, As.IBc{w, full} <> path, clean, full),
+                  y => Maybe.bind(&2, List<&2, As.Ins>, List<&2, As.Ins>, N.sw.label(labs, l),
+                    s => N.sw.walk(j, s, labs, As.IBc{N.sw.inv(w), full} <> path, clean, full))),
+                z => None{})(Unit{})
+            case As.IBt{+w, +l}:
+              Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, clean,
+                z => N.sw.or(N.sw.walk(j, t, labs, As.IBt{w, full} <> path, clean, full),
+                  y => Maybe.bind(&2, List<&2, As.Ins>, List<&2, As.Ins>, N.sw.label(labs, l),
+                    s => N.sw.walk(j, s, labs, As.IBt{N.sw.inv(w), full} <> path, clean, full))),
+                z => None{})(Unit{})
+            case As.IAdr{+rd, l}:
+              N.sw.walk(j, t, labs, As.IAdr{rd, l} <> path, Bool.and(clean, U32.is_gt(rd, 8)), full)
+            case As.ICall{+w, s}:
+              Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, U32.is_eq(w, As.bl()), z => None{},
+                z => N.sw.done(As.ICall{w, s} <> path))(Unit{})
+            case As.IAdrS{+rd, s}:
+              N.sw.walk(j, t, labs, As.IAdrS{rd, s} <> path, Bool.and(clean, U32.is_gt(rd, 8)), full)
+
+# Each label with the code from it.
+def N.sw.labs.at(i: As.Ins, t: List<&2, As.Ins>, m: Map<&2, List<&2, As.Ins>>) -> Map<&2, List<&2, As.Ins>>:
+  match i:
+    case As.ILab{l}:
+      Map.set(&2, List<&2, As.Ins>, m, l, t)
+    case other:
+      m
+
+def N.sw.labs(ins: List<&2, As.Ins>, m: Map<&2, List<&2, As.Ins>>) -> Map<&2, List<&2, As.Ins>>:
+  match ins:
+    case Nil{}:
+      m
+    case +i <> +t:
+      N.sw.labs(t, N.sw.labs.at(i, t, m))
+
+def N.sw.regs(ins: List<&2, As.Ins>, +acc: U32) -> U32:
+  match ins:
+    case Nil{}:
+      acc
+    case i <> t:
+      N.sw.regs(t, (acc .|. N.use.regs(As.use(i, 0, N.epi.w())) : U32))
+
+# Registers for x19..x28 on the path: for each it uses, one of x9..x17
+# it does not (99: none left).
+def N.sw.map(k: Nat, +i: U32, +used: U32, +cs: List<&2, U32>) -> List<&2, U32>:
+  match k:
+    case 0n:
+      List.reverse(&2, U32, cs)
+    case 1n+ +j:
+      +c = N.ra.first(9n, 9, used)
+      Bool.pick(Unit -> List<&2, U32>, As.du.bit(used, As.reg.bit((19 + i : U32))),
+        z => N.sw.map(j, U32.inc(i), (used .|. As.reg.bit(c) : U32), c <> cs),
+        z => N.sw.map(j, U32.inc(i), used, (19 + i : U32) <> cs))(Unit{})
+
+def N.sw.ok(cs: List<&2, U32>) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case c <> t:
+      Bool.and(U32.is_lt(c, 99), N.sw.ok(t))
+
+def N.sw.fin(+path: List<&2, As.Ins>) -> Maybe<&2, List<&2, As.Ins>>:
+  +cs = N.sw.map(10n, 0, N.sw.regs(path, 0), Nil{})
+  Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, N.sw.ok(cs), z => Some{N.ra.ren(path, cs)}, z => None{})(Unit{})
+
+# The path, if there is one (not in a def with twins, whose FP registers
+# the path could not keep).
+def N.sw(+ins: List<&2, As.Ins>, +fp: Bool, +full: String) -> Maybe<&2, List<&2, As.Ins>>:
+  Bool.pick(Unit -> Maybe<&2, List<&2, As.Ins>>, fp, z => None{},
+    z => Maybe.bind(&2, List<&2, As.Ins>, List<&2, As.Ins>,
+      N.sw.walk(64n, ins, N.sw.labs(ins, Map.new(&2, List<&2, As.Ins>)), Nil{}, True{}, full), p => N.sw.fin(p)))(Unit{})
+
+def N.ins.code(ins: List<&2, As.Ins>) -> As.Code:
+  match ins:
+    case Nil{}:
+      As.CNil{}
+    case i <> t:
+      As.CCat{As.COne{i}, N.ins.code(t)}
+
+# A frame with no slot in memory (nothing in the body reads or writes sp,
+# and no twins): fp and lr pushed with room for the pairs above them, the
+# pairs at sp + 16, sp + 32, ..., and sp left as it is.
+def N.cpairs(k: Nat, +i: U32, +ld: Bool) -> List<&2, U32>:
+  match k:
+    case 0n:
+      Nil{}
+    case 1n+j:
+      +r = N.sreg((2 * i : U32))
+      +off = (16 * U32.inc(i) : U32)
+      Bool.pick(U32, ld, As.ldpo(r, U32.inc(r), 31, off), As.stpo(r, U32.inc(r), 31, off)) <> N.cpairs(j, U32.inc(i), ld)
+
+def N.cframe(+np: U32) -> U32:
+  (16 + (16 * np : U32) : U32)
+
+def N.prologue.c(+np: U32) -> As.Code:
+  N.ws(As.push_fpk(N.cframe(np)) <> As.set_fp() <> N.cpairs(U32.to_nat(np), 0, False{}))
+
+def N.fix.c(c: As.Code, +np: U32) -> As.Code:
+  +rs = N.cpairs(U32.to_nat(np), 0, True{})
+  As.Code.subst(c, N.epi.w(), N.ws(List.append(&2, U32, rs, [As.pop_fpk(N.cframe(np)), As.ret()])),
+    N.pop.w(), N.ws(List.append(&2, U32, rs, [As.pop_fpk(N.cframe(np))])))
+
+def N.sp.any(ins: List<&2, As.Ins>) -> Bool:
+  match ins:
+    case Nil{}:
+      False{}
+    case i <> t:
+      Bool.or(As.mem.sp(As.Ins.word(i)), N.sp.any(t))
+
+def N.func.frame(+compact: Bool, +max: U32, +np: U32, +fp: Bool, body: As.Code) -> As.Code:
+  match compact:
+    case True{}:
+      As.CCat{N.prologue.c(np), N.fix.c(body, np)}
+    case False{}:
+      As.CCat{N.prologue.fp(max, np, fp), N.fix.fp(body, np, fp)}
+
+def N.func.sw(+name: String, +compact: Bool, +max: U32, +np: U32, +fp: Bool, body: As.Code,
+  m: Maybe<&2, List<&2, As.Ins>>
+) -> As.Code:
+  match m:
+    case None{}:
+      As.CCat{N.one(As.ISym{name, False{}}), N.func.frame(compact, max, np, fp, body)}
+    case Some{path}:
+      N.cat([N.one(As.ISym{name, False{}}), N.ins.code(path), N.one(As.ILab{name ++ ".full"}),
+        N.func.frame(compact, max, np, fp, body)])
+
+# Moves and dead writes
+# ---------------------
+#
+# After N.ra, a value often goes into a register only to be moved on
+# (mov x11, x0; mov x1, x11), or into one no one reads. N.pp, with where
+# the registers N.ra gives (x11..x15, x19..x28) are live after each
+# instruction: drops an instruction that only writes such registers when
+# none is read later (not a store, a call or a branch), and turns mov a, b
+# then an instruction that reads a (and does not write it) into that
+# instruction reading b, when a is not read after it.
+
+def N.pp.tr() -> U32:
+  (N.ra.slots() .|. N.ra.free() : U32)
+
+# The registers of tr live after each instruction, in order (m: the labels'
+# sets once they stay the same).
+def N.pp.outs(us: List<&2, As.Use>, +out: U32, +m: Map<&2, U32>, acc: List<&2, U32>) -> List<&2, U32>:
+  match us:
+    case Nil{}:
+      acc
+    case As.Use{+d, +u, +kind, +l, off, n} <> t:
+      +lab = Bool.pick(Unit -> U32, U32.is_lt((kind - 2 : U32), 2),
+        z => Pair.snd(Map<&2, U32>, U32, Map.get(U32, 0, m, l)), z => 0)(Unit{})
+      +s = N.ra.succ(kind, out, lab, 0)
+      +label = U32.is_eq(kind, 8)
+      N.pp.outs(t, Bool.pick(U32, label, out, (((s .&. (d .^. 4294967295 : U32) : U32) .|. u : U32) .&. N.pp.tr() : U32)),
+        m, Bool.pick(U32, label, out, s) <> acc)
+
+# Whether the code has a branch by offset or an instruction it cannot read.
+def N.pp.bad(us: List<&2, As.Use>) -> Bool:
+  match us:
+    case Nil{}:
+      False{}
+    case As.Use{d, u, +kind, l, off, n} <> t:
+      Bool.or(Bool.and(U32.is_ge(kind, 5), U32.is_le(kind, 7)), N.pp.bad(t))
+
+# Whether word w only writes registers of tr that are dead after it (o).
+def N.pp.dead(+w: U32, +o: U32) -> Bool:
+  +u = As.use.word(w, N.pp.tr(), N.epi.w())
+  +d = N.use.d(u)
+  Bool.and(Bool.and(U32.is_eq(N.use.kind(u), 0), U32.is_ne(w, N.epi.w())),
+    Bool.and(Bool.and(Bool.not(As.mem.st(w)), Bool.not(As.mem.sp(w))),
+      Bool.and(U32.is_ne(d, 0), U32.is_zero((d .&. ((N.pp.tr() .^. 4294967295 : U32) .|. o : U32) : U32)))))
+
+def N.pp.drop(i: As.Ins, +o: U32) -> Bool:
+  match i:
+    case As.IW{+w}:
+      Bool.or(Bool.and(As.peep.mov(w), U32.is_eq((w .&. 31 : U32), ((w >> 16n : U32) .&. 31 : U32))),
+        Bool.and(U32.is_ne(w, N.pop.w()), N.pp.dead(w, o)))
+    case other:
+      False{}
+
+# mov a, b (a of tr, b not 31): a, else 99.
+def N.pp.mov(i: As.Ins) -> U32:
+  match i:
+    case As.IW{+w}:
+      +a = (w .&. 31 : U32)
+      Bool.pick(U32, Bool.and(As.peep.mov(w), Bool.and(As.du.bit(N.pp.tr(), As.reg.bit(a)),
+        U32.is_ne(((w >> 16n : U32) .&. 31 : U32), 31))), a, 99)
+    case other:
+      99
+
+def N.pp.src(i: As.Ins) -> U32:
+  match i:
+    case As.IW{w}:
+      ((w >> 16n : U32) .&. 31 : U32)
+    case other:
+      99
+
+# Whether i reads register a, does not write it, and a is dead after it (o).
+def N.pp.fwd(+i: As.Ins, +a: U32, +o: U32) -> Bool:
+  +u = As.use(i, N.pp.tr(), N.epi.w())
+  +b = As.reg.bit(a)
+  Bool.and(Bool.and(As.du.bit(N.use.u(u), b), Bool.not(As.du.bit(N.use.d(u), b))),
+    Bool.and(Bool.not(As.du.bit(o, b)), U32.is_lt(N.use.kind(u), 4)))
+
+def N.pp.go(k: Nat, ins: List<&2, As.Ins>, outs: List<&2, U32>) -> List<&2, As.Ins>:
+  match k:
+    case 0n:
+      ins
+    case 1n+ +j:
+      match ins outs:
+        case +i <> +t +o <> +ot:
+          +a = N.pp.mov(i)
+          +i2 = Maybe.default(&2, As.Ins, List.head(&2, As.Ins, t), As.ILab{""})
+          +o2 = Maybe.default(&2, U32, List.head(&2, U32, ot), 4294967295)
+          Bool.pick(Unit -> List<&2, As.Ins>, N.pp.drop(i, o),
+            z => N.pp.go(j, t, ot),
+            z => Bool.pick(Unit -> List<&2, As.Ins>, Bool.and(U32.is_lt(a, 99), N.pp.fwd(i2, a, o2)),
+              y => N.pp.go(j, As.ren(i2, a, [N.pp.src(i)]) <> List.tail(&2, As.Ins, t), ot),
+              y => i <> N.pp.go(j, t, ot))(Unit{}))(Unit{})
+        case il ol:
+          il
+
+def N.pp(+ins: List<&2, As.Ins>) -> List<&2, As.Ins>:
+  +us = N.ra.uses(ins, Nil{})
+  Bool.pick(Unit -> List<&2, As.Ins>, N.pp.bad(us), z => ins,
+    z => Maybe.default(&2, List<&2, As.Ins>, Maybe.bind(&2, NRa, List<&2, As.Ins>,
+      N.ra.live(8n, N.pp.tr(), us, NRa{Map.new(&2, U32), False{}, Nil{}, 0, 0}),
+      st => Some{N.pp.go((1n + List.length(&2, As.Ins, ins) : Nat), ins, N.pp.outs(us, 0, N.ra.m(st), Nil{}))}), ins))(
+    Unit{})
+
+def N.func.ra(+name: String, +max: U32, +fp: Bool, r: List<&2, As.Ins> & U32) -> As.Code:
+  (ins0, +np) = r
+  +ins = N.pp(ins0)
+  N.func.sw(name, Bool.and(Bool.not(fp), Bool.not(N.sp.any(ins))), max, np, fp, N.ins.code(ins),
+    N.sw(ins, fp, name ++ ".full"))
 
 # A function: its symbol, its prologue for a frame of max slots (saving the
-# callee-saved registers N.ra leaves it), and its body.
+# callee-saved registers N.ra leaves it), and its body; first, the path
+# N.sw finds.
 # The same, saving d8..d15 too (fp: a def with twins, N.twins).
 def N.func.fp(+name: String, +max: U32, +fp: Bool, body: As.Code) -> As.Code:
-  N.func.ra(name, max, fp, N.ra(body, max))
+  N.func.ra(name, max, fp, N.ra(name, body, max))
 
 def N.func(+name: String, +max: U32, body: As.Code) -> As.Code:
   N.func.fp(name, max, False{}, body)

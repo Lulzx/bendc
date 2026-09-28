@@ -252,6 +252,14 @@ def push_fp() -> U32:
 def pop_fp() -> U32:
   2831252477
 
+# stp x29, x30, [sp, #-f]! (A9807BFD) and ldp x29, x30, [sp], #f
+# (A8C07BFD): f a multiple of 16 up to 496.
+def push_fpk(+f: U32) -> U32:
+  (2843769853 .|. ((((0 - f : U32) >> 3n : U32) .&. 127 : U32) << 15n : U32) : U32)
+
+def pop_fpk(+f: U32) -> U32:
+  (2831186941 .|. (((f >> 3n : U32) .&. 127 : U32) << 15n : U32) : U32)
+
 # stp rt, rt2, [rn, #off] and ldp rt, rt2, [rn, #off]: a signed offset, a
 # multiple of 8 in -512..504 (A9000000, A9400000).
 def stpo(+rt: U32, +rt2: U32, +rn: U32, +off: U32) -> U32:
@@ -514,6 +522,22 @@ def du.off(+w: U32) -> U32:
   Bool.pick(U32, du.is(w, 2080374784, 335544320), du.sext((w .&. 67108863 : U32), 26n),
     Bool.pick(U32, du.is(w, 2113929216, 905969664), du.sext(((w >> 5n : U32) .&. 16383 : U32), 14n),
       du.sext(((w >> 5n : U32) .&. 524287 : U32), 19n)))
+
+# Whether w stores to memory; whether it reads or writes sp (a load or
+# store based on it, or an add or sub of it).
+def mem.ls(+w: U32) -> Bool:
+  Bool.or(du.is(w, 973078528, 939524096), Bool.or(du.is(w, 973078528, 671088640), du.is(w, 1056964608, 134217728)))
+
+def mem.st(+w: U32) -> Bool:
+  Bool.or(Bool.and(du.is(w, 973078528, 939524096), Bool.not(du.bit(w, 12582912))),
+    Bool.or(Bool.and(du.is(w, 973078528, 671088640), Bool.not(du.bit(w, 4194304))),
+      Bool.and(du.is(w, 1056964608, 134217728), Bool.not(du.bit(w, 4194304)))))
+
+def mem.sp(+w: U32) -> Bool:
+  +n31 = U32.is_eq(((w >> 5n : U32) .&. 31 : U32), 31)
+  Bool.or(Bool.and(Bool.or(mem.ls(w), du.is(w, 522190848, 186646528)), n31),
+    Bool.and(du.is(w, 520093696, 285212672),
+      Bool.or(n31, Bool.and(U32.is_eq((w .&. 31 : U32), 31), Bool.not(du.bit(w, 536870912))))))
 
 # Register r as a bit (x0 is 1; 31 is none).
 def reg.bit(+r: U32) -> U32:
