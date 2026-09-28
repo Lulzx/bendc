@@ -873,6 +873,8 @@ V F_Nat_dshow(V a) {
 #endif
 #ifdef BEND_NATIVE_STR
 #endif
+#ifdef BEND_NATIVE_MAP
+#endif
 #define U(x) ((uint32_t)(x))
 #define F2(name, expr) static inline V F_F32_d##name(V a, V b) { float x = FV(a), y = FV(b); return expr; }
 #define F1(name, expr) static inline V F_F32_d##name(V a) { float x = FV(a); return expr; }

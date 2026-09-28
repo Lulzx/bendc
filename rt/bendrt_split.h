@@ -1112,6 +1112,51 @@ static inline V F_String_dcmp(V a, V b) { return C2(0, C2(0, a, b), str_cmp(a, b
 static inline V F_String_deq(V a, V b) { return BOOL(str_cmp(a, b) == IMM(1)); }
 #endif
 
+// Map.get(d, m, key) and Map.has(m, key): Base's walk the trie rebuilding
+// the path (and, through Map.bit, the key) to hand the map back; here the
+// map itself goes back, and a lookup allocates only its pair. (MTip is
+// IMM(0), MLeaf{key, val} tag 1, MNode{pos, lo, hi} tag 2.)
+#ifdef BEND_NATIVE_MAP
+static inline int map_bitv(V key, V pos) {
+  if (pos >> 63) return 0;
+  V ci = pos / 33, off = pos % 33, s = key;
+  for (;;) {
+    if (s == SNIL) return 0;
+    if (ci == 0) break;
+    s = ((V *)s)[2];
+    ci--;
+  }
+  return off == 0 || (((uint32_t)((V *)s)[1] >> (32 - off)) & 1);
+}
+// The leaf of m with key (0 when none).
+static inline V map_leaf(V m, V key) {
+  for (;;) {
+    if (m & 1) return 0;
+    V t = TAG(m);
+    if (t == 1) return str_cmp(key, FLD(m, 0)) == IMM(1) ? m : 0;
+    if (t != 2) return 0;
+    m = map_bitv(key, FLD(m, 0)) ? FLD(m, 2) : FLD(m, 1);
+  }
+}
+static inline V F_Map_dget(V d, V m, V key) {
+  V leaf = map_leaf(m, key), r = d;
+  if (leaf) {
+    r = FLD(leaf, 1);
+    // (the value is the map's and the answer's now)
+    if (gc_hot.rc) rc_dup_in(r, ((V *)leaf)[0] & RC_TS);
+    else bend_share(r);
+    bend_drop(d);
+  }
+  bend_drop(key);
+  return C2(0, m, r);
+}
+static inline V F_Map_dhas(V m, V key) {
+  V r = BOOL(map_leaf(m, key) != 0);
+  bend_drop(key);
+  return C2(0, m, r);
+}
+#endif
+
 // Natives: U32
 // ------------
 

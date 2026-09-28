@@ -3825,7 +3825,7 @@ def Natives() -> List<&2, String>:
    "F32.log10", "F32.sin", "F32.cos", "F32.tan", "F32.asin", "F32.acos",
    "F32.atan", "F32.sinh", "F32.cosh", "F32.tanh", "F32.floor", "F32.ceil",
    "F32.trunc", "F32.bits", "F32.to_u32", "F32.show", "F32.read", "Map.bit",
-   "String.cmp", "String.eq",
+   "Map.get", "Map.has", "String.cmp", "String.eq",
    "Array.size", "Array.get", "Array.swap", "Array.set", "Array.new", "Array.clone",
    "Array.atomic.add", "Array.atomic.min", "Array.atomic.max", "Array.atomic.and",
    "Array.atomic.or", "Array.atomic.xor", "Array.atomic.exch", "Array.atomic.cas",
@@ -16875,7 +16875,7 @@ def Lo.program(+flags: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
 def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
-  COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#define BEND_NATIVE_STR 1\n#ifdef BEND_RT_SPLIT\n#include \"bendrt_split.h\"\n#else\n#include \"bendrt.h\"\n#endif\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
+  COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#define BEND_NATIVE_STR 1\n#define BEND_NATIVE_MAP 1\n#ifdef BEND_RT_SPLIT\n#include \"bendrt_split.h\"\n#else\n#include \"bendrt.h\"\n#endif\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
     Doc.flat(Doc.list([protos, DStr{"\n"}, code, DStr{Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
     Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
     DStr{"\n" ++ entry}])), errs}

@@ -122,14 +122,28 @@ const F_Nat_dpow = (a, n) => {
 };
 // Base's Nat.show rebuilds each quotient as a successor (checked).
 const F_Nat_dshow = (a) => (nat_chk(a < 0n ? a : a / 10n), a.toString());
-const F_Map_dbit = (key, pos) => {
+const map_bit = (key, pos) => {
   const n = Number(pos), off = n % 33;
   let ci = Math.floor(n / 33);
   for (const ch of key) {
-    if (ci-- === 0) return { $: "Tuple", fst: key, snd: off === 0 ? true : ((ch.codePointAt(0) >>> (32 - off)) & 1) === 1 };
+    if (ci-- === 0) return off === 0 ? true : ((ch.codePointAt(0) >>> (32 - off)) & 1) === 1;
   }
-  return { $: "Tuple", fst: key, snd: false };
+  return false;
 };
+const F_Map_dbit = (key, pos) => ({ $: "Tuple", fst: key, snd: map_bit(key, pos) });
+// Map.get and Map.has hand the map itself back (Base's rebuild its path).
+const map_leaf = (m, key) => {
+  for (;;) {
+    if (m.$ === "MLeaf") return m.key === key ? m : null;
+    if (m.$ !== "MNode") return null;
+    m = map_bit(key, m.pos) ? m.hi : m.lo;
+  }
+};
+const F_Map_dget = (d, m, key) => {
+  const l = map_leaf(m, key);
+  return { $: "Tuple", fst: m, snd: l ? l.val : d };
+};
+const F_Map_dhas = (m, key) => ({ $: "Tuple", fst: m, snd: map_leaf(m, key) !== null });
 // String.cmp and String.eq, by code point (Base's String.cmp rebuilds
 // both strings to hand them back).
 const str_cmp = (a, b) => {
