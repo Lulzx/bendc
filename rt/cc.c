@@ -105,7 +105,64 @@ Term cc_end_run(Env e, Term *f, IoWork *w) {
   return io_done(e, term_pak(CID(Unit), 0));
 }
 
+// bendc --native: out.o holds the program's code (bendc wrote it, in
+// machine code); the temporary file, the C of its effects. Both link with the
+// runtime and rt/native.c (natives.o beside bendrt.o, built the same way).
+Term cc_link_run(Env e, Term *f, IoWork *w) {
+  (void)w;
+  u64 n;
+  char *out = io_cstr(e, f[0], &n);
+  fflush(stdout);
+  if (cc_saved >= 0) {
+    dup2(cc_saved, 1);
+    close(cc_saved);
+    cc_saved = -1;
+  }
+  char dir[PATH_MAX], rt[PATH_MAX], obj[PATH_MAX], impl[PATH_MAX], hdr[PATH_MAX], nobj[PATH_MAX], nsrc[PATH_MAX];
+  if (cc_exe_dir(dir, sizeof dir) != 0) { free(out); return cc_fail(e, "cannot find the bendc executable"); }
+  const char *env_rt = getenv("BENDC_RT");
+  if (env_rt && *env_rt) snprintf(rt, sizeof rt, "%s", env_rt);
+  else snprintf(rt, sizeof rt, "%s/../rt", dir);
+  snprintf(obj, sizeof obj, "%s/bendrt.o", dir);
+  snprintf(nobj, sizeof nobj, "%s/natives.o", dir);
+  snprintf(impl, sizeof impl, "%s/bendrt_impl.c", rt);
+  snprintf(nsrc, sizeof nsrc, "%s/native.c", rt);
+  snprintf(hdr, sizeof hdr, "%s/bendrt_split.h", rt);
+  const char *cc = getenv("CC") && *getenv("CC") ? getenv("CC") : "cc";
+  size_t cl = strlen(cc) + 6 * PATH_MAX + 3 * strlen(out) + 256;
+  char *cmd = malloc(cl);
+  const char *srcs[2] = {impl, nsrc};
+  const char *objs[2] = {obj, nobj};
+  for (int i = 0; i < 2; i++) {
+    if (cc_mtime(objs[i]) < 0 || cc_mtime(objs[i]) < cc_mtime(srcs[i]) || cc_mtime(objs[i]) < cc_mtime(hdr)) {
+      snprintf(cmd, cl, "%s -O2 -w -I '%s' -c '%s' -o '%s.tmp' && mv '%s.tmp' '%s'", cc, rt, srcs[i], objs[i], objs[i],
+        objs[i]);
+      if (system(cmd) != 0) { free(cmd); free(out); return cc_fail(e, "the runtime does not compile"); }
+    }
+  }
+#ifdef __APPLE__
+  const char *libs = "-lm -lpthread";
+#else
+  const char *libs = "-lm -lpthread -ldl";
+#endif
+  snprintf(cmd, cl, "%s -O2 -w -I '%s' '%s' '%s.o' '%s' '%s' -o '%s' %s", cc, rt, cc_tmp, out, nobj, obj, out, libs);
+  int rc = system(cmd);
+  free(cmd);
+  if (rc != 0) { free(out); return cc_fail(e, "linking failed"); }
+  if (!getenv("BENDC_KEEP")) {
+    size_t k = strlen(out) + 3;
+    char *o = malloc(k);
+    snprintf(o, k, "%s.o", out);
+    unlink(o);
+    free(o);
+    unlink(cc_tmp);
+  }
+  free(out);
+  return io_done(e, term_pak(CID(Unit), 0));
+}
+
 static void __attribute__((constructor)) cc_use(void) {
   io_eff(CID(Cc.begin), cc_begin_run, 0);
   io_eff(CID(Cc.end), cc_end_run, 0);
+  io_eff(CID(Cc.link), cc_link_run, 0);
 }

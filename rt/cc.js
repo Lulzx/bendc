@@ -5,3 +5,6 @@ function cc_begin() {
 function cc_end(out) {
   return io_fail(1, "bendc -o needs the C build of bendc");
 }
+function cc_link(out) {
+  return io_fail(1, "bendc --native needs the C build of bendc");
+}

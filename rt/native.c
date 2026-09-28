@@ -8,12 +8,23 @@
 // runtime's static inline functions are not, so this file gives each one the
 // generated code uses an external name: N_ and the mangled name of the Base
 // def it implements (every def of Natives() in bendc.bend), and bn_alloc for
-// the allocator. It is compiled once, beside bendrt.o.
+// the allocator, and bn_flt for float literals. It is compiled once, beside
+// bendrt.o (as natives.o: see Cc.link in rt/cc.c).
 
 #define BEND_NATIVE_MAP_BIT 1
 #include "bendrt_split.h"
 
 V *bn_alloc(V words) { return halloc((size_t)words); }
+
+// A float literal's bits, read once as C reads it (the slot holds them
+// with bit 32 set: a read 0.0 is then not an empty slot).
+V bn_flt(V *slot, const char *s) {
+  V c = __atomic_load_n(slot, __ATOMIC_ACQUIRE);
+  if (c) return (uint32_t)c;
+  V v = VF(strtof(s, 0));
+  __atomic_store_n(slot, v | ((V)1 << 32), __ATOMIC_RELEASE);
+  return v;
+}
 
 #define N1(f) V N_##f(V a) { return F_##f(a); }
 #define N2(f) V N_##f(V a, V b) { return F_##f(a, b); }
