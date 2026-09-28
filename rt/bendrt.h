@@ -655,6 +655,13 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
 #define bend_take(v, w) bend_take_at(v, w, 0)
 #endif
 
+// A flat result (a def's U_ function): node t's k fields go out through o,
+// then t is taken when matches free (a shared node shares its fields).
+static inline void bend_open(V t, V *o, unsigned k, int take) {
+  for (unsigned i = 0; i < k; i++) o[i] = FLD(t, i);
+  if (take) bend_take(t, k + 1);
+}
+
 // Registers words that hold values (a global cache, say) as roots.
 static void gc_root_add_locked(V *p, size_t n) {
   if (gc_nroots == gc_caproots) {
