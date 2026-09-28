@@ -50,14 +50,15 @@ __attribute__((noreturn)) void bend_fail(const char *msg) {
 #define GC_BLK ((uintptr_t)1 << GC_BLK_SHIFT)
 #define GC_MAXBLK ((uintptr_t)1 << 22)
 #define GC_HDR 64
-#define GC_SMALL 256
-#define GC_NCLS 31
+#define GC_SMALL 2052
+#define GC_NCLS 43
 #define GC_MAXTHR 256
 #define GC_SIG SIGUSR2
 #define GC_RQCLS 15
 const uint16_t gc_cls_w[GC_NCLS] = {
   2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-  20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256};
+  20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256,
+  320, 384, 448, 516, 640, 768, 896, 1028, 1280, 1536, 1792, 2052};
 uint8_t gc_cls_of[GC_SMALL + 1];
 char *gc_base;
 uint64_t *gc_abits;

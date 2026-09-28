@@ -132,8 +132,8 @@ __attribute__((noreturn)) void bend_fail(const char *msg);
 #define GC_BLK ((uintptr_t)1 << GC_BLK_SHIFT)
 #define GC_MAXBLK ((uintptr_t)1 << 22)
 #define GC_HDR 64
-#define GC_SMALL 256
-#define GC_NCLS 31
+#define GC_SMALL 2052
+#define GC_NCLS 43
 #define GC_MAXTHR 256
 #define GC_SIG SIGUSR2
 
@@ -781,33 +781,33 @@ static inline V F_Map_dbit(V key, V pos) {
 
 #define U(x) ((uint32_t)(x))
 static inline V nat_low32(V n) { return U(n); }
-static inline V F_U32_dinc(V a) { return U(a + 1); }
-static inline V F_U32_dadd(V a, V b) { return U(a + b); }
-static inline V F_U32_dsub(V a, V b) { return U(a - b); }
-static inline V F_U32_dmul(V a, V b) { return U(U(a) * U(b)); }
-static inline V F_U32_ddiv(V a, V b) { return b == 0 ? 0 : U(a) / U(b); }
-static inline V F_U32_dmod(V a, V b) { return b == 0 ? a : U(a) % U(b); }
-static inline V F_U32_dnot(V a) { return U(~a); }
-static inline V F_U32_dand(V a, V b) { return a & b; }
-static inline V F_U32_dor(V a, V b) { return a | b; }
-static inline V F_U32_dxor(V a, V b) { return a ^ b; }
-static inline V F_U32_dshl(V a) { return U(a << 1); }
-static inline V F_U32_dshr(V a) { return a >> 1; }
-static inline V F_U32_dshln(V a, V n) { return n >= 32 ? 0 : U(a << n); }
-static inline V F_U32_dshrn(V a, V n) { return n >= 32 ? 0 : a >> n; }
+static inline uint32_t F_U32_dinc(V a) { return U(U(a) + 1u); }
+static inline uint32_t F_U32_dadd(V a, V b) { return U(U(a) + U(b)); }
+static inline uint32_t F_U32_dsub(V a, V b) { return U(U(a) - U(b)); }
+static inline uint32_t F_U32_dmul(V a, V b) { return U(U(a) * U(b)); }
+static inline uint32_t F_U32_ddiv(V a, V b) { return b == 0 ? 0 : U(a) / U(b); }
+static inline uint32_t F_U32_dmod(V a, V b) { return b == 0 ? a : U(a) % U(b); }
+static inline uint32_t F_U32_dnot(V a) { return U(~U(a)); }
+static inline uint32_t F_U32_dand(V a, V b) { return U(a) & U(b); }
+static inline uint32_t F_U32_dor(V a, V b) { return U(a) | U(b); }
+static inline uint32_t F_U32_dxor(V a, V b) { return U(a) ^ U(b); }
+static inline uint32_t F_U32_dshl(V a) { return U(U(a) << 1); }
+static inline uint32_t F_U32_dshr(V a) { return U(a) >> 1; }
+static inline uint32_t F_U32_dshln(V a, V n) { return n >= 32 ? 0 : U(U(a) << U(n)); }
+static inline uint32_t F_U32_dshrn(V a, V n) { return n >= 32 ? 0 : U(a) >> U(n); }
 static inline V F_U32_dcmp(V a, V b) { return a < b ? IMM(0) : a == b ? IMM(1) : IMM(2); }
-static inline V F_U32_dis__eq(V a, V b) { return BOOL(a == b); }
-static inline V F_U32_dis__ne(V a, V b) { return BOOL(a != b); }
-static inline V F_U32_dis__lt(V a, V b) { return BOOL(a < b); }
-static inline V F_U32_dis__le(V a, V b) { return BOOL(a <= b); }
-static inline V F_U32_dis__gt(V a, V b) { return BOOL(a > b); }
-static inline V F_U32_dis__ge(V a, V b) { return BOOL(a >= b); }
-static inline V F_U32_dis__zero(V a) { return BOOL(a == 0); }
-static inline V F_U32_dis__even(V a) { return BOOL((a & 1) == 0); }
+static inline uint32_t F_U32_dis__eq(V a, V b) { return BOOL(U(a) == U(b)); }
+static inline uint32_t F_U32_dis__ne(V a, V b) { return BOOL(U(a) != U(b)); }
+static inline uint32_t F_U32_dis__lt(V a, V b) { return BOOL(U(a) < U(b)); }
+static inline uint32_t F_U32_dis__le(V a, V b) { return BOOL(U(a) <= U(b)); }
+static inline uint32_t F_U32_dis__gt(V a, V b) { return BOOL(U(a) > U(b)); }
+static inline uint32_t F_U32_dis__ge(V a, V b) { return BOOL(U(a) >= U(b)); }
+static inline uint32_t F_U32_dis__zero(V a) { return BOOL(U(a) == 0); }
+static inline uint32_t F_U32_dis__even(V a) { return BOOL((a & 1) == 0); }
 static inline V F_U32_dto__nat(V a) { return a; }
-static inline V F_U32_dfrom__nat(V n) { return nat_low32(n); }
-static inline V F_U32_dmin(V a, V b) { return a < b ? a : b; }
-static inline V F_U32_dmax(V a, V b) { return a < b ? b : a; }
+static inline uint32_t F_U32_dfrom__nat(V n) { return nat_low32(n); }
+static inline uint32_t F_U32_dmin(V a, V b) { return U(a) < U(b) ? U(a) : U(b); }
+static inline uint32_t F_U32_dmax(V a, V b) { return U(a) < U(b) ? U(b) : U(a); }
 static inline V F_U32_dpow(V a, V n) {
   // a^n mod 2^32; an odd a has an order dividing 2^30, an even one reaches 0.
   V e = n;
