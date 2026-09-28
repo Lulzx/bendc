@@ -14914,52 +14914,68 @@ def Opt.raises(ds: List<&2, OD>) -> List<&2, Decl>:
     case d <> r:
       Opt.raise(d) <> Opt.raises(r)
 
-# The number of nodes of t (a list field as its head and the node rebuilt
-# with the rest, as everywhere).
-def Opt.size(t: Core.Tm) -> U32:
+# acc plus the number of nodes of t (a list field as its head and the
+# node rebuilt with the rest, as everywhere), stopping once past cap: a
+# budget test reads only as much of a body as the budget allows.
+def Opt.sz(t: Core.Tm, +acc: U32, +cap: U32) -> U32:
   match t:
     case Core.CCall{f, as}:
       match as:
         case Nil{}:
-          1
+          U32.inc(acc)
         case Core.Arg{r, e} <> t2:
-          U32.add(Opt.size(e), Opt.size(Core.CCall{f, t2}))
+          +a = Opt.sz(e, acc, cap)
+          Bool.pick(Unit -> U32, U32.is_lt(cap, a), u => a, u => Opt.sz(Core.CCall{f, t2}, a, cap))(Unit{})
     case Core.CApp{f, as}:
       match as:
         case Nil{}:
-          U32.inc(Opt.size(f))
-        case a <> t2:
-          U32.add(Opt.size(a), Opt.size(Core.CApp{f, t2}))
+          Opt.sz(f, U32.inc(acc), cap)
+        case x <> t2:
+          +a = Opt.sz(x, acc, cap)
+          Bool.pick(Unit -> U32, U32.is_lt(cap, a), u => a, u => Opt.sz(Core.CApp{f, t2}, a, cap))(Unit{})
     case Core.CCtr{k, as}:
       match as:
         case Nil{}:
-          1
-        case a <> t2:
-          U32.add(Opt.size(a), Opt.size(Core.CCtr{k, t2}))
+          U32.inc(acc)
+        case x <> t2:
+          +a = Opt.sz(x, acc, cap)
+          Bool.pick(Unit -> U32, U32.is_lt(cap, a), u => a, u => Opt.sz(Core.CCtr{k, t2}, a, cap))(Unit{})
     case Core.CLam{p, b}:
-      U32.inc(Opt.size(b))
+      Opt.sz(b, U32.inc(acc), cap)
     case Core.CLet{p, v, b}:
-      U32.inc(U32.add(Opt.size(v), Opt.size(b)))
+      +a = Opt.sz(v, U32.inc(acc), cap)
+      Bool.pick(Unit -> U32, U32.is_lt(cap, a), u => a, u => Opt.sz(b, a, cap))(Unit{})
     case Core.CMat{scrs, cases}:
       match scrs:
-        case a <> t2:
-          U32.add(Opt.size(a), Opt.size(Core.CMat{t2, cases}))
+        case x <> t2:
+          +a = Opt.sz(x, acc, cap)
+          Bool.pick(Unit -> U32, U32.is_lt(cap, a), u => a, u => Opt.sz(Core.CMat{t2, cases}, a, cap))(Unit{})
         case Nil{}:
           match cases:
             case Nil{}:
-              1
+              U32.inc(acc)
             case c <> t2:
-              U32.add(Opt.size(c), Opt.size(Core.CMat{Nil{}, t2}))
+              +a = Opt.sz(c, acc, cap)
+              Bool.pick(Unit -> U32, U32.is_lt(cap, a), u => a, u => Opt.sz(Core.CMat{Nil{}, t2}, a, cap))(Unit{})
     case Core.CCse{ps, b}:
-      U32.inc(Opt.size(b))
+      Opt.sz(b, U32.inc(acc), cap)
     case Core.CSuc{k, e}:
-      U32.inc(Opt.size(e))
-    case Core.COp{op, a, b}:
-      U32.inc(U32.add(Opt.size(a), Opt.size(b)))
+      Opt.sz(e, U32.inc(acc), cap)
+    case Core.COp{op, x, b}:
+      +a = Opt.sz(x, U32.inc(acc), cap)
+      Bool.pick(Unit -> U32, U32.is_lt(cap, a), u => a, u => Opt.sz(b, a, cap))(Unit{})
     case Core.CAnn{e, ty}:
-      Opt.size(e)
+      Opt.sz(e, acc, cap)
     case other:
-      1
+      U32.inc(acc)
+
+# The number of nodes of t.
+def Opt.size(t: Core.Tm) -> U32:
+  Opt.sz(t, 0, 4294967295)
+
+# Whether t has at most n nodes.
+def Opt.size.le(t: Core.Tm, +n: U32) -> Bool:
+  U32.is_le(Opt.sz(t, 0, n), n)
 
 # General inlining
 # ----------------
@@ -15007,7 +15023,7 @@ def Opt.before(xs: List<&2, String>, +rank: Map<&2, U32>, +i: U32) -> Bool:
 def Opt.small(+flags: String, +rank: Map<&2, U32>, +d: Core.Def) -> Bool:
   match d:
     case Core.Def{+name, ps, +b, ret}:
-      Bool.and(Bool.and(U32.is_le(Opt.size(b), Opt.budget(flags)), Bool.not(G.is_native(name))),
+      Bool.and(Bool.and(Opt.size.le(b, Opt.budget(flags)), Bool.not(G.is_native(name))),
         Bool.and(Bool.not(String.starts_with(name, "IO.")),
           Opt.before(Inl.names(b, 3, Nil{}), rank, Pair.snd(Map<&2, U32>, U32, Map.get(U32, 0, rank, name)))))
 
@@ -15370,7 +15386,7 @@ def Opt.let.cases(+x: String, +v: Core.Tm, cs: List<&2, Core.Tm>) -> List<&2, Co
 def Opt.let.sink(+x: String, +v: Core.Tm, b: Core.Tm) -> OR:
   match b:
     case Core.CMat{+scrs, +cases}:
-      Bool.pick(Unit -> OR, Bool.and(Bool.and(U32.is_le(Opt.size(v), 16), Bool.not(Str.has(Inl.names(Core.CMat{scrs, Nil{}}, 0, Nil{}), x))),
+      Bool.pick(Unit -> OR, Bool.and(Bool.and(Opt.size.le(v, 16), Bool.not(Str.has(Inl.names(Core.CMat{scrs, Nil{}}, 0, Nil{}), x))),
           Inl.apart(x <> Inl.names(v, 0, Nil{}), Inl.names(Core.CMat{Nil{}, cases}, 1, Nil{}))),
         u => RAll{Core.CMat{scrs, Opt.let.cases(x, v, cases)}},
         u => RKeep{Core.CLet{Core.PtVar{x}, v, Core.CMat{scrs, cases}}})(Unit{})
@@ -16198,7 +16214,7 @@ def Opt.sp.def(+c: Map<&2, Core.Def>, +f: String, +as: List<&2, Core.Arg>, d: Co
   match d:
     case Core.Def{name, +ps, +b, ret}:
       Bool.pick(Unit -> OPk, Bool.and(Bool.and(Nat.is_eq(Inl.pars.len(ps), Inl.args.len(as)), Bool.not(Nat.is_eq(Inl.args.len(as), 0n))),
-          Bool.and(U32.is_le(Opt.size(b), Opt.sp.budget()), Bool.and(Bool.not(G.is_native(f)), Bool.not(String.starts_with(f, "IO."))))),
+          Bool.and(Opt.size.le(b, Opt.sp.budget()), Bool.and(Bool.not(G.is_native(f)), Bool.not(String.starts_with(f, "IO."))))),
         u => Opt.sp.at.pos(Opt.sp.pos(c, ps, as, 0n, f, b, Inl.pars.len(ps)), f, as),
         u => PkNo{})(Unit{})
 
@@ -16275,7 +16291,7 @@ def Opt.fu.j(d: Core.Def, +n: Nat) -> Nat:
   match d:
     case Core.Def{+name, +ps, +b, ret}:
       +x = Opt.fu.scr(b)
-      Bool.pick(Unit -> Nat, Bool.and(Bool.and(Bool.and(Nat.is_eq(Inl.pars.len(ps), n), U32.is_le(Opt.size(b), Opt.fu.gbudget())),
+      Bool.pick(Unit -> Nat, Bool.and(Bool.and(Bool.and(Nat.is_eq(Inl.pars.len(ps), n), Opt.size.le(b, Opt.fu.gbudget())),
           Str.has(Inl.names(b, 3, Nil{}), name)),
           Bool.and(Bool.not(String.eq(x, "")), U32.is_eq(Inl.uses(b, 0, x), 1))),
         u => Opt.par.pos(ps, x, 0n), u => n)(Unit{})
@@ -16283,7 +16299,7 @@ def Opt.fu.j(d: Core.Def, +n: Nat) -> Nat:
 def Opt.fu.prod(d: Core.Def, +n: Nat) -> Bool:
   match d:
     case Core.Def{+name, ps, +b, ret}:
-      Bool.and(Nat.is_eq(Inl.pars.len(ps), n), Bool.and(U32.is_le(Opt.size(b), Opt.fu.pbudget()), Opt.fu.ctail(name, b)))
+      Bool.and(Nat.is_eq(Inl.pars.len(ps), n), Bool.and(Opt.size.le(b, Opt.fu.pbudget()), Opt.fu.ctail(name, b)))
 
 def Opt.fu.pick(+c: Map<&2, Core.Def>, +g: String, +j: Nat, a: Core.Tm) -> OPk:
   match a:
