@@ -488,3 +488,171 @@ def Law.up_lo_pat(p):
 
 def Law.up_lo_params(ps, mask):
   Params.rt(ps, mask)
+
+# Lowering scopes
+# ===============
+
+def Str.sym(-a: List<&2, String>, -b: List<&2, String>, e: {a == b : List<&2, String>}) -> {b == a : List<&2, String>}:
+  %e : {_ == a : List<&2, String>}
+  {==}
+
+# c is r, which is scoped.
+def Sc.tr(-c: Core.Tm, -r: Core.Tm, -L: List<&2, String>, s: Law.Scoped(r, L), q: {c == r : Core.Tm}) -> Law.Scoped(c, L):
+  %Tm.sym(c, r, q) : Law.Scoped(_, L)
+  s
+
+def Var.sc(h: Bool, +n: String, -bound: List<&2, String>, he: {h == Core.Dead.none(bound, n) : Bool})
+    -> Law.Scoped(Bool.pick(Core.Tm, Bool.not(h), Core.CVar{n}, Core.CRef{n}), bound):
+  match h:
+    case True{}:
+      Unit{}
+    case False{}:
+      he
+
+def Call0.sc(h: Bool, +f: Core.Expr, +ms: Map<&2, List<&2, Bool>>, +bound: List<&2, String>, s: Law.Scoped(Core.Lo.go(f, ms, bound, True{}, Nil{}), bound)) -> Law.Scoped(Bool.pick(Unit -> Core.Tm, h, u => Core.CCall{Core.Lo.fname(f), Nil{}}, u => Core.CApp{Core.Lo.go(f, ms, bound, True{}, Nil{}), Nil{}})(Unit{}), bound):
+  match h:
+    case True{}:
+      Unit{}
+    case False{}:
+      s
+
+def CallG.sc(+f: Core.Expr, +a: Core.Expr, +t: List<&2, Core.Expr>, +ms: Map<&2, List<&2, Bool>>, +bound: List<&2, String>, +top: Bool, +mask: List<&2, Bool>,
+    sa: Law.Scoped(Core.Lo.go(a, ms, bound, True{}, Nil{}), bound), st: Law.Scoped(Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Core.Lo.tail(Core.Lo.mask(top, ms, f, mask))), bound),
+    sh: Sigma<&2, &2, List<&2, Core.Arg>, as => {Core.CCall{Core.Lo.fname(f), as} == Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Core.Lo.tail(Core.Lo.mask(top, ms, f, mask))) : Core.Tm}>)
+    -> Law.Scoped(Core.Lo.arg(Core.Lo.mask(top, ms, f, mask), Core.Lo.go(a, ms, bound, True{}, Nil{}), Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Core.Lo.tail(Core.Lo.mask(top, ms, f, mask)))), bound):
+  match sh:
+    case (as, +q):
+      %q : Law.Scoped(Core.Lo.arg(Core.Lo.mask(top, ms, f, mask), Core.Lo.go(a, ms, bound, True{}, Nil{}), _), bound)
+      (sa, Sc.tr(Core.CCall{Core.Lo.fname(f), as}, Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Core.Lo.tail(Core.Lo.mask(top, ms, f, mask))), bound, st, q))
+
+def CallA.sc(+f: Core.Expr, +a: Core.Expr, +t: List<&2, Core.Expr>, +ms: Map<&2, List<&2, Bool>>, +bound: List<&2, String>,
+    sa: Law.Scoped(Core.Lo.go(a, ms, bound, True{}, Nil{}), bound), st: Law.Scoped(Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Nil{}), bound),
+    sh: Sigma<&2, &2, List<&2, Core.Tm>, as => {Core.CApp{Core.Lo.go(f, ms, bound, True{}, Nil{}), as} == Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Nil{}) : Core.Tm}>)
+    -> Law.Scoped(Core.Tm.push(Core.Lo.go(a, ms, bound, True{}, Nil{}), Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Nil{})), bound):
+  match sh:
+    case (as, +q):
+      %q : Law.Scoped(Core.Tm.push(Core.Lo.go(a, ms, bound, True{}, Nil{}), _), bound)
+      (sa, Sc.tr(Core.CApp{Core.Lo.go(f, ms, bound, True{}, Nil{}), as}, Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Nil{}), bound, st, q))
+
+def CallN.sc(h: Bool, +f: Core.Expr, +a: Core.Expr, +t: List<&2, Core.Expr>, +ms: Map<&2, List<&2, Bool>>, +bound: List<&2, String>, +top: Bool, +mask: List<&2, Bool>,
+    +he: {h == Core.Lo.global(bound, f) : Bool}, +sa: Law.Scoped(Core.Lo.go(a, ms, bound, True{}, Nil{}), bound),
+    st1: Law.Scoped(Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Core.Lo.tail(Core.Lo.mask(top, ms, f, mask))), bound), st2: Law.Scoped(Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Nil{}), bound))
+    -> Law.Scoped(Bool.pick(Unit -> Core.Tm, h, u => Core.Lo.arg(Core.Lo.mask(top, ms, f, mask), Core.Lo.go(a, ms, bound, True{}, Nil{}), Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Core.Lo.tail(Core.Lo.mask(top, ms, f, mask)))), u => Core.Tm.push(Core.Lo.go(a, ms, bound, True{}, Nil{}), Core.Lo.go(Core.ECall{f, t}, ms, bound, False{}, Nil{})))(Unit{}), bound):
+  match h:
+    case True{}:
+      CallG.sc(f, a, t, ms, bound, top, mask, sa, st1, Shape.g(t, f, ms, bound, False{}, Core.Lo.tail(Core.Lo.mask(top, ms, f, mask)), he))
+    case False{}:
+      CallA.sc(f, a, t, ms, bound, sa, st2, Shape.n(t, f, ms, bound, False{}, Nil{}, he))
+
+def Ctr.sc(+n: String, +a: Core.Expr, +t: List<&2, Core.Expr>, +ms: Map<&2, List<&2, Bool>>, +bound: List<&2, String>,
+    sa: Law.Scoped(Core.Lo.go(a, ms, bound, True{}, Nil{}), bound), st: Law.Scoped(Core.Lo.go(Core.ECtor{n, t}, ms, bound, False{}, Nil{}), bound),
+    sh: Sigma<&2, &2, List<&2, Core.Tm>, as => {Core.CCtr{n, as} == Core.Lo.go(Core.ECtor{n, t}, ms, bound, False{}, Nil{}) : Core.Tm}>)
+    -> Law.Scoped(Core.Tm.push(Core.Lo.go(a, ms, bound, True{}, Nil{}), Core.Lo.go(Core.ECtor{n, t}, ms, bound, False{}, Nil{})), bound):
+  match sh:
+    case (as, +q):
+      %q : Law.Scoped(Core.Tm.push(Core.Lo.go(a, ms, bound, True{}, Nil{}), _), bound)
+      (sa, Sc.tr(Core.CCtr{n, as}, Core.Lo.go(Core.ECtor{n, t}, ms, bound, False{}, Nil{}), bound, st, q))
+
+def Mat.sc(+a: Core.Expr, +t: List<&2, Core.Expr>, +cs: List<&2, Core.Expr>, +ms: Map<&2, List<&2, Bool>>, +bound: List<&2, String>,
+    sa: Law.Scoped(Core.Lo.go(a, ms, bound, True{}, Nil{}), bound), st: Law.Scoped(Core.Lo.go(Core.EMatch{t, cs}, ms, bound, False{}, Nil{}), bound),
+    sh: Sigma<&2, &2, List<&2, Core.Tm>, ys => Sigma<&2, &2, List<&2, Core.Tm>, xs => {Core.CMat{ys, xs} == Core.Lo.go(Core.EMatch{t, cs}, ms, bound, False{}, Nil{}) : Core.Tm}>>)
+    -> Law.Scoped(Core.Tm.push(Core.Lo.go(a, ms, bound, True{}, Nil{}), Core.Lo.go(Core.EMatch{t, cs}, ms, bound, False{}, Nil{})), bound):
+  match sh:
+    case (ys, r):
+      match r:
+        case (xs, +q):
+          %q : Law.Scoped(Core.Tm.push(Core.Lo.go(a, ms, bound, True{}, Nil{}), _), bound)
+          (sa, Sc.tr(Core.CMat{ys, xs}, Core.Lo.go(Core.EMatch{t, cs}, ms, bound, False{}, Nil{}), bound, st, q))
+
+def Case.sc(+c: Core.Expr, +t: List<&2, Core.Expr>, +ms: Map<&2, List<&2, Bool>>, +bound: List<&2, String>,
+    sc: Law.Scoped(Core.Lo.go(c, ms, bound, True{}, Nil{}), bound), st: Law.Scoped(Core.Lo.go(Core.EMatch{Nil{}, t}, ms, bound, False{}, Nil{}), bound),
+    sh: Sigma<&2, &2, List<&2, Core.Tm>, xs => {Core.CMat{Nil{}, xs} == Core.Lo.go(Core.EMatch{Nil{}, t}, ms, bound, False{}, Nil{}) : Core.Tm}>)
+    -> Law.Scoped(Core.Tm.push.case(Core.Lo.go(c, ms, bound, True{}, Nil{}), Core.Lo.go(Core.EMatch{Nil{}, t}, ms, bound, False{}, Nil{})), bound):
+  match sh:
+    case (xs, +q):
+      %q : Law.Scoped(Core.Tm.push.case(Core.Lo.go(c, ms, bound, True{}, Nil{}), _), bound)
+      (sc, Sc.tr(Core.CMat{Nil{}, xs}, Core.Lo.go(Core.EMatch{Nil{}, t}, ms, bound, False{}, Nil{}), bound, st, q))
+
+def Ty.sc(+n: String, +a: Core.Expr, +t: List<&2, Core.Expr>, +ms: Map<&2, List<&2, Bool>>, +bound: List<&2, String>,
+    sh: Sigma<&2, &2, List<&2, Core.Tm>, as => {Core.CTyp{n, as} == Core.Lo.go(Core.ETy{n, t}, ms, bound, False{}, Nil{}) : Core.Tm}>)
+    -> Law.Scoped(Core.Tm.push(Core.Lo.go(a, ms, bound, True{}, Nil{}), Core.Lo.go(Core.ETy{n, t}, ms, bound, False{}, Nil{})), bound):
+  match sh:
+    case (as, +q):
+      %q : Law.Scoped(Core.Tm.push(Core.Lo.go(a, ms, bound, True{}, Nil{}), _), bound)
+      Unit{}
+
+# Each variable a lowered term looks up is bound: one of bound, or one the
+# term binds.
+def Lo.sc(e: Core.Expr, +ms: Map<&2, List<&2, Bool>>, +bound: List<&2, String>, +top: Bool, +mask: List<&2, Bool>, ok: Law.NoErr(e)) -> Law.Scoped(Core.Lo.go(e, ms, bound, top, mask), bound):
+  match e:
+    case Core.EVar{+n}:
+      Var.sc(Core.Dead.none(bound, n), n, bound, {==})
+    case Core.ENum{n}:
+      Unit{}
+    case Core.ENat{n}:
+      Unit{}
+    case Core.EFlt{s}:
+      Unit{}
+    case Core.EStr{s}:
+      Unit{}
+    case Core.ECall{+f, args}:
+      match args:
+        case Nil{}:
+          Call0.sc(Core.Lo.global(bound, f), f, ms, bound, Lo.sc(f, ms, bound, True{}, Nil{}, ok))
+        case +a <> +t:
+          match ok:
+            case (oa, +ot):
+              CallN.sc(Core.Lo.global(bound, f), f, a, t, ms, bound, top, mask, {==}, Lo.sc(a, ms, bound, True{}, Nil{}, oa),
+                Lo.sc(Core.ECall{f, t}, ms, bound, False{}, Core.Lo.tail(Core.Lo.mask(top, ms, f, mask)), ot), Lo.sc(Core.ECall{f, t}, ms, bound, False{}, Nil{}, ot))
+    case Core.ECtor{+n, args}:
+      match args:
+        case Nil{}:
+          Unit{}
+        case +a <> +t:
+          match ok:
+            case (oa, ot):
+              Ctr.sc(n, a, t, ms, bound, Lo.sc(a, ms, bound, True{}, Nil{}, oa), Lo.sc(Core.ECtor{n, t}, ms, bound, False{}, Nil{}, ot),
+                Shape.ctr(t, n, ms, bound, False{}, Nil{}))
+    case Core.ELam{+p, b}:
+      Lo.sc(b, ms, Core.Lo.bind(Core.Dead.names([Core.Lo.pat(p)]), bound), True{}, Nil{}, ok)
+    case Core.ELet{+p, v, b}:
+      match ok:
+        case (ov, ob):
+          (Lo.sc(v, ms, bound, True{}, Nil{}, ov), Lo.sc(b, ms, Core.Lo.bind(Core.Dead.names([Core.Lo.pat(p)]), bound), True{}, Nil{}, ob))
+    case Core.EMatch{scrs, +cases}:
+      match scrs:
+        case +a <> +t:
+          match ok:
+            case (oa, ot):
+              Mat.sc(a, t, cases, ms, bound, Lo.sc(a, ms, bound, True{}, Nil{}, oa), Lo.sc(Core.EMatch{t, cases}, ms, bound, False{}, Nil{}, ot),
+                Shape.ss(t, cases, ms, bound, False{}, Nil{}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Unit{}
+            case +c <> +t:
+              match ok:
+                case (oc, ot):
+                  Case.sc(c, t, ms, bound, Lo.sc(c, ms, bound, True{}, Nil{}, oc), Lo.sc(Core.EMatch{Nil{}, t}, ms, bound, False{}, Nil{}, ot),
+                    Shape.cs(t, ms, bound, False{}, Nil{}))
+    case Core.ECase{+ps, b}:
+      Lo.sc(b, ms, Core.Lo.bind(Core.Dead.names(Core.Lo.pats(ps)), bound), True{}, Nil{}, ok)
+    case Core.ESucc{k, x}:
+      Lo.sc(x, ms, bound, True{}, Nil{}, ok)
+    case Core.EOp{op, a, b}:
+      match ok:
+        case (oa, ob):
+          (Lo.sc(a, ms, bound, True{}, Nil{}, oa), Lo.sc(b, ms, bound, True{}, Nil{}, ob))
+    case Core.EAnn{x, ty}:
+      Lo.sc(x, ms, bound, True{}, Nil{}, ok)
+    case Core.ETy{+n, args}:
+      match args:
+        case Nil{}:
+          Unit{}
+        case +a <> +t:
+          Ty.sc(n, a, t, ms, bound, Shape.ty(t, n, ms, bound, False{}, Nil{}))
+    case Core.EErr{m}:
+      ok
+
+def Law.lo_scoped(e, ms, bound, top, mask, ok):
+  Lo.sc(e, ms, bound, top, mask, ok)
