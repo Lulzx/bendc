@@ -13373,6 +13373,18 @@ def Inl.app(f: Core.Tm, as: List<&2, Core.Tm>) -> Core.Tm:
     case a <> t:
       Core.CApp{f, a <> t}
 
+# Whether each pattern is a variable (a nested pattern may not match).
+def Inl.pts.vars(ps: List<&2, Core.Pt>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case p <> r:
+      match p:
+        case Core.PtVar{x}:
+          Inl.pts.vars(r)
+        case other:
+          False{}
+
 # The case of a match on K{as} (the first case whose pattern is K's, or a
 # variable), as lets; t itself when a case needs more than that.
 def Inl.known(+k: String, +as: List<&2, Core.Tm>, cases: List<&2, Core.Tm>, +t: Core.Tm) -> Core.Tm:
@@ -13389,7 +13401,7 @@ def Inl.known(+k: String, +as: List<&2, Core.Tm>, cases: List<&2, Core.Tm>, +t: 
                   Core.CLet{Core.PtVar{x}, Core.CCtr{k, as}, b}
                 case Core.PtCtr{+k2, +qs}:
                   Bool.pick(Unit -> Core.Tm, String.eq(k, k2),
-                    u => Bool.pick(Core.Tm, Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as)), Inl.lets(qs, as, b), t),
+                    u => Bool.pick(Core.Tm, Bool.and(Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as)), Inl.pts.vars(qs)), Inl.lets(qs, as, b), t),
                     u => Inl.known(k, as, r, t))(Unit{})
                 case other:
                   t
@@ -13641,27 +13653,190 @@ def Inl.def(+c: Map<&2, Core.Def>, d: Core.Def) -> Core.Def:
       Core.Def{name, ps, Bool.pick(Unit -> Core.Tm, Inl.any(Inl.names(body, 3, Nil{}), c),
         u => Inl.go(Fuel.max(), c, IAll{}, body), u => body)(Unit{}), ret}
 
-# The program through the core IR: each def lowered, erased, with monadic
-# binds inlined, and raised; a type-level def (a Type, Data, Quant or Kind)
-# keeps its body, which the printers unfold.
-def Lo.pass(+g: G, +c: Map<&2, Core.Def>, d: Decl) -> Decl:
+# Optimizer
+# ---------
+#
+# Opt runs on the whole program in the core IR, after erasure. Each pass
+# can be turned off for measurement: BEND_OPT lists the passes that run
+# (i general inlining, ...); unset, all of them run.
+
+# A declaration on its way through the core IR: a def lowered to it, or a
+# declaration that stays as it is (a type, an effect, a type-level def).
+type OD is Data:
+  OCore{d: Core.Def}
+  OKeep{d: Decl}
+
+def Opt.on(+flags: String, +c: U32) -> Bool:
+  String.contains(flags, Str.chr(c))
+
+def Opt.dname(d: Core.Def) -> String:
+  match d:
+    case Core.Def{name, ps, b, ret}:
+      name
+
+def Opt.lower(+g: G, d: Decl) -> OD:
   match d:
     case DDef{+name, +ps, +body, +ret}:
-      Bool.pick(Unit -> Decl, G.erased_ty(Ty.head(ret)), u => DDef{name, ps, body, ret},
-        u => Up.def(Inl.def(c, Core.Def.erase(Lo.def(g, name, ps, body, ret)))))(Unit{})
+      Bool.pick(Unit -> OD, G.erased_ty(Ty.head(ret)), u => OKeep{DDef{name, ps, body, ret}},
+        u => OCore{Core.Def.erase(Lo.def(g, name, ps, body, ret))})(Unit{})
     case other:
-      other
+      OKeep{other}
 
-def Lo.passes(+g: G, +c: Map<&2, Core.Def>, ds: List<&2, Decl>) -> List<&2, Decl>:
+def Opt.lowers(+g: G, ds: List<&2, Decl>) -> List<&2, OD>:
   match ds:
     case Nil{}:
       Nil{}
     case d <> r:
-      Lo.pass(g, c, d) <> Lo.passes(g, c, r)
+      Opt.lower(g, d) <> Opt.lowers(g, r)
 
-def Lo.program(+ds: List<&2, Decl>) -> List<&2, Decl>:
+def Opt.raise(d: OD) -> Decl:
+  match d:
+    case OCore{c}:
+      Up.def(c)
+    case OKeep{k}:
+      k
+
+def Opt.raises(ds: List<&2, OD>) -> List<&2, Decl>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Opt.raise(d) <> Opt.raises(r)
+
+# The number of nodes of t (a list field as its head and the node rebuilt
+# with the rest, as everywhere).
+def Opt.size(t: Core.Tm) -> U32:
+  match t:
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          1
+        case Core.Arg{r, e} <> t2:
+          U32.add(Opt.size(e), Opt.size(Core.CCall{f, t2}))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          U32.inc(Opt.size(f))
+        case a <> t2:
+          U32.add(Opt.size(a), Opt.size(Core.CApp{f, t2}))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          1
+        case a <> t2:
+          U32.add(Opt.size(a), Opt.size(Core.CCtr{k, t2}))
+    case Core.CLam{p, b}:
+      U32.inc(Opt.size(b))
+    case Core.CLet{p, v, b}:
+      U32.inc(U32.add(Opt.size(v), Opt.size(b)))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          U32.add(Opt.size(a), Opt.size(Core.CMat{t2, cases}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              1
+            case c <> t2:
+              U32.add(Opt.size(c), Opt.size(Core.CMat{Nil{}, t2}))
+    case Core.CCse{ps, b}:
+      U32.inc(Opt.size(b))
+    case Core.CSuc{k, e}:
+      U32.inc(Opt.size(e))
+    case Core.COp{op, a, b}:
+      U32.inc(U32.add(Opt.size(a), Opt.size(b)))
+    case Core.CAnn{e, ty}:
+      Opt.size(e)
+    case other:
+      1
+
+# General inlining
+# ----------------
+#
+# Inl's context also takes every small def that calls only defs declared
+# before it: a def is declared before its uses but for a law's (a cycle
+# goes through a law), so the defs it picks inline into each other only
+# finitely. Natives keep their calls (their Bend bodies are not what runs),
+# and so does IO, whose binds the runtime reads.
+
+def Opt.dots(s: String) -> U32:
+  match s:
+    case SNil{}:
+      0
+    case SCon{Chr{c}, t}:
+      U32.add(Bool.pick(U32, U32.is_eq(c, 46), 1, 0), Opt.dots(t))
+
+def Opt.budget(+flags: String) -> U32:
+  U32.add(4, U32.mul(2, Opt.dots(flags)))
+
+def Opt.rank(ds: List<&2, OD>, +i: U32, m: Map<&2, U32>) -> Map<&2, U32>:
+  match ds:
+    case Nil{}:
+      m
+    case d <> t:
+      match d:
+        case OCore{Core.Def{+name, ps, b, ret}}:
+          Opt.rank(t, U32.inc(i), Map.set(&2, U32, m, name, i))
+        case OKeep{k}:
+          Opt.rank(t, i, m)
+
+# Whether each def xs names comes before rank i (a name that is no def,
+# a constructor's or an effect's, never inlines).
+def Opt.before.one(+x: String, +rank: Map<&2, U32>, +i: U32) -> Bool:
+  Bool.or(U32.is_lt(Pair.snd(Map<&2, U32>, U32, Map.get(U32, 4294967295, rank, x)), i),
+    Bool.not(Pair.snd(Map<&2, U32>, Bool, Map.has(&2, U32, rank, x))))
+
+def Opt.before(xs: List<&2, String>, +rank: Map<&2, U32>, +i: U32) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case +x <> t:
+      Bool.and(Opt.before.one(x, rank, i), Opt.before(t, rank, i))
+
+def Opt.small(+flags: String, +rank: Map<&2, U32>, +d: Core.Def) -> Bool:
+  match d:
+    case Core.Def{+name, ps, +b, ret}:
+      Bool.and(Bool.and(U32.is_le(Opt.size(b), Opt.budget(flags)), Bool.not(G.is_native(name))),
+        Bool.and(Bool.not(String.starts_with(name, "IO.")),
+          Opt.before(Inl.names(b, 3, Nil{}), rank, Pair.snd(Map<&2, U32>, U32, Map.get(U32, 0, rank, name)))))
+
+def Opt.ctx(+flags: String, +names: Set(), +rank: Map<&2, U32>, ds: List<&2, OD>, +m: Map<&2, Core.Def>) -> Map<&2, Core.Def>:
+  match ds:
+    case Nil{}:
+      m
+    case d <> t:
+      match d:
+        case OCore{+cd}:
+          Opt.ctx(flags, names, rank, t, Bool.pick(Unit -> Map<&2, Core.Def>, Inl.pick(names, Opt.dname(cd)),
+            u => Inl.add(Opt.dname(cd), cd, m),
+            u => Bool.pick(Unit -> Map<&2, Core.Def>, Opt.on(flags, 105),
+              u2 => Bool.pick(Map<&2, Core.Def>, Opt.small(flags, rank, cd), Map.set(&2, Core.Def, m, Opt.dname(cd), cd), m),
+              u2 => m)(Unit{}))(Unit{}))
+        case OKeep{k}:
+          Opt.ctx(flags, names, rank, t, m)
+
+def Opt.inl(+c: Map<&2, Core.Def>, d: OD) -> OD:
+  match d:
+    case OCore{cd}:
+      OCore{Inl.def(c, cd)}
+    case OKeep{k}:
+      OKeep{k}
+
+def Opt.inls(+c: Map<&2, Core.Def>, ds: List<&2, OD>) -> List<&2, OD>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Opt.inl(c, d) <> Opt.inls(c, r)
+
+# The program through the core IR: each def lowered, erased, optimized
+# (see Opt), and raised; a type-level def (a Type, Data, Quant or Kind)
+# keeps its body, which the printers unfold.
+def Lo.program(+flags: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
   +g = G.new(ds)
-  Lo.passes(g, Inl.ctx(g, Inl.names.defs(ds, Set.new()), ds, Map.new(&2, Core.Def)), ds)
+  +ods = Opt.lowers(g, ds)
+  +rank = Opt.rank(ods, 0, Map.new(&2, U32))
+  Opt.raises(Opt.inls(Opt.ctx(flags, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods))
 
 def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
@@ -13701,11 +13876,19 @@ def Gen.program.m(+g: G) -> Gen(String):
     Gen.all(g, ["main"], Set.new())
     Gen.entry(g, G.body(g, "main"))
 
-def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool) -> COut:
-  +ds = Par.auto(par, Lo.program(Pick.decls(ds0)))
+def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String) -> COut:
+  +ds = Par.auto(par, Lo.program(opt, Pick.decls(ds0)))
   +g = Dps.build(G.new(ds), ds, free)
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
+
+# The optimizer's passes (see Opt): BEND_OPT's letters, else all of them.
+def Main.opt(r: Result<&1, &1, U32 & String, String>) -> String:
+  match r:
+    case Done{v}:
+      v
+    case Fail{e}:
+      "i."
 
 # C for a program: matches free what they open unless BEND_NO_FREE is set
 # (bendc builds itself so: a compiler's heap is mostly shared, short-lived
@@ -13715,7 +13898,8 @@ def Main.emit.c(+ds: List<&2, Decl>) -> IO(Unit):
     r : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
     r2 : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
     ap : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_AUTO_PAR")
-    Main.emit(ds, Gen.program(ds, Main.free(r), Main.auto_par(ap, Main.free(r2))))
+    op : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_OPT")
+    Main.emit(ds, Gen.program(ds, Main.free(r), Main.auto_par(ap, Main.free(r2)), Main.opt(op)))
 
 def J.entry.ty(+j: JG, +ret: Expr, io: Bool) -> Gen(String):
   match io:
