@@ -25,8 +25,9 @@ tests with stage2: 80 passed, 0 failed
 ```
 
 `bendc.bend` (the compiler) and `check.bend` (the type checker) are Bend: about 22,000 lines that
-`bend --check-only` accepts (since Bend 2.0.32 it exits 1 on them all the same, listing the defs
-that rely on `@unsafe` or foreign code; bendc's checker prints the same report). bendc type-checks
+`bend --check-only` accepts: `check.bend` outright, and `bendc.bend` with exit status 1 since Bend
+2.0.32, which lists the 18 defs that rely on foreign code (the package fetcher `Hub.ensure`, which
+imports C, and its callers); bendc's checker prints the same report. bendc type-checks
 a program the way the official checker does (a port of it, with the same error reports), then lexes, parses, erases, and code-generates it, including the
 parts of Bend's standard library (`Base`) that the program uses. The result is a single C file that
 clang builds against the runtime (`rt/bendrt.h`): a garbage collector, native `Nat` and arrays, a
@@ -461,9 +462,11 @@ Bend 2 is a proof language, and its checker is strict about code that runs. It s
   `Nat` fuel argument that starts at `Fuel.max()`, about 4 billion, and fails loudly if it ever
   runs out. A branch on a computed value that recurses is `Bool.pick(T, c, u => a, u => b)(x)`:
   the termination check sees the self-call under the lambda, and bendc compiles it as a match, with
-  no closures. `bendc.bend` has no `@unsafe` def, and `check.bend` has three, where its parser calls
-  the evaluator defined after it (`tools/unsafe_min.py` keeps the markers minimal: it strips them
-  all and puts back one for each def the checker rejects).
+  no closures. Neither `bendc.bend` nor `check.bend` has an `@unsafe` def: the checker's parser
+  normalizes each def's value and prints terms in its errors, so the evaluator and the printer
+  (`higher`, `term_lower`, `term_show` and what they use) come before the parser's declarations
+  (`tools/unsafe_min.py` keeps the markers minimal: it strips them all and puts back one for each
+  def the checker rejects).
 
 The compiler compiles every one of these patterns in its own source. It handles its own laws, its
 own dependent selectors, and its own user-defined monads (`Parser`, `Gen`), which is what makes the

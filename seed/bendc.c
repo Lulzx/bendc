@@ -427,6 +427,177 @@
 #ifndef CID_CHK_ROW
 #define CID_CHK_ROW 3u
 #endif
+#ifndef CID_CHK_LNO
+#define CID_CHK_LNO ((1u << 16) | 0u)
+#endif
+#ifndef CID_CHK_LH
+#define CID_CHK_LH 1u
+#endif
+#ifndef CID_CHK_FAPP
+#define CID_CHK_FAPP 0u
+#endif
+#ifndef CID_CHK_FMAT
+#define CID_CHK_FMAT 1u
+#endif
+#ifndef CID_CHK_FMNA
+#define CID_CHK_FMNA 2u
+#endif
+#ifndef CID_CHK_FMNB
+#define CID_CHK_FMNB 3u
+#endif
+#ifndef CID_CHK_FVAR
+#define CID_CHK_FVAR 4u
+#endif
+#ifndef CID_CHK_STERMSNF
+#define CID_CHK_STERMSNF 0u
+#endif
+#ifndef CID_CHK_SCLOAPPLY
+#define CID_CHK_SCLOAPPLY 1u
+#endif
+#ifndef CID_CHK_STERMAPPLYGO
+#define CID_CHK_STERMAPPLYGO 2u
+#endif
+#ifndef CID_CHK_STERMAPPLY
+#define CID_CHK_STERMAPPLY 3u
+#endif
+#ifndef CID_CHK_SLHSEXT
+#define CID_CHK_SLHSEXT 4u
+#endif
+#ifndef CID_CHK_SHIGHERVAL
+#define CID_CHK_SHIGHERVAL 5u
+#endif
+#ifndef CID_CHK_SHIGHERVAR
+#define CID_CHK_SHIGHERVAR 6u
+#endif
+#ifndef CID_CHK_SHIGHERAPP
+#define CID_CHK_SHIGHERAPP 7u
+#endif
+#ifndef CID_CHK_SHIGHERS
+#define CID_CHK_SHIGHERS 8u
+#endif
+#ifndef CID_CHK_SHIGHER
+#define CID_CHK_SHIGHER 9u
+#endif
+#ifndef CID_CHK_SLHSSTEP
+#define CID_CHK_SLHSSTEP 10u
+#endif
+#ifndef CID_CHK_SLHSMAT
+#define CID_CHK_SLHSMAT 11u
+#endif
+#ifndef CID_CHK_SWNFLAM
+#define CID_CHK_SWNFLAM 12u
+#endif
+#ifndef CID_CHK_SWNFMAT
+#define CID_CHK_SWNFMAT 13u
+#endif
+#ifndef CID_CHK_SWNFEFQ
+#define CID_CHK_SWNFEFQ 14u
+#endif
+#ifndef CID_CHK_SWNFRWT
+#define CID_CHK_SWNFRWT 15u
+#endif
+#ifndef CID_CHK_SWNFREF
+#define CID_CHK_SWNFREF 16u
+#endif
+#ifndef CID_CHK_SWNFGO
+#define CID_CHK_SWNFGO 17u
+#endif
+#ifndef CID_CHK_SWNFMATD
+#define CID_CHK_SWNFMATD 18u
+#endif
+#ifndef CID_CHK_SWNFBACK
+#define CID_CHK_SWNFBACK 19u
+#endif
+#ifndef CID_CHK_SWNFMNA
+#define CID_CHK_SWNFMNA 20u
+#endif
+#ifndef CID_CHK_SWNFWALK
+#define CID_CHK_SWNFWALK 21u
+#endif
+#ifndef CID_CHK_SSNFS
+#define CID_CHK_SSNFS 22u
+#endif
+#ifndef CID_CHK_SSNFFUN
+#define CID_CHK_SSNFFUN 23u
+#endif
+#ifndef CID_CHK_SSNFGO
+#define CID_CHK_SSNFGO 24u
+#endif
+#ifndef CID_CHK_SMATGOAL
+#define CID_CHK_SMATGOAL 25u
+#endif
+#ifndef CID_CHK_SLOWERS
+#define CID_CHK_SLOWERS 0u
+#endif
+#ifndef CID_CHK_STERMLOWERGO
+#define CID_CHK_STERMLOWERGO 1u
+#endif
+#ifndef CID_CHK_STERMLOWER
+#define CID_CHK_STERMLOWER 2u
+#endif
+#ifndef CID_CHK_STERMSHOWGO
+#define CID_CHK_STERMSHOWGO 0u
+#endif
+#ifndef CID_CHK_SSHOWARGS
+#define CID_CHK_SSHOWARGS 1u
+#endif
+#ifndef CID_CHK_SSHOWARR
+#define CID_CHK_SSHOWARR 2u
+#endif
+#ifndef CID_CHK_SSHOWTYP
+#define CID_CHK_SSHOWTYP 3u
+#endif
+#ifndef CID_CHK_SSHOWARMS
+#define CID_CHK_SSHOWARMS 4u
+#endif
+#ifndef CID_CHK_SSHOWAPPGO
+#define CID_CHK_SSHOWAPPGO 5u
+#endif
+#ifndef CID_CHK_SSHOWAPP
+#define CID_CHK_SSHOWAPP 6u
+#endif
+#ifndef CID_CHK_SSHOWRWTINNER
+#define CID_CHK_SSHOWRWTINNER 7u
+#endif
+#ifndef CID_CHK_SSHOWRWTGO
+#define CID_CHK_SSHOWRWTGO 8u
+#endif
+#ifndef CID_CHK_SSHOWRWT
+#define CID_CHK_SSHOWRWT 9u
+#endif
+#ifndef CID_CHK_SSHOWCTRPLAIN
+#define CID_CHK_SSHOWCTRPLAIN 10u
+#endif
+#ifndef CID_CHK_SSHOWCTRARR
+#define CID_CHK_SSHOWCTRARR 11u
+#endif
+#ifndef CID_CHK_SSHOWCTRTUP
+#define CID_CHK_SSHOWCTRTUP 12u
+#endif
+#ifndef CID_CHK_SSHOWCTRLST
+#define CID_CHK_SSHOWCTRLST 13u
+#endif
+#ifndef CID_CHK_SSHOWCTRSTR
+#define CID_CHK_SSHOWCTRSTR 14u
+#endif
+#ifndef CID_CHK_SSHOWCTRCHR
+#define CID_CHK_SSHOWCTRCHR 15u
+#endif
+#ifndef CID_CHK_SSHOWCTRSUCC
+#define CID_CHK_SSHOWCTRSUCC 16u
+#endif
+#ifndef CID_CHK_SSHOWCTRNAT
+#define CID_CHK_SSHOWCTRNAT 17u
+#endif
+#ifndef CID_CHK_SSHOWCTRF32
+#define CID_CHK_SSHOWCTRF32 18u
+#endif
+#ifndef CID_CHK_SSHOWCTRU32
+#define CID_CHK_SSHOWCTRU32 19u
+#endif
+#ifndef CID_CHK_SSHOWCTR
+#define CID_CHK_SSHOWCTR 20u
+#endif
 #ifndef CID_CHK_PKPATTS
 #define CID_CHK_PKPATTS 0u
 #endif
@@ -757,114 +928,6 @@
 #ifndef CID_CHK_US
 #define CID_CHK_US 0u
 #endif
-#ifndef CID_CHK_LNO
-#define CID_CHK_LNO ((1u << 16) | 0u)
-#endif
-#ifndef CID_CHK_LH
-#define CID_CHK_LH 1u
-#endif
-#ifndef CID_CHK_FAPP
-#define CID_CHK_FAPP 0u
-#endif
-#ifndef CID_CHK_FMAT
-#define CID_CHK_FMAT 1u
-#endif
-#ifndef CID_CHK_FMNA
-#define CID_CHK_FMNA 2u
-#endif
-#ifndef CID_CHK_FMNB
-#define CID_CHK_FMNB 3u
-#endif
-#ifndef CID_CHK_FVAR
-#define CID_CHK_FVAR 4u
-#endif
-#ifndef CID_CHK_STERMSNF
-#define CID_CHK_STERMSNF 0u
-#endif
-#ifndef CID_CHK_SCLOAPPLY
-#define CID_CHK_SCLOAPPLY 1u
-#endif
-#ifndef CID_CHK_STERMAPPLYGO
-#define CID_CHK_STERMAPPLYGO 2u
-#endif
-#ifndef CID_CHK_STERMAPPLY
-#define CID_CHK_STERMAPPLY 3u
-#endif
-#ifndef CID_CHK_SLHSEXT
-#define CID_CHK_SLHSEXT 4u
-#endif
-#ifndef CID_CHK_SHIGHERVAL
-#define CID_CHK_SHIGHERVAL 5u
-#endif
-#ifndef CID_CHK_SHIGHERVAR
-#define CID_CHK_SHIGHERVAR 6u
-#endif
-#ifndef CID_CHK_SHIGHERAPP
-#define CID_CHK_SHIGHERAPP 7u
-#endif
-#ifndef CID_CHK_SHIGHERS
-#define CID_CHK_SHIGHERS 8u
-#endif
-#ifndef CID_CHK_SHIGHER
-#define CID_CHK_SHIGHER 9u
-#endif
-#ifndef CID_CHK_SLHSSTEP
-#define CID_CHK_SLHSSTEP 10u
-#endif
-#ifndef CID_CHK_SLHSMAT
-#define CID_CHK_SLHSMAT 11u
-#endif
-#ifndef CID_CHK_SWNFLAM
-#define CID_CHK_SWNFLAM 12u
-#endif
-#ifndef CID_CHK_SWNFMAT
-#define CID_CHK_SWNFMAT 13u
-#endif
-#ifndef CID_CHK_SWNFEFQ
-#define CID_CHK_SWNFEFQ 14u
-#endif
-#ifndef CID_CHK_SWNFRWT
-#define CID_CHK_SWNFRWT 15u
-#endif
-#ifndef CID_CHK_SWNFREF
-#define CID_CHK_SWNFREF 16u
-#endif
-#ifndef CID_CHK_SWNFGO
-#define CID_CHK_SWNFGO 17u
-#endif
-#ifndef CID_CHK_SWNFMATD
-#define CID_CHK_SWNFMATD 18u
-#endif
-#ifndef CID_CHK_SWNFBACK
-#define CID_CHK_SWNFBACK 19u
-#endif
-#ifndef CID_CHK_SWNFMNA
-#define CID_CHK_SWNFMNA 20u
-#endif
-#ifndef CID_CHK_SWNFWALK
-#define CID_CHK_SWNFWALK 21u
-#endif
-#ifndef CID_CHK_SSNFS
-#define CID_CHK_SSNFS 22u
-#endif
-#ifndef CID_CHK_SSNFFUN
-#define CID_CHK_SSNFFUN 23u
-#endif
-#ifndef CID_CHK_SSNFGO
-#define CID_CHK_SSNFGO 24u
-#endif
-#ifndef CID_CHK_SMATGOAL
-#define CID_CHK_SMATGOAL 25u
-#endif
-#ifndef CID_CHK_SLOWERS
-#define CID_CHK_SLOWERS 0u
-#endif
-#ifndef CID_CHK_STERMLOWERGO
-#define CID_CHK_STERMLOWERGO 1u
-#endif
-#ifndef CID_CHK_STERMLOWER
-#define CID_CHK_STERMLOWER 2u
-#endif
 #ifndef CID_CHK_STERMCOMPARE
 #define CID_CHK_STERMCOMPARE 0u
 #endif
@@ -894,69 +957,6 @@
 #endif
 #ifndef CID_CHK_SCMPGO
 #define CID_CHK_SCMPGO 9u
-#endif
-#ifndef CID_CHK_STERMSHOWGO
-#define CID_CHK_STERMSHOWGO 0u
-#endif
-#ifndef CID_CHK_SSHOWARGS
-#define CID_CHK_SSHOWARGS 1u
-#endif
-#ifndef CID_CHK_SSHOWARR
-#define CID_CHK_SSHOWARR 2u
-#endif
-#ifndef CID_CHK_SSHOWTYP
-#define CID_CHK_SSHOWTYP 3u
-#endif
-#ifndef CID_CHK_SSHOWARMS
-#define CID_CHK_SSHOWARMS 4u
-#endif
-#ifndef CID_CHK_SSHOWAPPGO
-#define CID_CHK_SSHOWAPPGO 5u
-#endif
-#ifndef CID_CHK_SSHOWAPP
-#define CID_CHK_SSHOWAPP 6u
-#endif
-#ifndef CID_CHK_SSHOWRWTINNER
-#define CID_CHK_SSHOWRWTINNER 7u
-#endif
-#ifndef CID_CHK_SSHOWRWTGO
-#define CID_CHK_SSHOWRWTGO 8u
-#endif
-#ifndef CID_CHK_SSHOWRWT
-#define CID_CHK_SSHOWRWT 9u
-#endif
-#ifndef CID_CHK_SSHOWCTRPLAIN
-#define CID_CHK_SSHOWCTRPLAIN 10u
-#endif
-#ifndef CID_CHK_SSHOWCTRARR
-#define CID_CHK_SSHOWCTRARR 11u
-#endif
-#ifndef CID_CHK_SSHOWCTRTUP
-#define CID_CHK_SSHOWCTRTUP 12u
-#endif
-#ifndef CID_CHK_SSHOWCTRLST
-#define CID_CHK_SSHOWCTRLST 13u
-#endif
-#ifndef CID_CHK_SSHOWCTRSTR
-#define CID_CHK_SSHOWCTRSTR 14u
-#endif
-#ifndef CID_CHK_SSHOWCTRCHR
-#define CID_CHK_SSHOWCTRCHR 15u
-#endif
-#ifndef CID_CHK_SSHOWCTRSUCC
-#define CID_CHK_SSHOWCTRSUCC 16u
-#endif
-#ifndef CID_CHK_SSHOWCTRNAT
-#define CID_CHK_SSHOWCTRNAT 17u
-#endif
-#ifndef CID_CHK_SSHOWCTRF32
-#define CID_CHK_SSHOWCTRF32 18u
-#endif
-#ifndef CID_CHK_SSHOWCTRU32
-#define CID_CHK_SSHOWCTRU32 19u
-#endif
-#ifndef CID_CHK_SSHOWCTR
-#define CID_CHK_SSHOWCTR 20u
 #endif
 #ifndef CID_CHK_CL
 #define CID_CHK_CL 0u
@@ -13756,7 +13756,7 @@ return IMM(0);
 static V W_Chk_dLazy_dand(V *a) { (void)a; return F_Chk_dLazy_dand(a[0], a[1]); }
 static V F_Chk_dterm__lower(V a0, V a1, V a2) {
 top:;
-return F_Chk_dlower_drun(F_Chk_dFuel_dmax(), C3(2, a0, a1, a2));
+return F_Chk_dlower_drun(F_Chk_dFuel_dmax(), C3(2, a0, a1, (a2)));
 }
 static V W_Chk_dterm__lower(V *a) { (void)a; return F_Chk_dterm__lower(a[0], a[1], a[2]); }
 static V S189(void) { static V c; return STRC(c, "out of fuel"); }
@@ -37283,7 +37283,7 @@ return F_Chk_dwnf_drun(F_Chk_dFuel_dmax(), C2(0, a0, a1));
 static V W_Chk_dterm__snf(V *a) { (void)a; return F_Chk_dterm__snf(a[0], a[1]); }
 static V F_Chk_dterm__show(V a0, V a1, V a2) {
 top:;
-return F_Chk_dterm__show_dgo(a0, a1, a2, F_List_dlength(0, a2));
+return F_Chk_dterm__show_dgo(a0, (a1), a2, F_List_dlength(0, a2));
 }
 static V W_Chk_dterm__show(V *a) { (void)a; return F_Chk_dterm__show(a[0], a[1], a[2]); }
 static V F_Chk_dterm__show_dgo(V a0, V a1, V a2, V a3) {
