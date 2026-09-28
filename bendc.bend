@@ -12755,8 +12755,8 @@ def Gen.gpu.tail(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> String:
 # Core IR
 # =======
 #
-# The C back end's input goes through the core IR (core.bend): Lo lowers a
-# def to it, marking each argument of a call of a global def relevant or
+# The C back end's input goes through the core IR (core.bend): Core.Lo
+# lowers a def to it, marking each argument of a call of a global def relevant or
 # erased by the def's parameter mask; Core.Tm.erase boxes the erased ones
 # and the types left in the body (PROOF.bend proves that this preserves the
 # IR's semantics); Inl inlines monadic binds; Core.Tm.red makes each lambda
@@ -12764,8 +12764,9 @@ def Gen.gpu.tail(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> String:
 # the semantics too); Core.Tm.known resolves each match on a known
 # constructor (KNOWNPROOF.bend); Core.Tm.lit puts the numbers lets bind in
 # the place of their variables' lookups (LITPROOF.bend); Core.Tm.dead drops
-# lets of variables no lookup reaches (DEADPROOF.bend); Up raises the
-# result back to an Expr.
+# lets of variables no lookup reaches (DEADPROOF.bend); Core.Up raises the
+# result back to an Expr. LOPROOF.bend proves that raising a lowered def
+# gives it back, and that a lowered def never fails a variable lookup.
 
 # The parameter masks of the program's defs, which Core.Lo.go reads a
 # call's from.
