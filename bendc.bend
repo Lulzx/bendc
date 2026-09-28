@@ -15625,6 +15625,10 @@ type NSelf is Data:
 def NSelf.none() -> NSelf:
   NSelf{"", Nil{}, ""}
 
+def N.self.name(s: NSelf) -> String:
+  NSelf{sn, mask, top} = s
+  sn
+
 # The generator's state: a counter for fresh names, the current frame's next
 # slot and its most, the finished functions, the defs referenced since the
 # last def, errors, the data slots used (string literal caches), the literal
@@ -16748,12 +16752,25 @@ def N.target(native: Bool, +w: U32, +name: String) -> As.Code:
       N.one(As.IB{w, Gen.f(name)})
 
 # A call: a native inlined when it can be (its code in place of the branch).
-def N.ncall(native: Bool, +name: String) -> As.Code:
+def N.ncall(native: Bool, +name: String, sym: String) -> As.Code:
   match native:
     case True{}:
       N.inline.or(N.inline.find(N.inlines(), name), As.bl(), name)
     case False{}:
-      N.one(As.IB{As.bl(), Gen.f(name)})
+      N.one(As.IB{As.bl(), sym})
+
+def N.fsym.pick(m: Maybe<&2, String>, +name: String) -> String:
+  match m:
+    case Some{+v}:
+      Bool.pick(String, Str.eq(v, name), "S_" ++ Gen.mangle(name), Gen.f(name))
+    case None{}:
+      Gen.f(name)
+
+# A def's symbol: F_name, or S_name inside S_name's code (Gen.def.seq).
+def N.fsym(+name: String) -> NG(String):
+  do NG<String>:
+    m : Maybe<&2, String> <- N.memo.find("%seqmode")
+    return N.fsym.pick(m, name)
 
 def N.ntail.go(m: Maybe<&2, As.Code>, +name: String) -> As.Code:
   match m:
@@ -16764,12 +16781,12 @@ def N.ntail.go(m: Maybe<&2, As.Code>, +name: String) -> As.Code:
 
 # A tail call's end: an inlined native, then the epilogue; else pop the frame
 # and branch.
-def N.ntail(native: Bool, +name: String) -> As.Code:
+def N.ntail(native: Bool, +name: String, sym: String) -> As.Code:
   match native:
     case True{}:
       N.ntail.go(N.inline.find(N.inlines(), name), name)
     case False{}:
-      As.CCat{N.pop(), N.one(As.IB{As.b(), Gen.f(name)})}
+      As.CCat{N.pop(), N.one(As.IB{As.b(), sym})}
 
 # The operands of a call into x0..x7, or (a wide call) into the row from
 # slot base up, whose address goes in x0.
@@ -16928,6 +16945,13 @@ type NS is Data:
   NSLets{g: G, env0: NEnv(), env: NEnv(), self: NSelf, tgt: NT, ps: List<&2, Pat>, vs: List<&2, Expr>,
     body: Expr}
   NSLetPar{g: G, env: NEnv(), self: NSelf, tgt: NT, ps: List<&2, Pat>, v: Expr, body: Expr}
+  NSPar{g: G, env: NEnv(), self: NSelf, tgt: NT, ps: List<&2, Pat>, vs: List<&2, Expr>, body: Expr}
+  NSParPick{mode: Nat, g: G, env: NEnv(), self: NSelf, tgt: NT, ps: List<&2, Pat>, vs: List<&2, Expr>,
+    body: Expr}
+  NSParSq{sq: Bool, g: G, env: NEnv(), sn: String, prev: String, s: U32, vs: List<&2, Expr>}
+  NSParSeq{g: G, env: NEnv(), s: U32, vs: List<&2, Expr>}
+  NSParVals{g: G, env: NEnv(), s: U32, vs: List<&2, Expr>}
+  NSParBind{g: G, env: NEnv(), self: NSelf, tgt: NT, ps: List<&2, Pat>, s: U32, body: Expr}
   NSLetCtor{g: G, env: NEnv(), self: NSelf, tgt: NT, name: String, ps: List<&2, Pat>, v: Expr,
     body: Expr, par: Bool}
   NSLet{g: G, env: NEnv(), self: NSelf, tgt: NT, p: Pat, v: Expr, body: Expr}
@@ -17058,7 +17082,8 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
                 +row : U32 <- N.slots(N.wide(n))
                 +r : U32 <- N.slots(1)
                 x : As.Code <- N.rec(fu, NSApp{g, env, extra, r})
-                return N.cat([a, N.callops(N.ops(env, kept, base), base, row, n), N.ncall(native, name), x])
+                sym : String <- N.fsym(name)
+                return N.cat([a, N.callops(N.ops(env, kept, base), base, row, n), N.ncall(native, name, sym), x])
             case False{}:
               do NG<As.Code>:
                 +base : U32 <- N.slots(N.cx(env, all))
@@ -17205,7 +17230,8 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
                 N.ref(name)
                 +base : U32 <- N.slots(N.cx(env, kept))
                 a : As.Code <- N.rec(fu, NSArgs{g, env, kept, base})
-                return N.cat([a, N.lregs.b(N.ops(env, kept, base), base), N.ntail(U32.is_eq(kind, 2), name)])
+                sym : String <- N.fsym(name)
+                return N.cat([a, N.lregs.b(N.ops(env, kept, base), base), N.ntail(U32.is_eq(kind, 2), name, sym)])
         case NSTailCall{+g, +env, +name, +args, ok}:
           match ok:
             case True{}:
@@ -17269,9 +17295,77 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
         case NSLetPar{+g, +env, +self, +tgt, ps, v, body}:
           match v:
             case ECtor{n, vs}:
+              N.rec(fu, NSPar{g, env, self, tgt, ps, vs, body})
+            case other:
+              N.rec(fu, NSPar{g, env, self, tgt, ps, [other], body})
+        # A parallel let (GSPar): in S_name its values run in order; else
+        # they fork (every one but the last, which runs here, then the forks
+        # are joined in reverse), in a seq def only above the frontier.
+        case NSPar{+g, +env, +self, +tgt, +ps, +vs, +body}:
+          do NG<As.Code>:
+            m : Maybe<&2, String> <- N.memo.find("%seqmode")
+            N.rec(fu, NSParPick{Gen.par.mode(m, N.self.name(self)), g, env, self, tgt, ps, vs, body})
+        case NSParPick{mode, +g, +env, +self, +tgt, +ps, +vs, +body}:
+          match mode:
+            case 1n:
               N.rec(fu, NSLets{g, env, env, self, tgt, ps, vs, body})
             case other:
-              N.rec(fu, NSLets{g, env, env, self, tgt, ps, [other], body})
+              +sn = N.self.name(self)
+              do NG<As.Code>:
+                m : Maybe<&2, String> <- N.memo.find("%seqmode")
+                +s : U32 <- N.slots(U32.from_nat(List.length(&2, Expr, vs)))
+                pre : As.Code <- N.rec(fu, NSParSq{Gen.isseq(g, sn), g, env, sn, Maybe.default(&2, String, m, ""), s,
+                  vs})
+                b : As.Code <- N.rec(fu, NSParBind{g, env, self, tgt, ps, s, body})
+                return As.CCat{pre, b}
+        # At the frontier (bn_front: par_depth against par_front) the values
+        # run in order, calling S_name; below it they fork.
+        case NSParSq{sq, +g, +env, +sn, +prev, +s, +vs}:
+          match sq:
+            case True{}:
+              do NG<As.Code>:
+                +fk : String <- N.label()
+                +done : String <- N.label()
+                N.memo.add(Bind{"%seqmode", sn})
+                q : As.Code <- N.rec(fu, NSParSeq{g, env, s, vs})
+                N.memo.add(Bind{"%seqmode", prev})
+                f : As.Code <- N.rec(fu, NSParVals{g, env, s, vs})
+                return N.cat([N.call("bn_front"), N.one(As.IBc{As.cbz(0), fk}), q, N.b(done), N.lab(fk), f,
+                  N.call("bn_back"), N.lab(done)])
+            case False{}:
+              N.rec(fu, NSParVals{g, env, s, vs})
+        case NSParSeq{+g, +env, +s, vs}:
+          match vs:
+            case Nil{}:
+              NG.pure(As.Code, As.CNil{})
+            case v <> t:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSExpr{g, env, v})
+                rest : As.Code <- N.rec(fu, NSParSeq{g, env, U32.inc(s), t})
+                return N.cat([c, N.st(0, s), rest])
+        case NSParVals{+g, +env, +s, vs}:
+          match vs:
+            case Nil{}:
+              NG.pure(As.Code, As.CNil{})
+            case v <> Nil{}:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSExpr{g, env, v})
+                return As.CCat{c, N.st(0, s)}
+            case v <> t:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSLam{g, env, PVar{"_"}, v})
+                rest : As.Code <- N.rec(fu, NSParVals{g, env, U32.inc(s), t})
+                return N.cat([c, N.call("par_fork"), N.st(0, s), rest, N.ld(0, s), N.call("par_join"), N.st(0, s)])
+        case NSParBind{+g, +env, +self, +tgt, ps, +s, +body}:
+          match ps:
+            case +p <> pt:
+              do NG<As.Code>:
+                +binds : List<&2, NBd> = N.binds.keep(Gen.free(g), NPr.binds(N.pat(g, p, NPO{NOS{s}}, NPr.none())))
+                +bb : U32 <- N.slots(N.binds.n(binds))
+                b : As.Code <- N.rec(fu, NSParBind{g, N.binds.env(binds, bb, env), self, tgt, pt, U32.inc(s), body})
+                return N.cat([N.binds.code(binds, bb), N.open(g, binds, bb, body), b])
+            case Nil{}:
+              N.rec(fu, NSStmt{g, env, self, tgt, body})
         case NSLetCtor{+g, +env, +self, +tgt, name, ps, v, body, par}:
           match par:
             case True{}:
@@ -17366,18 +17460,35 @@ def N.wrapper(+name: String, +mask: List<&2, Bool>, +native: Bool) -> NG(Unit):
       N.cat([N.prologue(n, 0), N.w(As.mov(10, 0)), N.wargs(mask, 0, 0, True{}), N.w(As.addi(0, 31, 0)),
         N.target(native, As.bl(), name), N.fix(N.epilogue(), 0)]))})
 
-def N.def.body(+g: G, +name: String, +mask: List<&2, Bool>, +ps: List<&2, Param>, body: Expr) -> NG(Unit):
+def N.def.fn(+g: G, +sym: String, +name: String, +mask: List<&2, Bool>, +ps: List<&2, Param>, +e: Expr) -> NG(Unit):
   +n = N.kept(mask)
-  +e = R.ops(body, "Nat")
   do NG<Unit>:
     saved : U32 & U32 <- N.enter()
     +p0 : U32 <- N.slots(n)
     +top : String <- N.label()
     b : As.Code <- N.stmt(g, N.params(ps, mask, 0, Nil{}), NSelf{name, mask, top}, NTRet{}, e)
     +max : U32 <- N.leave(saved)
-    N.emit(N.func(Gen.f(name), max, N.cat([N.params.in(U32.to_nat(n), 0, U32.is_gt(n, 8)), N.lab(top),
+    N.emit(N.func(sym, max, N.cat([N.params.in(U32.to_nat(n), 0, U32.is_gt(n, 8)), N.lab(top),
       N.shares.g(g, N.params.boxed(ps, mask, 0), e), b])))
+
+# S_name, a seq def's sequential clone (Gen.def.seq): its parallel lets run
+# in order and its calls to itself stay in it.
+def N.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +ps: List<&2, Param>, +e: Expr) -> NG(Unit):
+  match sq:
+    case True{}:
+      do NG<Unit>:
+        N.memo.add(Bind{"%seqmode", name})
+        N.def.fn(g, "S_" ++ Gen.mangle(name), name, mask, ps, e)
+        N.memo.add(Bind{"%seqmode", ""})
+    case False{}:
+      NG.pure(Unit, Unit{})
+
+def N.def.body(+g: G, +name: String, +mask: List<&2, Bool>, +ps: List<&2, Param>, body: Expr) -> NG(Unit):
+  +e = R.ops(body, "Nat")
+  do NG<Unit>:
+    N.def.fn(g, Gen.f(name), name, mask, ps, e)
     N.wrapper(name, mask, False{})
+    N.def.seq(Bool.and(Expr.has_par(e), Gen.isseq(g, name)), g, name, mask, ps, e)
 
 # a[j] into the request's field j (x10 holds a, x0 the node).
 def N.eff.args(k: Nat, +j: U32) -> As.Code:
@@ -17713,8 +17824,8 @@ def N.program.fin(elf: Bool, cids: String, r: As.Code & NSt) -> NOut:
     Gen.dedup(List.reverse(&2, String, effs), Nil{}), As.object(N.cat([out, entry, lits]), U32.max(data, 1), elf), errs}
 
 # (An ELF object for Linux, else Mach-O.)
-def N.program(+ds0: List<&2, Decl>, elf: Bool, free: Bool, +opt: String) -> NOut:
-  +ds = Lo.program(opt, Pick.decls(ds0))
+def N.program(+ds0: List<&2, Decl>, elf: Bool, free: Bool, par: Bool, +opt: String) -> NOut:
+  +ds = Par.auto(par, Lo.program(opt, Pick.decls(ds0)))
   +g = Dps.build(G.new(ds), ds, free)
   N.program.fin(elf, Gen.cids(g, ds, 0), N.program.m(g)(NSt{0, 0, 0, As.CNil{}, Nil{}, Nil{}, 0, As.CNil{}, Nil{}, Nil{},
     N.eids(ds, 0, Map.new(&2, U32))}))
@@ -17932,12 +18043,15 @@ def Main.native.emit(+ds: List<&2, Decl>, +out: String, r: NOut) -> IO(Unit):
         IO.print_err(String.join(List.reverse(&2, String, e <> t), "\n"))
         IO.die(Unit, 1, "bendc: compilation failed")
 
-# (Matches free what they open unless BEND_NO_FREE is set, as in C.)
+# (Matches free what they open unless BEND_NO_FREE is set, and parallel
+# lets are found as BEND_AUTO_PAR says, as in C.)
 def Main.native.to(+ds: List<&2, Decl>, +out: String, elf: Bool) -> IO(Unit):
   do IO<Unit>:
     r : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
+    r2 : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
+    ap : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_AUTO_PAR")
     op : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_OPT")
-    Main.native.emit(ds, out, N.program(ds, elf, Main.free(r), Main.opt(op)))
+    Main.native.emit(ds, out, N.program(ds, elf, Main.free(r), Main.auto_par(ap, Main.free(r2)), Main.opt(op)))
 
 def Main.native.compile(+out: String, elf: Bool, base: Result<&2, &2, String, List<&2, Decl>>,
   user: Result<&2, &2, String, List<&2, Decl>>

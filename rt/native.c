@@ -61,3 +61,13 @@ N3(Array_datomic_dfadd)
 // bound to variables used twice.
 V bn_take(V v, V w) { return (V)bend_take(v, (unsigned)w); }
 void bn_share(V v) { bend_share(v); }
+
+// Parallel lets fork with par_fork and par_join; a seq def's (see
+// GSParFront in bendc.bend) run in order at the frontier: bn_front is 1
+// there, else it counts the fork's depth, which bn_back undoes.
+V bn_front(void) {
+  if (par_depth >= par_front) return 1;
+  par_depth += 1;
+  return 0;
+}
+void bn_back(void) { par_depth -= 1; }
