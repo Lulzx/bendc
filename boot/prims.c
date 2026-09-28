@@ -472,7 +472,7 @@ static void run(void) {
 static void *thread_main(void *arg) {
   char base = 0;
   (void)arg;
-  set_stack_base(&base + 64);
+  set_stack_base(&base);  // run() and all it calls are below
   run();
   return 0;
 }

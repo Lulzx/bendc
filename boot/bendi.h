@@ -1,5 +1,5 @@
 // bendi: a small interpreter for Bend 2, written by hand, to bootstrap
-// bendc from source (see boot/README in the main README's "Bootstrapping").
+// bendc from source (see "Bootstrapping" in the README, and tools/boot.sh).
 //
 // Shared declarations. The interpreter is four files:
 //   parse.c  the lexer, layout and parser (a port of bendc.bend's), and
