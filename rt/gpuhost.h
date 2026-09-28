@@ -347,7 +347,8 @@ static void gpu_keep(V v) {
 static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
   KW lo = P->ab + ((P->heap0 + 1) << 3), hi = P->ab + ((P->heap0 + P->heapw) << 3);
 #define GPU_OBJ(w) ((w) >= lo && (w) < hi && ((w) & 7) == 0)
-  if (!GPU_OBJ(v)) { *out = v; return 1; }
+  // (counted, the copy holds a reference to each CPU object it reaches)
+  if (!GPU_OBJ(v)) { if (gc_hot.rc) rc_dup(v); *out = v; return 1; }
   size_t cap = 1024, sp = 0;
   KW *stk = malloc(cap * sizeof(KW));
   stk[sp++] = v;
@@ -381,10 +382,14 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
         }
         if (!fn) { ok = 0; gpu_note("%s", "the value holds a function the CPU has no code for"); break; }
         w = (V)fn;
+      } else if (k == 0) {
+        w &= RC_ADDR;  // (a word the device copied from a counted object: its count is not the copy's)
       } else if (GPU_OBJ(w)) {
         KW hw = gpu_H[KIX_H(P, w) - 1];
         if (!(hw & GPU_FWD)) { ok = 0; break; }
         w = hw & ~GPU_FWD;
+      } else if (gc_hot.rc) {
+        rc_dup(w);
       }
       p[k] = w;
     }
@@ -533,5 +538,8 @@ static int gpu_call(const GpuProg *prog, KW entry, V *args, int n, V *out) {
   int r = gpu_mode != GPU_OFF ? gpu_run(prog, entry, args, n, out) : 0;
   while (r == 2) r = gpu_grow() ? gpu_run(prog, entry, args, n, out) : 0;
   pthread_mutex_unlock(&gpu_lock);
+  // (counted, the device's run consumed the arguments, as the CPU's would)
+  if (r == 1 && gc_hot.rc)
+    for (int i = 0; i < n; i++) rc_drop(args[i]);
   return r == 1;
 }
