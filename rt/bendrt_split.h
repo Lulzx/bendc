@@ -467,7 +467,9 @@ static inline void gc_mark(V w) {
   if (kd == 3) bi -= gc_back[bi];
   GcBlk *b = gc_blk(bi);
   uintptr_t o = (uintptr_t)gc_objs(b);
-  if (a < o) return;
+  // A large object's header counts as the object: gc_alloc_large returns
+  // gc_objs(b) after it unlocks, so a thread stopped in the unlock holds b.
+  if (a < o && !b->large) return;
   size_t i = 0;
   if (b->large) {
     if (a >= o + (uintptr_t)b->words * sizeof(V)) return;
