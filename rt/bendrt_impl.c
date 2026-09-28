@@ -650,6 +650,7 @@ void thr_register(uintptr_t top) {
   __atomic_store_n(&gc_nthr, n1, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&gc_lock);
 }
+#define RUF(u) do { if (u) rc_free_at(u, 0); } while (0)
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))
 void rc_let_go_arr(V a) {

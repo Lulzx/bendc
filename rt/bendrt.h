@@ -1277,6 +1277,31 @@ static inline V CHN(V t, int n, const V *xs) {
   return (V)p;
 }
 
+// Reuse (counted programs): a constructor built where a match freed a node
+// of its size takes that node's slot, tok (rc_take_ru's: 0 when the node was
+// shared, then a new slot). A case that does not build in its token frees
+// it (RUF).
+static inline V CR1(V u, V t, V a) { V *p = RU(u, 2); p[0] = t; p[1] = a; return (V)p; }
+static inline V CR2(V u, V t, V a, V b) { V *p = RU(u, 3); p[0] = t; p[1] = a; p[2] = b; return (V)p; }
+static inline V CR3(V u, V t, V a, V b, V c) {
+  V *p = RU(u, 4); p[0] = t; p[1] = a; p[2] = b; p[3] = c; return (V)p;
+}
+static inline V CR4(V u, V t, V a, V b, V c, V d) {
+  V *p = RU(u, 5); p[0] = t; p[1] = a; p[2] = b; p[3] = c; p[4] = d; return (V)p;
+}
+static inline V CRN(V u, V t, int n, const V *xs) {
+  V *p = RU(u, n + 1); p[0] = t;
+  for (int i = 0; i < n; i++) p[i + 1] = xs[i];
+  return (V)p;
+}
+// (a D_ node: no collector runs to see its hole)
+static inline V CRH1(V u, V t, V a) { return CR1(u, t, a); }
+static inline V CRH2(V u, V t, V a, V b) { return CR2(u, t, a, b); }
+static inline V CRH3(V u, V t, V a, V b, V c) { return CR3(u, t, a, b, c); }
+static inline V CRH4(V u, V t, V a, V b, V c, V d) { return CR4(u, t, a, b, c, d); }
+static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
+#define RUF(u) do { if (u) rc_free_at(u, 0); } while (0)
+
 // Arrays
 // ------
 //
