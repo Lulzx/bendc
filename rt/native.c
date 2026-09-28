@@ -56,3 +56,8 @@ N1(Array_dsize) N2(Array_dget) N3(Array_dswap) N3(Array_dset) N2(Array_dnew) N1(
 N3(Array_datomic_dadd) N3(Array_datomic_dmin) N3(Array_datomic_dmax) N3(Array_datomic_dand)
 N3(Array_datomic_dor) N3(Array_datomic_dxor) N3(Array_datomic_dexch) N4(Array_datomic_dcas)
 N3(Array_datomic_dfadd)
+
+// Freeing on match (see bendrt.h): the nodes a match opens, and the values
+// bound to variables used twice.
+V bn_take(V v, V w) { return (V)bend_take(v, (unsigned)w); }
+void bn_share(V v) { bend_share(v); }

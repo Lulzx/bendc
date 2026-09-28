@@ -14171,6 +14171,19 @@ def N.pat.tag(single: Bool, c: NCo, r: NPr) -> NPr:
     case False{}:
       N.pat.cond(c, r)
 
+def N.is_field(p: NPa) -> Bool:
+  match p:
+    case NPF{q, i}:
+      True{}
+    case other:
+      False{}
+
+# A node the pattern opens (Gen.pat.node): %top (a scrutinee) or %sub (a
+# field), then its size in words.
+def N.pat.node(+ar: U32, +path: NPa, r: NPr) -> NPr:
+  NPr{conds, binds} = r
+  NPr{conds, NBd{Bool.pick(String, N.is_field(path), "%sub", "%top") ++ U32.show(U32.inc(ar)), path} <> binds}
+
 def N.imm(+t: U32) -> U32:
   ((t * 8 : U32) + 1 : U32)
 
@@ -14243,7 +14256,7 @@ def N.pat.go(
                   match k:
                     case 0n:
                       N.pat.go(PCtor{name, [a]}, 0n, g, path, 0, None{}, 0n,
-                        N.pat.tag(single, NCTag{path, tag}, r))
+                        N.pat.node(ar, path, N.pat.tag(single, NCTag{path, tag}, r)))
                     case 1n:
                       N.pat.tag(single, NCEq{path, N.imm(tag)}, r)
                     case 2n:
@@ -14292,7 +14305,7 @@ def N.pat.go(
                   match k:
                     case 0n:
                       N.pat.go(PCtor{name, [a, b]}, 0n, g, path, 0, None{}, 0n,
-                        N.pat.tag(single, NCTag{path, tag}, r))
+                        N.pat.node(ar, path, N.pat.tag(single, NCTag{path, tag}, r)))
                     case 1n:
                       N.pat.tag(single, NCEq{path, N.imm(tag)}, r)
                     case 2n:
@@ -14344,7 +14357,7 @@ def N.pat.go(
                   match k:
                     case 0n:
                       N.pat.go(PCtor{name, h <> t}, 0n, g, path, 0, None{}, 0n,
-                        N.pat.tag(single, NCTag{path, tag}, r))
+                        N.pat.node(ar, path, N.pat.tag(single, NCTag{path, tag}, r)))
                     case 1n:
                       N.pat.tag(single, NCEq{path, N.imm(tag)}, r)
                     case 2n:
@@ -14567,6 +14580,100 @@ def N.binds.code(bs: List<&2, NBd>, +base: U32) -> As.Code:
         case other:
           N.cat([N.path(other), N.st(0, base), N.binds.code(t, U32.inc(base))])
 
+# Freeing on match
+# ----------------
+#
+# As the C backend does (see "Freeing on match" in bendrt.h, and
+# GSCaseBodyMat): after a pattern's bindings are loaded, the nodes it opens
+# go to bend_take (a scrutinee's, then its fields' in reverse, each before
+# the nodes inside it), and a binding its body uses twice to bend_share
+# (bn_take and bn_share in rt/native.c). BEND_NO_FREE turns it off: the
+# pattern then binds no nodes.
+
+# The bindings, without the nodes, when matches do not free.
+def N.binds.keep.if(drop: Bool, b: NBd, rest: List<&2, NBd>) -> List<&2, NBd>:
+  match drop:
+    case True{}:
+      rest
+    case False{}:
+      b <> rest
+
+def N.binds.keep(+free: Bool, bs: List<&2, NBd>) -> List<&2, NBd>:
+  match bs:
+    case Nil{}:
+      Nil{}
+    case NBd{+x, p} <> t:
+      N.binds.keep.if(Bool.and(Bool.not(free), Gen.is_take(x)), NBd{x, p}, N.binds.keep(free, t))
+
+# Each binding's operand, in order (where N.binds.env puts it).
+def N.binds.ops(bs: List<&2, NBd>, +base: U32) -> NEnv():
+  match bs:
+    case Nil{}:
+      Nil{}
+    case NBd{x, p} <> t:
+      match p:
+        case NPO{o}:
+          NB{x, o} <> N.binds.ops(t, base)
+        case other:
+          NB{x, NOS{base}} <> N.binds.ops(t, U32.inc(base))
+
+def N.num(s: String, +acc: U32) -> U32:
+  match s:
+    case SCon{Chr{+c}, t}:
+      N.num(t, ((acc * 10 : U32) + (c - 48 : U32) : U32))
+    case SNil{}:
+      acc
+
+def N.is_slot(o: NO) -> Bool:
+  match o:
+    case NOS{s}:
+      True{}
+    case NOK{k}:
+      False{}
+
+def N.takes(bs: NEnv(), +kind: String) -> As.Code:
+  match bs:
+    case Nil{}:
+      As.CNil{}
+    case NB{+x, o} <> t:
+      As.CCat{Bool.pick(As.Code, Str.eq(Gen.take.kind(x), kind),
+        N.cat([N.lo(o, 0), N.k(1, N.num(Gen.take.words(x), 0)), N.call("bn_take")]), As.CNil{}), N.takes(t, kind)}
+
+# bend_share for each variable body uses twice (a constant is no node).
+def N.shares(bs: NEnv(), +body: Expr) -> As.Code:
+  match bs:
+    case Nil{}:
+      As.CNil{}
+    case NB{+x, +o} <> t:
+      As.CCat{Bool.pick(As.Code, Bool.and(Bool.not(Bool.or(Gen.is_take(x), Str.eq(x, "_"))),
+        Bool.and(N.is_slot(o), U32.is_le(2, Use.n(x, body)))), As.CCat{N.lo(o, 0), N.call("bn_share")}, As.CNil{}),
+        N.shares(t, body)}
+
+def N.shares.if(free: Bool, bs: NEnv(), +body: Expr) -> As.Code:
+  match free:
+    case True{}:
+      N.shares(bs, body)
+    case False{}:
+      As.CNil{}
+
+def N.shares.g(+g: G, bs: NEnv(), +body: Expr) -> As.Code:
+  N.shares.if(Gen.free(g), bs, body)
+
+def N.open.go(bs: NEnv(), +body: Expr) -> As.Code:
+  +ops = bs
+  N.cat([N.takes(ops, "%top"), N.takes(List.reverse(&2, NB, ops), "%sub"), N.shares(ops, body)])
+
+# After a pattern's bindings (from slot base up): its takes and shares.
+def N.open.if(free: Bool, bs: List<&2, NBd>, +base: U32, +body: Expr) -> As.Code:
+  match free:
+    case True{}:
+      N.open.go(N.binds.ops(bs, base), body)
+    case False{}:
+      As.CNil{}
+
+def N.open(+g: G, bs: List<&2, NBd>, +base: U32, +body: Expr) -> As.Code:
+  N.open.if(Gen.free(g), bs, base, body)
+
 # Operands
 # --------
 
@@ -14663,6 +14770,16 @@ def N.params(ps: List<&2, Param>, mask: List<&2, Bool>, +i: U32, env: NEnv()) ->
       N.params(pt, mt, i, NB{x, NOK{0}} <> env)
     case pl ml:
       env
+
+# The kept parameters that may hold nodes (Gen.scalar.ty: not numbers).
+def N.params.boxed(ps: List<&2, Param>, mask: List<&2, Bool>, +i: U32) -> NEnv():
+  match ps mask:
+    case Param{x, m, +t} <> pt True{} <> mt:
+      List.append(&2, NB, Bool.pick(NEnv(), Gen.scalar.ty(t), Nil{}, [NB{x, NOS{i}}]), N.params.boxed(pt, mt, U32.inc(i)))
+    case Param{x, m, t} <> pt False{} <> mt:
+      N.params.boxed(pt, mt, i)
+    case pl ml:
+      Nil{}
 
 # The prologue's stores of the parameters: from x0..x7, or from the row x0
 # points at (a wide def).
@@ -15159,7 +15276,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
         case NSLam{+g, +env, +p, +body}:
           +caps = N.caps(FV.expr(body, Pat.vars(p, Nil{}), Nil{}), env)
           +n = U32.from_nat(List.length(&2, NB, caps))
-          +binds = NPr.binds(N.pat(g, p, NPO{NOS{n}}, NPr.none()))
+          +binds = N.binds.keep(Gen.free(g), NPr.binds(N.pat(g, p, NPO{NOS{n}}, NPr.none())))
           do NG<As.Code>:
             +k : U32 <- N.fresh()
             +name : String <- NG.pure(String, "L_" ++ U32.show(k))
@@ -15169,7 +15286,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
             b : As.Code <- N.rec(fu, NSStmt{g, N.binds.env(binds, bb, N.caps.inner(caps, 0)), NSelf.none(), NTRet{}, body})
             +max : U32 <- N.leave(saved)
             N.emit(N.func(name, max, N.cat([N.params.in(U32.to_nat(U32.inc(n)), 0, True{}),
-              N.binds.code(binds, bb), b])))
+              N.binds.code(binds, bb), N.open(g, binds, bb, body), b])))
             return N.clo(name, U32.inc(n), N.caps.ops(caps))
         # A statement as a value: its arms store it in a slot and jump to the
         # join label.
@@ -15220,40 +15337,42 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
               do NG<As.Code>:
                 c : As.Code <- N.rec(fu, NSExpr{g, env, ECall{EVar{name}, args}})
                 return As.CCat{c, N.fin(NTSet{s, j})}
-        case NSLetVar{+g, +env, +self, +tgt, +x, v, body, m}:
+        case NSLetVar{+g, +env, +self, +tgt, +x, v, +body, m}:
           match m:
-            case Some{o}:
-              N.rec(fu, NSStmt{g, NB{x, o} <> env, self, tgt, body})
+            case Some{+o}:
+              do NG<As.Code>:
+                b : As.Code <- N.rec(fu, NSStmt{g, NB{x, o} <> env, self, tgt, body})
+                return As.CCat{N.shares.g(g, [NB{x, o}], body), b}
             case None{}:
               do NG<As.Code>:
                 +s : U32 <- N.slots(1)
                 c : As.Code <- N.rec(fu, NSExpr{g, env, v})
                 b : As.Code <- N.rec(fu, NSStmt{g, NB{x, NOS{s}} <> env, self, tgt, body})
-                return N.cat([c, N.st(0, s), b])
+                return N.cat([c, N.st(0, s), N.shares.g(g, [NB{x, NOS{s}}], body), b])
         case NSLetHole{+g, +env, +self, +tgt, v, body}:
           do NG<As.Code>:
             c : As.Code <- N.rec(fu, NSExpr{g, env, v})
             b : As.Code <- N.rec(fu, NSStmt{g, env, self, tgt, body})
             return As.CCat{c, b}
-        case NSLetPat{+g, +env, +self, +tgt, +p, v, body}:
+        case NSLetPat{+g, +env, +self, +tgt, +p, v, +body}:
           do NG<As.Code>:
             +s : U32 <- N.slots(1)
             c : As.Code <- N.rec(fu, NSExpr{g, env, v})
-            +binds : List<&2, NBd> = NPr.binds(N.pat(g, p, NPO{NOS{s}}, NPr.none()))
+            +binds : List<&2, NBd> = N.binds.keep(Gen.free(g), NPr.binds(N.pat(g, p, NPO{NOS{s}}, NPr.none())))
             +bb : U32 <- N.slots(N.binds.n(binds))
             b : As.Code <- N.rec(fu, NSStmt{g, N.binds.env(binds, bb, env), self, tgt, body})
-            return N.cat([c, N.st(0, s), N.binds.code(binds, bb), b])
+            return N.cat([c, N.st(0, s), N.binds.code(binds, bb), N.open(g, binds, bb, body), b])
         # A parallel let, in order: each value in the environment before it.
-        case NSLets{+g, +env0, +env, +self, +tgt, ps, vs, body}:
+        case NSLets{+g, +env0, +env, +self, +tgt, ps, vs, +body}:
           match ps vs:
             case +p <> pt v <> vt:
               do NG<As.Code>:
                 +s : U32 <- N.slots(1)
                 c : As.Code <- N.rec(fu, NSExpr{g, env0, v})
-                +binds : List<&2, NBd> = NPr.binds(N.pat(g, p, NPO{NOS{s}}, NPr.none()))
+                +binds : List<&2, NBd> = N.binds.keep(Gen.free(g), NPr.binds(N.pat(g, p, NPO{NOS{s}}, NPr.none())))
                 +bb : U32 <- N.slots(N.binds.n(binds))
                 b : As.Code <- N.rec(fu, NSLets{g, env0, N.binds.env(binds, bb, env), self, tgt, pt, vt, body})
-                return N.cat([c, N.st(0, s), N.binds.code(binds, bb), b])
+                return N.cat([c, N.st(0, s), N.binds.code(binds, bb), N.open(g, binds, bb, body), b])
             case pl vl:
               N.rec(fu, NSStmt{g, env, self, tgt, body})
         case NSLetPar{+g, +env, +self, +tgt, ps, v, body}:
@@ -15280,7 +15399,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
               N.rec(fu, NSLetPat{g, env, self, tgt, other, v, body})
         # A case: its tests (a failing one jumps to the next case), its
         # bindings, its body, each in slots freed after it.
-        case NSCaseGo{+g, +env, +self, +tgt, +os, cs, +binds, body, rest}:
+        case NSCaseGo{+g, +env, +self, +tgt, +os, cs, +binds, +body, rest}:
           match cs:
             case Nil{}:
               do NG<As.Code>:
@@ -15288,7 +15407,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
                 +bb : U32 <- N.slots(N.binds.n(binds))
                 b : As.Code <- N.rec(fu, NSStmt{g, N.binds.env(binds, bb, env), self, tgt, body})
                 N.release(m)
-                return As.CCat{N.binds.code(binds, bb), b}
+                return N.cat([N.binds.code(binds, bb), N.open(g, binds, bb, body), b])
             case c <> t:
               do NG<As.Code>:
                 +no : String <- N.label()
@@ -15298,7 +15417,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
                 b : As.Code <- N.rec(fu, NSStmt{g, N.binds.env(binds, bb, env), self, tgt, body})
                 N.release(m)
                 more : As.Code <- N.rec(fu, NSCases{g, env, self, tgt, os, rest})
-                return N.cat([cc, N.binds.code(binds, bb), b, N.lab(no), more])
+                return N.cat([cc, N.binds.code(binds, bb), N.open(g, binds, bb, body), b, N.lab(no), more])
         case NSCases{+g, +env, +self, +tgt, +os, cases}:
           match cases:
             case Nil{}:
@@ -15307,7 +15426,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
                 return As.CCat{N.adr(0, l), N.call("bend_fail")}
             case ECase{+ps, body} <> t:
               +pr = N.pats(g, ps, os, NPr.none())
-              N.rec(fu, NSCaseGo{g, env, self, tgt, os, NPr.conds(pr), NPr.binds(pr), body, t})
+              N.rec(fu, NSCaseGo{g, env, self, tgt, os, NPr.conds(pr), N.binds.keep(Gen.free(g), NPr.binds(pr)), body, t})
             case other <> t:
               N.rec(fu, NSCases{g, env, self, tgt, os, t})
         case NSMatch{+g, +env, +self, +tgt, +scrs, cases}:
@@ -15356,15 +15475,17 @@ def N.wrapper(+name: String, +mask: List<&2, Bool>, +native: Bool) -> NG(Unit):
       N.cat([N.prologue(n, 0), N.w(As.mov(10, 0)), N.wargs(mask, 0, 0, True{}), N.w(As.addi(0, 31, 0)),
         N.target(native, As.bl(), name), N.fix(N.epilogue(), 0)]))})
 
-def N.def.body(+g: G, +name: String, +mask: List<&2, Bool>, ps: List<&2, Param>, body: Expr) -> NG(Unit):
+def N.def.body(+g: G, +name: String, +mask: List<&2, Bool>, +ps: List<&2, Param>, body: Expr) -> NG(Unit):
   +n = N.kept(mask)
+  +e = R.ops(body, "Nat")
   do NG<Unit>:
     saved : U32 & U32 <- N.enter()
     +p0 : U32 <- N.slots(n)
     +top : String <- N.label()
-    b : As.Code <- N.stmt(g, N.params(ps, mask, 0, Nil{}), NSelf{name, mask, top}, NTRet{}, R.ops(body, "Nat"))
+    b : As.Code <- N.stmt(g, N.params(ps, mask, 0, Nil{}), NSelf{name, mask, top}, NTRet{}, e)
     +max : U32 <- N.leave(saved)
-    N.emit(N.func(Gen.f(name), max, N.cat([N.params.in(U32.to_nat(n), 0, U32.is_gt(n, 8)), N.lab(top), b])))
+    N.emit(N.func(Gen.f(name), max, N.cat([N.params.in(U32.to_nat(n), 0, U32.is_gt(n, 8)), N.lab(top),
+      N.shares.g(g, N.params.boxed(ps, mask, 0), e), b])))
     N.wrapper(name, mask, False{})
 
 # a[j] into the request's field j (x10 holds a, x0 the node).
@@ -15693,9 +15814,9 @@ def N.program.fin(elf: Bool, cids: String, r: As.Code & NSt) -> NOut:
     Gen.dedup(List.reverse(&2, String, effs), Nil{}), As.object(N.cat([out, entry, lits]), U32.max(data, 1), elf), errs}
 
 # (An ELF object for Linux, else Mach-O.)
-def N.program(+ds0: List<&2, Decl>, elf: Bool) -> NOut:
+def N.program(+ds0: List<&2, Decl>, elf: Bool, free: Bool) -> NOut:
   +ds = Lo.program(Pick.decls(ds0))
-  +g = G.new(ds)
+  +g = Dps.build(G.new(ds), ds, free)
   N.program.fin(elf, Gen.cids(g, ds, 0), N.program.m(g)(NSt{0, 0, 0, As.CNil{}, Nil{}, Nil{}, 0, As.CNil{}, Nil{}, Nil{},
     N.eids(ds, 0, Map.new(&2, U32))}))
 
@@ -15903,8 +16024,11 @@ def Main.native.emit(+ds: List<&2, Decl>, +out: String, r: NOut) -> IO(Unit):
         IO.print_err(String.join(List.reverse(&2, String, e <> t), "\n"))
         IO.die(Unit, 1, "bendc: compilation failed")
 
+# (Matches free what they open unless BEND_NO_FREE is set, as in C.)
 def Main.native.to(+ds: List<&2, Decl>, +out: String, elf: Bool) -> IO(Unit):
-  Main.native.emit(ds, out, N.program(ds, elf))
+  do IO<Unit>:
+    r : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
+    Main.native.emit(ds, out, N.program(ds, elf, Main.free(r)))
 
 def Main.native.compile(+out: String, elf: Bool, base: Result<&2, &2, String, List<&2, Decl>>,
   user: Result<&2, &2, String, List<&2, Decl>>
