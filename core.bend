@@ -1434,3 +1434,152 @@ def Res.dead(r: Res) -> Res:
       RNo{}
     case RFail{m}:
       RFail{m}
+
+# Literals
+# ========
+
+# The literal rule as a pass: Tm.lit puts a let's number in the place of
+# each lookup of its variable in the let's body (the dead-let pass then
+# drops the let). A string is left bound, so that it is built once.
+# LITPROOF.bend proves that a run that does not fail gives a related result
+# (LIT.bend states the law).
+
+# What the pass knows of the bindings made in a term's scope, the nearest
+# first: a let's literal (Sub), or a binding it does not know (Opq).
+type Sub is Data:
+  Sub{x: String, l: Lit}
+  Opq{x: String}
+
+def Sub.sel(h: Bool, a: Tm, b: Tm) -> Tm:
+  match h:
+    case True{}:
+      a
+    case False{}:
+      b
+
+# What a lookup of y becomes: the literal of the nearest binding of y, if
+# the pass knows it, or the lookup.
+def Sub.find(s: List<&2, Sub>, +y: String) -> Tm:
+  match s:
+    case Nil{}:
+      CVar{y}
+    case b <> r:
+      match b:
+        case Sub{x, l}:
+          Sub.sel(String.eq(x, y), CLit{l}, Sub.find(r, y))
+        case Opq{x}:
+          Sub.sel(String.eq(x, y), CVar{y}, Sub.find(r, y))
+
+# s with bindings of xs in front, in the order a match makes them.
+def Sub.bind(xs: List<&2, String>, s: List<&2, Sub>) -> List<&2, Sub>:
+  match xs:
+    case Nil{}:
+      s
+    case x <> r:
+      Sub.bind(r, Opq{x} <> s)
+
+# t with the literals s knows in the place of their lookups. A list field
+# is walked as its head and the node rebuilt with the rest.
+def Tm.lits(t: Tm, +s: List<&2, Sub>) -> Tm:
+  match t:
+    case CVar{+y}:
+      Sub.find(s, y)
+    case CCall{f, as}:
+      match as:
+        case Nil{}:
+          CCall{f, Nil{}}
+        case a <> r:
+          match a:
+            case Arg{rel, e}:
+              match rel:
+                case Run{}:
+                  Tm.push.call(Arg{Run{}, Tm.lits(e, s)}, Tm.lits(CCall{f, r}, s))
+                case Era{}:
+                  Tm.push.call(Arg{Era{}, e}, Tm.lits(CCall{f, r}, s))
+    case CApp{f, as}:
+      match as:
+        case Nil{}:
+          CApp{Tm.lits(f, s), Nil{}}
+        case a <> r:
+          Tm.push(Tm.lits(a, s), Tm.lits(CApp{f, r}, s))
+    case CCtr{k, as}:
+      match as:
+        case Nil{}:
+          CCtr{k, Nil{}}
+        case a <> r:
+          Tm.push(Tm.lits(a, s), Tm.lits(CCtr{k, r}, s))
+    case CLam{+p, b}:
+      CLam{p, Tm.lits(b, Sub.bind(Dead.names([p]), s))}
+    case CLet{p, v, b}:
+      match p:
+        case PtVar{+x}:
+          match v:
+            case CLit{l}:
+              match l:
+                case LNum{+n}:
+                  CLet{PtVar{x}, CLit{LNum{n}}, Tm.lits(b, Sub{x, LNum{n}} <> s)}
+                case LNat{+n}:
+                  CLet{PtVar{x}, CLit{LNat{n}}, Tm.lits(b, Sub{x, LNat{n}} <> s)}
+                case LFlt{+f}:
+                  CLet{PtVar{x}, CLit{LFlt{f}}, Tm.lits(b, Sub{x, LFlt{f}} <> s)}
+                case LStr{z}:
+                  CLet{PtVar{x}, CLit{LStr{z}}, Tm.lits(b, Opq{x} <> s)}
+            case other:
+              CLet{PtVar{x}, Tm.lits(other, s), Tm.lits(b, Opq{x} <> s)}
+        case +other:
+          CLet{other, Tm.lits(v, s), Tm.lits(b, Sub.bind(Dead.names([other]), s))}
+    case CMat{scrs, cases}:
+      match scrs:
+        case a <> r:
+          Tm.push(Tm.lits(a, s), Tm.lits(CMat{r, cases}, s))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              CMat{Nil{}, Nil{}}
+            case c <> r:
+              Tm.push.case(Tm.lits(c, s), Tm.lits(CMat{Nil{}, r}, s))
+    case CCse{+ps, b}:
+      CCse{ps, Tm.lits(b, Sub.bind(Dead.names(ps), s))}
+    case CSuc{k, e}:
+      CSuc{k, Tm.lits(e, s)}
+    case COp{op, a, b}:
+      COp{op, Tm.lits(a, s), Tm.lits(b, s)}
+    case CAnn{e, ty}:
+      CAnn{Tm.lits(e, s), ty}
+    case other:
+      other
+
+def Tms.lits(ts: List<&2, Tm>, +s: List<&2, Sub>) -> List<&2, Tm>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      Tm.lits(t, s) <> Tms.lits(r, s)
+
+def Args.lits(as: List<&2, Arg>, +s: List<&2, Sub>) -> List<&2, Arg>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case a <> r:
+      match a:
+        case Arg{rel, e}:
+          match rel:
+            case Run{}:
+              Arg{Run{}, Tm.lits(e, s)} <> Args.lits(r, s)
+            case Era{}:
+              Arg{Era{}, e} <> Args.lits(r, s)
+
+def Tm.lit(t: Tm) -> Tm:
+  Tm.lits(t, Nil{})
+
+def Def.lit(d: Def) -> Def:
+  match d:
+    case Def{n, ps, b, ret}:
+      Def{n, ps, Tm.lit(b), ret}
+
+def Defs.lit(ds: List<&2, Def>) -> List<&2, Def>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Def.lit(d) <> Defs.lit(r)
