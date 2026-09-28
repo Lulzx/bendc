@@ -1984,3 +1984,369 @@ def Pat.rel(+e1: List<&2, Core.Val>, pt: Core.Pt, +v: Core.Val, +pr: List<&2, Co
               match vv:
             case Core.VBnd{x2, w2}:
               (e2, vr2, {==}, Unit{})
+
+# Lookups
+# =======
+
+def Val.sym(-x: Core.Val, -y: Core.Val, e: {x == y : Core.Val}) -> {y == x : Core.Val}:
+  %e : {_ == x : Core.Val}
+  {==}
+
+# A binding the other program lacks is not x's, if none of hs is x.
+def Miss(-z: String, -x: String, -hs: List<&2, String>, eu: {True{} == String.eq(z, x) : Bool}, inv: Law.Tru(Core.Dead.none(hs, x)))
+    -> Law.Tru(Bool.and(String.eq(z, x), Core.Dead.none(hs, x))):
+  %eu : Law.Tru(Bool.and(_, Core.Dead.none(hs, x)))
+  inv
+
+def Inv.step(-z: String, -x: String, -hs: List<&2, String>, eu: {False{} == String.eq(z, x) : Bool}, inv: Law.Tru(Core.Dead.none(hs, x)))
+    -> Law.Tru(Core.Dead.none(z <> hs, x)):
+  %eu : Law.Tru(Bool.and(Bool.not(_), Core.Dead.none(hs, x)))
+  inv
+
+# A lookup of x: the source passes the bindings the other program lacks (a
+# step each), and the two meet at the rest. hs: the names of the bindings
+# both have passed, none of them x.
+def Look(~prim: String -> List<&2, Core.Val> -> Core.Res, +n: Nat, +m: Nat, +le: Red.Le(n, m), +ds: List<&2, Core.Def>,
+    +x: String, e1: List<&2, Core.Val>, d: Dec.env(e1, x), +hs: List<&2, String>, e2: List<&2, Core.Val>, -U: List<&2, String> -> String -> Bool,
+    h: Law.ERel(e1, Law.Lk(Core.CVar{x}), hs, e2), +inv: Law.Tru(Core.Dead.none(hs, x)))
+    -> Law.RRel(Core.run(~prim, n, ds, Core.SLook{e1, x}), U, Core.run(~prim, m, Core.Defs.dead(ds), Core.SLook{e2, x})):
+  match n:
+    case 0n:
+      Unit{}
+    case 1n+p:
+      match p:
+        case 0n:
+          match e1:
+            case Nil{}:
+              Unit{}
+            case b <> r1:
+              match b:
+                case Core.VLit{l9}:
+                  Unit{}
+                case Core.VCtr{k9, fs9}:
+                  Unit{}
+                case Core.VClo{env9, p9, b9}:
+                  Unit{}
+                case Core.VFun{f9, as9}:
+                  Unit{}
+                case Core.VTrm{t9}:
+                  Unit{}
+                case Core.VBnd{x9, w9}:
+                  Unit{}
+        case 1n+p2:
+          match m:
+            case 0n:
+              match le:
+            case 1n+q:
+              match q:
+                case 0n:
+                  match le:
+                case 1n+q2:
+                  match e1:
+                    case Nil{}:
+                      Unit{}
+                    case b <> +r1:
+                      match b:
+                        case Core.VBnd{+z, +w}:
+                            match d:
+                              case Inl{eu}:
+                                match e2:
+                                  case Nil{}:
+                                    match h:
+                                      case (a, h2):
+                                        Contra(Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{String.eq(z, x), w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Nil{}, x})), Bool.and(String.eq(z, x), Core.Dead.none(hs, x)), a, Miss(z, x, hs, eu, inv))
+                                  case y <> r2:
+                                    match y:
+                                      case Core.VLit{l8}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                Contra(Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{String.eq(z, x), w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VLit{l8} <> r2, x})), Bool.and(String.eq(z, x), Core.Dead.none(hs, x)), a, Miss(z, x, hs, eu, inv))
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                      case Core.VCtr{k8, fs8}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                Contra(Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{String.eq(z, x), w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VCtr{k8, fs8} <> r2, x})), Bool.and(String.eq(z, x), Core.Dead.none(hs, x)), a, Miss(z, x, hs, eu, inv))
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                      case Core.VClo{env8, p8, b8}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                Contra(Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{String.eq(z, x), w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VClo{env8, p8, b8} <> r2, x})), Bool.and(String.eq(z, x), Core.Dead.none(hs, x)), a, Miss(z, x, hs, eu, inv))
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                      case Core.VFun{f8, as8}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                Contra(Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{String.eq(z, x), w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VFun{f8, as8} <> r2, x})), Bool.and(String.eq(z, x), Core.Dead.none(hs, x)), a, Miss(z, x, hs, eu, inv))
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                      case Core.VTrm{t8}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                Contra(Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{String.eq(z, x), w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VTrm{t8} <> r2, x})), Bool.and(String.eq(z, x), Core.Dead.none(hs, x)), a, Miss(z, x, hs, eu, inv))
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                      case Core.VBnd{z2, w2}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                Contra(Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{String.eq(z, x), w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VBnd{z2, w2} <> r2, x})), Bool.and(String.eq(z, x), Core.Dead.none(hs, x)), a, Miss(z, x, hs, eu, inv))
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                                  case (ez, vw):
+                                                    %ez : Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{String.eq(z, x), w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VBnd{_, w2} <> r2, x}))
+                                                    %eu : Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{_, w, r1, x}), U, Core.run(~prim, 1n+q2, Core.Defs.dead(ds), Core.SLook2{_, w2, r2, x}))
+                                                    (vw, Unit{})
+                              case Inr{+eu}:
+                                match e2:
+                                  case Nil{}:
+                                    match h:
+                                      case (a, h2):
+                                        %eu : Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{_, w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Nil{}, x}))
+                                        Look(~prim, p2, 1n+(1n+q2), RP.Le.succ(p2, 1n+q2, RP.Le.succ(p2, q2, le)), ds, x, r1, Dec.env.of(r1, x), hs, Nil{}, U, h2, inv)
+                                  case y <> r2:
+                                    match y:
+                                      case Core.VLit{l8}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                %eu : Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{_, w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VLit{l8} <> r2, x}))
+                                                Look(~prim, p2, 1n+(1n+q2), RP.Le.succ(p2, 1n+q2, RP.Le.succ(p2, q2, le)), ds, x, r1, Dec.env.of(r1, x), hs, Core.VLit{l8} <> r2, U, h2, inv)
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                      case Core.VCtr{k8, fs8}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                %eu : Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{_, w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VCtr{k8, fs8} <> r2, x}))
+                                                Look(~prim, p2, 1n+(1n+q2), RP.Le.succ(p2, 1n+q2, RP.Le.succ(p2, q2, le)), ds, x, r1, Dec.env.of(r1, x), hs, Core.VCtr{k8, fs8} <> r2, U, h2, inv)
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                      case Core.VClo{env8, p8, b8}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                %eu : Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{_, w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VClo{env8, p8, b8} <> r2, x}))
+                                                Look(~prim, p2, 1n+(1n+q2), RP.Le.succ(p2, 1n+q2, RP.Le.succ(p2, q2, le)), ds, x, r1, Dec.env.of(r1, x), hs, Core.VClo{env8, p8, b8} <> r2, U, h2, inv)
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                      case Core.VFun{f8, as8}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                %eu : Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{_, w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VFun{f8, as8} <> r2, x}))
+                                                Look(~prim, p2, 1n+(1n+q2), RP.Le.succ(p2, 1n+q2, RP.Le.succ(p2, q2, le)), ds, x, r1, Dec.env.of(r1, x), hs, Core.VFun{f8, as8} <> r2, U, h2, inv)
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                      case Core.VTrm{t8}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                %eu : Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{_, w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VTrm{t8} <> r2, x}))
+                                                Look(~prim, p2, 1n+(1n+q2), RP.Le.succ(p2, 1n+q2, RP.Le.succ(p2, q2, le)), ds, x, r1, Dec.env.of(r1, x), hs, Core.VTrm{t8} <> r2, U, h2, inv)
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                      case Core.VBnd{z2, w2}:
+                                        match h:
+                                          case Inl{dd}:
+                                            match dd:
+                                              case (a, h2):
+                                                %eu : Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{_, w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VBnd{z2, w2} <> r2, x}))
+                                                Look(~prim, p2, 1n+(1n+q2), RP.Le.succ(p2, 1n+q2, RP.Le.succ(p2, q2, le)), ds, x, r1, Dec.env.of(r1, x), hs, Core.VBnd{z2, w2} <> r2, U, h2, inv)
+                                          case Inr{kk}:
+                                            match kk:
+                                              case (vb, h2):
+                                                match vb:
+                                                  case (ez, vw):
+                                                    %ez : Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{String.eq(z, x), w, r1, x}), U, Core.run(~prim, 1n+(1n+q2), Core.Defs.dead(ds), Core.SLook{Core.VBnd{_, w2} <> r2, x}))
+                                                    %eu : Law.RRel(Core.run(~prim, 1n+p2, ds, Core.SLook2{_, w, r1, x}), U, Core.run(~prim, 1n+q2, Core.Defs.dead(ds), Core.SLook2{_, w2, r2, x}))
+                                                    Look(~prim, p2, q2, le, ds, x, r1, Dec.env.of(r1, x), z <> hs, r2, U, h2, Inv.step(z, x, hs, eu, inv))
+                        case Core.VLit{l9}:
+                          match e2:
+                            case Nil{}:
+                              match h:
+                            case y <> r2:
+                              match y:
+                                case Core.VLit{l8}:
+                                  match h:
+                                    case (vb, h2):
+                                      Look(~prim, 1n+p2, 1n+q2, le, ds, x, r1, Dec.env.of(r1, x), hs, r2, U, h2, inv)
+                                case Core.VCtr{k8, fs8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VClo{env8, p8, b8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VFun{f8, as8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VTrm{t8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VBnd{x8, w8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                        case Core.VCtr{k9, fs9}:
+                          match e2:
+                            case Nil{}:
+                              match h:
+                            case y <> r2:
+                              match y:
+                                case Core.VLit{l8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VCtr{k8, fs8}:
+                                  match h:
+                                    case (vb, h2):
+                                      Look(~prim, 1n+p2, 1n+q2, le, ds, x, r1, Dec.env.of(r1, x), hs, r2, U, h2, inv)
+                                case Core.VClo{env8, p8, b8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VFun{f8, as8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VTrm{t8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VBnd{x8, w8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                        case Core.VClo{env9, p9, b9}:
+                          match e2:
+                            case Nil{}:
+                              match h:
+                            case y <> r2:
+                              match y:
+                                case Core.VLit{l8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VCtr{k8, fs8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VClo{env8, p8, b8}:
+                                  match h:
+                                    case (vb, h2):
+                                      Look(~prim, 1n+p2, 1n+q2, le, ds, x, r1, Dec.env.of(r1, x), hs, r2, U, h2, inv)
+                                case Core.VFun{f8, as8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VTrm{t8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VBnd{x8, w8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                        case Core.VFun{f9, as9}:
+                          match e2:
+                            case Nil{}:
+                              match h:
+                            case y <> r2:
+                              match y:
+                                case Core.VLit{l8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VCtr{k8, fs8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VClo{env8, p8, b8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VFun{f8, as8}:
+                                  match h:
+                                    case (vb, h2):
+                                      Look(~prim, 1n+p2, 1n+q2, le, ds, x, r1, Dec.env.of(r1, x), hs, r2, U, h2, inv)
+                                case Core.VTrm{t8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VBnd{x8, w8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                        case Core.VTrm{t9}:
+                          match e2:
+                            case Nil{}:
+                              match h:
+                            case y <> r2:
+                              match y:
+                                case Core.VLit{l8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VCtr{k8, fs8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VClo{env8, p8, b8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VFun{f8, as8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
+                                case Core.VTrm{t8}:
+                                  match h:
+                                    case (vb, h2):
+                                      Look(~prim, 1n+p2, 1n+q2, le, ds, x, r1, Dec.env.of(r1, x), hs, r2, U, h2, inv)
+                                case Core.VBnd{x8, w8}:
+                                  match h:
+                                    case (vb, h2):
+                                      match vb:
