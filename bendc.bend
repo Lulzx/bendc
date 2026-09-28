@@ -13592,13 +13592,15 @@ def Inl.def(+c: Map<&2, Core.Def>, d: Core.Def) -> Core.Def:
 # The program through the core IR: each def lowered, erased, with monadic
 # binds inlined, its redexes reduced (Core.Def.red, which REDPROOF.bend
 # proves correct), its matches on known constructors resolved
-# (Core.Def.known, which KNOWNPROOF.bend proves correct), and raised; a type-level def (a Type, Data, Quant or
+# (Core.Def.known, which KNOWNPROOF.bend proves correct), its lets of
+# variables no lookup reaches dropped (Core.Def.dead, which DEADPROOF.bend
+# proves correct), and raised; a type-level def (a Type, Data, Quant or
 # Kind) keeps its body, which the printers unfold.
 def Lo.pass(+g: G, +c: Map<&2, Core.Def>, d: Decl) -> Decl:
   match d:
     case DDef{+name, +ps, +body, +ret}:
       Bool.pick(Unit -> Decl, G.erased_ty(Ty.head(ret)), u => DDef{name, ps, body, ret},
-        u => Up.def(Core.Def.known(Core.Def.red(Inl.def(c, Core.Def.erase(Lo.def(g, name, ps, body, ret)))))))(Unit{})
+        u => Up.def(Core.Def.dead(Core.Def.known(Core.Def.red(Inl.def(c, Core.Def.erase(Lo.def(g, name, ps, body, ret))))))))(Unit{})
     case other:
       other
 
