@@ -1132,7 +1132,16 @@ ARR_ATOMIC(add, fetch_add)
 ARR_ATOMIC(and, fetch_and)
 ARR_ATOMIC(or, fetch_or)
 ARR_ATOMIC(xor, fetch_xor)
+#ifdef __TINYC__
+// tcc lowers __atomic_exchange_n to a call its libtcc1 lacks: a CAS loop.
+static inline V F_Array_datomic_dexch(V a, V i, V v) {
+  uint32_t *w = arr_word(a, i), o = __atomic_load_n(w, __ATOMIC_RELAXED);
+  while (!__atomic_compare_exchange_n(w, &o, (uint32_t)v, 1, __ATOMIC_SEQ_CST, __ATOMIC_RELAXED)) {}
+  return C2(0, a, (V)o);
+}
+#else
 ARR_ATOMIC(exch, exchange_n)
+#endif
 static inline V arr_rmw(V a, V i, V v, int k) {
   uint32_t *w = arr_word(a, i);
   uint32_t o = __atomic_load_n(w, __ATOMIC_RELAXED), n;
