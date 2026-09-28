@@ -4165,13 +4165,13 @@ def Gen.pat.arr(+path: String, r: PatR) -> PatR:
   PatR{conds, binds} = r
   PatR{conds, Bind{"%arr", path} <> binds}
 
-# Counted, an ALeaf's cell gets a reference ("%leaf") before the array is
-# dropped ("%arr").
+# Counted, an ALeaf's cell gets a reference ("%leaf", rc_dup_leaf) before
+# the array is dropped ("%arr").
 def Gen.pat.leaf(rc: Bool, +path: String, r: PatR) -> PatR:
   match rc:
     case True{}:
       PatR{conds, binds} = r
-      PatR{conds, Bind{"%arr", path} <> Bind{"%leaf", "FLD(" ++ path ++ ", 0)"} <> binds}
+      PatR{conds, Bind{"%arr", path} <> Bind{"%leaf", path} <> binds}
     case False{}:
       r
 
@@ -5185,7 +5185,7 @@ def RC.arrs.go(binds: Env(), +kind: String, +op: String) -> Doc:
 def RC.arrs(rc: Bool, +binds: Env()) -> Doc:
   match rc:
     case True{}:
-      Doc.list([RC.arrs.go(binds, "%leaf", "rc_dup"), RC.arrs.go(binds, "%arr", "rc_drop")])
+      Doc.list([RC.arrs.go(binds, "%leaf", "rc_dup_leaf"), RC.arrs.go(binds, "%arr", "rc_drop")])
     case False{}:
       DNil{}
 

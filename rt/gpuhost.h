@@ -348,7 +348,8 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
   KW lo = P->ab + ((P->heap0 + 1) << 3), hi = P->ab + ((P->heap0 + P->heapw) << 3);
 #define GPU_OBJ(w) ((w) >= lo && (w) < hi && ((w) & 7) == 0)
   // (counted, the copy holds a reference to each CPU object it reaches)
-  if (!GPU_OBJ(v)) { if (gc_hot.rc) rc_dup(v); *out = v; return 1; }
+  // (marked first: another thread may hold what reaches it, see RC_TS)
+  if (!GPU_OBJ(v)) { if (gc_hot.rc) rc_dup_in(v, 1); *out = v; return 1; }
   size_t cap = 1024, sp = 0;
   KW *stk = malloc(cap * sizeof(KW));
   stk[sp++] = v;
@@ -389,7 +390,7 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
         if (!(hw & GPU_FWD)) { ok = 0; break; }
         w = hw & ~GPU_FWD;
       } else if (gc_hot.rc) {
-        rc_dup(w);
+        rc_dup_in(w, 1);
       }
       p[k] = w;
     }

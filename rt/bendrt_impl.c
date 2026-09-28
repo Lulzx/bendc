@@ -203,6 +203,20 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
         memory_order_relaxed);
     return p;
   }
+  // Counted, the thread's own frees go back to the block it allocates from:
+  // while a 5th of it is free again, it goes on handing out those slots (no
+  // lock, and the memory stays warm). Only its owner sets its bits.
+  if (gc_hot.rc && k->blk) {
+    GcBlk *q = k->blk;
+    uint32_t used = 0;
+    for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(__atomic_load_n(&GC_ALLOC(q)[j], __ATOMIC_RELAXED));
+    if (q->nobj - used >= q->nobj / 5) {
+      k->bump = k->end = NULL;
+      k->j = (uint32_t)-1;
+      k->bits = 0;
+      return gc_refill(k, atomic, c);
+    }
+  }
   pthread_mutex_lock(&gc_lock);
   if (k->blk) { k->blk->owned = 0; k->blk = NULL; }
   // First the next block, in address order, where matches freed slots and a
@@ -334,7 +348,9 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w) {
 #endif
 #define RC_ONE ((V)1 << 48)
 #define RC_STICKY ((V)1 << 62)
+#define RC_TS ((V)1 << 63)
 #define RC_ADDR (RC_ONE - 1)
+#define RC_REFS(w0) (((w0) >> 48) & 0x7fff)
 __attribute__((noinline)) void rc_free_large(uintptr_t bi) {
   pthread_mutex_lock(&gc_lock);
   GcBlk *b = gc_blk(bi);
@@ -387,7 +403,8 @@ __attribute__((noinline)) void rc_free_obj(V v) {
 }
 __attribute__((noinline)) void rc_take_shared(V v, unsigned w) {
   V *p = (V *)v;
-  for (unsigned j = 1; j < w; j++) rc_dup(p[j]);
+  V ts = __atomic_load_n(p, __ATOMIC_RELAXED) & RC_TS;
+  for (unsigned j = 1; j < w; j++) rc_dup_in(p[j], ts);
   if (rc_release(v)) rc_free_obj(v);
 }
 #define RU(tok, w) ((tok) ? (V *)(tok) : halloc(w))
@@ -399,6 +416,25 @@ void rc_immortal(V v) {
     size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
     for (size_t j = 1; j + 1 < w; j++) rc_immortal(p[j]);
     v = w > 1 ? p[w - 1] : 0;
+  }
+}
+__attribute__((noinline)) void rc_publish(V v) {
+  Thr *t = thr_self;
+  size_t base = t->rcn;
+  int root = 1;
+  for (;;) {
+    V w0;
+    if (rc_obj(v) && !((w0 = *(V *)v) & (RC_TS | RC_STICKY)) && (root || RC_REFS(w0))) {
+      V *p = (V *)v;
+      p[0] = w0 | RC_TS;
+      uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
+      size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
+      for (size_t j = 1; j < w; j++)
+        if (p[j] >= ((V)1 << 32)) rc_push(t, p[j]);
+    }
+    root = 0;
+    if (t->rcn == base) return;
+    v = t->rcs[--t->rcn];
   }
 }
 size_t rc_live(void) {
@@ -657,7 +693,8 @@ void rc_let_go_arr(V a) {
   if (rc_unique(a)) rc_free_at(a, 0);
   else {
     size_t n = (size_t)1 << arr_cls(a);
-    for (size_t i = 0; i < n; i++) rc_dup(arr_cells(a)[i]);
+    V ts = ((V *)a)[0] & RC_TS;
+    for (size_t i = 0; i < n; i++) rc_dup_in(arr_cells(a)[i], ts);
     rc_drop(a);
   }
 }
@@ -667,14 +704,14 @@ V arr_alloc(unsigned c) {
   p[0] = ARR_HDR(c);
   return (V)p;
 }
-V arr_copy(unsigned c, const V *src, int share) {
+V arr_copy(unsigned c, const V *src, int share, V ts) {
   size_t n = (size_t)1 << c;
   V a = arr_alloc(c);
   V *d = arr_cells(a);
   arr_dirty(a);
   for (size_t i = 0; i < n; i++) {
     V x = src[i];
-    if (share) bend_dup(x);
+    if (share) { if (gc_hot.rc) rc_dup_in(x, ts); else bend_share(x); }
     d[i] = x;
   }
   return a;
@@ -710,7 +747,7 @@ V arr_node(V l, V r) {
 V arr_half(V a, unsigned hi) {
   unsigned c = arr_cls(a);
   if (c == 0) bend_fail("runtime fail-stop");
-  return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), gc_hot.rc || arr_shared(a));
+  return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), gc_hot.rc || arr_shared(a), ((V *)a)[0] & RC_TS);
 }
 #define ARR_ATOMIC(name, op) static inline V F_Array_datomic_d##name(V a, V i, V v) { return C2(0, a, (V)__atomic_##op(arr_word(a, i), (uint32_t)v, __ATOMIC_SEQ_CST)); }
 V apply(V f, V x) {
@@ -994,6 +1031,7 @@ V par_fork(V clo) {
   long tp = atomic_load_explicit(&d->top, memory_order_relaxed);
   if (b - tp >= 4) return clo | 2;
   if (UNLIKELY(!atomic_load_explicit(&par_started, memory_order_relaxed))) par_start();
+  if (gc_hot.rc) rc_publish(clo);
   PTask *t = (PTask *)halloc(4);
   t->clo = clo;
   t->depth = (V)par_depth;

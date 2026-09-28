@@ -407,6 +407,20 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
         memory_order_relaxed);
     return p;
   }
+  // Counted, the thread's own frees go back to the block it allocates from:
+  // while a 5th of it is free again, it goes on handing out those slots (no
+  // lock, and the memory stays warm). Only its owner sets its bits.
+  if (gc_hot.rc && k->blk) {
+    GcBlk *q = k->blk;
+    uint32_t used = 0;
+    for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(__atomic_load_n(&GC_ALLOC(q)[j], __ATOMIC_RELAXED));
+    if (q->nobj - used >= q->nobj / 5) {
+      k->bump = k->end = NULL;
+      k->j = (uint32_t)-1;
+      k->bits = 0;
+      return gc_refill(k, atomic, c);
+    }
+  }
   pthread_mutex_lock(&gc_lock);
   if (k->blk) { k->blk->owned = 0; k->blk = NULL; }
   // First the next block, in address order, where matches freed slots and a
@@ -686,15 +700,24 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
 // variable is used more than once (rc_dupn), drops them on the paths that do
 // not use it (rc_drop), and a match that opens a node takes it (rc_take): a
 // node with one reference is freed there, its fields moving to the pattern's
-// variables; a shared one gives each field a reference and loses one. With
-// more than one thread the counts change atomically, but a count of one is
-// read plainly: whoever holds the only reference is the only thread that
-// can see it. Values are acyclic, so dropping the last reference to each
+// variables; a shared one gives each field a reference and loses one. Bit
+// 63 marks an object other threads may reach (RC_TS), and only a marked
+// object's count changes atomically. A fork's closure is marked before
+// another thread can take its task, as is a value stored into a marked
+// array, and so is every object they reach through objects with more than
+// one reference (rc_publish): another reference may be the forking
+// thread's. An object with one reference is reached through its one
+// holder, and when that holder is marked, the thread that reads the object
+// out of it for a new reference marks it first (rc_dup_in). A new object,
+// its first word written whole, is unmarked. Values are acyclic, so dropping the last reference to each
 // object frees everything, and a Nat equal to the address of a live object
 // is the one word taken for a reference that is not one.
 #define RC_ONE ((V)1 << 48)
 #define RC_STICKY ((V)1 << 62)
+#define RC_TS ((V)1 << 63)
 #define RC_ADDR (RC_ONE - 1)
+// The count and the immortal bit: 0 for an object with one reference.
+#define RC_REFS(w0) (((w0) >> 48) & 0x7fff)
 
 // off (from the heap's base) is the start of an allocated object.
 static inline int rc_valid(uintptr_t off) {
@@ -726,12 +749,23 @@ static inline void rc_dup_obj(V v, V n) {
   V w0 = __atomic_load_n(p, __ATOMIC_RELAXED);
   if (w0 & RC_STICKY) return;
   if (UNLIKELY(n >= 0x2000)) { __atomic_fetch_or(p, RC_STICKY, __ATOMIC_RELAXED); return; }
-  if (gc_hot.mt) __atomic_fetch_add(p, n * RC_ONE, __ATOMIC_RELAXED);
+  if (w0 & RC_TS) __atomic_fetch_add(p, n * RC_ONE, __ATOMIC_RELAXED);
   else *p = w0 + n * RC_ONE;
 }
 
 // n more references to v.
 static inline void rc_dupn(V v, V n) { if (rc_obj(v)) rc_dup_obj(v, n); }
+
+// A reference more to x, read out of an object that is marked when ts is
+// not 0 (see RC_TS): x is marked first.
+static inline void rc_dup_in(V x, V ts) {
+  if (!rc_obj(x)) return;
+  if (ts && !(__atomic_load_n((V *)x, __ATOMIC_RELAXED) & (RC_TS | RC_STICKY)))
+    __atomic_fetch_or((V *)x, RC_TS, __ATOMIC_RELAXED);
+  rc_dup_obj(x, 1);
+}
+// ALeaf{x} = a (counted): x gets a reference.
+static inline void rc_dup_leaf(V a) { rc_dup_in(((V *)a)[1], ((V *)a)[0] & RC_TS); }
 static inline void rc_dup(V v) { rc_dupn(v, 1); }
 static inline V rc_dupv(V v) { rc_dup(v); return v; }
 
@@ -739,12 +773,16 @@ static inline V rc_dupv(V v) { rc_dup(v); return v; }
 // freed).
 static inline int rc_release(V v) {
   V *p = (V *)v;
-  V w0 = gc_hot.mt ? __atomic_load_n(p, __ATOMIC_ACQUIRE) : *p;
-  if ((w0 >> 48) == 0) return 1;
+  V w0 = __atomic_load_n(p, __ATOMIC_RELAXED);
+  if (RC_REFS(w0) == 0) {
+    // (the frees of the other holders' writes happen before this one's)
+    if (w0 & RC_TS) atomic_thread_fence(memory_order_acquire);
+    return 1;
+  }
   if (w0 & RC_STICKY) return 0;
-  if (!gc_hot.mt) { *p = w0 - RC_ONE; return 0; }
+  if (!(w0 & RC_TS)) { *p = w0 - RC_ONE; return 0; }
   // (another holder may have let go since the load: then this one is last)
-  return (__atomic_fetch_sub(p, RC_ONE, __ATOMIC_ACQ_REL) >> 48) == 0;
+  return RC_REFS(__atomic_fetch_sub(p, RC_ONE, __ATOMIC_ACQ_REL)) == 0;
 }
 
 // Frees a small slot (block bi, slot i, of class c) or a large object.
@@ -847,9 +885,10 @@ static inline void rc_dropn(V v, V n) {
   if (!rc_obj(v)) return;
   V *p = (V *)v;
   // (all but the last at once: v outlives them)
-  if (n > 1 && !(__atomic_load_n(p, __ATOMIC_RELAXED) & RC_STICKY)) {
-    if (gc_hot.mt) __atomic_fetch_sub(p, (n - 1) * RC_ONE, __ATOMIC_RELEASE);
-    else *p -= (n - 1) * RC_ONE;
+  V w0 = __atomic_load_n(p, __ATOMIC_RELAXED);
+  if (n > 1 && !(w0 & RC_STICKY)) {
+    if (w0 & RC_TS) __atomic_fetch_sub(p, (n - 1) * RC_ONE, __ATOMIC_RELEASE);
+    else *p = w0 - (n - 1) * RC_ONE;
   }
   if (rc_release(v)) rc_free_obj(v);
 }
@@ -858,13 +897,16 @@ static inline void rc_dropn(V v, V n) {
 // loses one (freed, fields and all, when that was the last).
 __attribute__((noinline)) static void rc_take_shared(V v, unsigned w) {
   V *p = (V *)v;
-  for (unsigned j = 1; j < w; j++) rc_dup(p[j]);
+  V ts = __atomic_load_n(p, __ATOMIC_RELAXED) & RC_TS;
+  for (unsigned j = 1; j < w; j++) rc_dup_in(p[j], ts);
   if (rc_release(v)) rc_free_obj(v);
 }
 
 static inline int rc_unique(V v) {
-  V w0 = gc_hot.mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : *(V *)v;
-  return (w0 >> 48) == 0;
+  V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  if (RC_REFS(w0)) return 0;
+  if (w0 & RC_TS) atomic_thread_fence(memory_order_acquire);
+  return 1;
 }
 
 // A match opened node v, of w words, after reading its fields: its fields
@@ -910,6 +952,29 @@ static void rc_immortal(V v) {
     size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
     for (size_t j = 1; j + 1 < w; j++) rc_immortal(p[j]);
     v = w > 1 ? p[w - 1] : 0;
+  }
+}
+
+// Marks v reachable by other threads (RC_TS), and what it reaches through
+// objects with more than one reference, stopping at marked and immortal
+// objects.
+__attribute__((noinline)) static void rc_publish(V v) {
+  Thr *t = thr_self;
+  size_t base = t->rcn;
+  int root = 1;
+  for (;;) {
+    V w0;
+    if (rc_obj(v) && !((w0 = *(V *)v) & (RC_TS | RC_STICKY)) && (root || RC_REFS(w0))) {
+      V *p = (V *)v;
+      p[0] = w0 | RC_TS;
+      uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
+      size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
+      for (size_t j = 1; j < w; j++)
+        if (p[j] >= ((V)1 << 32)) rc_push(t, p[j]);
+    }
+    root = 0;
+    if (t->rcn == base) return;
+    v = t->rcs[--t->rcn];
   }
 }
 
@@ -1318,7 +1383,7 @@ static inline unsigned arr_cls(V a) { return (unsigned)(((V *)a)[0] & 31); }
 static inline V *arr_cells(V a) { return (V *)a + 1; }
 static inline int arr_shared(V a) {
   V w0 = __atomic_load_n((V *)a, __ATOMIC_RELAXED);
-  return gc_hot.rc ? (w0 >> 48) != 0 : (w0 & BEND_SH) != 0;
+  return gc_hot.rc ? RC_REFS(w0) != 0 : (w0 & BEND_SH) != 0;
 }
 
 // Marks a's block dirty before a pointer is stored in it (gc_rescan_dirty).
@@ -1329,7 +1394,10 @@ static inline void arr_dirty(V a) {
   BEND_BARRIER();
 }
 static inline void arr_put(V a, V *p, V v) {
-  if (v >= ((V)1 << 32)) arr_dirty(a);
+  if (v >= ((V)1 << 32)) {
+    arr_dirty(a);
+    if (gc_hot.rc && (((V *)a)[0] & RC_TS)) rc_publish(v);
+  }
   *p = v;
 }
 
@@ -1339,7 +1407,8 @@ static void rc_let_go_arr(V a) {
   if (rc_unique(a)) rc_free_at(a, 0);
   else {
     size_t n = (size_t)1 << arr_cls(a);
-    for (size_t i = 0; i < n; i++) rc_dup(arr_cells(a)[i]);
+    V ts = ((V *)a)[0] & RC_TS;
+    for (size_t i = 0; i < n; i++) rc_dup_in(arr_cells(a)[i], ts);
     rc_drop(a);
   }
 }
@@ -1352,14 +1421,15 @@ static V arr_alloc(unsigned c) {
 }
 
 // 2^c cells from src (a shared source's are shared) into a new array.
-static V arr_copy(unsigned c, const V *src, int share) {
+// (ts: the source is marked, see RC_TS)
+static V arr_copy(unsigned c, const V *src, int share, V ts) {
   size_t n = (size_t)1 << c;
   V a = arr_alloc(c);
   V *d = arr_cells(a);
   arr_dirty(a);
   for (size_t i = 0; i < n; i++) {
     V x = src[i];
-    if (share) bend_dup(x);
+    if (share) { if (gc_hot.rc) rc_dup_in(x, ts); else bend_share(x); }
     d[i] = x;
   }
   return a;
@@ -1401,7 +1471,7 @@ static V arr_node(V l, V r) {
 static V arr_half(V a, unsigned hi) {
   unsigned c = arr_cls(a);
   if (c == 0) bend_fail("runtime fail-stop");
-  return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), gc_hot.rc || arr_shared(a));
+  return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), gc_hot.rc || arr_shared(a), ((V *)a)[0] & RC_TS);
 }
 
 static inline V *arr_at(V a, V i) { return arr_cells(a) + ((uint32_t)i & (((V)1 << arr_cls(a)) - 1)); }
@@ -1422,7 +1492,13 @@ static inline V F_Chk_dmemo_dhas(V m, V v) {
   bend_drop(v);
   return BOOL(k != 0 && k == v);
 }
-static inline V F_Chk_dmemo_dget(V m) { V x = arr_cells(m)[1]; bend_dup(x); bend_drop(m); return x; }
+static inline V F_Chk_dmemo_dget(V m) {
+  V x = arr_cells(m)[1];
+  if (gc_hot.rc) rc_dup_in(x, ((V *)m)[0] & RC_TS);
+  else bend_share(x);
+  bend_drop(m);
+  return x;
+}
 // (Counted, the cell keeps its term, so no other term takes its address
 // while the memo lives.)
 static inline V F_Chk_dmemo_dset(V m, V v, V x) {
@@ -1433,7 +1509,12 @@ static inline V F_Chk_dmemo_dset(V m, V v, V x) {
   bend_drop(m);
   return x;
 }
-static inline V F_Array_dget(V a, V i) { V x = *arr_at(a, i); bend_dup(x); return C2(0, a, x); }
+static inline V F_Array_dget(V a, V i) {
+  V x = *arr_at(a, i);
+  if (gc_hot.rc) rc_dup_in(x, ((V *)a)[0] & RC_TS);
+  else bend_share(x);
+  return C2(0, a, x);
+}
 static inline V F_Array_dswap(V a, V i, V v) {
   V *p = arr_at(a, i);
   V old = *p;
@@ -1447,7 +1528,7 @@ static inline V F_Array_dset(V a, V i, V v) {
   return a;
 }
 static inline V F_Array_dnew(V d, V v) { return arr_new(d, v); }
-static inline V F_Array_dclone(V a) { return C2(0, a, arr_copy(arr_cls(a), arr_cells(a), 1)); }
+static inline V F_Array_dclone(V a) { return C2(0, a, arr_copy(arr_cls(a), arr_cells(a), 1, ((V *)a)[0] & RC_TS)); }
 
 // The atomics, on a cell's U32 (its low half: the cell is a U32 below 2^32).
 static inline uint32_t *arr_word(V a, V i) { return (uint32_t *)arr_at(a, i); }
@@ -2014,6 +2095,7 @@ static V par_fork(V clo) {
   long tp = atomic_load_explicit(&d->top, memory_order_relaxed);
   if (b - tp >= 4) return clo | 2;
   if (UNLIKELY(!atomic_load_explicit(&par_started, memory_order_relaxed))) par_start();
+  if (gc_hot.rc) rc_publish(clo);
   PTask *t = (PTask *)halloc(4);
   t->clo = clo;
   t->depth = (V)par_depth;
