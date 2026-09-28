@@ -6812,10 +6812,14 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                   DStr{"} else "}, more])
         case GSMatchGo{+g, +env, +self, +tgt, +cases, r}:
           match r:
+            # (a match whose value goes on, not back, leaves the tokens in
+            # reach to what follows it: its cases neither take nor free them)
             case Scrs{cs, decls}:
               do Gen<Doc>:
+                +outer : String <- Gen.ru.get(Gen.rc(g))
+                Gen.ru.set(Gen.rc(g), Bool.pick(String, Gen.is_ret(tgt), outer, ""))
                 body : Doc <- Gen.rec(fu, GSCases{g, env, self, tgt, cs, cases, RC.mx.if(Gen.rc(g), g, env, cases)})
-                Gen.ru.set(Gen.rc(g), "")
+                Gen.ru.set(Gen.rc(g), Bool.pick(String, Gen.is_ret(tgt), "", outer))
                 return Doc.list([decls, body])
         case GSMatch{+g, +env, +self, +tgt, scrs, cases}:
           do Gen<Doc>:
