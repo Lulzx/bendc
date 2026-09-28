@@ -17217,6 +17217,43 @@ def N.inline.find(xs: List<&2, NI>, +name: String) -> Maybe<&2, As.Code>:
     case NI{+n, c} <> t:
       Bool.pick(Unit -> Maybe<&2, As.Code>, String.eq(n, name), u => Some{c}, u => N.inline.find(t, name))(Unit{})
 
+# A native whose second operand is a constant k, as one instruction on x0:
+# U32.shrn and U32.shln by k, U32.mul by a power of two, U32.add and
+# U32.sub of k below 4096.
+def N.inline.kc(w: Nat, +k: U32) -> Maybe<&2, As.Code>:
+  match w:
+    case 0n:
+      Some{Bool.pick(As.Code, U32.is_lt(k, 32), N.w(As.lsri(0, 0, k)), N.k(0, 0))}
+    case 1n:
+      Some{Bool.pick(As.Code, U32.is_lt(k, 32), N.w(As.lslwi(0, 0, k)), N.k(0, 0))}
+    case 2n:
+      Bool.pick(Maybe<&2, As.Code>, Bool.and(U32.is_ne(k, 0), U32.is_zero((k .&. (k - 1 : U32) : U32))),
+        Some{N.w(As.lslwi(0, 0, U32.from_nat(U32.log2(k))))}, None{})
+    case 3n:
+      Bool.pick(Maybe<&2, As.Code>, U32.is_lt(k, 4096), Some{N.w(As.addwi(0, 0, k))}, None{})
+    case 4n:
+      Bool.pick(Maybe<&2, As.Code>, U32.is_lt(k, 4096), Some{N.w(As.subwi(0, 0, k))}, None{})
+    case other:
+      None{}
+
+def N.inline.kop(+name: String, m: Maybe<&2, NO>) -> Maybe<&2, As.Code>:
+  match m:
+    case Some{NOK{+k}}:
+      N.inline.kc(P.which(name, ["U32.shrn", "U32.shln", "U32.mul", "U32.add", "U32.sub"]), k)
+    case other:
+      None{}
+
+def N.inline.k(native: Bool, +name: String, +env: NEnv(), xs: List<&2, Expr>) -> Maybe<&2, As.Code>:
+  match native:
+    case True{}:
+      match xs:
+        case a <> b <> Nil{}:
+          N.inline.kop(name, N.simple(env, b))
+        case other:
+          None{}
+    case False{}:
+      None{}
+
 def N.inline.or(m: Maybe<&2, As.Code>, +w: U32, +name: String) -> As.Code:
   match m:
     case Some{c}:
@@ -17273,6 +17310,31 @@ def N.ntail(native: Bool, +name: String, sym: String) -> As.Code:
 # slot base up, whose address goes in x0.
 def N.callops(+os: List<&2, NO>, +base: U32, +row: U32, +n: U32) -> As.Code:
   Bool.pick(As.Code, U32.is_le(n, 8), N.lregs.b(os, base), As.CCat{N.row.mem(os, row), N.addk(0, 31, (row * 8 : U32))})
+
+def N.first(os: List<&2, NO>) -> List<&2, NO>:
+  match os:
+    case o <> t:
+      [o]
+    case Nil{}:
+      Nil{}
+
+# The call itself: one of those, or N.ncall.
+def N.callk(m: Maybe<&2, As.Code>, +os: List<&2, NO>, +base: U32, +row: U32, +n: U32, native: Bool, +name: String,
+  sym: String
+) -> As.Code:
+  match m:
+    case Some{c}:
+      As.CCat{N.lregs.b(N.first(os), base), c}
+    case None{}:
+      As.CCat{N.callops(os, base, row, n), N.ncall(native, name, sym)}
+
+# The same in tail position.
+def N.tailk(m: Maybe<&2, As.Code>, +os: List<&2, NO>, +base: U32, native: Bool, +name: String, sym: String) -> As.Code:
+  match m:
+    case Some{c}:
+      N.cat([N.lregs.b(N.first(os), base), c, N.epilogue()])
+    case None{}:
+      As.CCat{N.lregs.b(os, base), N.ntail(native, name, sym)}
 
 def N.fin(t: NT) -> As.Code:
   match t:
@@ -17682,7 +17744,8 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
                 +r : U32 <- N.slots(1)
                 x : As.Code <- N.rec(fu, NSApp{g, env, extra, r})
                 sym : String <- N.fsym(name)
-                return N.cat([a, N.callops(N.ops(env, kept, base), base, row, n), N.ncall(native, name, sym), x])
+                return N.cat([a, N.callk(N.inline.k(native, name, env, kept), N.ops(env, kept, base), base, row, n, native,
+                  name, sym), x])
             case False{}:
               do NG<As.Code>:
                 +base : U32 <- N.slots(N.cx(env, all))
@@ -17868,7 +17931,8 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
                 +base : U32 <- N.slots(N.cx(env, kept))
                 a : As.Code <- N.rec(fu, NSArgs{g, env, kept, base})
                 sym : String <- N.fsym(name)
-                return N.cat([a, N.lregs.b(N.ops(env, kept, base), base), N.ntail(U32.is_eq(kind, 2), name, sym)])
+                return As.CCat{a, N.tailk(N.inline.k(U32.is_eq(kind, 2), name, env, kept), N.ops(env, kept, base), base,
+                  U32.is_eq(kind, 2), name, sym)}
         case NSTailCall{+g, +env, +name, +args, ok}:
           match ok:
             case True{}:

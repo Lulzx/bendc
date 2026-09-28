@@ -324,6 +324,17 @@ def fmadd(+rd: U32, +rn: U32, +rm: U32, +ra: U32) -> U32:
 def fmovss(+rd: U32, +rn: U32) -> U32:
   reg3(505430016, rd, rn, 0)
 
+# lsl wd, wn, #k (ubfm wd, wn, #(32 - k) % 32, #31 - k: 53000000); add and
+# sub wd, wn, #k, k below 4096 (11000000, 51000000).
+def lslwi(+rd: U32, +rn: U32, +k: U32) -> U32:
+  (1392508928 .|. (((((32 - k : U32) .&. 31 : U32)) << 16n : U32) .|. (((31 - k : U32) << 10n : U32) .|. ((rn << 5n : U32) .|. rd : U32) : U32) : U32) : U32)
+
+def addwi(+rd: U32, +rn: U32, +k: U32) -> U32:
+  (285212672 .|. ((k << 10n : U32) .|. ((rn << 5n : U32) .|. rd : U32) : U32) : U32)
+
+def subwi(+rd: U32, +rn: U32, +k: U32) -> U32:
+  (1358954496 .|. ((k << 10n : U32) .|. ((rn << 5n : U32) .|. rd : U32) : U32) : U32)
+
 # ubfx wd, wn, #lsb, #w (53000000).
 def ubfxw(+rd: U32, +rn: U32, +lsb: U32, +w: U32) -> U32:
   (1392508928 .|. ((lsb << 16n : U32) .|. ((((lsb + w : U32) - 1 : U32) << 10n : U32) .|. ((rn << 5n : U32) .|. rd : U32) : U32) : U32) : U32)
