@@ -573,10 +573,27 @@ does not implement it: native programs are traced whatever `BEND_RC` says.
   the slot. Reuse is not applied to the arguments of a def's call to itself in tail position
   (a loop): an accumulator built in the nodes the loop walks ends up scattered, as a sort's
   halves do.
-- **Threads.** Once the worker pool starts, counts change atomically. A count of one is still
-  read plainly, because whoever holds the only reference is the only thread that can see it.
-  Allocation bits are set with an atomic OR, since another thread may free a slot of the same
-  block. Values are acyclic, so dropping the last reference frees everything the value reaches;
+- **Borrowing.** A def may borrow a parameter: the caller keeps its reference (and drops it
+  after the call if it owned it), and the def neither takes the nodes it opens in it nor drops
+  it. A parameter is borrowed when the def only matches it and passes it, or what it reads out
+  of it, to defs that borrow there; a value read out of it and used otherwise gets a reference
+  where it is bound. A def that does that stays borrowing only when it walks down the value in a
+  tail call to itself (a search); any other owns the parameter, so that its nodes can be reused
+  (`List.map`). Parameters of defs with parallel lets, destination-passing groups, `main` and
+  `!`-called defs are never borrowed. `String.eq`, `String.cmp`, `Map.get` and `Map.has` are
+  native and borrow too: they walk the value and hand it back unchanged.
+- **Constants.** A constructor whose fields are all literals is built once, on first use, and
+  kept as an immortal object (`KONST`).
+- **Threads.** Bit 63 marks an object that other threads may reach, and only a marked object's
+  count changes atomically. A count of one is read plainly, because whoever holds the only
+  reference is the only thread that can see it. A task that another thread takes has its
+  closure marked first, along with everything the closure reaches (`rc_publish`). That
+  includes what sits below nodes with one reference, since the forking thread may hold those
+  objects too. Marking stops at objects that are already marked, because everything a marked
+  object reaches is marked. A forked task waits in its deque unmarked (`P_HELD`). A thief that
+  finds one asks the owner, which marks the task and lets it go at its next fork or join, so
+  only the tasks that are actually stolen pay for marking. Allocation bits are set with an
+  atomic OR, since another thread may free a slot of the same block. Values are acyclic, so dropping the last reference frees everything the value reaches;
   `rc_free_obj` does this iteratively, on a per-thread stack.
 - **The runtime.** Closures, arrays (`Array.get` gives the cell a reference), string literals,
   IO requests, channels (a sent value's reference moves to the receiver, and a send to a closed
@@ -611,22 +628,29 @@ the official repository's; `official` is `bend -o`, version 2.0.32.
 | merkle | 12 | 0.96s (272 MB) | 0.86s (202 MB) | **0.84s** (**134 MB**) | 105 ms |
 | tree-radix | 1 | 4.90s (682 MB) | **4.12s** (**565 MB**) | 4.84s (655 MB) | 451 ms |
 | tree-radix | 12 | 4.82s (1223 MB) | 1.18s (1001 MB) | **0.86s** (**583 MB**) | 883 ms |
-| tree-bitonic | 1 | 48.4s (661 MB) | 38.7s (404 MB) | **6.5s** (**151 MB**) | 627 ms |
-| hashmap | 1 | **2.45s** (267 MB) | 3.03s (**6 MB**) | 3.08s (**6 MB**) | 2 ms |
-| hashmap | 12 | **0.45s** (295 MB) | 0.55s (13 MB) | 0.48s (**11 MB**) | 10 ms |
-| bendc building itself | 1 | **0.51s** (457 MB) | 0.87s (**136 MB**) | | 22 ms |
-| `bendc --check-only bendc.bend` | all | **0.79s** (559 MB) | 2.09s (**155 MB**) | | 26 ms |
+| tree-bitonic | 1 | 47.6s (662 MB) | 32.4s (404 MB) | **7.0s** (**151 MB**) | 627 ms |
+| tree-bitonic | 8 | 51.5s (1155 MB) | 17.4s (411 MB) | **1.45s** (**157 MB**) | |
+| hashmap | 1 | **2.66s** (266 MB) | 3.10s (**6 MB**) | 3.52s (**6 MB**) | 2 ms |
+| hashmap | 12 | 0.60s (295 MB) | **0.55s** (13 MB) | 0.56s (**11 MB**) | 10 ms |
+| bendc building itself | 1 | **0.81s** (387 MB) | 1.11s (**236 MB**) | | 22 ms |
+| `bendc --check-only bendc.bend` | 1 | **1.39s** (523 MB) | 2.06s (**205 MB**) | | 26 ms |
+
+The tree-bitonic, hashmap and bendc rows were measured again after borrowing, with the load
+between 18 and 36. bendc itself is larger now than when the other rows were measured. The pause
+column was not measured again.
 
 In `rc` mode the collector never runs, so there are no pauses at all. The mode wins where the
 collector has a lot of live data to trace: tree-radix and tree-bitonic, and parallel tree-radix
 most of all. It loses where a program walks shared data without keeping it. Opening a shared
 node costs a reference for each of its fields, plus the release of the node itself. `hashmap`
 spends its time in `rc_take_shared` walking chains that `Array.get` shares, and the compiler
-does the same with its maps and environments. Perceus avoids this cost with borrowed
-parameters, and this implementation has none.
+does the same with its maps and environments. Borrowed parameters remove part of this cost:
+what remains is mostly in the checker's own maps and in nodes that are opened and rebuilt, which
+cannot be borrowed.
 
-On 12 threads, tree-bitonic takes minutes in both modes (the official build takes 1.5s); the
-cause is the fork-join scheme, not memory. The `default` column is no slower than the compiler
+On 8 threads, `rc` runs tree-bitonic in a third of `default`'s time, but still 12 times slower
+than the official build: most of what remains is allocating and freeing each node. The
+`default` column is no slower than the compiler
 before reference counting went in, within the noise of these runs. `String.cmp` and
 `String.eq` are native: they walk both strings and return them unchanged, where Base's
 versions rebuild both. This change applies to both modes, and it cut bendc's own build from

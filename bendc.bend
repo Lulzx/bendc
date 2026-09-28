@@ -5329,9 +5329,9 @@ def RC.op(+c: String, +u: U32) -> Doc:
   Bool.pick(Doc, U32.is_zero(u), DStr{"rc_drop(" ++ c ++ ");\n"},
     Bool.pick(Doc, U32.is_le(u, 1), DNil{}, DStr{"rc_dupn(" ++ c ++ ", " ++ U32.show((u - 1 : U32)) ++ ");\n"}))
 
-# A borrowed value gets a reference for each use (none is dropped): one
-# read out of a borrowed node, marked as the node is (rc_bdupFLD, see
-# RC_TS); any other, marked.
+# A borrowed value gets a reference for each use (none is dropped), with
+# rc_bdupFLD for one read out of a borrowed node and rc_bdup for any other
+# (its own mark says whether other threads reach it: see RC_TS).
 def RC.bdup(+c: String, n: Nat) -> String:
   match n:
     case 0n:
