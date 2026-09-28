@@ -6,7 +6,7 @@
 #   A (trusted): the official Bend (TypeScript) translates boot.bend to C,
 #                GCC builds it, and that stage0 compiles bendc.bend.
 #   B (seed):    GCC builds seed/bendc.c, which compiles bendc.bend.
-#   C (native):  on an arm64 Mac, B's compiler builds bendc natively, and
+#   C (native):  on arm64, B's compiler builds bendc natively, and
 #                that compiles bendc.bend.
 #
 # All outputs must be seed/bendc.c byte for byte. Path A shares no code
@@ -41,13 +41,14 @@ echo "[B] seed/bendc.c (GCC): bendc.bend -> build/ddc/b.c"
 "$GCC" -O2 -w -I rt seed/bendc.c -o build/ddc/seed -lm -lpthread
 BEND_NO_FREE=1 ./build/ddc/seed --no-check "$BASE" bendc.bend > build/ddc/b.c
 
-# C (on an arm64 Mac): the seed built in B compiles bendc.bend to machine
-# code with its own backend (bendc --native: its assembler and Mach-O
-# writer; GCC builds only the runtime and the effects' C and links), and
+# C (on arm64): the seed built in B compiles bendc.bend to machine code with
+# its own backend (bendc --native: its assembler and object writer; GCC
+# builds only the runtime and the effects' C, and links), and
 # that bendc compiles bendc.bend. bendc's own code in it went through no C
 # compiler.
 legs="a b"
-if [ "$(uname -sm)" = "Darwin arm64" ]; then
+case $(uname -m) in arm64|aarch64) native=1;; *) native=0;; esac
+if [ $native = 1 ]; then
   echo "[C] seed (GCC) --native: bendc.bend -> build/ddc/native"
   BENDC_RT=$PWD/rt CC=$GCC ./build/ddc/seed --native -o build/ddc/native "$BASE" bendc.bend > /dev/null
   echo "[C] native bendc: bendc.bend -> build/ddc/c.c"

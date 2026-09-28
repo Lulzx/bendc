@@ -161,8 +161,21 @@ Term cc_link_run(Env e, Term *f, IoWork *w) {
   return io_done(e, term_pak(CID(Unit), 0));
 }
 
+// bendc --native: the object format bendc writes, ELF (1) but on macOS
+// (Mach-O, 0).
+Term cc_elf_run(Env e, Term *f, IoWork *w) {
+  (void)f;
+  (void)w;
+#ifdef __APPLE__
+  return io_done(e, 0);
+#else
+  return io_done(e, 1);
+#endif
+}
+
 static void __attribute__((constructor)) cc_use(void) {
   io_eff(CID(Cc.begin), cc_begin_run, 0);
   io_eff(CID(Cc.end), cc_end_run, 0);
   io_eff(CID(Cc.link), cc_link_run, 0);
+  io_eff(CID(Cc.elf), cc_elf_run, 0);
 }

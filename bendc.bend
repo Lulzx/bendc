@@ -9336,6 +9336,11 @@ def Cc.end(out: String) -> IO(Result<&1, &1, U32 & String, Unit>):
   import "./rt/cc.c"
   import "./rt/cc.js"
 
+# bendc --native: whether objects are ELF (1, on Linux) or Mach-O (0).
+def Cc.elf() -> IO(Result<&1, &1, U32 & String, U32>):
+  import "./rt/cc.c"
+  import "./rt/cc.js"
+
 # bendc --native: links out.o (the program's code) with the effects' C that
 # bendc wrote (Cc.begin) and the runtime (rt/cc.c).
 def Cc.link(out: String) -> IO(Result<&1, &1, U32 & String, Unit>):
@@ -15643,16 +15648,17 @@ def N.program.m(+g: G) -> NG(As.Code):
 type NOut is Data:
   NOut{head: String, effs: List<&2, String>, obj: As.Obj, errs: List<&2, String>}
 
-def N.program.fin(cids: String, r: As.Code & NSt) -> NOut:
+def N.program.fin(elf: Bool, cids: String, r: As.Code & NSt) -> NOut:
   (entry, st) = r
   NSt{n, slot, max, out, refs, errs, +data, lits, memo, effs, eids} = st
   NOut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#include \"bendrt_split.h\"\n\n",
-    Gen.dedup(List.reverse(&2, String, effs), Nil{}), As.object(N.cat([out, entry, lits]), U32.max(data, 1)), errs}
+    Gen.dedup(List.reverse(&2, String, effs), Nil{}), As.object(N.cat([out, entry, lits]), U32.max(data, 1), elf), errs}
 
-def N.program(+ds0: List<&2, Decl>) -> NOut:
+# (An ELF object for Linux, else Mach-O.)
+def N.program(+ds0: List<&2, Decl>, elf: Bool) -> NOut:
   +ds = Lo.program(Pick.decls(ds0))
   +g = G.new(ds)
-  N.program.fin(Gen.cids(g, ds, 0), N.program.m(g)(NSt{0, 0, 0, As.CNil{}, Nil{}, Nil{}, 0, As.CNil{}, Nil{}, Nil{},
+  N.program.fin(elf, Gen.cids(g, ds, 0), N.program.m(g)(NSt{0, 0, 0, As.CNil{}, Nil{}, Nil{}, 0, As.CNil{}, Nil{}, Nil{},
     N.eids(ds, 0, Map.new(&2, U32))}))
 
 # The bytes of little-endian words.
@@ -15859,10 +15865,10 @@ def Main.native.emit(+ds: List<&2, Decl>, +out: String, r: NOut) -> IO(Unit):
         IO.print_err(String.join(List.reverse(&2, String, e <> t), "\n"))
         IO.die(Unit, 1, "bendc: compilation failed")
 
-def Main.native.to(+ds: List<&2, Decl>, +out: String) -> IO(Unit):
-  Main.native.emit(ds, out, N.program(ds))
+def Main.native.to(+ds: List<&2, Decl>, +out: String, elf: Bool) -> IO(Unit):
+  Main.native.emit(ds, out, N.program(ds, elf))
 
-def Main.native.compile(+out: String, base: Result<&2, &2, String, List<&2, Decl>>,
+def Main.native.compile(+out: String, elf: Bool, base: Result<&2, &2, String, List<&2, Decl>>,
   user: Result<&2, &2, String, List<&2, Decl>>
 ) -> IO(Unit):
   match base user:
@@ -15872,33 +15878,34 @@ def Main.native.compile(+out: String, base: Result<&2, &2, String, List<&2, Decl
       IO.die(Unit, 1, "bendc: parse error: " ++ e)
     case Done{b} Done{u}:
       +ds = List.append(&2, Decl, b, u)
-      Main.native.to(LM.decls(ds, ds), out)
+      Main.native.to(LM.decls(ds, ds), out, elf)
 
-def Main.native.build(+out: String, +base_path: String, user_path: String) -> IO(Unit):
+def Main.native.build(+out: String, elf: Bool, +base_path: String, user_path: String) -> IO(Unit):
   do IO<Unit>:
     base : String <- IO.read_file(base_path)
     user : List<&2, Decl> <- Main.load(64n, user_path)
-    Main.native.compile(out, Main.resolve(Mod.dir(base_path), Main.parse(base)), Done{user})
+    Main.native.compile(out, elf, Main.resolve(Mod.dir(base_path), Main.parse(base)), Done{user})
 
 # A value main the checker normalized: main puts the text.
-def Main.native.value(+out: String, v: String) -> IO(Unit):
+def Main.native.value(+out: String, elf: Bool, v: String) -> IO(Unit):
   do IO<Unit>:
     IO.write("")
     Main.native.obj(out, As.object(N.cat([N.one(As.ISym{"main", True{}}), N.ws([As.push_fp(), As.set_fp()]),
-      N.adr(0, ".V"), N.call("puts"), N.k(0, 0), N.epilogue(), N.lab(".V"), N.ws(As.cstr(v))]), 1))
+      N.adr(0, ".V"), N.call("puts"), N.k(0, 0), N.epilogue(), N.lab(".V"), N.ws(As.cstr(v))]), 1, elf))
 
-def Main.native.checked.go(+out: String, +base_path: String, user_path: String, +bk: Chk.Book, norm: Bool) ->
-  IO(Unit):
+def Main.native.checked.go(+out: String, +elf: Bool, +base_path: String, user_path: String, +bk: Chk.Book,
+  norm: Bool) -> IO(Unit):
   match norm:
     case True{}:
-      Main.native.value(out, Chk.show_main(bk))
+      Main.native.value(out, elf, Chk.show_main(bk))
     case False{}:
-      Main.native.build(out, base_path, user_path)
+      Main.native.build(out, elf, base_path, user_path)
 
-def Main.native.checked(+out: String, +base_path: String, user_path: String, r: Chk.Book & Nat) -> IO(Unit):
+def Main.native.checked(+out: String, +elf: Bool, +base_path: String, user_path: String, r: Chk.Book & Nat) ->
+  IO(Unit):
   (b, n0) = r
   +bk = b
-  Main.native.checked.go(out, base_path, user_path, bk, Main.normalized(bk))
+  Main.native.checked.go(out, elf, base_path, user_path, bk, Main.normalized(bk))
 
 # bendc --native -o out base.bend input.bend: the program as machine code
 # (see "Native code generation"), linked into out.
@@ -15906,9 +15913,10 @@ def Main.run5(code: Nat, o: Nat, +out: String, +base_path: String, +user_path: S
   match code o:
     case 7n 6n:
       do IO<Unit>:
+        k : U32 <- IO.try(U32, Cc.elf())
         u : Unit <- IO.try(Unit, Cc.begin())
         r : Chk.Book & Nat <- Main.check(base_path, user_path)
-        Main.native.checked(out, base_path, user_path, r)
+        Main.native.checked(out, U32.is_eq(k, 1), base_path, user_path, r)
         IO.try(Unit, Cc.link(out))
     case c k:
       Main.usage()

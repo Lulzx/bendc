@@ -6,7 +6,7 @@ import Base
 # list of instructions (Ins): most are encoded words, and the rest name a
 # label (a branch, an address) or an external symbol (a runtime function).
 # As.object lays the code out, resolves its labels, and writes a relocatable
-# object file around it (Mach-O, for macOS on arm64) with relocations for
+# object file around it (Mach-O for macOS, ELF for Linux) with relocations for
 # the external symbols, which the system linker then links with the runtime.
 # Before that, a peephole pass (peep) turns a reload after a store to the
 # same frame slot into a move.
@@ -444,8 +444,8 @@ def enc(ins: List<&2, Ins>, +pc: U32, +m: Map<&2, U32>, e: Enc) -> Enc:
           enc(t, (pc + 4 : U32), m, enc.label(w, target(m, l), pc, 14n, 5n, l, e))
         case IAdr{+rd, +l}:
           enc(t, (pc + 8 : U32), m, enc.adr(rd, target(m, l), pc, l, e))
-        case ICall{w, +s}:
-          enc(t, (pc + 4 : U32), m, Enc.rel(w, Rel{pc, s, 2}, e))
+        case ICall{+w, +s}:
+          enc(t, (pc + 4 : U32), m, Enc.rel(w, Rel{pc, s, Bool.pick(U32, U32.is_eq(w, b()), 5, 2)}, e))
         case IAdrS{+rd, +s}:
           enc(t, (pc + 8 : U32), m, Enc.rel(addi(rd, rd, 0), Rel{(pc + 4 : U32), s, 4},
             Enc.rel((2415919104 .|. rd : U32), Rel{pc, s, 3}, e)))
@@ -605,9 +605,13 @@ def macho.undef(offs: List<&2, U32>) -> List<&2, U32>:
 
 # A relocation_info: kind 2 branch26 (pc-relative), 3 page21 (pc-relative),
 # 4 pageoff12; every one names a symbol (extern), 4 bytes long.
-def macho.rel(+at: U32, +sym: U32, +kind: U32) -> List<&2, U32>:
+def macho.rel.go(+at: U32, +sym: U32, +kind: U32) -> List<&2, U32>:
   +pc = Bool.pick(U32, U32.is_eq(kind, 4), 0, 1)
   [at, (sym .|. ((pc << 24n : U32) .|. ((2 << 25n : U32) .|. ((1 << 27n : U32) .|. (kind << 28n : U32) : U32) : U32) : U32) : U32)]
+
+# (Kind 5, a b to a symbol, is a branch26 too.)
+def macho.rel(+at: U32, +sym: U32, +kind: U32) -> List<&2, U32>:
+  macho.rel.go(at, sym, Bool.pick(U32, U32.is_eq(kind, 5), 2, kind))
 
 def macho.rels(rs: List<&2, Rel>, +names: List<&2, String>, +base: U32, +data: String, +dsym: U32) -> List<&2, U32>:
   match rs:
@@ -663,19 +667,124 @@ def macho.go(+text: List<&2, U32>, +nslots: U32, +rs: List<&2, Rel>, tab: Tab) -
 def macho(text: List<&2, U32>, +nslots: U32, rs: List<&2, Rel>, ss: List<&2, Sym>) -> List<&2, U32>:
   macho.go(text, nslots, rs, Tab.split(ss, Tab{Nil{}, Nil{}, Nil{}}))
 
+# ELF
+# ===
+
+# An Elf64_Sym: name offset, info (bind << 4 | type), section, value (and
+# no size).
+def elf.sym(+name: U32, +info: U32, +shndx: U32, +value: U32) -> List<&2, U32>:
+  [name, (info .|. (shndx << 16n : U32) : U32), value, 0, 0, 0]
+
+def elf.syms(ss: List<&2, Sym>, offs: List<&2, U32>, +info: U32) -> List<&2, U32>:
+  match ss offs:
+    case Sym{n, +at, e} <> st +o <> ot:
+      List.append(&2, U32, elf.sym(o, info, 1, at), elf.syms(st, ot, info))
+    case a b:
+      Nil{}
+
+def elf.undef(offs: List<&2, U32>) -> List<&2, U32>:
+  match offs:
+    case Nil{}:
+      Nil{}
+    case +o <> t:
+      List.append(&2, U32, elf.sym(o, 16, 0, 0), elf.undef(t))
+
+# An Elf64_Rela with no addend (the instruction's field is zero): kind 2
+# is R_AARCH64_CALL26 (bl), 5 JUMP26 (b), 3 ADR_PREL_PG_HI21, 4
+# ADD_ABS_LO12_NC.
+def elf.rel(+at: U32, +sym: U32, +kind: U32) -> List<&2, U32>:
+  +ty = Bool.pick(U32, U32.is_eq(kind, 2), 283, Bool.pick(U32, U32.is_eq(kind, 5), 282,
+    Bool.pick(U32, U32.is_eq(kind, 3), 275, 277)))
+  [at, 0, ty, sym, 0, 0]
+
+def elf.rels(rs: List<&2, Rel>, +names: List<&2, String>, +base: U32, +data: String, +dsym: U32) -> List<&2, U32>:
+  match rs:
+    case Nil{}:
+      Nil{}
+    case Rel{+at, +s, +k} <> t:
+      List.append(&2, U32, elf.rel(at, Bool.pick(U32, Str.eq(s, data), dsym, (base + Str.index(names, s, 0) : U32)), k),
+        elf.rels(t, names, base, data, dsym))
+
+# An Elf64_Shdr (at address 0).
+def elf.sh(+name: U32, +ty: U32, +flags: U32, +off: U32, +size: U32, +link: U32, +info: U32, +align: U32,
+  +entsize: U32) -> List<&2, U32>:
+  [name, ty, flags, 0, 0, 0, off, 0, size, 0, link, info, align, 0, entsize, 0]
+
+def elf.names() -> List<&2, String>:
+  [".text", ".bss", ".rela.text", ".symtab", ".strtab", ".shstrtab", ".note.GNU-stack"]
+
+def elf.at(+offs: List<&2, U32>, +i: Nat) -> U32:
+  Maybe.default(&2, U32, List.get(&2, U32, offs, i), 0)
+
+# A relocatable ELF object for AArch64: the header, the code (.text, aligned
+# to a page), the slots (.bss), the code's relocations, the symbol table
+# (the null symbol, locals, globals, undefined names), its names, the
+# section names, an empty .note.GNU-stack (the stack is not executable), and
+# the section headers.
+def elf.go(+text: List<&2, U32>, +nslots: U32, +rs: List<&2, Rel>, tab: Tab) -> List<&2, U32>:
+  Tab{+locals, +globals, u} = tab
+  +undef = Tab.undef(rs, "bn_slots", Set.new(), Nil{})
+  +tsize = (4 * len32(text) : U32)
+  +pad = (tsize .&. 4 : U32)
+  +nl = U32.inc(lens(Sym.names(locals)))
+  +ng = lens(Sym.names(globals))
+  +nu = lens(undef)
+  +nsym = U32.inc(((nl + ng : U32) + nu : U32))
+  +nrel = U32.from_nat(List.length(&2, Rel, rs))
+  +reloff = ((64 + tsize : U32) + pad : U32)
+  +symoff = (reloff + (24 * nrel : U32) : U32)
+  +stroff = (symoff + (24 * nsym : U32) : U32)
+  +lnames = List.append(&2, String, Sym.names(locals), ["bn_slots"])
+  +allnames = List.append(&2, String, lnames, List.append(&2, String, Sym.names(globals), undef))
+  +strw = bytes.pack(0 <> strtab(allnames, ""))
+  +offs = stroffs(allnames, "", 1)
+  +loffs = List.take(&2, U32, offs, U32.to_nat(nl))
+  +goffs = List.drop(&2, U32, offs, U32.to_nat(nl))
+  +uoffs = List.drop(&2, U32, goffs, U32.to_nat(ng))
+  +shw = bytes.pack(0 <> strtab(elf.names(), ""))
+  +soffs = stroffs(elf.names(), "", 1)
+  +shsoff = (stroff + (4 * len32(strw) : U32) : U32)
+  +end = (shsoff + (4 * len32(shw) : U32) : U32)
+  +shpad = (end .&. 4 : U32)
+  +shoff = (end + shpad : U32)
+  +header = {[1179403647, 65794, 0, 0, 11993089, 1, 0, 0, 0, 0, shoff, 0, 0, 64, 4194304, 393224] : List<&2, U32>}
+  +shs = List.concat(&2, U32, [zeros(16n),
+    elf.sh(elf.at(soffs, 0n), 1, 6, 64, tsize, 0, 0, 4096, 0),
+    elf.sh(elf.at(soffs, 1n), 8, 3, reloff, (8 * nslots : U32), 0, 0, 8, 0),
+    elf.sh(elf.at(soffs, 2n), 4, 64, reloff, (24 * nrel : U32), 4, 1, 8, 24),
+    elf.sh(elf.at(soffs, 3n), 2, 0, symoff, (24 * nsym : U32), 5, U32.inc(nl), 8, 24),
+    elf.sh(elf.at(soffs, 4n), 3, 0, stroff, (4 * len32(strw) : U32), 0, 0, 1, 0),
+    elf.sh(elf.at(soffs, 5n), 3, 0, shsoff, (4 * len32(shw) : U32), 0, 0, 1, 0),
+    elf.sh(elf.at(soffs, 6n), 1, 0, shoff, 0, 0, 0, 1, 0)])
+  +lsyms = List.append(&2, U32, elf.syms(locals, loffs, 0), elf.sym(P.last32(loffs), 1, 2, 0))
+  List.concat(&2, U32, [header, text, Bool.pick(List<&2, U32>, U32.is_zero(pad), Nil{}, [0]),
+    elf.rels(rs, undef, U32.inc((nl + ng : U32)), "bn_slots", nl),
+    zeros(6n), lsyms, elf.syms(globals, goffs, 18), elf.undef(uoffs), strw, shw,
+    Bool.pick(List<&2, U32>, U32.is_zero(shpad), Nil{}, [0]), shs])
+
+def elf.file(text: List<&2, U32>, +nslots: U32, rs: List<&2, Rel>, ss: List<&2, Sym>) -> List<&2, U32>:
+  elf.go(text, nslots, rs, Tab.split(ss, Tab{Nil{}, Nil{}, Nil{}}))
+
 # Objects
 # =======
 
 type Obj is Data:
   Obj{words: List<&2, U32>, errs: List<&2, String>}
 
-def object.enc(+ss: List<&2, Sym>, +nslots: U32, e: Enc) -> Obj:
-  Enc{ws, rs, es} = e
-  Obj{macho(List.reverse(&2, U32, ws), nslots, List.reverse(&2, Rel, rs), ss), es}
+def object.fmt(elf: Bool, text: List<&2, U32>, +nslots: U32, rs: List<&2, Rel>, ss: List<&2, Sym>) -> List<&2, U32>:
+  match elf:
+    case True{}:
+      elf.file(text, nslots, rs, ss)
+    case False{}:
+      macho(text, nslots, rs, ss)
 
-def object.lay(+ins: List<&2, Ins>, +nslots: U32, l: Lay) -> Obj:
+def object.enc(elf: Bool, +ss: List<&2, Sym>, +nslots: U32, e: Enc) -> Obj:
+  Enc{ws, rs, es} = e
+  Obj{object.fmt(elf, List.reverse(&2, U32, ws), nslots, List.reverse(&2, Rel, rs), ss), es}
+
+def object.lay(elf: Bool, +ins: List<&2, Ins>, +nslots: U32, l: Lay) -> Obj:
   Lay{+m, +ss, size} = l
-  object.enc(ss, nslots, enc(ins, 0, m, Enc{Nil{}, Nil{}, Nil{}}))
+  object.enc(elf, ss, nslots, enc(ins, 0, m, Enc{Nil{}, Nil{}, Nil{}}))
 
 # Peephole
 # ========
@@ -754,7 +863,7 @@ def peep.go(xs: List<&2, Ins>, acc: List<&2, Ins>) -> List<&2, Ins>:
 def peep(xs: List<&2, Ins>) -> List<&2, Ins>:
   peep.go(xs, Nil{})
 
-# The object file for code with nslots data slots.
-def object(c: Code, +nslots: U32) -> Obj:
+# The object file for code with nslots data slots: ELF, or Mach-O.
+def object(c: Code, +nslots: U32, elf: Bool) -> Obj:
   +ins = peep(Code.flat(c))
-  object.lay(ins, nslots, lay(ins, 0, Map.new(&2, U32), Nil{}))
+  object.lay(elf, ins, nslots, lay(ins, 0, Map.new(&2, U32), Nil{}))
