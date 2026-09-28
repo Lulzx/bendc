@@ -3768,3 +3768,243 @@ def L.dead(~prim: String -> List<&2, Core.Val> -> Core.Res,
                     case (e2, vs2, eq, pc):
                       %eq : Law.RRel(Core.run(~prim, 1n+p, ds, Core.SPatC{False{}, e1, ps, vs}), U, Core.run(~prim, 1n+q, Core.Defs.dead(ds), _))
                       Unit{}
+
+# Equality
+# ========
+
+# Related values without closures: the second is the first with the pass
+# taken.
+def Eq.val(v1: Core.Val, v2: Core.Val, vr: Law.VRel(v1, v2), c: Law.NoClo(v1)) -> {Core.Val.dead(v1) == v2 : Core.Val}:
+  match v1:
+    case Core.VLit{l}:
+      match v2:
+        case Core.VLit{l2}:
+          %vr : {Core.VLit{l} == Core.VLit{_} : Core.Val}
+          {==}
+        case Core.VCtr{k8, fs8}:
+          match vr:
+        case Core.VClo{env8, p8, b8}:
+          match vr:
+        case Core.VFun{f8, as8}:
+          match vr:
+        case Core.VTrm{t8}:
+          match vr:
+        case Core.VBnd{x8, w8}:
+          match vr:
+    case Core.VCtr{+k, fs}:
+      match fs:
+        case Nil{}:
+          match v2:
+            case Core.VLit{l8}:
+              match vr:
+            case Core.VCtr{k2, fs2}:
+              match fs2:
+                case Nil{}:
+                  match vr:
+                    case (ek, vrs):
+                      %ek : {Core.VCtr{k, Nil{}} == Core.VCtr{_, Nil{}} : Core.Val}
+                      {==}
+                case w <> s:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+            case Core.VClo{env8, p8, b8}:
+              match vr:
+            case Core.VFun{f8, as8}:
+              match vr:
+            case Core.VTrm{t8}:
+              match vr:
+            case Core.VBnd{x8, w8}:
+              match vr:
+        case +f <> +r:
+          match v2:
+            case Core.VLit{l8}:
+              match vr:
+            case Core.VCtr{+k2, fs2}:
+              match fs2:
+                case Nil{}:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+                case +f2 <> +r2:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+                        case (vf, vrr):
+                          match c:
+                            case (cf, cr):
+                              %Val.sym(Core.Val.dead(Core.VCtr{k, r}), Core.VCtr{k2, r2}, Eq.val(Core.VCtr{k, r}, Core.VCtr{k2, r2}, (ek, vrr), cr)) : {Core.Val.push(Core.Val.dead(f), _) == Core.VCtr{k2, f2 <> r2} : Core.Val}
+                              %Val.sym(Core.Val.dead(f), f2, Eq.val(f, f2, vf, cf)) : {Core.VCtr{k2, _ <> r2} == Core.VCtr{k2, f2 <> r2} : Core.Val}
+                              {==}
+            case Core.VClo{env8, p8, b8}:
+              match vr:
+            case Core.VFun{f8, as8}:
+              match vr:
+            case Core.VTrm{t8}:
+              match vr:
+            case Core.VBnd{x8, w8}:
+              match vr:
+    case Core.VClo{ce, cp, cb}:
+      match c:
+    case Core.VFun{+g, fs}:
+      match fs:
+        case Nil{}:
+          match v2:
+            case Core.VLit{l8}:
+              match vr:
+            case Core.VCtr{k8, fs8}:
+              match vr:
+            case Core.VClo{env8, p8, b8}:
+              match vr:
+            case Core.VFun{g2, fs2}:
+              match fs2:
+                case Nil{}:
+                  match vr:
+                    case (ek, vrs):
+                      %ek : {Core.VFun{g, Nil{}} == Core.VFun{_, Nil{}} : Core.Val}
+                      {==}
+                case w <> s:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+            case Core.VTrm{t8}:
+              match vr:
+            case Core.VBnd{x8, w8}:
+              match vr:
+        case +f <> +r:
+          match v2:
+            case Core.VLit{l8}:
+              match vr:
+            case Core.VCtr{k8, fs8}:
+              match vr:
+            case Core.VClo{env8, p8, b8}:
+              match vr:
+            case Core.VFun{+g2, fs2}:
+              match fs2:
+                case Nil{}:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+                case +f2 <> +r2:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+                        case (vf, vrr):
+                          match c:
+                            case (cf, cr):
+                              %Val.sym(Core.Val.dead(Core.VFun{g, r}), Core.VFun{g2, r2}, Eq.val(Core.VFun{g, r}, Core.VFun{g2, r2}, (ek, vrr), cr)) : {Core.Val.push(Core.Val.dead(f), _) == Core.VFun{g2, f2 <> r2} : Core.Val}
+                              %Val.sym(Core.Val.dead(f), f2, Eq.val(f, f2, vf, cf)) : {Core.VFun{g2, _ <> r2} == Core.VFun{g2, f2 <> r2} : Core.Val}
+                              {==}
+            case Core.VTrm{t8}:
+              match vr:
+            case Core.VBnd{x8, w8}:
+              match vr:
+    case Core.VTrm{t}:
+      match v2:
+        case Core.VLit{l8}:
+          match vr:
+        case Core.VCtr{k8, fs8}:
+          match vr:
+        case Core.VClo{env8, p8, b8}:
+          match vr:
+        case Core.VFun{f8, as8}:
+          match vr:
+        case Core.VTrm{t2}:
+          %vr : {Core.VTrm{Core.Tm.dead(t)} == Core.VTrm{_} : Core.Val}
+          {==}
+        case Core.VBnd{x8, w8}:
+          match vr:
+    case Core.VBnd{+x, +w}:
+      match v2:
+        case Core.VLit{l8}:
+          match vr:
+        case Core.VCtr{k8, fs8}:
+          match vr:
+        case Core.VClo{env8, p8, b8}:
+          match vr:
+        case Core.VFun{f8, as8}:
+          match vr:
+        case Core.VTrm{t8}:
+          match vr:
+        case Core.VBnd{x2, +w2}:
+          match vr:
+            case (ex, vw):
+              %ex : {Core.VBnd{x, Core.Val.dead(w)} == Core.VBnd{_, w2} : Core.Val}
+              %Val.sym(Core.Val.dead(w), w2, Eq.val(w, w2, vw, c)) : {Core.VBnd{x, _} == Core.VBnd{x, w2} : Core.Val}
+              {==}
+
+def Eq.vals(vs1: List<&2, Core.Val>, vs2: List<&2, Core.Val>, vr: Law.VRels(vs1, vs2), c: Law.NoClos(vs1))
+    -> {Core.Vals.dead(vs1) == vs2 : List<&2, Core.Val>}:
+  match vs1:
+    case Nil{}:
+      match vs2:
+        case Nil{}:
+          {==}
+        case w <> s:
+          match vr:
+    case +v <> +r:
+      match vs2:
+        case Nil{}:
+          match vr:
+        case +w <> +s:
+          match vr:
+            case (vv, vrr):
+              match c:
+                case (cv, cr):
+                  %Eq.val(v, w, vv, cv) : {Core.Val.dead(v) <> Core.Vals.dead(r) == _ <> s : List<&2, Core.Val>}
+                  %Eq.vals(r, s, vrr, cr) : {Core.Val.dead(v) <> Core.Vals.dead(r) == Core.Val.dead(v) <> _ : List<&2, Core.Val>}
+                  {==}
+
+# Related results, the first clean: the second is the first with the pass
+# taken.
+def Eq.res(r1: Core.Res, r2: Core.Res, -U: List<&2, String> -> String -> Bool, rr: Law.RRel(r1, U, r2), c: Law.Clean(r1))
+    -> {Core.Res.dead(r1) == r2 : Core.Res}:
+  match r1:
+    case Core.ROk{+vs1}:
+      match r2:
+        case Core.ROk{+vs2}:
+          %Eq.vals(vs1, vs2, rr, c) : {Core.ROk{Core.Vals.dead(vs1)} == Core.ROk{_} : Core.Res}
+          {==}
+        case Core.REnv{e9}:
+          match rr:
+        case Core.RNo{}:
+          match rr:
+        case Core.RFail{m9}:
+          match rr:
+    case Core.REnv{e1}:
+      match c:
+    case Core.RNo{}:
+      match r2:
+        case Core.ROk{vs9}:
+          match rr:
+        case Core.REnv{e9}:
+          match rr:
+        case Core.RNo{}:
+          {==}
+        case Core.RFail{m9}:
+          match rr:
+    case Core.RFail{m}:
+      match c:
+
+# The laws
+# ========
+
+def L.top(~prim: String -> List<&2, Core.Val> -> Core.Res,
+    ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(vs1, vs2) -> Law.PRel(prim(op, vs1), prim(op, vs2)),
+    +n: Nat, +m: Nat, +le: Red.Le(n, m), +ds: List<&2, Core.Def>, +s1: Core.Sel, s2: Core.Sel,
+    -U: List<&2, String> -> String -> Bool, rel: Law.SRel(s1, U, s2))
+    -> Law.RRel(Core.run(~prim, n, ds, s1), U, Core.run(~prim, m, Core.Defs.dead(ds), s2)):
+  L.dead(~prim, ~ok, n, m, le, ds, s1, Dec.sel.of(s1), s2, U, rel)
+
+def Eq.top(~prim: String -> List<&2, Core.Val> -> Core.Res,
+    ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(vs1, vs2) -> Law.PRel(prim(op, vs1), prim(op, vs2)),
+    +n: Nat, +m: Nat, +le: Red.Le(n, m), +ds: List<&2, Core.Def>, nf: Law.Clean(Core.Prog.run(~prim, n, ds)))
+    -> {Core.Res.dead(Core.Prog.run(~prim, n, ds)) == Core.Prog.run(~prim, m, Core.Defs.dead(ds)) : Core.Res}:
+  Eq.res(Core.Prog.run(~prim, n, ds), Core.Prog.run(~prim, m, Core.Defs.dead(ds)), Law.Lk(Core.CBox{}),
+    L.top(~prim, ~ok, n, m, le, ds, Core.SCallDef{"main", Nil{}}, Core.SCallDef{"main", Nil{}}, Law.Lk(Core.CBox{}), (Nil{}, {==}, Unit{})), nf)
+
+def Law.dead_ok(prim, ok, n, m, le, ds, U, s1, s2, rel):
+  L.top(~prim, ~ok, n, m, le, ds, s1, s2, U, rel)
+
+def Law.dead_prog(prim, ok, n, m, le, ds, nf):
+  Eq.top(~prim, ~ok, n, m, le, ds, nf)
