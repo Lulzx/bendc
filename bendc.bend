@@ -5453,7 +5453,7 @@ def K.isflat(g: G, name: String) -> KM(Bool):
 def K.sq.decl.go(kind: Nat, d: Decl, +g: G, +name: String, +mask: List<&2, Bool>) -> KM(Bool):
   match kind d:
     case 0n DDef{n, ps, body, ret}:
-      K.fl.and(U32.is_le(K.kept(mask), 8), K.fl.expr(g, KSelf{name, 1, mask}, K.params(ps, mask), R.ops(body, "Nat"),
+      K.fl.and(U32.is_le(K.kept(mask), 12), K.fl.expr(g, KSelf{name, 1, mask}, K.params(ps, mask), R.ops(body, "Nat"),
         True{}))
     case k o:
       KM.pure(Bool, False{})

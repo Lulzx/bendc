@@ -310,6 +310,7 @@ static int gpu_setup(const GpuProg *prog) {
   // size: 30 ms for 1 GB) and grows when a call fills it (see gpu_call).
   gpu_Hmax = (size_t)gpu_env("BEND_GPU_MB", 4096) << 20;
   gpu_Hn = gpu_Hmax < ((size_t)64 << 20) ? gpu_Hmax : (size_t)64 << 20;
+  if (bend_gpu_mb > 64) gpu_Hn = ((size_t)bend_gpu_mb << 20) < gpu_Hmax ? (size_t)bend_gpu_mb << 20 : gpu_Hmax;
   gpu_H = mmap(NULL, gpu_Hn, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
   gpu_An = ((KA_SEQ + gpu_qcap) * sizeof(KAU) + 0xffff) & ~(size_t)0xffff;
   gpu_A = mmap(NULL, gpu_An, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);

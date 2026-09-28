@@ -98,7 +98,7 @@ typedef struct {
 #define PC_JOIN 2
 #define PC_TASK 3
 #define PC_KQ 4      // waiting to run a KQ_ call (see the kernel's loop)
-#define KQ_ARGS 8
+#define KQ_ARGS 12
 #define K_LANE (10 + KQ_ARGS)  // words of a lane's saved state
 
 #define K_CHUNK 256

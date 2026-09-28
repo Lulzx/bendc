@@ -2382,6 +2382,9 @@ static void *bend_thread(void *arg) {
 }
 
 static int bend_gpu = 1;
+// --gpu SIZE: the device arena's first size in MB (0: the default), so a
+// call that needs it does not first fill a smaller one.
+static long bend_gpu_mb = 0;
 
 static const char *CLI_HELP =
   "usage: %s [options] [arguments]\n"
@@ -2416,6 +2419,14 @@ static int bend_start(int argc, char **argv, V (*m)(void), int value) {
     } else if (strcmp(a, "--gpu") == 0) {
       if (v == NULL) cli_fail("expected on, off or a size like 4GB after --gpu");
       bend_gpu = strcmp(v, "off") != 0;
+      {
+        char *end = NULL;
+        long n = strtol(v, &end, 10);
+        if (end != v && n > 0) {
+          if (strcmp(end, "GB") == 0 || strcmp(end, "G") == 0 || strcmp(end, "gb") == 0) bend_gpu_mb = n << 10;
+          else if (strcmp(end, "MB") == 0 || strcmp(end, "M") == 0 || strcmp(end, "mb") == 0) bend_gpu_mb = n;
+        }
+      }
       i++;
     } else {
       io_argv[io_argc++] = argv[i];

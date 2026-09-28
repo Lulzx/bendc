@@ -102,7 +102,7 @@ static const char K_GPU_H[] =
 "#define PC_JOIN 2\n"
 "#define PC_TASK 3\n"
 "#define PC_KQ 4      // waiting to run a KQ_ call (see the kernel's loop)\n"
-"#define KQ_ARGS 8\n"
+"#define KQ_ARGS 12\n"
 "#define K_LANE (10 + KQ_ARGS)  // words of a lane's saved state\n"
 "\n"
 "#define K_CHUNK 256\n"

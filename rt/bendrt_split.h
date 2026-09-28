@@ -1242,6 +1242,9 @@ extern int bend_exit;
 void *bend_thread(void *arg);
 
 extern int bend_gpu;
+// --gpu SIZE: the device arena's first size in MB (0: the default), so a
+// call that needs it does not first fill a smaller one.
+extern long bend_gpu_mb;
 
 extern const char *CLI_HELP;
 
