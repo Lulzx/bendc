@@ -704,12 +704,12 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
 // 63 marks an object other threads may reach (RC_TS), and only a marked
 // object's count changes atomically. A fork's closure is marked before
 // another thread can take its task, as is a value stored into a marked
-// array, and so is every object they reach through objects with more than
-// one reference (rc_publish): another reference may be the forking
-// thread's. An object with one reference is reached through its one
-// holder, and when that holder is marked, the thread that reads the object
-// out of it for a new reference marks it first (rc_dup_in). A new object,
-// its first word written whole, is unmarked. Values are acyclic, so dropping the last reference to each
+// array, and so is every object they reach (rc_publish): an object may be
+// held by the forking thread too, even below a node with one reference
+// (whose taker gets its fields as they are). So everything a marked object
+// reaches is marked, and marking stops at a marked object. A new object,
+// its first word written whole, is unmarked. Values are acyclic, so
+// dropping the last reference to each
 // object frees everything, and a Nat equal to the address of a live object
 // is the one word taken for a reference that is not one.
 #define RC_ONE ((V)1 << 48)
@@ -756,21 +756,21 @@ static inline void rc_dup_obj(V v, V n) {
 // n more references to v.
 static inline void rc_dupn(V v, V n) { if (rc_obj(v)) rc_dup_obj(v, n); }
 
+static void rc_publish(V v);
 // A reference more to x, read out of an object that is marked when ts is
-// not 0 (see RC_TS): x is marked first.
+// not 0 (see RC_TS): x is marked first, with its reach. (A marked object's
+// reach is marked already; the mark here is for a holder that is not one.)
 static inline void rc_dup_in(V x, V ts) {
   if (!rc_obj(x)) return;
-  if (ts && !(__atomic_load_n((V *)x, __ATOMIC_RELAXED) & (RC_TS | RC_STICKY)))
-    __atomic_fetch_or((V *)x, RC_TS, __ATOMIC_RELAXED);
+  if (ts && !(__atomic_load_n((V *)x, __ATOMIC_RELAXED) & (RC_TS | RC_STICKY))) rc_publish(x);
   rc_dup_obj(x, 1);
 }
 // ALeaf{x} = a (counted): x gets a reference.
 static inline void rc_dup_leaf(V a) { rc_dup_in(((V *)a)[1], ((V *)a)[0] & RC_TS); }
-// A reference more to a borrowed value (see Bor in bendc.bend), marked
-// once threads run: a borrowed node was opened without rc_take, so its
-// mark may lag its holders' (a node another thread reaches through a
-// marked parent is marked only when a take passes it on).
-#define rc_bmark() (gc_hot.rcmt ? RC_TS : 0)
+// A reference more to a borrowed value (see Bor in bendc.bend): its own
+// mark says whether other threads reach it, as everything a marked object
+// reaches is marked (rc_publish).
+#define rc_bmark() 0
 #define rc_bdupFLD(p, i) rc_dup_in(FLD(p, i), rc_bmark())
 #define rc_bdup(x) rc_dup_in((x), rc_bmark())
 static inline void rc_dup(V v) { rc_dupn(v, 1); }
@@ -962,16 +962,17 @@ static void rc_immortal(V v) {
   }
 }
 
-// Marks v reachable by other threads (RC_TS), and what it reaches through
-// objects with more than one reference, stopping at marked and immortal
-// objects.
+// Marks v reachable by other threads (RC_TS), and everything it reaches,
+// stopping at marked and immortal objects (whose reach is marked). Not only
+// through objects with more than one reference: a node with one, reached
+// only through v, may hold one the forking thread holds too, and the thread
+// that takes the node gets that one without a mark.
 __attribute__((noinline)) static void rc_publish(V v) {
   Thr *t = thr_self;
   size_t base = t->rcn;
-  int root = 1;
   for (;;) {
     V w0;
-    if (rc_obj(v) && !((w0 = *(V *)v) & (RC_TS | RC_STICKY)) && (root || RC_REFS(w0))) {
+    if (rc_obj(v) && !((w0 = *(V *)v) & (RC_TS | RC_STICKY))) {
       V *p = (V *)v;
       p[0] = w0 | RC_TS;
       uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
@@ -979,7 +980,6 @@ __attribute__((noinline)) static void rc_publish(V v) {
       for (size_t j = 1; j < w; j++)
         if (p[j] >= ((V)1 << 32)) rc_push(t, p[j]);
     }
-    root = 0;
     if (t->rcn == base) return;
     v = t->rcs[--t->rcn];
   }
@@ -1827,9 +1827,7 @@ static inline V F_Map_dget(V d, V m, V key) {
   if (leaf) {
     r = FLD(leaf, 1);
     // (the value is the map's and the answer's now)
-    // (marked once threads run: the walk took no node, so the leaf's
-    // mark may lag, as a borrowed node's does)
-    if (gc_hot.rc) rc_dup_in(r, rc_bmark());
+    if (gc_hot.rc) rc_dup(r);
     else bend_share(r);
     bend_drop(d);
   }

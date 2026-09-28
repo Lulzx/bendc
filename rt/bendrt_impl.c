@@ -351,7 +351,7 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w) {
 #define RC_TS ((V)1 << 63)
 #define RC_ADDR (RC_ONE - 1)
 #define RC_REFS(w0) (((w0) >> 48) & 0x7fff)
-#define rc_bmark() (gc_hot.rcmt ? RC_TS : 0)
+#define rc_bmark() 0
 #define rc_bdupFLD(p, i) rc_dup_in(FLD(p, i), rc_bmark())
 #define rc_bdup(x) rc_dup_in((x), rc_bmark())
 __attribute__((noinline)) void rc_free_large(uintptr_t bi) {
@@ -424,10 +424,9 @@ void rc_immortal(V v) {
 __attribute__((noinline)) void rc_publish(V v) {
   Thr *t = thr_self;
   size_t base = t->rcn;
-  int root = 1;
   for (;;) {
     V w0;
-    if (rc_obj(v) && !((w0 = *(V *)v) & (RC_TS | RC_STICKY)) && (root || RC_REFS(w0))) {
+    if (rc_obj(v) && !((w0 = *(V *)v) & (RC_TS | RC_STICKY))) {
       V *p = (V *)v;
       p[0] = w0 | RC_TS;
       uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
@@ -435,7 +434,6 @@ __attribute__((noinline)) void rc_publish(V v) {
       for (size_t j = 1; j < w; j++)
         if (p[j] >= ((V)1 << 32)) rc_push(t, p[j]);
     }
-    root = 0;
     if (t->rcn == base) return;
     v = t->rcs[--t->rcn];
   }
