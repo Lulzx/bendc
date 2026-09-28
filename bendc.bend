@@ -16009,9 +16009,85 @@ def N.str(+s: String) -> NG(As.Code):
     return N.cat([N.dslot.at(d), N.w(As.ldar(9, 0)), N.one(As.IBc{As.cbz(9), slow}), N.w(As.mov(0, 9)),
       N.b(done), N.lab(slow), N.adr(1, l), N.k(2, As.len32(As.bytes(s))), N.call("str_cache"), N.lab(done)])
 
+# A float literal's bits, at compile time: a decimal of at most 14 digits,
+# 6 of them after the point, rounded to nearest (ties to even) as strtof
+# rounds, with every number below 2^48 (Nat's range); others (and ones
+# that would be subnormal or infinite) are read at run time (N.flt).
+type FltP is Data:
+  FltP{m: Nat, f: Nat, nd: Nat, ok: Bool}
+
+def Flt.scan(s: String, r: FltP, +dot: Bool) -> FltP:
+  match s:
+    case SNil{}:
+      r
+    case SCon{Chr{+c}, +t}:
+      FltP{+m, +f, +nd, +ok} = r
+      Bool.pick(Unit -> FltP, U32.is_eq(c, 46), u => Bool.pick(Unit -> FltP, dot, v => FltP{m, f, nd, False{}},
+        v => Flt.scan(t, FltP{m, f, nd, ok}, True{}))(Unit{}),
+        u => Bool.pick(Unit -> FltP, Bool.and(Bool.and(U32.is_ge(c, 48), U32.is_le(c, 57)), Nat.is_lt(nd, 14n)),
+          v => Flt.scan(t, FltP{Nat.add(Nat.mul(m, 10n), U32.to_nat((c - 48 : U32))), Bool.pick(Nat, dot, 1n+f, f),
+            1n+nd, ok}, dot),
+          v => FltP{m, f, nd, False{}})(Unit{}))(Unit{})
+
+# The bits a number needs.
+def Flt.blen(fu: Nat, +n: Nat) -> Nat:
+  match fu:
+    case 0n:
+      0n
+    case 1n+k:
+      Bool.pick(Unit -> Nat, Nat.is_eq(n, 0n), u => 0n, u => 1n+Flt.blen(k, Nat.div(n, 2n)))(Unit{})
+
+def Flt.fin(+q: Nat, +t: Nat, +ld: Nat) -> Maybe<&2, U32>:
+  +e = Nat.sub(t, ld)
+  Bool.pick(Maybe<&2, U32>, Bool.and(Nat.is_gt(t, ld), Nat.is_lt(e, 255n)),
+    Some{U32.from_nat(Nat.add(Nat.mul(e, Nat.pow(2n, 23n)), Nat.sub(q, Nat.pow(2n, 23n))))}, None{})
+
+# q (below 2^25) and the remainder r of the division by d, rounded.
+def Flt.round(qr: Nat & Nat, +d: Nat, +t: Nat, +ld: Nat) -> Maybe<&2, U32>:
+  (+q, +r) = qr
+  +up = Bool.or(Nat.is_gt(Nat.double(r), d), Bool.and(Nat.is_eq(Nat.double(r), d), Nat.is_eq(Nat.mod(q, 2n), 1n)))
+  +q1 = Bool.pick(Nat, up, 1n+q, q)
+  +top = Nat.is_eq(q1, Nat.pow(2n, 24n))
+  Flt.fin(Bool.pick(Nat, top, Nat.pow(2n, 23n), q1), Bool.pick(Nat, top, 1n+t, t), ld)
+
+# m * 2^a / (den * 2^b) is in [2^23, 2^25): halved into [2^23, 2^24).
+def Flt.q(+n: Nat, +d: Nat, +t: Nat, +ld: Nat) -> Maybe<&2, U32>:
+  +hi = Nat.is_ge(Nat.div(n, d), Nat.pow(2n, 24n))
+  +d2 = Bool.pick(Nat, hi, Nat.double(d), d)
+  Flt.round(Nat.divmod(n, d2), d2, Bool.pick(Nat, hi, 1n+t, t), ld)
+
+# m / den = q * 2^(lm - ld - 24 + h), q in [2^23, 2^24): the biased exponent
+# is lm + 126 + h - ld.
+def Flt.mag(+m: Nat, +den: Nat) -> Maybe<&2, U32>:
+  +lm = Flt.blen(64n, m)
+  +ld = Flt.blen(64n, den)
+  +up = Nat.is_ge(Nat.add(24n, ld), lm)
+  Flt.q(Bool.pick(Nat, up, Nat.mul(m, Nat.pow(2n, Nat.sub(Nat.add(24n, ld), lm))), m),
+    Bool.pick(Nat, up, den, Nat.mul(den, Nat.pow(2n, Nat.sub(lm, Nat.add(24n, ld))))), Nat.add(lm, 126n), ld)
+
+def Flt.parsed(r: FltP) -> Maybe<&2, U32>:
+  FltP{+m, +f, +nd, +ok} = r
+  Bool.pick(Unit -> Maybe<&2, U32>, Bool.and(ok, Bool.and(Nat.is_le(f, 6n), Nat.is_gt(nd, 0n))),
+    u => Bool.pick(Unit -> Maybe<&2, U32>, Nat.is_eq(m, 0n), v => Some{0}, v => Flt.mag(m, Nat.pow(10n, f)))(Unit{}),
+    u => None{})(Unit{})
+
+def Flt.neg(m: Maybe<&2, U32>) -> Maybe<&2, U32>:
+  match m:
+    case Some{+b}:
+      Some{(b .|. 2147483648 : U32)}
+    case None{}:
+      None{}
+
+def Flt.bits(s: String) -> Maybe<&2, U32>:
+  match s:
+    case SCon{Chr{45}, t}:
+      Flt.neg(Flt.parsed(Flt.scan(t, FltP{0n, 0n, 0n, True{}}, False{})))
+    case other:
+      Flt.parsed(Flt.scan(other, FltP{0n, 0n, 0n, True{}}, False{}))
+
 # A float literal, read once (bn_flt, in rt/native.c, reads as C does). Its
 # slot holds a number, not a pointer, so a plain load will do.
-def N.flt(s: String) -> NG(As.Code):
+def N.flt.rt(s: String) -> NG(As.Code):
   do NG<As.Code>:
     +d : U32 <- N.dslot()
     +l : String <- N.cstr(s)
@@ -16019,6 +16095,16 @@ def N.flt(s: String) -> NG(As.Code):
     +done : String <- N.label()
     return N.cat([N.dslot.at(d), N.w(As.ldr(9, 0, 0)), N.one(As.IBc{As.cbz(9), slow}), N.w(As.ubfm(0, 9, 0, 31)),
       N.b(done), N.lab(slow), N.adr(1, l), N.call("bn_flt"), N.lab(done)])
+
+def N.flt.or(m: Maybe<&2, U32>, s: String) -> NG(As.Code):
+  match m:
+    case Some{+b}:
+      NG.pure(As.Code, N.k(0, b))
+    case None{}:
+      N.flt.rt(s)
+
+def N.flt(+s: String) -> NG(As.Code):
+  N.flt.or(Flt.bits(s), s)
 
 # Patterns
 # --------
@@ -16389,6 +16475,23 @@ def N.pats(+g: G, ps: List<&2, Pat>, os: List<&2, NO>, r: NPr) -> NPr:
     case pl ol:
       r
 
+# The register a place is in with no code (a slot's), else 0 (x0, after
+# N.path).
+def N.preg(p: NPa) -> U32:
+  match p:
+    case NPO{o}:
+      match o:
+        case NOS{+s}:
+          Bool.pick(U32, U32.is_lt(s, N.nregs()), N.sreg(s), 0)
+        case NOK{k}:
+          0
+    case other:
+      0
+
+# rd = rn - k.
+def N.subk(+rd: U32, +rn: U32, +k: U32) -> As.Code:
+  Bool.pick(As.Code, U32.is_lt(k, 4096), N.w(As.subi(rd, rn, k)), As.CCat{N.k(9, k), N.w(As.sub(rd, rn, 9))})
+
 # The value at a place into x0 (x9 is scratch; arr_half is a call).
 def N.path(p: NPa) -> As.Code:
   match p:
@@ -16396,8 +16499,8 @@ def N.path(p: NPa) -> As.Code:
       N.lo(o, 0)
     case NPF{q, +i}:
       As.CCat{N.path(q), N.w(As.ldr(0, 0, ((i + 1 : U32) * 8 : U32)))}
-    case NPK{q, +k}:
-      N.cat([N.path(q), N.k(9, k), N.w(As.sub(0, 0, 9))])
+    case NPK{+q, +k}:
+      As.CCat{Bool.pick(As.Code, U32.is_zero(N.preg(q)), N.path(q), As.CNil{}), N.subk(0, N.preg(q), k)}
     case NPB{q}:
       N.cat([N.path(q), N.ws([As.and1(0, 0), As.lsli(0, 0, 3), As.orr1(0, 0)])])
     case NPW{q}:
@@ -16405,15 +16508,27 @@ def N.path(p: NPa) -> As.Code:
     case NPH{q, +hi}:
       N.cat([N.path(q), N.k(1, hi), N.call("arr_half")])
 
-# A test, branching to no when it fails.
+def N.pcode(+p: NPa) -> As.Code:
+  Bool.pick(As.Code, U32.is_zero(N.preg(p)), N.path(p), As.CNil{})
+
+# cmp r, k (through x9 past 12 bits).
+def N.cmpk(+r: U32, +k: U32) -> As.Code:
+  Bool.pick(As.Code, U32.is_lt(k, 4096), N.w(As.cmpi(r, k)), As.CCat{N.k(9, k), N.w(As.cmp(r, 9))})
+
+def N.cond.eq(+r: U32, +k: U32, +no: String) -> As.Code:
+  Bool.pick(As.Code, U32.is_zero(k), N.one(As.IBc{As.cbnz(r), no}),
+    As.CCat{N.cmpk(r, k), N.one(As.IBc{As.bc(As.ne()), no})})
+
+# A test, branching to no when it fails (a place in a register is read
+# there).
 def N.cond(c: NCo, +no: String) -> NG(As.Code):
   match c:
-    case NCEq{p, +k}:
-      NG.pure(As.Code, N.cat([N.path(p), N.k(9, k), N.w(As.cmp(0, 9)), N.one(As.IBc{As.bc(As.ne()), no})]))
-    case NCNz{p}:
-      NG.pure(As.Code, As.CCat{N.path(p), N.one(As.IBc{As.cbz(0), no})})
-    case NCGe{p, +k}:
-      NG.pure(As.Code, N.cat([N.path(p), N.k(9, k), N.w(As.cmp(0, 9)), N.one(As.IBc{As.bc(As.lo()), no})]))
+    case NCEq{+p, +k}:
+      NG.pure(As.Code, As.CCat{N.pcode(p), N.cond.eq(N.preg(p), k, no)})
+    case NCNz{+p}:
+      NG.pure(As.Code, As.CCat{N.pcode(p), N.one(As.IBc{As.cbz(N.preg(p)), no})})
+    case NCGe{+p, +k}:
+      NG.pure(As.Code, N.cat([N.pcode(p), N.cmpk(N.preg(p), k), N.one(As.IBc{As.bc(As.lo()), no})]))
     case NCTag{p, +tag}:
       NG.pure(As.Code, N.cat([N.path(p), N.tag(), N.k(9, tag), N.w(As.cmp(0, 9)),
         N.one(As.IBc{As.bc(As.ne()), no})]))
@@ -16579,7 +16694,15 @@ def N.simple.var(m: Maybe<&2, NO>, +x: String) -> Maybe<&2, NO>:
     case None{}:
       Bool.pick(Maybe<&2, NO>, Str.eq(x, "_"), Some{NOK{0}}, None{})
 
-# An expression that needs no code: a variable in a slot, a constant.
+def N.simple.flt(m: Maybe<&2, U32>) -> Maybe<&2, NO>:
+  match m:
+    case Some{+b}:
+      Some{NOK{b}}
+    case None{}:
+      None{}
+
+# An expression that needs no code: a variable in a slot, a constant (a
+# float literal's bits among them).
 def N.simple(+env: NEnv(), e: Expr) -> Maybe<&2, NO>:
   match e:
     case EVar{+x}:
@@ -16590,6 +16713,8 @@ def N.simple(+env: NEnv(), e: Expr) -> Maybe<&2, NO>:
       Some{NOK{n}}
     case ETy{n, a}:
       Some{NOK{0}}
+    case EFlt{f}:
+      N.simple.flt(Flt.bits(f))
     case other:
       None{}
 
@@ -16703,6 +16828,135 @@ def N.bool(+c: U32) -> List<&2, U32>:
 
 def N.fop(+w: U32) -> As.Code:
   N.ws([As.fmovsw(0, 0), As.fmovsw(1, 1), w, As.fmovws(0, 0)])
+
+# Float trees
+# -----------
+#
+# Nested F32 operations compute in FP registers, each node's value in the
+# register of its depth (s0..s7, then s16..s27: s8..s15 are callee-saved),
+# with no trip through x0 between them; their other operands are computed
+# first, into slots, as a call's arguments are. Past depth 20 a node is an
+# operand.
+
+# 0..3: F32.add, sub, mul, div of two; 4: F32.neg of one; 5: not a node.
+def N.ft.arity(k: Nat, n: Nat) -> Nat:
+  match k:
+    case 4n:
+      Bool.pick(Nat, Nat.is_eq(n, 1n), 4n, 5n)
+    case 5n+q:
+      5n
+    case other:
+      Bool.pick(Nat, Nat.is_eq(n, 2n), other, 5n)
+
+def N.ft.kind(+env: NEnv(), e: Expr, +d: U32) -> Nat:
+  match e:
+    case ECall{EVar{+name}, args}:
+      Bool.pick(Nat, Bool.or(NEnv.has(env, name), U32.is_ge(d, 20)), 5n,
+        N.ft.arity(P.which(name, ["F32.add", "F32.sub", "F32.mul", "F32.div", "F32.neg"]), List.length(&2, Expr, args)))
+    case other:
+      5n
+
+def N.ft.sreg(+d: U32) -> U32:
+  Bool.pick(U32, U32.is_lt(d, 8), d, (d + 8 : U32))
+
+def N.ft.push(simple: Bool, e: Expr, acc: List<&2, Expr>) -> List<&2, Expr>:
+  match simple:
+    case True{}:
+      acc
+    case False{}:
+      e <> acc
+
+# A tree's operands that need code, in order (n bounds the depth: a tree
+# is no deeper than 21).
+def N.ft.leaves(n: Nat, kind: Nat, +env: NEnv(), +e: Expr, +d: U32, acc: List<&2, Expr>) -> List<&2, Expr>:
+  match n:
+    case 0n:
+      acc
+    case 1n+ +fu:
+      match kind:
+        case 5n+q:
+          N.ft.push(Maybe.is_some(&2, NO, N.simple(env, e)), e, acc)
+        case other:
+          match e:
+            case ECall{f, +a <> +b <> Nil{}}:
+              N.ft.leaves(fu, N.ft.kind(env, a, d), env, a, d,
+                N.ft.leaves(fu, N.ft.kind(env, b, U32.inc(d)), env, b, U32.inc(d), acc))
+            case ECall{f, +a <> Nil{}}:
+              N.ft.leaves(fu, N.ft.kind(env, a, d), env, a, d, acc)
+            case other:
+              acc
+
+# How many of them there are.
+def N.ft.count(n: Nat, kind: Nat, +env: NEnv(), +e: Expr, +d: U32) -> U32:
+  match n:
+    case 0n:
+      0
+    case 1n+ +fu:
+      match kind:
+        case 5n+q:
+          Bool.pick(U32, Maybe.is_some(&2, NO, N.simple(env, e)), 0, 1)
+        case other:
+          match e:
+            case ECall{f, +a <> +b <> Nil{}}:
+              (N.ft.count(fu, N.ft.kind(env, a, d), env, a, d) +
+                N.ft.count(fu, N.ft.kind(env, b, U32.inc(d)), env, b, U32.inc(d)) : U32)
+            case ECall{f, +a <> Nil{}}:
+              N.ft.count(fu, N.ft.kind(env, a, d), env, a, d)
+            case other:
+              0
+
+# s(d) = an operand.
+def N.ft.lo(o: NO, +d: U32) -> As.Code:
+  match o:
+    case NOS{+s}:
+      Bool.pick(As.Code, U32.is_lt(s, N.nregs()), N.w(As.fmovsw(N.ft.sreg(d), N.sreg(s))),
+        As.CCat{N.ldx(9, (s * 8 : U32)), N.w(As.fmovsw(N.ft.sreg(d), 9))})
+    case NOK{+k}:
+      As.CCat{N.k(9, k), N.w(As.fmovsw(N.ft.sreg(d), 9))}
+
+def N.ft.leaf(m: Maybe<&2, NO>, +d: U32, +k: U32) -> As.Code:
+  match m:
+    case Some{o}:
+      N.ft.lo(o, d)
+    case None{}:
+      N.ft.lo(NOS{k}, d)
+
+def N.ft.ins(op: Nat, +rd: U32, +rn: U32, +rm: U32) -> U32:
+  match op:
+    case 0n:
+      As.fadd(rd, rn, rm)
+    case 1n:
+      As.fsub(rd, rn, rm)
+    case 2n:
+      As.fmul(rd, rn, rm)
+    case other:
+      As.fdiv(rd, rn, rm)
+
+# The tree's value into s(d), its operands that need code in slots k, k + 1,
+# ... (a node's second operand's after its first's).
+def N.ft.code(n: Nat, kind: Nat, +env: NEnv(), +e: Expr, +d: U32, +k: U32) -> As.Code:
+  match n:
+    case 0n:
+      As.CNil{}
+    case 1n+ +fu:
+      match kind:
+        case 5n+q:
+          N.ft.leaf(N.simple(env, e), d, k)
+        case 4n:
+          match e:
+            case ECall{f, +a <> Nil{}}:
+              As.CCat{N.ft.code(fu, N.ft.kind(env, a, d), env, a, d, k), N.w(As.fneg(N.ft.sreg(d), N.ft.sreg(d)))}
+            case other:
+              As.CNil{}
+        case +op:
+          match e:
+            case ECall{f, +a <> +b <> Nil{}}:
+              N.cat([N.ft.code(fu, N.ft.kind(env, a, d), env, a, d, k),
+                N.ft.code(fu, N.ft.kind(env, b, U32.inc(d)), env, b, U32.inc(d),
+                  (k + N.ft.count(fu, N.ft.kind(env, a, d), env, a, d) : U32)),
+                N.w(N.ft.ins(op, N.ft.sreg(d), N.ft.sreg(d), N.ft.sreg(U32.inc(d))))])
+            case other:
+              As.CNil{}
 
 def N.fcmp(+c: U32) -> As.Code:
   N.ws(As.fmovsw(0, 0) <> As.fmovsw(1, 1) <> As.fcmp(0, 1) <> N.bool(c))
@@ -16839,10 +17093,50 @@ def N.copy(k: Nat, +from: U32, +to: U32) -> As.Code:
     case 1n+j:
       N.cat([N.ld(9, from), N.st(9, to), N.copy(j, U32.inc(from), U32.inc(to))])
 
-# The new arguments of a tail call to itself over the parameters: through
-# registers, or (past 8) through the temporaries.
+# A parallel move of operands into parameters 0..n-1 (slots 0..n-1): the
+# ones read from another parameter go through x0..x7, all read first;
+# a parameter that stays is left; the rest are written in place.
+def N.pm.kind(o: NO, +n: U32, +i: U32) -> U32:
+  match o:
+    case NOS{+s}:
+      Bool.pick(U32, U32.is_eq(s, i), 1, Bool.pick(U32, U32.is_lt(s, n), 0, 2))
+    case NOK{k}:
+      2
+
+def N.pm.read(os: List<&2, NO>, +n: U32, +i: U32) -> As.Code:
+  match os:
+    case Nil{}:
+      As.CNil{}
+    case +o <> t:
+      As.CCat{Bool.pick(As.Code, U32.is_zero(N.pm.kind(o, n, i)), N.lo(o, i), As.CNil{}), N.pm.read(t, n, U32.inc(i))}
+
+# Slot i = operand o, register to register when both are.
+def N.pm.put(o: NO, +i: U32) -> As.Code:
+  match o:
+    case NOS{+s}:
+      Bool.pick(As.Code, Bool.and(U32.is_lt(s, N.nregs()), U32.is_lt(i, N.nregs())), N.mov(N.sreg(i), N.sreg(s)),
+        As.CCat{N.ld(9, s), N.st(9, i)})
+    case NOK{+k}:
+      Bool.pick(As.Code, U32.is_lt(i, N.nregs()), N.k(N.sreg(i), k), As.CCat{N.k(9, k), N.st(9, i)})
+
+def N.pm.direct(os: List<&2, NO>, +n: U32, +i: U32) -> As.Code:
+  match os:
+    case Nil{}:
+      As.CNil{}
+    case +o <> t:
+      As.CCat{Bool.pick(As.Code, U32.is_eq(N.pm.kind(o, n, i), 2), N.pm.put(o, i), As.CNil{}), N.pm.direct(t, n, U32.inc(i))}
+
+def N.pm.write(os: List<&2, NO>, +n: U32, +i: U32) -> As.Code:
+  match os:
+    case Nil{}:
+      As.CNil{}
+    case +o <> t:
+      As.CCat{Bool.pick(As.Code, U32.is_zero(N.pm.kind(o, n, i)), N.st(i, i), As.CNil{}), N.pm.write(t, n, U32.inc(i))}
+
+# The new arguments of a tail call to itself over the parameters: a
+# parallel move, or (past 8) through the temporaries.
 def N.tail.move(+os: List<&2, NO>, +base: U32, +row: U32, +n: U32) -> As.Code:
-  Bool.pick(As.Code, U32.is_le(n, 8), As.CCat{N.lregs.b(os, base), N.params.in(U32.to_nat(n), 0, False{})},
+  Bool.pick(As.Code, U32.is_le(n, 8), N.cat([N.pm.read(os, n, 0), N.pm.direct(os, n, 0), N.pm.write(os, n, 0)]),
     As.CCat{N.row(os, row), N.copy(U32.to_nat(n), row, 0)})
 
 # A constructor's value from its fields' operands, by kind (see G.ctor_kind).
@@ -16925,6 +17219,8 @@ type NS is Data:
   NSCallGpu{g: G, env: NEnv(), args: List<&2, Expr>}
   NSCallName{g: G, env: NEnv(), name: String, args: List<&2, Expr>, gpu: Bool}
   NSCall{g: G, env: NEnv(), f: Expr, args: List<&2, Expr>}
+  NSCallF{ft: Bool, g: G, env: NEnv(), f: Expr, args: List<&2, Expr>}
+  NSFloat{g: G, env: NEnv(), e: Expr}
   NSBitsGo{g: G, env: NEnv(), k: Nat, e: Expr}
   NSBits{g: G, env: NEnv(), e: Expr}
   NSCtorBits{g: G, env: NEnv(), args: List<&2, Expr>}
@@ -16984,10 +17280,10 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
               N.flt(s)
             case EStr{s}:
               N.str(s)
-            case ECall{f, args}:
+            case ECall{+f, +args}:
               do NG<As.Code>:
                 +m : U32 <- N.mark()
-                c : As.Code <- N.rec(fu, NSCall{g, env, f, args})
+                c : As.Code <- N.rec(fu, NSCallF{Nat.is_lt(N.ft.kind(env, ECall{f, args}, 0), 5n), g, env, f, args})
                 N.release(m)
                 return c
             case ECtor{name, args}:
@@ -17128,6 +17424,20 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
               N.rec(fu, NSCallGpu{g, env, args})
             case False{}:
               N.rec(fu, NSCallVar{g, env, name, args, NEnv.has(env, name)})
+        case NSCallF{ft, +g, +env, f, args}:
+          match ft:
+            case True{}:
+              N.rec(fu, NSFloat{g, env, ECall{f, args}})
+            case False{}:
+              N.rec(fu, NSCall{g, env, f, args})
+        # A tree of float operations: its other operands that need code into
+        # slots, then the tree in FP registers (N.ft.code).
+        case NSFloat{+g, +env, +e}:
+          +ls = N.ft.leaves(24n, N.ft.kind(env, e, 0), env, e, 0, Nil{})
+          do NG<As.Code>:
+            +base : U32 <- N.slots(U32.from_nat(List.length(&2, Expr, ls)))
+            a : As.Code <- N.rec(fu, NSArgs{g, env, ls, base})
+            return N.cat([a, N.ft.code(24n, N.ft.kind(env, e, 0), env, e, 0, base), N.w(As.fmovws(0, 0))])
         case NSCall{+g, +env, f, args}:
           match f:
             case EVar{+name}:
