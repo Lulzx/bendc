@@ -1184,3 +1184,253 @@ def Sel.known(s: Sel) -> Sel:
       SPat{Vals.known(env), ps, Vals.known(vs)}
     case SPatC{hit, env, ps, vs}:
       SPatC{hit, Vals.known(env), ps, Vals.known(vs)}
+
+# Dead lets
+# =========
+
+# The dead-let rule as a pass: Tm.dead drops each let of a variable that no
+# lookup in its body reaches, with its value (which is not evaluated).
+# DEADPROOF.bend proves that a run that does not fail gives a related result
+# with the lets dropped (DEAD.bend states the law).
+
+# Whether none of hs is y.
+def Dead.none(hs: List<&2, String>, +y: String) -> Bool:
+  match hs:
+    case Nil{}:
+      True{}
+    case z <> r:
+      Bool.and(Bool.not(String.eq(z, y)), Dead.none(r, y))
+
+def Dead.cat(a: List<&2, String>, b: List<&2, String>) -> List<&2, String>:
+  match a:
+    case Nil{}:
+      b
+    case x <> r:
+      x <> Dead.cat(r, b)
+
+# The variables of ps, in the order a match binds them.
+def Dead.names(ps: List<&2, Pt>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> r:
+      match p:
+        case PtVar{x}:
+          x <> Dead.names(r)
+        case PtCtr{k, qs}:
+          Dead.cat(Dead.names(qs), Dead.names(r))
+        case PtSuc{k, q}:
+          Dead.names(q <> r)
+        case PtNat{n}:
+          Dead.names(r)
+        case PtNum{n}:
+          Dead.names(r)
+        case PtFlt{s}:
+          Dead.names(r)
+
+# Whether a lookup in t reaches a binding of x made before t's scope, past
+# the bindings of hs (made in t's scope, the nearest last).
+def Dead.used(t: Tm, +hs: List<&2, String>, +x: String) -> Bool:
+  match t:
+    case CVar{+y}:
+      Bool.and(String.eq(x, y), Dead.none(hs, y))
+    case CCall{f, as}:
+      match as:
+        case Nil{}:
+          False{}
+        case a <> r:
+          match a:
+            case Arg{rel, e}:
+              Bool.or(Dead.used(e, hs, x), Dead.used(CCall{f, r}, hs, x))
+    case CApp{f, as}:
+      match as:
+        case Nil{}:
+          Dead.used(f, hs, x)
+        case a <> r:
+          Bool.or(Dead.used(a, hs, x), Dead.used(CApp{f, r}, hs, x))
+    case CCtr{k, as}:
+      match as:
+        case Nil{}:
+          False{}
+        case a <> r:
+          Bool.or(Dead.used(a, hs, x), Dead.used(CCtr{k, r}, hs, x))
+    case CLam{p, b}:
+      Dead.used(b, Dead.cat(hs, Dead.names([p])), x)
+    case CLet{p, v, b}:
+      Bool.or(Dead.used(v, hs, x), Dead.used(b, Dead.cat(hs, Dead.names([p])), x))
+    case CMat{scrs, cases}:
+      match scrs:
+        case a <> r:
+          Bool.or(Dead.used(a, hs, x), Dead.used(CMat{r, cases}, hs, x))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case c <> r:
+              Bool.or(Dead.used(c, hs, x), Dead.used(CMat{Nil{}, r}, hs, x))
+    case CCse{ps, b}:
+      Dead.used(b, Dead.cat(hs, Dead.names(ps)), x)
+    case CSuc{k, e}:
+      Dead.used(e, hs, x)
+    case COp{op, a, b}:
+      Bool.or(Dead.used(a, hs, x), Bool.or(Dead.used(b, hs, x), False{}))
+    case CAnn{e, ty}:
+      Dead.used(e, hs, x)
+    case CLit{l}:
+      False{}
+    case CRef{f}:
+      False{}
+    case CTyp{n, as}:
+      False{}
+    case CBox{}:
+      False{}
+    case CErr{m}:
+      False{}
+
+def Dead.pick(u: Bool, x: String, v: Tm, b: Tm) -> Tm:
+  match u:
+    case True{}:
+      CLet{PtVar{x}, v, b}
+    case False{}:
+      b
+
+# A let of v to p with the body b: b alone if p is a variable b does not use.
+def Dead.let(p: Pt, v: Tm, +b: Tm) -> Tm:
+  match p:
+    case PtVar{+x}:
+      Dead.pick(Dead.used(b, Nil{}, x), x, v, b)
+    case PtCtr{k, qs}:
+      CLet{PtCtr{k, qs}, v, b}
+    case PtNat{n}:
+      CLet{PtNat{n}, v, b}
+    case PtSuc{k, q}:
+      CLet{PtSuc{k, q}, v, b}
+    case PtNum{n}:
+      CLet{PtNum{n}, v, b}
+    case PtFlt{s}:
+      CLet{PtFlt{s}, v, b}
+
+# t with its dead lets dropped.
+def Tm.dead(t: Tm) -> Tm:
+  match t:
+    case CCall{f, as}:
+      match as:
+        case Nil{}:
+          CCall{f, Nil{}}
+        case a <> r:
+          match a:
+            case Arg{rel, e}:
+              Tm.push.call(Arg{rel, Tm.dead(e)}, Tm.dead(CCall{f, r}))
+    case CApp{f, as}:
+      match as:
+        case Nil{}:
+          CApp{Tm.dead(f), Nil{}}
+        case a <> r:
+          Tm.push(Tm.dead(a), Tm.dead(CApp{f, r}))
+    case CCtr{k, as}:
+      match as:
+        case Nil{}:
+          CCtr{k, Nil{}}
+        case a <> r:
+          Tm.push(Tm.dead(a), Tm.dead(CCtr{k, r}))
+    case CLam{p, b}:
+      CLam{p, Tm.dead(b)}
+    case CLet{p, v, b}:
+      Dead.let(p, Tm.dead(v), Tm.dead(b))
+    case CMat{scrs, cases}:
+      match scrs:
+        case a <> r:
+          Tm.push(Tm.dead(a), Tm.dead(CMat{r, cases}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              CMat{Nil{}, Nil{}}
+            case c <> r:
+              Tm.push.case(Tm.dead(c), Tm.dead(CMat{Nil{}, r}))
+    case CCse{ps, b}:
+      CCse{ps, Tm.dead(b)}
+    case CSuc{k, e}:
+      CSuc{k, Tm.dead(e)}
+    case COp{op, a, b}:
+      COp{op, Tm.dead(a), Tm.dead(b)}
+    case CAnn{e, ty}:
+      CAnn{Tm.dead(e), ty}
+    case other:
+      other
+
+def Tms.dead(ts: List<&2, Tm>) -> List<&2, Tm>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      Tm.dead(t) <> Tms.dead(r)
+
+def Arg.dead(a: Arg) -> Arg:
+  match a:
+    case Arg{rel, e}:
+      Arg{rel, Tm.dead(e)}
+
+def Args.dead(as: List<&2, Arg>) -> List<&2, Arg>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case a <> r:
+      Arg.dead(a) <> Args.dead(r)
+
+def Def.dead(d: Def) -> Def:
+  match d:
+    case Def{n, ps, b, ret}:
+      Def{n, ps, Tm.dead(b), ret}
+
+def Defs.dead(ds: List<&2, Def>) -> List<&2, Def>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Def.dead(d) <> Defs.dead(r)
+
+# The pass on values and results (DEAD.bend relates the states).
+def Val.dead(v: Val) -> Val:
+  match v:
+    case VCtr{k, fs}:
+      match fs:
+        case Nil{}:
+          VCtr{k, Nil{}}
+        case f <> r:
+          Val.push(Val.dead(f), Val.dead(VCtr{k, r}))
+    case VFun{f, as}:
+      match as:
+        case Nil{}:
+          VFun{f, Nil{}}
+        case a <> r:
+          Val.push(Val.dead(a), Val.dead(VFun{f, r}))
+    case VClo{env, p, b}:
+      match env:
+        case Nil{}:
+          VClo{Nil{}, p, Tm.dead(b)}
+        case e <> r:
+          Val.push.env(Val.dead(e), Val.dead(VClo{r, p, b}))
+    case VBnd{x, y}:
+      VBnd{x, Val.dead(y)}
+    case VTrm{t}:
+      VTrm{Tm.dead(t)}
+    case VLit{l}:
+      VLit{l}
+
+def Vals.dead(vs: List<&2, Val>) -> List<&2, Val>:
+  match vs:
+    case Nil{}:
+      Nil{}
+    case v <> r:
+      Val.dead(v) <> Vals.dead(r)
+
+def Res.dead(r: Res) -> Res:
+  match r:
+    case ROk{vs}:
+      ROk{Vals.dead(vs)}
+    case REnv{env}:
+      REnv{Vals.dead(env)}
+    case RNo{}:
+      RNo{}
+    case RFail{m}:
+      RFail{m}
