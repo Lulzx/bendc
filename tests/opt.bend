@@ -74,6 +74,23 @@ def show(xs: List<U32>) -> String:
 def pair(a: U32, b: U32) -> String:
   "(" ++ U32.show(a) ++ ", " ++ U32.show(b) ++ ")"
 
+# A def with an erased parameter passed as a function whose type has it:
+# the application passes the erased argument too.
+law pick:
+  for -x: Nat
+  for  y: Nat
+  Nat
+
+def pick(x, y):
+  y
+
+law apply:
+  for f: @-x: Nat -> @y: Nat -> Nat
+  Nat
+
+def apply(f):
+  f(3n, 4n)
+
 def main() -> IO(Unit):
   do IO<Unit>:
     IO.print(kinds("abcab"))
@@ -87,3 +104,4 @@ def main() -> IO(Unit):
     IO.print(Nat.show(List.length(&1, U32, List.map(~U32, ~U32, ~inc, gen(10n, [])))))
     IO.print(U32.show(sum(List.filter(~U32, ~x => U32.is_even(U32.shrn(x, 1n)), double(gen2(10n, []))), 0)))
     IO.print(pair(3, 4) ++ pair(0, 12))
+    IO.print(Nat.show(apply(pick)))

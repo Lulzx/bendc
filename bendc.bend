@@ -14563,9 +14563,24 @@ def Opt.refs.left(ps: List<&2, Core.Par>, as: List<&2, Core.Tm>) -> List<&2, Cor
             case a <> ar:
               Opt.refs.left(pr, ar)
 
+# Every parameter's argument, the erased ones boxed.
+def Opt.refs.all(ps: List<&2, Core.Par>, as: List<&2, Core.Tm>) -> List<&2, Core.Arg>:
+  match ps as:
+    case Core.Par{x, Core.Era{}, m, ty} <> pr a <> ar:
+      Core.Arg{Core.Era{}, Core.CBox{}} <> Opt.refs.all(pr, ar)
+    case Core.Par{x, Core.Run{}, m, ty} <> pr a <> ar:
+      Core.Arg{Core.Run{}, a} <> Opt.refs.all(pr, ar)
+    case qs bs:
+      Nil{}
+
+# An application with an argument for every parameter (a function type
+# with erased parameters, as @-x: A -> B, is applied to them) pairs them;
+# one with fewer takes them for the runtime parameters.
 def Opt.refs.fix(+g: String, +has: Bool, +ps: List<&2, Core.Par>, +as: List<&2, Core.Tm>) -> Core.Tm:
-  Bool.pick(Core.Tm, has, Inl.app(Core.CCall{g, Opt.refs.take(ps, as)}, Opt.refs.left(ps, as)),
-    Core.CApp{Core.CRef{g}, as})
+  Bool.pick(Unit -> Core.Tm, Bool.and(has, Nat.is_eq(Inl.pars.len(ps), Inl.tms.len(as))),
+    u => Core.CCall{g, Opt.refs.all(ps, as)},
+    u => Bool.pick(Core.Tm, has, Inl.app(Core.CCall{g, Opt.refs.take(ps, as)}, Opt.refs.left(ps, as)),
+      Core.CApp{Core.CRef{g}, as}))(Unit{})
 
 def Opt.refs.app(+c: Map<&2, Core.Def>, f: Core.Tm, +as: List<&2, Core.Tm>) -> Core.Tm:
   match f:
@@ -15272,38 +15287,6 @@ def Opt.sp.reqs(ss: List<&2, OSp>, +seen: Set(), +acc: List<&2, OSp>) -> List<&2
       Bool.pick(Unit -> List<&2, OSp>, Lo.bound(seen, name), u => Opt.sp.reqs(r, seen, acc),
         u => Opt.sp.reqs(r, Set.add(seen, name), OSp{name, f, i, a} <> acc))(Unit{})
 
-# A def's name as a lambda that calls it (its erased parameters boxed).
-def Opt.eta.args(ps: List<&2, Core.Par>, +i: U32) -> List<&2, Core.Arg>:
-  match ps:
-    case Nil{}:
-      Nil{}
-    case Core.Par{x, rel, m, ty} <> r:
-      match rel:
-        case Core.Era{}:
-          Core.Arg{Core.Era{}, Core.CBox{}} <> Opt.eta.args(r, i)
-        case Core.Run{}:
-          Core.Arg{Core.Run{}, Core.CVar{"eta" ++ U32.show(i)}} <> Opt.eta.args(r, U32.inc(i))
-
-def Opt.eta.lams(ps: List<&2, Core.Par>, +i: U32, b: Core.Tm) -> Core.Tm:
-  match ps:
-    case Nil{}:
-      b
-    case Core.Par{x, rel, m, ty} <> r:
-      match rel:
-        case Core.Era{}:
-          Opt.eta.lams(r, i, b)
-        case Core.Run{}:
-          Core.CLam{Core.PtVar{"eta" ++ U32.show(i)}, Opt.eta.lams(r, U32.inc(i), b)}
-
-def Opt.eta(+c: Map<&2, Core.Def>, t: Core.Tm) -> Core.Tm:
-  match t:
-    case Core.CRef{+g}:
-      Opt.eta.lams(Inl.pars(Opt.get(c, g)), 0, Core.CCall{g, Opt.eta.args(Inl.pars(Opt.get(c, g)), 0)})
-    case Core.CAnn{e, ty}:
-      Opt.eta(c, e)
-    case other:
-      other
-
 # A copy's parameters keep their relevance in their modes: it fills no
 # law to take them from.
 def Opt.sp.par(p: Core.Par) -> Core.Par:
@@ -15335,7 +15318,7 @@ def Opt.sp.make.def(+c: Map<&2, Core.Def>, +name: String, +i: Nat, a: Core.Tm, d
   match d:
     case Core.Def{+f, +ps, b, ret}:
       OCore{Core.Def{name, Opt.sp.pars(Opt.drop.par(i, ps)),
-        Opt.go(Fuel.max(), OAll{}, Opt.go(Fuel.max(), OSub{Opt.nth.par(i, ps), Opt.eta(c, a), True{}},
+        Opt.go(Fuel.max(), OAll{}, Opt.go(Fuel.max(), OSub{Opt.nth.par(i, ps), Opt.strip(a), True{}},
           Opt.sp.rw(Fuel.max(), DSelf{f, i, name}, True{}, b))), ret}}
 
 # The copy an OSp asks for.
