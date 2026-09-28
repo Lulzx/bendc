@@ -12777,7 +12777,9 @@ def Gen.gpu.tail(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> String:
 # def to it, marking each argument of a call of a global def relevant or
 # erased by the def's parameter mask; Core.Tm.erase boxes the erased ones
 # and the types left in the body (PROOF.bend proves that this preserves the
-# IR's semantics); Up raises the result back to an Expr.
+# IR's semantics); Inl inlines monadic binds; Core.Tm.red makes each lambda
+# applied to one argument a let (REDPROOF.bend proves that this preserves
+# the semantics too); Up raises the result back to an Expr.
 
 def Lo.pt.push(a: Core.Pt, p: Core.Pt) -> Core.Pt:
   match p:

@@ -2,10 +2,14 @@ import Base
 import ./RED.bend as Red
 import ./core.bend as Core
 
-# Proof of RED.bend's laws.
+# Proof of RED.bend's laws. S.one: a term gives one value (one_ok). L.mono:
+# more fuel gives the same result. L.beta.law: in one program, the redex
+# (CLam{pt, bd})(a) and CLet{pt, a, bd} give the same result. L.red (red_ok):
+# induction on the fuel, one case per step of `run` as in PROOF.bend, and the
+# redex by the beta law in the reduced program.
 
-# Shapes
-# ======
+# How many values
+# ===============
 
 def S.any(r: Core.Res) -> Red.Fits(r, Red.WAny{}):
   match r:
@@ -976,8 +980,8 @@ def L.mono(~prim: String -> List<&2, Core.Val> -> Core.Res,
 # The source runs (CLam{pt, bd})(a) as: a to A, then the closure applied to
 # A's value: pt against it to P, then bd in P's scope to B. The let runs a,
 # pt and bd the same, in fewer steps. These give the states of P's and B's
-# runs from A and P (or one that does not run out of fuel), so that the
-# induction hypothesis can be taken at them before A and P are known.
+# runs from A and P (or one that does not run out of fuel), so that L.mono
+# can be taken at them before A and P are known.
 
 def Beta.none() -> Core.Sel:
   Core.SPat{Nil{}, Nil{}, Nil{}}
@@ -1364,7 +1368,7 @@ def L.app1(~prim: String -> List<&2, Core.Val> -> Core.Res,
     case Core.CErr{m}:
       e
 
-# The same as a match's case: not one.
+# The same, reduced, as a match's case: it is not one.
 def L.mat.app1(~prim: String -> List<&2, Core.Val> -> Core.Res, +q: Nat, ds: List<&2, Core.Def>,
     env: List<&2, Core.Val>, vs: List<&2, Core.Val>, f: Core.Tm, a: Core.Tm, r: List<&2, Core.Tm>)
     -> {Core.RFail{"not a case"} == Core.run(~prim, 1n+q, ds, Core.SMatch{env, vs, Core.Tm.red(Core.CApp{f, [a]}, True{}) <> r}) : Core.Res}:
@@ -1800,3 +1804,6 @@ def Red.one_ok(prim, one, n, ds, s):
 
 def Red.red_ok(prim, ok, one, n, m, le, ds, s, nf):
   L.red(~prim, ~ok, ~one, n, m, le, ds, s, nf)
+
+def Red.red_prog(prim, ok, one, n, m, le, ds, nf):
+  L.red(~prim, ~ok, ~one, n, m, le, ds, Core.SCallDef{"main", Nil{}}, nf)

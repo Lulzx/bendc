@@ -2,8 +2,10 @@
 # the README). A program's defs, their terms with every call of a global def
 # explicit and its arguments marked relevant or erased, the parameters with
 # their declared types, and the return types. Erasure (Tm.erase) replaces
-# each erased argument by a box; `run` gives the IR a semantics, and
-# LAWS.bend / PROOF.bend prove that erasure preserves it.
+# each erased argument by a box, and reduction (Tm.red) each lambda applied
+# to one argument by a let; `run` gives the IR a semantics, LAWS.bend /
+# PROOF.bend prove that erasure preserves it, and RED.bend / REDPROOF.bend
+# that reduction does.
 
 import Base
 
@@ -704,9 +706,9 @@ def Prog.run(~prim: String -> List<&2, Val> -> Res, n: Nat, ds: List<&2, Def>) -
 # Reduction
 # =========
 
-# The inliner's reductions (Inl in bendc.bend), as a pass: Tm.red makes them
-# at every node, and RED.bend proves that this preserves `run`. An applied
-# lambda with one argument becomes a let.
+# The inliner's beta rule (Inl in bendc.bend) as a pass of its own: Tm.red
+# makes every lambda applied to one argument a let, and REDPROOF.bend proves
+# that this preserves `run` (RED.bend states the law).
 
 def Red.is_lam(f: Tm) -> Bool:
   match f:

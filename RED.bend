@@ -124,7 +124,8 @@ def Sel.want(s: Core.Sel) -> Want:
 # The laws
 # ========
 
-# Natives give one value, or fail.
+# If natives give one value or fail, so does a term (a step gives what
+# Sel.want says).
 law one_ok:
   for ~prim: String -> List<&2, Core.Val> -> Core.Res
   for one: @op:String -> @vs:List<&2, Core.Val> -> Fits(prim(op, vs), WLen{1n})
@@ -146,3 +147,15 @@ law red_ok:
   for s: Core.Sel
   for nf: NotOof(Core.run(~prim, n, ds, s))
   {Core.Res.red(Core.run(~prim, n, ds, s)) == Core.run(~prim, m, Core.Defs.red(ds), Core.Sel.red(s)) : Core.Res}
+
+# The same for a program's result.
+law red_prog:
+  for ~prim: String -> List<&2, Core.Val> -> Core.Res
+  for ok: @op:String -> @vs:List<&2, Core.Val> -> {Core.Res.red(prim(op, vs)) == prim(op, Core.Vals.red(vs)) : Core.Res}
+  for one: @op:String -> @vs:List<&2, Core.Val> -> Fits(prim(op, vs), WLen{1n})
+  for n: Nat
+  for m: Nat
+  for le: Le(n, m)
+  for ds: List<&2, Core.Def>
+  for nf: NotOof(Core.Prog.run(~prim, n, ds))
+  {Core.Res.red(Core.Prog.run(~prim, n, ds)) == Core.Prog.run(~prim, m, Core.Defs.red(ds)) : Core.Res}

@@ -238,12 +238,24 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    in runtime positions, with a box. [`PROOF.bend`](PROOF.bend) proves that this preserves the IR's
    semantics, which `core.bend` gives in Bend as a fuelled machine (`Core.run`): the law
    ([`LAWS.bend`](LAWS.bend)) says running a program and erasing the result gives what running the
-   erased program gives. Both checkers verify it in CI. Then full calls of a monad's `bind`, `pure`,
+   erased program gives. Then full calls of a monad's `bind`, `pure`,
    `go` and `go.done` (the parser's, the generator's, the checker's) are inlined. The callee is
    renamed apart, each argument takes its parameter's place when that moves no work into a lambda,
    and the places it lands are reduced: an applied lambda becomes a `let`, and a `let` or `match` of
-   a known constructor takes its case. A `do` block becomes one closure, and the checker, which
-   runs on these monads, runs 9% fewer instructions.
+   a known constructor takes its case (a `match` only when that case binds the fields to variables:
+   a field pattern that fails moves on to the next case). A `do` block becomes one closure, and the
+   checker, which runs on these monads, runs 9% fewer instructions. Last, `Core.Def.red` turns
+   every lambda applied to one argument, `(p => b)(a)`, into `let p = a; b`, anywhere in the def.
+   [`REDPROOF.bend`](REDPROOF.bend) proves the law in [`RED.bend`](RED.bend): if a run does not run
+   out of fuel, the reduced program, with as much fuel or more, gives the same result, reduced
+   (`red_ok`; `red_prog` for a program's `main`). The let takes fewer steps than the application,
+   so the proof shows that more fuel does not change a result that did not run out (`L.mono`), and
+   that in one program the application and the let give the same result (`L.beta.law`). Like
+   erasure's proof, it assumes that the natives commute with the pass (`ok`); it also assumes that
+   a native gives one value or fails (`one`). The proven function is the one bendc runs. The
+   inliner's own rules (the substitution of arguments, the known-constructor rules, applications
+   of more than one argument) are not proven, nor are lowering, raising back to an `Expr`, or code
+   generation. Both checkers verify both proofs in CI.
 6. **Code generation.** A state monad threads fresh names, emitted C, references and errors through
    the generator. Only defs reachable from `main` are emitted.
    - Each def becomes a C function, and self tail calls become `goto` loops.
@@ -452,7 +464,9 @@ Bend 2 is a proof language, and its checker is strict about code that runs. It s
 - **`match` only on parameters.** A match cannot inspect a computed value, and neither can
   destructuring. So each decision is a small helper def whose parameter is the thing being matched.
   The parser monad avoids most of the tuple-destructuring helpers a hand-threaded token list would
-  need.
+  need. After a match, the parameters and fields before the matched one cannot be matched: a proof
+  that needs the fuel's shape deep in a case (as `REDPROOF.bend`'s redex does) takes it from a
+  separate lemma.
 - **Affine variables.** A variable is used at most once unless it is marked `+`, which requires a
   copyable `Data` type. Every AST type is `Data`, and `+` appears where values are reused.
 - **Totality.** A recursive call must shrink its first changing argument. Walks over a node and a
@@ -531,6 +545,7 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`bendc.bend`](bendc.bend) | the compiler, organized by section: lexer, layout, parser monad, expressions, patterns, statements, declarations, operator resolution, free variables, global tables, code generation, value printers, modules, driver |
 | [`core.bend`](core.bend) | the core IR between the front end and code generation: terms with relevance-marked arguments, erasure, and a semantics |
 | [`LAWS.bend`](LAWS.bend), [`PROOF.bend`](PROOF.bend) | the law that erasure preserves the core IR's semantics, and its proof (induction on the fuel, one case per step) |
+| [`RED.bend`](RED.bend), [`REDPROOF.bend`](REDPROOF.bend) | the law that reducing applied lambdas to lets (`Core.Def.red`) preserves the core IR's semantics, and its proof |
 | [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, arrays, native `Nat`, `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
 | [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the kernel cache, the simulator, copying results back |
 | [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
