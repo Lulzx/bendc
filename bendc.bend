@@ -13578,7 +13578,7 @@ def Inl.go(+n: Nat, +c: Map<&2, Core.Def>, mode: IM, +t: Core.Tm) -> Core.Tm:
                 case Core.PtCtr{+k, +qs}:
                   match v:
                     case Core.CCtr{+k2, +as}:
-                      Bool.pick(Unit -> Core.Tm, Bool.and(String.eq(k, k2), Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as))),
+                      Bool.pick(Unit -> Core.Tm, Bool.and(Bool.and(String.eq(k, k2), Bool.not(String.eq(k, "%par"))), Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as))),
                         u => Inl.lets(qs, as, b),
                         u => Core.CLet{Core.PtCtr{k, qs}, Core.CCtr{k2, as}, b})(Unit{})
                     case other:
@@ -13658,7 +13658,7 @@ def Inl.def(+c: Map<&2, Core.Def>, d: Core.Def) -> Core.Def:
 #
 # Opt runs on the whole program in the core IR, after erasure. Each pass
 # can be turned off for measurement: BEND_OPT lists the passes that run
-# (i general inlining, ...); unset, all of them run.
+# (i general inlining, s simplification, ...); unset, all of them run.
 
 # A declaration on its way through the core IR: a def lowered to it, or a
 # declaration that stays as it is (a type, an effect, a type-level def).
@@ -13829,6 +13829,544 @@ def Opt.inls(+c: Map<&2, Core.Def>, ds: List<&2, OD>) -> List<&2, OD>:
     case d <> r:
       Opt.inl(c, d) <> Opt.inls(c, r)
 
+# Simplification
+# --------------
+#
+# After inlining, each def's body is simplified bottom up (s in BEND_OPT).
+# The rules, at a node whose children are simplified:
+# - A let whose variable is unused is dropped: its value is pure.
+# - A let of an atom (a variable, a literal, a box, a nullary constructor,
+#   a def's name) puts it in its variable's place; so does a let whose
+#   variable is used once, outside a lambda, when that captures nothing.
+#   The value then runs only if its place is reached (a match's case).
+# - A match on known constructors or literals takes the first case whose
+#   patterns match, as lets; one whose patterns may not match stops it.
+# - A let or a match on a let floats the let out; a match on a match whose
+#   cases all end in constructors the outer one knows moves the outer match
+#   into them (case of case), when the copies are small.
+# - An applied lambda becomes a let; an applied let or match takes the
+#   arguments inside, when they are atoms.
+# A substitution reduces where it lands, as Inl's does.
+
+# A pattern against a term: the bindings (reversed), no match, or unknown.
+type OPm is Data:
+  PmYes{ps: List<&2, Core.Pt>, ts: List<&2, Core.Tm>}
+  PmNo{}
+  PmUnk{}
+
+# What a rule gives: the node as it was, a finished term, a substitution
+# of v for x in b, a term to simplify again, k new lets on top of t, or a
+# new let around a new node t.
+type OR is Data:
+  RKeep{t: Core.Tm}
+  RTo{t: Core.Tm}
+  RSub{x: String, v: Core.Tm, b: Core.Tm}
+  RAll{t: Core.Tm}
+  RLets{k: Nat, t: Core.Tm}
+  RLet1{p: Core.Pt, v: Core.Tm, t: Core.Tm}
+
+# The simplifier's walk modes: OAll the children, then the node; OKids the
+# children; ONode the rules at the node; ODo{r} what a rule gave; OFin{top}
+# the rules when top; OSub{x, v, top} puts v for x and applies the rules
+# where it lands; OLets{k} simplifies k new lets on top of a term.
+type OW is Data:
+  OAll{}
+  OKids{}
+  ONode{}
+  ODo{r: OR}
+  OFin{top: Bool}
+  OSub{x: String, v: Core.Tm, top: Bool}
+  OLets{k: Nat}
+
+def Opt.strip(t: Core.Tm) -> Core.Tm:
+  match t:
+    case Core.CAnn{e, ty}:
+      Opt.strip(e)
+    case other:
+      other
+
+# Whether t is an atom: copying it copies no work.
+def Opt.atom(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CVar{x}:
+      True{}
+    case Core.CLit{l}:
+      True{}
+    case Core.CBox{}:
+      True{}
+    case Core.CRef{f}:
+      True{}
+    case Core.CCtr{k, as}:
+      List.is_empty(&2, Core.Tm, as)
+    case other:
+      False{}
+
+def Opt.atoms(ts: List<&2, Core.Tm>) -> Bool:
+  match ts:
+    case Nil{}:
+      True{}
+    case t <> r:
+      Bool.and(Opt.atom(t), Opt.atoms(r))
+
+def Opt.pm.bind(x: Core.Pt, t: Core.Tm, r: OPm) -> OPm:
+  match r:
+    case PmYes{ps, ts}:
+      PmYes{x <> ps, t <> ts}
+    case other:
+      other
+
+def Opt.pm.and(a: OPm, b: OPm) -> OPm:
+  match a:
+    case PmYes{ps, ts}:
+      b
+    case other:
+      other
+
+def Opt.pm.if(c: Bool, r: OPm) -> OPm:
+  match c:
+    case True{}:
+      r
+    case False{}:
+      PmNo{}
+
+def Opt.pm.nat(+m: U32, p: Core.Pt, r: OPm) -> OPm:
+  match p:
+    case Core.PtNat{n}:
+      Opt.pm.if(U32.is_eq(n, m), r)
+    case Core.PtSuc{+k, q}:
+      match q:
+        case Core.PtVar{y}:
+          Opt.pm.if(U32.is_le(k, m), Opt.pm.bind(Core.PtVar{y}, Core.CLit{Core.LNat{U32.sub(m, k)}}, r))
+        case other:
+          PmUnk{}
+    case other:
+      PmUnk{}
+
+def Opt.pm.lit(l: Core.Lit, p: Core.Pt, r: OPm) -> OPm:
+  match l:
+    case Core.LNat{m}:
+      Opt.pm.nat(m, p, r)
+    case Core.LNum{+m}:
+      match p:
+        case Core.PtNum{n}:
+          Opt.pm.if(U32.is_eq(n, m), r)
+        case other:
+          PmUnk{}
+    case other:
+      PmUnk{}
+
+# Constructors k and k2 of a pattern and a term: r when they are the same,
+# no match when not (Nat's are numbers, and a %par is no value: unknown).
+def Opt.pm.same(+k: String, +k2: String) -> Bool:
+  Bool.and(String.eq(k, k2), Bool.not(Str.has(["Zero", "Succ", "%par"], k)))
+
+def Opt.pm.name(+k: String, +k2: String, r: OPm) -> OPm:
+  Bool.pick(OPm, Str.has(["Zero", "Succ", "%par"], k), PmUnk{}, Opt.pm.if(String.eq(k, k2), r))
+
+# The pattern p against t, onto r (a constructor's fields as its head and
+# the node rebuilt with the rest).
+def Opt.pm(t: Core.Tm, p: Core.Pt, r: OPm) -> OPm:
+  match t p:
+    case t0 Core.PtVar{x}:
+      Opt.pm.bind(Core.PtVar{x}, t0, r)
+    case Core.CAnn{e, ty} q:
+      Opt.pm(e, q, r)
+    case Core.CCtr{k2, Nil{}} Core.PtCtr{k, Nil{}}:
+      Opt.pm.name(k, k2, r)
+    case Core.CCtr{+k2, a <> ar} Core.PtCtr{+k, q <> qr}:
+      Bool.pick(Unit -> OPm, Opt.pm.same(k, k2), u => Opt.pm(Core.CCtr{k2, ar}, Core.PtCtr{k, qr}, Opt.pm(a, q, r)),
+        u => Opt.pm.name(k, k2, PmUnk{}))(Unit{})
+    case Core.CLit{l} q:
+      Opt.pm.lit(l, q, r)
+    case t0 q:
+      PmUnk{}
+
+def Opt.pms(ps: List<&2, Core.Pt>, ts: List<&2, Core.Tm>, r: OPm) -> OPm:
+  match ps:
+    case Nil{}:
+      r
+    case p <> pr:
+      match ts:
+        case Nil{}:
+          PmUnk{}
+        case t <> tr:
+          Opt.pms(pr, tr, Opt.pm(t, p, r))
+
+# Lets binding each pattern to its term (the lists reversed), around b.
+def Opt.lets(ps: List<&2, Core.Pt>, ts: List<&2, Core.Tm>, b: Core.Tm) -> Core.Tm:
+  match ps:
+    case Nil{}:
+      b
+    case p <> pr:
+      match ts:
+        case Nil{}:
+          b
+        case t <> tr:
+          Opt.lets(pr, tr, Core.CLet{p, t, b})
+
+def Opt.pvars(ps: List<&2, Core.Pt>) -> List<&2, String>:
+  Inl.ppvars(ps, Nil{})
+
+# The bindings of a matched case: when no bound variable is read by a term
+# bound (a let would capture it), its lets, else nothing.
+def Opt.bound(r: OPm, +b: Core.Tm) -> OR:
+  match r:
+    case PmYes{+ps, +ts}:
+      Bool.pick(Unit -> OR, Inl.apart(Opt.pvars(ps), Inl.names(Core.CCtr{"", ts}, 0, Nil{})),
+        u => RLets{Inl.pts.len(ps), Opt.lets(ps, ts, b)},
+        u => RKeep{Core.CErr{"%miss"}})(Unit{})
+    case other:
+      RKeep{Core.CErr{"%miss"}}
+
+def Opt.known.go(m: OPm, +b: Core.Tm, next: Unit -> OR) -> OR:
+  match m:
+    case PmNo{}:
+      next(Unit{})
+    case PmUnk{}:
+      RKeep{Core.CErr{"%miss"}}
+    case PmYes{ps, ts}:
+      Opt.bound(PmYes{ps, ts}, b)
+
+# The case a match on scrs takes, when it is known (RKeep{%miss} if not).
+def Opt.known(+scrs: List<&2, Core.Tm>, cases: List<&2, Core.Tm>) -> OR:
+  match cases:
+    case Nil{}:
+      RKeep{Core.CErr{"%miss"}}
+    case c <> r:
+      match c:
+        case Core.CCse{ps, +b}:
+          Opt.known.go(Opt.pms(ps, scrs, PmYes{Nil{}, Nil{}}), b, u => Opt.known(scrs, r))
+        case other:
+          RKeep{Core.CErr{"%miss"}}
+
+def Opt.miss(r: OR) -> Bool:
+  match r:
+    case RKeep{t}:
+      Inl.miss(t)
+    case other:
+      False{}
+
+# The term of a rule's result (a known case's lets).
+def Opt.res(r: OR) -> Core.Tm:
+  match r:
+    case RKeep{t}:
+      t
+    case RTo{t}:
+      t
+    case RSub{x, v, b}:
+      Core.CLet{Core.PtVar{x}, v, b}
+    case RAll{t}:
+      t
+    case RLets{k, t}:
+      t
+    case RLet1{p, v, t}:
+      Core.CLet{p, v, t}
+
+# The body a case ends in, under its lets.
+def Opt.end(t: Core.Tm) -> Core.Tm:
+  match t:
+    case Core.CLet{p, v, b}:
+      Opt.end(b)
+    case Core.CAnn{e, ty}:
+      Opt.end(e)
+    case other:
+      other
+
+# Case of case: each inner case's end against the outer cases (Nil{} when
+# one is unknown).
+def Opt.coc.ok(cs: List<&2, Core.Tm>, +outer: List<&2, Core.Tm>) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case c <> r:
+      match c:
+        case Core.CCse{ps, b}:
+          Bool.and(Bool.not(Opt.miss(Opt.known([Opt.end(b)], outer))), Opt.coc.ok(r, outer))
+        case other:
+          False{}
+
+# The inner case with the outer match around its end.
+def Opt.coc.put(b: Core.Tm, +outer: List<&2, Core.Tm>) -> Core.Tm:
+  match b:
+    case Core.CLet{p, v, e}:
+      Core.CLet{p, v, Opt.coc.put(e, outer)}
+    case Core.CAnn{e, ty}:
+      Opt.coc.put(e, outer)
+    case other:
+      Core.CMat{[other], outer}
+
+def Opt.coc.cases(cs: List<&2, Core.Tm>, +outer: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case c <> r:
+      match c:
+        case Core.CCse{ps, b}:
+          Core.CCse{ps, Opt.coc.put(b, outer)} <> Opt.coc.cases(r, outer)
+        case other:
+          other <> Opt.coc.cases(r, outer)
+
+# Whether moving the outer cases into n inner ones copies little, and the
+# inner cases bind none of the names the outer ones read.
+def Opt.coc.small(+inner: List<&2, Core.Tm>, +outer: List<&2, Core.Tm>) -> Bool:
+  Bool.and(U32.is_le(U32.mul(Opt.size(Core.CMat{Nil{}, outer}), U32.from_nat(Nat.sub(Inl.tms.len(inner), 1n))), 24),
+    Inl.apart(Inl.names(Core.CMat{Nil{}, inner}, 1, Nil{}), Inl.names(Core.CMat{Nil{}, outer}, 0, Nil{})))
+
+def Opt.coc(+s: List<&2, Core.Tm>, +inner: List<&2, Core.Tm>, +outer: List<&2, Core.Tm>) -> OR:
+  Bool.pick(Unit -> OR, Bool.and(Opt.coc.small(inner, outer), Opt.coc.ok(inner, outer)),
+    u => RAll{Core.CMat{s, Opt.coc.cases(inner, outer)}},
+    u => RKeep{Core.CMat{[Core.CMat{s, inner}], outer}})(Unit{})
+
+# A match's rules: a known case, a let floated out of its scrutinee, a
+# case of case.
+def Opt.mat.one(s: Core.Tm, +cases: List<&2, Core.Tm>) -> OR:
+  match s:
+    case Core.CLet{+p, +v, +b}:
+      Bool.pick(Unit -> OR, Inl.apart(Inl.pvars(p, Nil{}), Inl.names(Core.CMat{Nil{}, cases}, 0, Nil{})),
+        u => RLet1{p, v, Core.CMat{[b], cases}},
+        u => RKeep{Core.CMat{[Core.CLet{p, v, b}], cases}})(Unit{})
+    case Core.CMat{+s2, +inner}:
+      Opt.coc(s2, inner, cases)
+    case other:
+      RKeep{Core.CMat{[other], cases}}
+
+def Opt.mat.scrs(scrs: List<&2, Core.Tm>, +cases: List<&2, Core.Tm>) -> OR:
+  match scrs:
+    case s <> Nil{}:
+      Opt.mat.one(s, cases)
+    case other:
+      RKeep{Core.CMat{other, cases}}
+
+def Opt.mat.go(+r: OR, +scrs: List<&2, Core.Tm>, +cases: List<&2, Core.Tm>) -> OR:
+  Bool.pick(Unit -> OR, Opt.miss(r), u => Opt.mat.scrs(scrs, cases), u => r)(Unit{})
+
+def Opt.mat(+scrs: List<&2, Core.Tm>, +cases: List<&2, Core.Tm>) -> OR:
+  Opt.mat.go(Opt.known(scrs, cases), scrs, cases)
+
+# A let's rules.
+def Opt.let.var(+x: String, +v: Core.Tm, +b: Core.Tm) -> OR:
+  +n = Inl.uses(b, 0, x)
+  Bool.pick(Unit -> OR, U32.is_zero(n), u => RTo{b},
+    u => Bool.pick(Unit -> OR, Bool.and(Bool.and(Bool.or(Opt.atom(v), Bool.and(U32.is_eq(n, 1), U32.is_eq(Inl.uses(b, 2, x), 1))),
+        Inl.apart(Inl.names(v, 0, Nil{}), Inl.names(b, 1, Nil{}))), True{}),
+      u2 => RSub{x, v, b},
+      u2 => RKeep{Core.CLet{Core.PtVar{x}, v, b}})(Unit{}))(Unit{})
+
+def Opt.let.ctr(+k: String, +qs: List<&2, Core.Pt>, v: Core.Tm, +b: Core.Tm) -> OR:
+  match v:
+    case Core.CCtr{+k2, +as}:
+      Bool.pick(Unit -> OR, Bool.and(Bool.and(String.eq(k, k2), Bool.not(String.eq(k, "%par"))),
+          Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as))),
+        u => Opt.bound(Opt.pms(qs, as, PmYes{Nil{}, Nil{}}), b),
+        u => RKeep{Core.CLet{Core.PtCtr{k, qs}, Core.CCtr{k2, as}, b}})(Unit{})
+    case Core.CLet{+p2, +v2, +b2}:
+      Bool.pick(Unit -> OR, Bool.and(Bool.not(String.eq(k, "%par")), Inl.apart(Inl.pvars(p2, Nil{}), Inl.names(b, 0, Nil{}))),
+        u => RLet1{p2, v2, Core.CLet{Core.PtCtr{k, qs}, b2, b}},
+        u => RKeep{Core.CLet{Core.PtCtr{k, qs}, Core.CLet{p2, v2, b2}, b}})(Unit{})
+    case other:
+      RKeep{Core.CLet{Core.PtCtr{k, qs}, other, b}}
+
+def Opt.let(p: Core.Pt, +v: Core.Tm, +b: Core.Tm) -> OR:
+  match p:
+    case Core.PtVar{+x}:
+      Opt.let.var(x, v, b)
+    case Core.PtCtr{+k, +qs}:
+      Opt.let.ctr(k, qs, v, b)
+    case other:
+      RKeep{Core.CLet{other, v, b}}
+
+# An application's rules.
+def Opt.app.cases(cs: List<&2, Core.Tm>, +as: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case c <> r:
+      match c:
+        case Core.CCse{ps, b}:
+          Core.CCse{ps, Inl.app(b, as)} <> Opt.app.cases(r, as)
+        case other:
+          other <> Opt.app.cases(r, as)
+
+def Opt.app(f: Core.Tm, +as: List<&2, Core.Tm>) -> OR:
+  match f:
+    case Core.CLam{+pt, +b}:
+      match as:
+        case Nil{}:
+          RKeep{Core.CApp{Core.CLam{pt, b}, Nil{}}}
+        case +a <> +r:
+          Bool.pick(Unit -> OR, Inl.apart(Inl.pvars(pt, Nil{}), Inl.names(Core.CCtr{"", r}, 0, Nil{})),
+            u => RLet1{pt, a, Inl.app(b, r)},
+            u => RKeep{Core.CApp{Core.CLam{pt, b}, a <> r}})(Unit{})
+    case Core.CLet{+pt, +v, +b}:
+      Bool.pick(Unit -> OR, Inl.apart(Inl.pvars(pt, Nil{}), Inl.names(Core.CCtr{"", as}, 0, Nil{})),
+        u => RLet1{pt, v, Inl.app(b, as)},
+        u => RKeep{Core.CApp{Core.CLet{pt, v, b}, as}})(Unit{})
+    case Core.CMat{+scrs, +cases}:
+      Bool.pick(Unit -> OR, Bool.and(Opt.atoms(as), Inl.apart(Inl.names(Core.CMat{Nil{}, cases}, 1, Nil{}), Inl.names(Core.CCtr{"", as}, 0, Nil{}))),
+        u => RAll{Core.CMat{scrs, Opt.app.cases(cases, as)}},
+        u => RKeep{Core.CApp{Core.CMat{scrs, cases}, as}})(Unit{})
+    case other:
+      RKeep{Core.CApp{other, as}}
+
+def Opt.rule(t: Core.Tm) -> OR:
+  match t:
+    case Core.CLet{p, v, b}:
+      Opt.let(p, v, b)
+    case Core.CMat{scrs, cases}:
+      Opt.mat(scrs, cases)
+    case Core.CApp{f, as}:
+      Opt.app(f, as)
+    case other:
+      RKeep{other}
+
+# The walk (see OW). Fuel bounds its depth.
+def Opt.go(+n: Nat, mode: OW, +t: Core.Tm) -> Core.Tm:
+  match n:
+    case 0n:
+      t
+    case 1n+p:
+      match mode:
+        case OAll{}:
+          Opt.go(p, ONode{}, Opt.go(p, OKids{}, t))
+        case ONode{}:
+          Opt.go(p, ODo{Opt.rule(t)}, Core.CBox{})
+        case ODo{r}:
+          match r:
+            case RKeep{e}:
+              e
+            case RTo{e}:
+              e
+            case RSub{+x, +v, b}:
+              Opt.go(p, OSub{x, v, True{}}, b)
+            case RAll{e}:
+              Opt.go(p, OAll{}, e)
+            case RLets{k, e}:
+              Opt.go(p, OLets{k}, e)
+            case RLet1{+pt, +v, e}:
+              Opt.go(p, ONode{}, Core.CLet{pt, v, Opt.go(p, ONode{}, e)})
+        case OLets{k}:
+          match k:
+            case 0n:
+              t
+            case 1n+j:
+              match t:
+                case Core.CLet{+pt, +v, +b}:
+                  Opt.go(p, ONode{}, Core.CLet{pt, v, Opt.go(p, OLets{j}, b)})
+                case other:
+                  other
+        case OFin{top}:
+          Bool.pick(Unit -> Core.Tm, top, u => Opt.go(p, ONode{}, t), u => t)(Unit{})
+        case OSub{+x, +v, top}:
+          match t:
+            case Core.CVar{+y}:
+              Bool.pick(Core.Tm, String.eq(x, y), v, Core.CVar{y})
+            case Core.CCall{f, as}:
+              match as:
+                case Nil{}:
+                  Core.CCall{f, Nil{}}
+                case Core.Arg{r, e} <> t2:
+                  Core.Tm.push.call(Core.Arg{r, Opt.go(p, OSub{x, v, True{}}, e)},
+                    Opt.go(p, OSub{x, v, False{}}, Core.CCall{f, t2}))
+            case Core.CApp{f, as}:
+              match as:
+                case Nil{}:
+                  Opt.go(p, OFin{top}, Core.CApp{Opt.go(p, OSub{x, v, True{}}, f), Nil{}})
+                case a <> t2:
+                  Opt.go(p, OFin{top}, Core.Tm.push(Opt.go(p, OSub{x, v, True{}}, a),
+                    Opt.go(p, OSub{x, v, False{}}, Core.CApp{f, t2})))
+            case Core.CCtr{k, as}:
+              match as:
+                case Nil{}:
+                  Core.CCtr{k, Nil{}}
+                case a <> t2:
+                  Core.Tm.push(Opt.go(p, OSub{x, v, True{}}, a), Opt.go(p, OSub{x, v, False{}}, Core.CCtr{k, t2}))
+            case Core.CLam{+pt, +b}:
+              Bool.pick(Unit -> Core.Tm, Inl.binds(x, pt), u => Core.CLam{pt, b},
+                u => Core.CLam{pt, Opt.go(p, OSub{x, v, True{}}, b)})(Unit{})
+            case Core.CLet{+pt, v2, +b}:
+              Opt.go(p, OFin{top}, Core.CLet{pt, Opt.go(p, OSub{x, v, True{}}, v2),
+                Bool.pick(Unit -> Core.Tm, Inl.binds(x, pt), u => b, u => Opt.go(p, OSub{x, v, True{}}, b))(Unit{})})
+            case Core.CMat{scrs, cases}:
+              match scrs:
+                case a <> t2:
+                  Opt.go(p, OFin{top}, Core.Tm.push(Opt.go(p, OSub{x, v, True{}}, a),
+                    Opt.go(p, OSub{x, v, False{}}, Core.CMat{t2, cases})))
+                case Nil{}:
+                  match cases:
+                    case Nil{}:
+                      Core.CMat{Nil{}, Nil{}}
+                    case cs <> t2:
+                      Core.Tm.push.case(Opt.go(p, OSub{x, v, True{}}, cs), Opt.go(p, OSub{x, v, False{}}, Core.CMat{Nil{}, t2}))
+            case Core.CCse{+ps, +b}:
+              Bool.pick(Unit -> Core.Tm, Inl.binds.any(x, ps), u => Core.CCse{ps, b},
+                u => Core.CCse{ps, Opt.go(p, OSub{x, v, True{}}, b)})(Unit{})
+            case Core.CSuc{k, e}:
+              Core.CSuc{k, Opt.go(p, OSub{x, v, True{}}, e)}
+            case Core.COp{op, a, b}:
+              Core.COp{op, Opt.go(p, OSub{x, v, True{}}, a), Opt.go(p, OSub{x, v, True{}}, b)}
+            case Core.CAnn{e, ty}:
+              Core.CAnn{Opt.go(p, OSub{x, v, True{}}, e), ty}
+            case other:
+              other
+        case OKids{}:
+          match t:
+            case Core.CCall{f, as}:
+              match as:
+                case Nil{}:
+                  Core.CCall{f, Nil{}}
+                case Core.Arg{r, e} <> t2:
+                  Core.Tm.push.call(Core.Arg{r, Opt.go(p, OAll{}, e)}, Opt.go(p, OKids{}, Core.CCall{f, t2}))
+            case Core.CApp{f, as}:
+              match as:
+                case Nil{}:
+                  Core.CApp{Opt.go(p, OAll{}, f), Nil{}}
+                case a <> t2:
+                  Core.Tm.push(Opt.go(p, OAll{}, a), Opt.go(p, OKids{}, Core.CApp{f, t2}))
+            case Core.CCtr{k, as}:
+              match as:
+                case Nil{}:
+                  Core.CCtr{k, Nil{}}
+                case a <> t2:
+                  Core.Tm.push(Opt.go(p, OAll{}, a), Opt.go(p, OKids{}, Core.CCtr{k, t2}))
+            case Core.CLam{pt, b}:
+              Core.CLam{pt, Opt.go(p, OAll{}, b)}
+            case Core.CLet{pt, v, b}:
+              Core.CLet{pt, Opt.go(p, OAll{}, v), Opt.go(p, OAll{}, b)}
+            case Core.CMat{scrs, cases}:
+              match scrs:
+                case a <> t2:
+                  Core.Tm.push(Opt.go(p, OAll{}, a), Opt.go(p, OKids{}, Core.CMat{t2, cases}))
+                case Nil{}:
+                  match cases:
+                    case Nil{}:
+                      Core.CMat{Nil{}, Nil{}}
+                    case cs <> t2:
+                      Core.Tm.push.case(Opt.go(p, OAll{}, cs), Opt.go(p, OKids{}, Core.CMat{Nil{}, t2}))
+            case Core.CCse{ps, b}:
+              Core.CCse{ps, Opt.go(p, OAll{}, b)}
+            case Core.CSuc{k, e}:
+              Core.CSuc{k, Opt.go(p, OAll{}, e)}
+            case Core.COp{op, a, b}:
+              Core.COp{op, Opt.go(p, OAll{}, a), Opt.go(p, OAll{}, b)}
+            case Core.CAnn{e, ty}:
+              Core.CAnn{Opt.go(p, OAll{}, e), ty}
+            case other:
+              other
+
+def Opt.simp(+flags: String, d: OD) -> OD:
+  match d:
+    case OCore{Core.Def{name, ps, +body, ret}}:
+      OCore{Core.Def{name, ps, Bool.pick(Unit -> Core.Tm, Opt.on(flags, 115), u => Opt.go(Fuel.max(), OAll{}, body), u => body)(Unit{}), ret}}
+    case OKeep{k}:
+      OKeep{k}
+
+def Opt.simps(+flags: String, ds: List<&2, OD>) -> List<&2, OD>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Opt.simp(flags, d) <> Opt.simps(flags, r)
+
 # The program through the core IR: each def lowered, erased, optimized
 # (see Opt), and raised; a type-level def (a Type, Data, Quant or Kind)
 # keeps its body, which the printers unfold.
@@ -13836,7 +14374,7 @@ def Lo.program(+flags: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
   +g = G.new(ds)
   +ods = Opt.lowers(g, ds)
   +rank = Opt.rank(ods, 0, Map.new(&2, U32))
-  Opt.raises(Opt.inls(Opt.ctx(flags, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods))
+  Opt.raises(Opt.simps(flags, Opt.inls(Opt.ctx(flags, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods)))
 
 def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
@@ -13888,7 +14426,7 @@ def Main.opt(r: Result<&1, &1, U32 & String, String>) -> String:
     case Done{v}:
       v
     case Fail{e}:
-      "i."
+      "i..s"
 
 # C for a program: matches free what they open unless BEND_NO_FREE is set
 # (bendc builds itself so: a compiler's heap is mostly shared, short-lived
