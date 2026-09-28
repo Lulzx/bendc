@@ -5022,6 +5022,40 @@ def Gen.par.mode(m: Maybe<&2, String>, +sn: String) -> Nat:
     case None{}:
       3n
 
+# A parallel let of n values forks lg(n) levels deep: par_depth counts
+# log2 of the tasks above, so the frontier (par_front) is 2^par_front tasks
+# whatever the fan-out.
+def Gen.par.lg(n: Nat) -> U32:
+  match n:
+    case 0n:
+      1
+    case 1n:
+      1
+    case 2n:
+      1
+    case 3n:
+      2
+    case 4n:
+      2
+    case 5n:
+      3
+    case 6n:
+      3
+    case 7n:
+      3
+    case 8n:
+      3
+    case 9n+m:
+      4
+
+# Past the frontier, a def with a sequential clone (S_name) calls it; any
+# other def runs its parallel let's values in order (sn = "").
+def Gen.par.def(+sn: String) -> String:
+  Bool.pick(String, String.is_empty(sn), "", "#define " ++ Gen.f(sn) ++ " S_" ++ Gen.mangle(sn) ++ "\n")
+
+def Gen.par.undef(+sn: String) -> String:
+  Bool.pick(String, String.is_empty(sn), "", "#undef " ++ Gen.f(sn) ++ "\n")
+
 def Gen.par.decls(n: Nat, +k: U32, +i: U32) -> String:
   match n:
     case 0n:
@@ -5531,6 +5565,16 @@ def Gen.out.call(+g: G, +env: Env(), t: Tgt, +name: String, +args: List<&2, Expr
     case other:
       False{}
 
+# A flat result of two fields returned by Array.get (1) or Array.swap (2),
+# unless a local shadows them; else 0.
+def Gen.out.arr(+env: Env(), t: Tgt, +name: String) -> Nat:
+  match t:
+    case TOut{k, free}:
+      Bool.pick(Nat, Bool.or(Bool.not(U32.is_eq(k, 2)), Env.has(env, name)), 0n,
+        Bool.pick(Nat, Str.eq(name, "Array.get"), 1n, Bool.pick(Nat, Str.eq(name, "Array.swap"), 2n, 0n)))
+    case other:
+      0n
+
 type Scrs is Data:
   Scrs{cs: List<&2, String>, code: Doc}
 
@@ -5628,6 +5672,10 @@ type GSel is Data:
     x: String, t: Expr, arr: Expr, idx: Expr, body: Expr}
   GSLetOut{hit: Bool, g: G, env: Env(), self: Self, tgt: Tgt, name: String, ps: List<&2, Pat>,
     f: String, args: List<&2, Expr>, body: Expr}
+  GSLetSwap{hit: Bool, g: G, env: Env(), self: Self, tgt: Tgt, name: String, f: String, a: String,
+    x: String, t: Expr, arr: Expr, idx: Expr, v: Expr, body: Expr}
+  GSRetArr{hit: Nat, g: G, env: Env(), tgt: Tgt, name: String, args: List<&2, Expr>}
+  GSSwap{g: G, env: Env(), k: U32, arr: Expr, idx: Expr, v: Expr}
   GSCallU{g: G, env: Env(), name: String, s: Split, o: String}
   GSRetCtor{out: Bool, g: G, env: Env(), tgt: Tgt, name: String, args: List<&2, Expr>}
   GSRetCall{out: Bool, g: G, env: Env(), tgt: Tgt, name: String, args: List<&2, Expr>}
@@ -5778,6 +5826,12 @@ def GSel.none(k: GSel) -> GSel.ty(k):
     case GSLetGet{hit, g, env, self, tgt, name, f, a, x, t, arr, idx, body}:
       DNil{}
     case GSLetOut{hit, g, env, self, tgt, name, ps, f, args, body}:
+      DNil{}
+    case GSLetSwap{hit, g, env, self, tgt, name, f, a, x, t, arr, idx, v, body}:
+      DNil{}
+    case GSRetArr{hit, g, env, tgt, name, args}:
+      DNil{}
+    case GSSwap{g, env, k, arr, idx, v}:
       DNil{}
     case GSCallU{g, env, name, s, o}:
       DNil{}
@@ -6249,19 +6303,20 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         # in order below it, through S_name.
         case GSParFront{+g, +env, +sn, +k, +vs}:
           +n = List.length(&2, Expr, vs)
+          +lg = U32.show(Gen.par.lg(n))
           do Gen<Doc>:
             sq : Doc <- Gen.rec(fu, GSParSeq{g, env, k, 0, vs, False{}})
             +j : U32 <- Gen.fresh()
             fk : Doc <- Gen.rec(fu, GSParVals{g, env, j, 0, vs})
-            return Doc.list([DStr{Gen.par.decls(n, k, 0) ++ "\nif (par_depth >= par_front) {\n#define " ++ Gen.f(sn) ++ " S_" ++
-              Gen.mangle(sn) ++ "\n"}, sq, DStr{"#undef " ++ Gen.f(sn) ++ "\n} else {\npar_depth += 1;\n"}, fk,
-              DStr{Gen.par.copy(n, k, j, 0) ++ "\npar_depth -= 1;\n}\n"}])
+            return Doc.list([DStr{Gen.par.decls(n, k, 0) ++ "\nif (par_depth >= par_front) {\n" ++ Gen.par.def(sn)}, sq,
+              DStr{Gen.par.undef(sn) ++ "} else {\npar_depth += " ++ lg ++ ";\n"}, fk,
+              DStr{Gen.par.copy(n, k, j, 0) ++ "\npar_depth -= " ++ lg ++ ";\n}\n"}])
         case GSParSq{sq, +g, +env, +sn, +k, +vs}:
           match sq:
             case True{}:
               Gen.rec(fu, GSParFront{g, env, sn, k, vs})
             case False{}:
-              Gen.rec(fu, GSParVals{g, env, k, 0, vs})
+              Gen.rec(fu, GSParFront{g, env, "", k, vs})
         case GSParPick{mode, +g, +env, +sn, +k, +vs}:
           match mode:
             case 1n:
@@ -6302,6 +6357,9 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case PVar{+a} <> PVar{+x} <> Nil{} t <> arr <> idx <> Nil{}:
               Gen.rec(fu, GSLetGet{Bool.and(Bool.and(Str.eq(f, "Array.get"), Str.eq(name, "Tuple")),
                 Bool.not(Env.has(env, f))), g, env, self, tgt, name, f, a, x, t, arr, idx, body})
+            case PVar{+a} <> PVar{+x} <> Nil{} t <> arr <> idx <> v <> Nil{}:
+              Gen.rec(fu, GSLetSwap{Bool.and(Bool.and(Str.eq(f, "Array.swap"), Str.eq(name, "Tuple")),
+                Bool.not(Env.has(env, f))), g, env, self, tgt, name, f, a, x, t, arr, idx, v, body})
             case +qs +as:
               Gen.rec(fu, GSLetOut{Gen.out.let(g, env, f, qs, as), g, env, self, tgt, name, qs, f, as, body})
         case GSLetGet{hit, +g, +env, +self, +tgt, +name, +f, +a, +x, t, arr, idx, +body}:
@@ -6320,6 +6378,54 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               +qs = {[PVar{a}, PVar{x}] : List<&2, Pat>}
               +as = {[t, arr, idx] : List<&2, Expr>}
               Gen.rec(fu, GSLetOut{Gen.out.let(g, env, f, qs, as), g, env, self, tgt, name, qs, f, as, body})
+        # (a, x) = Array.swap(T, arr, i, v): the old cell and the array, with
+        # no pair in between.
+        case GSLetSwap{hit, +g, +env, +self, +tgt, +name, +f, +a, +x, t, arr, idx, v, +body}:
+          match hit:
+            case True{}:
+              do Gen<Doc>:
+                +k : U32 <- Gen.fresh()
+                +ca : String <- Gen.pure(String, "ga" ++ U32.show(k))
+                +cx : String <- Gen.pure(String, "gx" ++ U32.show(k))
+                sw : Doc <- Gen.rec(fu, GSSwap{g, env, k, arr, idx, v})
+                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, cx} <> env, self, tgt, body})
+                return Doc.list([sw, Gen.shares.g(g, [Bind{a, ca}, Bind{x, cx}], body), b])
+            case False{}:
+              +qs = {[PVar{a}, PVar{x}] : List<&2, Pat>}
+              +as = {[t, arr, idx, v] : List<&2, Expr>}
+              Gen.rec(fu, GSLetOut{Gen.out.let(g, env, f, qs, as), g, env, self, tgt, name, qs, f, as, body})
+        # V gaK = arr; V gxK = old cell, with v stored in it.
+        case GSSwap{+g, +env, +k, arr, idx, v}:
+          +ks = U32.show(k)
+          do Gen<Doc>:
+            da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
+            di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
+            dv : Doc <- Gen.rec(fu, GSExpr{g, env, v})
+            return Doc.list([DStr{"V ga" ++ ks ++ " = "}, da, DStr{";\nV gi" ++ ks ++ " = "}, di, DStr{";\nV gv" ++ ks ++ " = "},
+              dv, DStr{";\nV *gp" ++ ks ++ " = arr_at(ga" ++ ks ++ ", gi" ++ ks ++ ");\nV gx" ++ ks ++ " = *gp" ++ ks ++
+              ";\narr_put(ga" ++ ks ++ ", gp" ++ ks ++ ", gv" ++ ks ++ ");\n"}])
+        # A flat result of two fields returned from Array.get (1) or
+        # Array.swap (2): the array and the cell go straight out.
+        case GSRetArr{hit, +g, +env, +tgt, +name, +args}:
+          match hit args:
+            case 1n t <> arr <> idx <> Nil{}:
+              do Gen<Doc>:
+                +k : U32 <- Gen.fresh()
+                +ks : String <- Gen.pure(String, U32.show(k))
+                da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
+                di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
+                return Doc.list([DStr{"{\nV ga" ++ ks ++ " = "}, da, DStr{";\nV gx" ++ ks ++ " = *arr_at(ga" ++ ks ++ ", "}, di,
+                  DStr{"); bend_share(gx" ++ ks ++ ");\no[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
+            case 2n t <> arr <> idx <> v <> Nil{}:
+              do Gen<Doc>:
+                +k : U32 <- Gen.fresh()
+                +ks : String <- Gen.pure(String, U32.show(k))
+                sw : Doc <- Gen.rec(fu, GSSwap{g, env, k, arr, idx, v})
+                return Doc.list([DStr{"{\n"}, sw, DStr{"o[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
+            case h as:
+              do Gen<Doc>:
+                d : Doc <- Gen.rec(fu, GSCall{g, env, EVar{name}, as})
+                return Gen.ret(tgt, d)
         case GSLetOut{hit, +g, +env, +self, +tgt, +name, +ps, +f, +args, +body}:
           match hit:
             case True{}:
@@ -6362,9 +6468,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                   Split{Nil{}, Nil{}, Nil{}, False{}}), "o"})
                 return Doc.list([DStr{"return "}, c, DStr{";\n"}])
             case False{}:
-              do Gen<Doc>:
-                d : Doc <- Gen.rec(fu, GSCall{g, env, EVar{name}, args})
-                return Gen.ret(tgt, d)
+              Gen.rec(fu, GSRetArr{Gen.out.arr(env, tgt, name), g, env, tgt, name, args})
         case GSLet{+g, +env, +self, +tgt, p, v, body}:
           match p:
             case PVar{+x}:
