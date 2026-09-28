@@ -4831,6 +4831,66 @@ def Gen.scalar.var(+env: Env(), v: Expr) -> Bool:
     case other:
       False{}
 
+# The natives whose result is a U32, and those whose result is another
+# scalar (a Bool, a Nat, an F32).
+def Gen.scalar.u32s() -> List<&2, String>:
+  ["U32.inc", "U32.add", "U32.sub", "U32.mul", "U32.div", "U32.mod", "U32.not",
+   "U32.and", "U32.or", "U32.xor", "U32.shl", "U32.shr", "U32.shln", "U32.shrn",
+   "U32.from_nat", "U32.min", "U32.max", "U32.pow", "U32.log2", "F32.bits", "F32.to_u32"]
+
+def Gen.scalar.others() -> List<&2, String>:
+  ["U32.is_eq", "U32.is_ne", "U32.is_lt", "U32.is_le", "U32.is_gt", "U32.is_ge",
+   "U32.is_zero", "U32.is_even", "U32.to_nat", "U32.to_f32",
+   "F32.add", "F32.sub", "F32.mul", "F32.div", "F32.mod", "F32.pow", "F32.atan2",
+   "F32.is_eq", "F32.is_ne", "F32.is_lt", "F32.is_le", "F32.is_gt", "F32.is_ge",
+   "F32.neg", "F32.abs", "F32.sqrt", "F32.exp", "F32.log", "F32.log2",
+   "F32.log10", "F32.sin", "F32.cos", "F32.tan", "F32.asin", "F32.acos",
+   "F32.atan", "F32.sinh", "F32.cosh", "F32.tanh", "F32.floor", "F32.ceil",
+   "F32.trunc"]
+
+def Gen.scalar.ret.ty(+t: String) -> U32:
+  Bool.pick(U32, Str.eq(t, "U32"), 2, Bool.pick(U32, Gen.scalar.ty(t), 1, 0))
+
+# What a def's result is: 2 a U32, 1 another scalar, 0 anything else.
+def Gen.scalar.ret(d: Decl) -> U32:
+  match d:
+    case DDef{n, ps, b, r}:
+      Gen.scalar.ret.ty(P.head(r))
+    case other:
+      0
+
+def Gen.scalar.fn(+g: G, +f: String, local: Bool) -> U32:
+  match local:
+    case True{}:
+      0
+    case False{}:
+      Bool.pick(U32, Str.has(Gen.scalar.u32s(), f), 2,
+        Bool.pick(U32, Str.has(Gen.scalar.others(), f), 1, Gen.scalar.ret(G.body(g, f))))
+
+def Gen.scalar.bound(m: Maybe<&2, String>) -> Bool:
+  match m:
+    case Some{c}:
+      True{}
+    case None{}:
+      False{}
+
+# What a let's value is: 2 a U32 (its C local is a uint32_t), 1 another
+# scalar (never shared), 0 anything else. A variable holding a scalar is 1;
+# a call is what its def or native returns.
+def Gen.scalar.let(+g: G, +env: Env(), v: Expr) -> U32:
+  match v:
+    case EVar{+y}:
+      Bool.pick(U32, Gen.scalar.find(Env.find(env, y)), 1, 0)
+    case ENum{n}:
+      2
+    case ECall{EVar{+f}, args}:
+      Gen.scalar.fn(g, f, Gen.scalar.bound(Env.find(env, f)))
+    case other:
+      0
+
+def Gen.scalar.cty(+k: U32) -> String:
+  Bool.pick(String, U32.is_eq(k, 2), "uint32_t ", "V ")
+
 #
 # A value bound to a variable used twice (on some path) is marked shared
 # where it is bound (bend_share). A match or destructuring let that opens a
@@ -4856,9 +4916,9 @@ def Use.n(+x: String, e: Expr) -> U32:
         case a <> t:
           (Use.n(x, a) + Use.n(x, ECtor{n, t}) : U32)
     case ELam{p, b}:
-      Use.n(x, b)
+      Bool.pick(U32, Str.has(Pat.vars(p, Nil{}), x), 0, Use.n(x, b))
     case ELet{p, v, b}:
-      (Use.n(x, v) + Use.n(x, b) : U32)
+      (Use.n(x, v) + Bool.pick(U32, Str.has(Pat.vars(p, Nil{}), x), 0, Use.n(x, b)) : U32)
     case EMatch{scrs, cases}:
       match scrs:
         case a <> t:
@@ -4870,7 +4930,7 @@ def Use.n(+x: String, e: Expr) -> U32:
             case c <> t:
               U32.max(Use.n(x, c), Use.n(x, EMatch{Nil{}, t}))
     case ECase{ps, b}:
-      Use.n(x, b)
+      Bool.pick(U32, Str.has(Pats.vars(ps, Nil{}), x), 0, Use.n(x, b))
     case ESucc{k, y}:
       Use.n(x, y)
     case EOp{op, a, b}:
@@ -6186,10 +6246,11 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case False{}:
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
-                +c : String <- Gen.pure(String, Gen.scalar.wrap(Gen.scalar.var(env, v), "v" ++ U32.show(k)))
+                +sk : U32 <- Gen.pure(U32, Gen.scalar.let(g, env, v))
+                +c : String <- Gen.pure(String, Gen.scalar.wrap(U32.is_ne(sk, 0), "v" ++ U32.show(k)))
                 d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
                 b : Doc <- Gen.rec(fu, GSStmt{g, Bind{x, c} <> env, self, tgt, body})
-                return Doc.list([DStr{"V " ++ c ++ " = "}, d, DStr{";\n"}, Gen.shares.g(g, [Bind{x, c}], body), b])
+                return Doc.list([DStr{Gen.scalar.cty(sk) ++ c ++ " = "}, d, DStr{";\n"}, Gen.shares.g(g, [Bind{x, c}], body), b])
         case GSCasesNext{+g, +env, +self, +tgt, +cs, rest, conds, b}:
           match conds:
             case Nil{}:
@@ -6526,19 +6587,71 @@ def Gen.memo.add.go(st: St, b: Bind) -> Unit & St:
 def Gen.memo.add(b: Bind) -> Gen(Unit):
   st => Gen.memo.add.go(st, b)
 
+# A def's U32 parameters live in uint32_t locals: the C parameter is aK_
+# and the local aK, so clang sees 32-bit values (a loop over them, a self
+# call's goto top, can then use 32-bit vector lanes).
+def Gen.u32.if(+c: String, rest: List<&2, String>, keep: Bool) -> List<&2, String>:
+  match keep:
+    case True{}:
+      c <> rest
+    case False{}:
+      rest
+
+def Gen.u32.names(ps: List<&2, Param>, mask: List<&2, Bool>, +i: U32) -> List<&2, String>:
+  match ps mask:
+    case Param{x, m, +t} <> pt True{} <> mt:
+      Gen.u32.if("a" ++ U32.show(i), Gen.u32.names(pt, mt, U32.inc(i)), Str.eq(t, "U32"))
+    case Param{x, m, t} <> pt False{} <> mt:
+      Gen.u32.names(pt, mt, U32.inc(i))
+    case pl ml:
+      Nil{}
+
+def Gen.u32.of(d: Decl, +mask: List<&2, Bool>) -> List<&2, String>:
+  match d:
+    case DDef{n, ps, b, r}:
+      Gen.u32.names(ps, mask, 0)
+    case other:
+      Nil{}
+
+def Gen.u32(+g: G, +name: String, +mask: List<&2, Bool>) -> List<&2, String>:
+  Gen.u32.of(G.body(g, name), mask)
+
+def Gen.cparams.u.go(ps: List<&2, String>, +us: List<&2, String>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case +h <> t:
+      ("V " ++ h ++ Bool.pick(String, Str.has(us, h), "_", "")) <> Gen.cparams.u.go(t, us)
+
+def Gen.cparams.u(ps: List<&2, String>, +us: List<&2, String>) -> String:
+  match ps:
+    case Nil{}:
+      "void"
+    case h <> t:
+      String.join(Gen.cparams.u.go(h <> t, us), ", ")
+
+def Gen.u32.open(us: List<&2, String>) -> String:
+  match us:
+    case Nil{}:
+      ""
+    case +h <> t:
+      "uint32_t " ++ h ++ " = (uint32_t)" ++ h ++ "_;\n" ++ Gen.u32.open(t)
+
 # S_name, a seq def's sequential clone: its parallel lets run in order and
 # its calls to itself stay in S_name (F_name is renamed to it inside).
 def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Expr, +env: Env(),
   +params: List<&2, String>) -> Gen(Unit):
   match sq:
     case True{}:
-      +head = "static V S_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams(params) ++ ")"
+      +us = Gen.u32(g, name, mask)
+      +head = "static V S_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
       do Gen<Unit>:
         Gen.proto(DStr{head ++ ";\n"})
         Gen.memo.add(Bind{"%seqmode", name})
         b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
         Gen.memo.add(Bind{"%seqmode", ""})
-        Gen.code(Doc.list([DStr{"#define " ++ Gen.f(name) ++ " S_" ++ Gen.mangle(name) ++ "\n" ++ head ++ " {\ntop:;\n"},
+        Gen.code(Doc.list([DStr{"#define " ++ Gen.f(name) ++ " S_" ++ Gen.mangle(name) ++ "\n" ++ head ++ " {\n" ++
+          Gen.u32.open(us) ++ "top:;\n"},
           Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n#undef " ++ Gen.f(name) ++ "\n"}]))
     case False{}:
       Gen.pure(Unit, Unit{})
@@ -6623,11 +6736,12 @@ def Expr.has_par(e: Expr) -> Bool:
 def Gen.def.boxed(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr,
   +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
 ) -> Gen(Unit):
-  +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
+  +us = Gen.u32(g, name, mask)
+  +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n"})
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
-    Gen.code(Doc.list([DStr{head ++ " {\ntop:;\n"}, Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
+    Gen.code(Doc.list([DStr{head ++ " {\n" ++ Gen.u32.open(us) ++ "top:;\n"}, Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
     Gen.wrapper(name, wargs)
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
 
@@ -6637,12 +6751,13 @@ def Gen.def.unb(+k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Exp
   +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
 ) -> Gen(Unit):
   +u = "U_" ++ Gen.mangle(name)
-  +uhead = "static V " ++ u ++ "(" ++ String.join(List.append(&2, String, Gen.cparams.go(params), ["V *o"]), ", ") ++ ")"
+  +us = Gen.u32(g, name, mask)
+  +uhead = "static V " ++ u ++ "(" ++ String.join(List.append(&2, String, Gen.cparams.u.go(params, us), ["V *o"]), ", ") ++ ")"
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n" ++ uhead ++ ";\n"})
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TOut{k, Gen.free(g)}, R.ops(body, "Nat"))
-    Gen.code(Doc.list([DStr{uhead ++ " {\ntop:;\n"}, Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
+    Gen.code(Doc.list([DStr{uhead ++ " {\n" ++ Gen.u32.open(us) ++ "top:;\n"}, Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
     Gen.code(DStr{head ++ " { V o[" ++ U32.show(k) ++ "]; " ++ u ++ "(" ++ String.join(List.append(&2, String, params,
       ["o"]), ", ") ++ "); return CN(0, " ++ U32.show(k) ++ ", o); }\n"})
     Gen.wrapper(name, wargs)
