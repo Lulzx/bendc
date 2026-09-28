@@ -190,7 +190,7 @@ def Defs.erase(ds: List<&2, Def>) -> List<&2, Def>:
 # Semantics
 # =========
 
-# A value: an erased argument is bound unevaluated (VTrm: nothing reads it).
+# A value: an erased argument runs as a box (VTrm: nothing reads it).
 # A scope is a list of bindings, VBnd.
 type Val is Data:
   VLit{l: Lit}
@@ -358,17 +358,23 @@ def Sel.erase(s: Sel) -> Sel:
     case SPatC{hit, env, ps, vs}:
       SPatC{hit, Vals.erase(env), ps, Vals.erase(vs)}
 
-# The parameters bound to the first values (an erased one too: to its term).
-def Scope.bind(ps: List<&2, Par>, vs: List<&2, Val>) -> List<&2, Val>:
+# The parameters bound to the first values in front of acc, each in front of
+# the ones before it: the order a match binds its patterns in (Pat.step), so
+# a call and the match an inlined call becomes make the same scope.
+def Scope.push(ps: List<&2, Par>, vs: List<&2, Val>, acc: List<&2, Val>) -> List<&2, Val>:
   match ps:
     case Nil{}:
-      Nil{}
+      acc
     case Par{x, rel, mode, ty} <> pr:
       match vs:
         case Nil{}:
-          Nil{}
+          acc
         case v <> vr:
-          VBnd{x, v} <> Scope.bind(pr, vr)
+          Scope.push(pr, vr, VBnd{x, v} <> acc)
+
+# The parameters bound to the first values (an erased one too: to a box).
+def Scope.bind(ps: List<&2, Par>, vs: List<&2, Val>) -> List<&2, Val>:
+  Scope.push(ps, vs, Nil{})
 
 def Vals.drop(n: Nat, vs: List<&2, Val>) -> List<&2, Val>:
   match n:
@@ -552,7 +558,7 @@ def run(~prim: String -> List<&2, Val> -> Res, +n: Nat, +ds: List<&2, Def>, s: S
                     case Run{}:
                       run(~prim, p, ds, SThen{run(~prim, p, ds, SEval{env, e}), KATail{env, r}})
                     case Era{}:
-                      run(~prim, p, ds, SThen{run(~prim, p, ds, SArgs{env, r}), KCons{VTrm{e}}})
+                      run(~prim, p, ds, SThen{run(~prim, p, ds, SEval{env, CBox{}}), KATail{env, r}})
         case SThen{r, k}:
           match r:
             case RFail{m}:
@@ -1781,7 +1787,7 @@ def Lo.params(ps: List<&2, Param>, +mask: List<&2, Bool>) -> List<&2, Par>:
       Par{x, Lo.rel(mask), m, t} <> Lo.params(r, Lo.tail(mask))
 
 def Lo.def(+ms: Map<&2, List<&2, Bool>>, +name: String, +ps: List<&2, Param>, body: Expr, ret: Expr) -> Def:
-  +bound = Lo.names(ps)
+  +bound = Lo.bind(Lo.names(ps), Nil{})
   Def{name, Lo.params(ps, Pair.snd(Map<&2, List<&2, Bool>>, List<&2, Bool>, Map.get(List<&2, Bool>, Nil{}, ms, name))), Lo.go(body, ms, bound, True{}, Nil{}),
     Lo.go(ret, ms, bound, True{}, Nil{})}
 
