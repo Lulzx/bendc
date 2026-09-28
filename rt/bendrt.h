@@ -89,6 +89,16 @@ typedef uint64_t Term;
 #endif
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
+// A def's U_ function (a flat result, stored through o) is inlined into its
+// callers, where o is then registers. (GCC refuses always_inline on a
+// recursive function; tcc has no inlining.)
+#if defined(__clang__)
+#define BEND_UINL static inline __attribute__((always_inline))
+#elif defined(__TINYC__)
+#define BEND_UINL static
+#else
+#define BEND_UINL static inline
+#endif
 
 #ifdef BEND_DEBUG_FREE
 #include <execinfo.h>

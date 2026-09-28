@@ -26,6 +26,13 @@
 #endif
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
+#if defined(__clang__)
+#define BEND_UINL static inline __attribute__((always_inline))
+#elif defined(__TINYC__)
+#define BEND_UINL static
+#else
+#define BEND_UINL static inline
+#endif
 #ifdef BEND_DEBUG_FREE
 void *bend_debug_stk[1 << 20][12];
 void bend_debug_record(uint64_t n) {

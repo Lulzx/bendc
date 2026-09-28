@@ -6747,7 +6747,8 @@ def Gen.def.boxed(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr,
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
 
 # A def with a flat result of k fields: U_name stores them through o, and
-# F_name, for the callers that want a node, builds it from them.
+# F_name, for the callers that want a node, builds it from them. U_name is
+# inlined into its callers (BEND_UINL), so o stays in registers.
 def Gen.def.unb(+k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Expr,
   +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
 ) -> Gen(Unit):
@@ -6758,7 +6759,8 @@ def Gen.def.unb(+k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Exp
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n" ++ uhead ++ ";\n"})
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TOut{k, Gen.free(g)}, R.ops(body, "Nat"))
-    Gen.code(Doc.list([DStr{uhead ++ " {\n" ++ Gen.u32.open(us) ++ "top:;\n"}, Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
+    Gen.code(Doc.list([DStr{"BEND_UINL" ++ String.drop(uhead, 6n) ++ " {\n" ++ Gen.u32.open(us) ++ "top:;\n"},
+      Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
     Gen.code(DStr{head ++ " { V o[" ++ U32.show(k) ++ "]; " ++ u ++ "(" ++ String.join(List.append(&2, String, params,
       ["o"]), ", ") ++ "); return CN(0, " ++ U32.show(k) ++ ", o); }\n"})
     Gen.wrapper(name, wargs)
@@ -7356,6 +7358,51 @@ def Expr.mentions(e: Expr, +k: String) -> Bool:
       Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(b, k))(Unit{})
     case EAnn{x, ty}:
       Expr.mentions(x, k)
+    case other:
+      False{}
+
+# Whether k is free in e: as Expr.mentions, but a pattern that binds k hides
+# its scope.
+def Expr.free(e: Expr, +k: String) -> Bool:
+  match e:
+    case EVar{+n}:
+      Str.eq(n, k)
+    case ECall{f, args}:
+      match args:
+        case Nil{}:
+          Expr.free(f, k)
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.free(a, k), u => True{}, u => Expr.free(ECall{f, t}, k))(Unit{})
+    case ECtor{n, args}:
+      match args:
+        case Nil{}:
+          False{}
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.free(a, k), u => True{}, u => Expr.free(ECtor{n, t}, k))(Unit{})
+    case ELam{p, +b}:
+      Bool.pick(Unit -> Bool, Str.has(Pat.vars(p, Nil{}), k), u => False{}, u => Expr.free(b, k))(Unit{})
+    case ELet{p, +v, +b}:
+      Bool.pick(Unit -> Bool, Expr.free(v, k), u => True{},
+        u => Bool.pick(Unit -> Bool, Str.has(Pat.vars(p, Nil{}), k), w => False{}, w => Expr.free(b, k))(Unit{}))(Unit{})
+    case EMatch{scrs, cases}:
+      match scrs:
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.free(a, k), u => True{}, u => Expr.free(EMatch{t, cases}, k))(Unit{})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case +c <> t:
+              Bool.pick(Unit -> Bool, Expr.free(c, k), u => True{},
+                u => Expr.free(EMatch{Nil{}, t}, k))(Unit{})
+    case ECase{ps, +b}:
+      Bool.pick(Unit -> Bool, Str.has(Pats.vars(ps, Nil{}), k), u => False{}, u => Expr.free(b, k))(Unit{})
+    case ESucc{n, x}:
+      Expr.free(x, k)
+    case EOp{op, +a, +b}:
+      Bool.pick(Unit -> Bool, Expr.free(a, k), u => True{}, u => Expr.free(b, k))(Unit{})
+    case EAnn{x, ty}:
+      Expr.free(x, k)
     case other:
       False{}
 
@@ -8043,22 +8090,16 @@ def Unb.free.none(xs: List<&2, String>, +e: Expr) -> Bool:
     case Nil{}:
       True{}
     case x <> t:
-      Bool.and(Bool.not(Expr.mentions(e, x)), Unb.free.none(t, e))
+      Bool.and(Bool.not(Expr.free(e, x)), Unb.free.none(t, e))
 
-def Unb.float.go(ok: Bool, p: Pat, q: Pat, w: Expr, c: Expr, e: Expr) -> Expr:
-  match ok:
-    case True{}:
-      ELet{q, w, ELet{p, c, e}}
-    case False{}:
-      ELet{p, ELet{q, w, c}, e}
-
-# let p = v; e, with a let v opens with (a worker call's own) floated out
-# of it, so the code generator sees the call (see GSLetOut): when its
-# variables are not free in e.
-def Unb.float(p: Pat, v: Expr, +e: Expr) -> Expr:
+# let p = v; e, with the lets v opens with (a worker call's own) floated out
+# of it, so the code generator sees the call (see GSLetOut): each when its
+# variables are not free in e (but for those p binds again).
+def Unb.float(+p: Pat, v: Expr, +e: Expr) -> Expr:
   match v:
-    case ELet{+q, w, c}:
-      Unb.float.go(Unb.free.none(Pat.vars(q, Nil{}), e), p, q, w, c, e)
+    case ELet{+q, +w, +c}:
+      Bool.pick(Unit -> Expr, Unb.free.none(Pat.vars(q, Nil{}), ELam{p, e}),
+        u => ELet{q, w, Unb.float(p, c, e)}, u => ELet{p, ELet{q, w, c}, e})(Unit{})
     case other:
       ELet{p, other, e}
 
@@ -8397,8 +8438,86 @@ def Unb.wrapper(ps: List<&2, Param>, us: List<&2, Unb>) -> UArgs:
     case pl ul:
       UArgs{Nil{}, Nil{}}
 
+# Whether e is a full call of a def with a flat result, after the lets it
+# opens with.
+def Unb.flat.tail(e: Expr, +rm: Map<&2, URet>) -> Bool:
+  match e:
+    case ELet{p, v, b}:
+      Unb.flat.tail(b, rm)
+    case ECall{f, as}:
+      match f:
+        case EVar{+h}:
+          +r = G.get(URet, URet{Unb.none(), 0}, rm, h)
+          Bool.and(Unb.is(URet.u(r)), U32.is_eq(URet.n(r), U32.from_nat(List.length(&2, Expr, as))))
+        case other:
+          False{}
+    case other:
+      False{}
+
+# a in front of the arguments of the call under e's lets.
+def Unb.push.deep(a: Expr, e: Expr) -> Expr:
+  match e:
+    case ELet{p, v, b}:
+      ELet{p, v, Unb.push.deep(a, b)}
+    case other:
+      Expr.push(a, other)
+
+def Unb.pull.one(hit: Bool, a: Expr, +x: String, e: Expr) -> Expr:
+  match hit:
+    case True{}:
+      Unb.float(PVar{x}, a, Unb.push.deep(EVar{x}, e))
+    case False{}:
+      Unb.push.deep(a, e)
+
+# e with each call's arguments that call a def with a flat result let-bound
+# before it (_ufD_I: the call's depth D, the argument's place I from the
+# end), so Unb.lvars opens them: the optimizer's inlining nests such calls
+# (look(.., look(.., st))), and a flat call that is an argument builds its
+# node.
+def Unb.flet(e: Expr, +rm: Map<&2, URet>, +d: U32) -> Expr:
+  match e:
+    case ECall{f, args}:
+      match args:
+        case Nil{}:
+          ECall{Unb.flet(f, rm, d), Nil{}}
+        case a <> +t:
+          +a2 = Unb.flet(a, rm, U32.inc(d))
+          Unb.pull.one(Unb.flat.tail(a2, rm), a2,
+            "_uf" ++ U32.show(d) ++ "_" ++ U32.show(U32.from_nat(List.length(&2, Expr, t))),
+            Unb.flet(ECall{f, t}, rm, d))
+    case ECtor{n, args}:
+      match args:
+        case Nil{}:
+          ECtor{n, Nil{}}
+        case a <> t:
+          Expr.push(Unb.flet(a, rm, U32.inc(d)), Unb.flet(ECtor{n, t}, rm, d))
+    case ELam{pt, b}:
+      ELam{pt, Unb.flet(b, rm, d)}
+    case ELet{pt, v, b}:
+      ELet{pt, Unb.flet(v, rm, d), Unb.flet(b, rm, d)}
+    case EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.push(Unb.flet(a, rm, d), Unb.flet(EMatch{t, cases}, rm, d))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Unb.flet(c, rm, d), Unb.flet(EMatch{Nil{}, t}, rm, d))
+    case ECase{ps, b}:
+      ECase{ps, Unb.flet(b, rm, d)}
+    case ESucc{k, x}:
+      ESucc{k, Unb.flet(x, rm, d)}
+    case EOp{op, a, b}:
+      EOp{op, Unb.flet(a, rm, d), Unb.flet(b, rm, d)}
+    case EAnn{x, ty}:
+      EAnn{Unb.flet(x, rm, d), ty}
+    case other:
+      other
+
 def Unb.fix(+rm: Map<&2, URet>, +rk: String, +wm: Map<&2, List<&2, Unb>>, +cm: Map<&2, Unb>, e: Expr) -> Expr:
-  Unb.calls(Unb.known(cm, Unb.lvars(e, True{}, rm, rk, wm, Nil{}), True{}), wm, Nil{}, 0, True{})
+  Unb.calls(Unb.known(cm, Unb.lvars(Unb.flet(e, rm, 0), True{}, rm, rk, wm, Nil{}), True{}), wm, Nil{}, 0, True{})
 
 def Unb.decl.pick(hit: Bool, +us: List<&2, Unb>, +rm: Map<&2, URet>, +wm: Map<&2, List<&2, Unb>>,
   +cm: Map<&2, Unb>, +name: String, +ps: List<&2, Param>, body: Expr, +ret: Expr) -> List<&2, Decl>:
