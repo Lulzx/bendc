@@ -541,11 +541,13 @@ static inline void rc_dup_in(V x, V ts) {
 }
 // ALeaf{x} = a (counted): x gets a reference.
 static inline void rc_dup_leaf(V a) { rc_dup_in(((V *)a)[1], ((V *)a)[0] & RC_TS); }
-// A reference more to a borrowed value (see Bor in bendc.bend): field i
-// of borrowed node p, marked as p is; or one whose holder is not known,
-// marked.
-#define rc_bdupFLD(p, i) rc_dup_in(FLD(p, i), ((V *)(p))[0] & RC_TS)
-#define rc_bdup(x) rc_dup_in((x), RC_TS)
+// A reference more to a borrowed value (see Bor in bendc.bend), marked
+// once threads run: a borrowed node was opened without rc_take, so its
+// mark may lag its holders' (a node another thread reaches through a
+// marked parent is marked only when a take passes it on).
+#define rc_bmark() (gc_hot.rcmt ? RC_TS : 0)
+#define rc_bdupFLD(p, i) rc_dup_in(FLD(p, i), rc_bmark())
+#define rc_bdup(x) rc_dup_in((x), rc_bmark())
 static inline void rc_dup(V v) { rc_dupn(v, 1); }
 static inline V rc_dupv(V v) { rc_dup(v); return v; }
 
