@@ -350,6 +350,11 @@ KINLINE KW KF_Nat_dpow(KTHR KCtx *c, KW a, KW n) {
   return r;
 }
 KINLINE KW KF_Nat_dshow(KTHR KCtx *c, KW a) { k_fail(c, KE_FX); return 0; }
+// String.cmp, String.eq and Map.bit are natives on the CPU: a device call
+// that meets one runs on the CPU.
+KINLINE KW KF_String_dcmp(KTHR KCtx *c, KW a, KW b) { k_fail(c, KE_FX); return 0; }
+KINLINE KW KF_String_deq(KTHR KCtx *c, KW a, KW b) { k_fail(c, KE_FX); return 0; }
+KINLINE KW KF_Map_dbit(KTHR KCtx *c, KW a, KW b) { k_fail(c, KE_FX); return 0; }
 // An Array is a host block (see "Arrays" in bendrt.h): the device runs no
 // Array operation, and a call that meets one runs on the CPU.
 KINLINE bool k_arr(KTHR KCtx *c) { k_fail(c, KE_FX); return false; }

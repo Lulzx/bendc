@@ -750,6 +750,9 @@ V arr_half(V a, unsigned hi) {
   return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), gc_hot.rc || arr_shared(a), ((V *)a)[0] & RC_TS);
 }
 #define ARR_ATOMIC(name, op) static inline V F_Array_datomic_d##name(V a, V i, V v) { return C2(0, a, (V)__atomic_##op(arr_word(a, i), (uint32_t)v, __ATOMIC_SEQ_CST)); }
+#ifdef __TINYC__
+#else
+#endif
 V apply(V f, V x) {
   V *c = (V *)f;
   V ar = c[1], n = c[2];

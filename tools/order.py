@@ -153,6 +153,7 @@ SECTIONS = [
     ('Free variables', r'^(FV\.|Pats?\.vars)'),
     ('Global tables', r'^(CInfo|DInfo|G|Natives)(\.|$)'),
     ('Code generation', r'^(St|Gen|Bind|Env|Tgt|Self|PatR|Split|Sig|Dps|DEdge|DGrp)(\.|$)'),
+    ('Native code generation', r'^(N|NB|NBd|NCo|NEnv|NG|NI|NO|NOut|NPa|NPr|NPS|NS|NSelf|NSt|NT)(\.|$)'),
     ('Value printers', r'^(TB$|Ty\.)'),
     ('Modules', r'^(Mod\.|Qual$)'),
     ('Driver', r'^(Main\.|main$)'),

@@ -25,8 +25,9 @@ tests with stage2: 80 passed, 0 failed
 ```
 
 `bendc.bend` (the compiler) and `check.bend` (the type checker) are Bend: about 22,000 lines that
-`bend --check-only` accepts (since Bend 2.0.32 it exits 1 on them all the same, listing the defs
-that rely on `@unsafe` or foreign code; bendc's checker prints the same report). bendc type-checks
+`bend --check-only` accepts: `check.bend` outright, and `bendc.bend` with exit status 1 since Bend
+2.0.32, which lists the 18 defs that rely on foreign code (the package fetcher `Hub.ensure`, which
+imports C, and its callers); bendc's checker prints the same report. bendc type-checks
 a program the way the official checker does (a port of it, with the same error reports), then lexes, parses, erases, and code-generates it, including the
 parts of Bend's standard library (`Base`) that the program uses. The result is a single C file that
 clang builds against the runtime (`rt/bendrt.h`): a garbage collector, native `Nat` and arrays, a
@@ -41,6 +42,7 @@ backend that runs `f!(x)` calls on Metal.
 - [Language support](#language-support)
 - [How it works](#how-it-works)
 - [The GPU backend](#the-gpu-backend)
+- [The native backend](#the-native-backend)
 - [Benchmarks](#benchmarks)
 - [Writing a compiler under Bend's rules](#writing-a-compiler-under-bends-rules)
 - [Testing](#testing)
@@ -175,7 +177,9 @@ flowchart LR
   translates to C and GCC builds, once with the seed GCC builds. Both outputs must equal
   `seed/bendc.c` byte for byte. The first path shares nothing with the seed (not its C, and not
   clang, which the official `bend -o` calls), so a tampered seed would have to be matched by the
-  official Bend and GCC together. It needs GCC 15 or newer (the official C uses `musttail`).
+  official Bend and GCC together. It needs GCC 15 or newer (the official C uses `musttail`). On
+  arm64 a third leg builds bendc with its own native backend (see [The native
+  backend](#the-native-backend)) and checks that it compiles `bendc.bend` to the seed too.
 - **`make tcc`** builds the seed with the [Tiny C Compiler](https://repo.or.cz/tinycc.git), which
   [bootstrappable builds](https://bootstrappable.org) reach from a few hundred bytes of hex (through
   M2-Planet and GNU Mes), so bendc can join that chain. The tcc-built bendc must compile `bendc.bend`
@@ -237,12 +241,77 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    in runtime positions, with a box. [`PROOF.bend`](PROOF.bend) proves that this preserves the IR's
    semantics, which `core.bend` gives in Bend as a fuelled machine (`Core.run`): the law
    ([`LAWS.bend`](LAWS.bend)) says running a program and erasing the result gives what running the
-   erased program gives. Both checkers verify it in CI. Then full calls of a monad's `bind`, `pure`,
+   erased program gives. Then full calls of a monad's `bind`, `pure`,
    `go` and `go.done` (the parser's, the generator's, the checker's) are inlined. The callee is
    renamed apart, each argument takes its parameter's place when that moves no work into a lambda,
-   and the places it lands are reduced: an applied lambda becomes a `let`, and a `let` or `match` of
-   a known constructor takes its case. A `do` block becomes one closure, and the checker, which
-   runs on these monads, runs 9% fewer instructions.
+   and the places it lands are reduced: an applied lambda becomes a `let`, and a `let` of a known
+   constructor binds its fields. A `do` block becomes one closure, and the
+   checker, which runs on these monads, runs 9% fewer instructions. Last, `Core.Def.red` turns
+   every lambda applied to one argument, `(p => b)(a)`, into `let p = a; b`, anywhere in the def.
+   [`REDPROOF.bend`](REDPROOF.bend) proves the law in [`RED.bend`](RED.bend): if a run does not run
+   out of fuel, the reduced program, with as much fuel or more, gives the same result, reduced
+   (`red_ok`; `red_prog` for a program's `main`). The let takes fewer steps than the application,
+   so the proof shows that more fuel does not change a result that did not run out (`L.mono`), and
+   that in one program the application and the let give the same result (`L.beta.law`). Like
+   erasure's proof, it assumes that the natives commute with the pass (`ok`); it also assumes that
+   a native gives one value or fails (`one`). Then `Core.Def.known` resolves each `match` on a
+   known constructor `K{as}`: it drops each case whose pattern is another constructor's, and when
+   the first case left is `K`'s with a variable for each field, it makes the match one on `as`
+   with that case alone, which bendc compiles as lets (no `K` is built). A field pattern that can
+   fail keeps the match, since its case can move on to the next. [`KNOWNPROOF.bend`](KNOWNPROOF.bend)
+   proves the law in [`KNOWN.bend`](KNOWN.bend), `known_ok` (and `known_prog`), stated as
+   `red_ok` is, with the same assumptions; the resolved match takes no more steps than the source,
+   and in one program the two give the same result (`K.mat`). The proven functions are the ones
+   bendc runs; the inliner no longer resolves matches itself. The inliner's own rules (the
+   substitution of arguments, a `let` of a known constructor, applications of more than one
+   argument) are not proven, nor are lowering, raising back to an `Expr`, or code generation. Both
+   checkers verify the three proofs in CI.
+
+   Then the optimizer (`Opt` in `bendc.bend`) works on the whole program in the core IR. The
+   inlining of monadic binds, `Core.Def.red` and `Core.Def.known` always run first, on every def;
+   the passes below come after, and their own case of a known constructor or literal resolves what
+   the proven one leaves (literal patterns, nested patterns, matches that inlining exposes).
+   `BEND_OPT` names its passes by letter: the default is `i..spf`, and `BEND_OPT=` turns it off.
+   - `i` inlines small defs: a body of size at most 4 plus 2 per `.` (8 for `i..`) that calls only
+     defs declared before it (so inlining ends), and is neither native nor `IO`. Most of the gain
+     comes from `Bool.pick`, `Bool.and`, `Bool.or` and `Bool.not`, whose arguments move into the
+     branches, so only the taken one runs.
+   - `s` simplifies each body bottom up. A dead let goes. A let of an atom, or one used once outside
+     a lambda, takes its variable's place. A small let over a match that reads it only in its cases
+     goes into them. A match on a known constructor or literal takes the first case whose patterns
+     match, and stops at one that may not. Lets float out of matches and applications. A match on
+     a match whose cases all end in constructors goes into those cases (case of case), when the
+     copies are small. An applied lambda becomes a let. Parallel lets stay parallel. A comparison
+     of literals folds, and a comparison of a match whose cases give literals goes into the cases
+     (`U32.is_zero(b2u(c))` is a match on `c`).
+   - `p` specializes a higher-order def. A call that passes a closed function (a lambda with no
+     free variables, as every `~f` template argument is, or a def's name) for a parameter the
+     callee passes unchanged to its own calls calls a copy instead. In the copy the function takes
+     the parameter's place and is simplified, and its self-calls drop the argument. Copies are
+     shared by the callee's name and a hash of the function's text.
+   - `f` fuses a consumer with a producer. Take a call `g(.., p(..), ..)` where `g` is recursive
+     and matches on that argument alone, and some result of `p` is a constructor with a field that
+     calls `p` (`p` builds a list or tree). It calls a fused def instead: `p`'s body with `g`
+     around each result, `g` unfolded where the result is a constructor, and each
+     `g(.., p(..), ..)` left over made a call of the fused def. The structure `p` built is never
+     built. `sum(filter(xs))`, `foldr(map(map(xs)))` and `length(map(xs))` become single loops.
+     Fused defs that nothing calls are dropped.
+
+   [`OPT.bend`](OPT.bend) states these rewrites as laws on the instances the optimizer meets
+   (map/map, foldr/map, foldl/map, length/map, a fused consumer, a specialized copy, case of case,
+   a folded comparison) and proves each by induction. Both checkers verify it in CI. These are laws
+   about instances, not a proof that these passes on `Core.Tm` preserve meaning, as REDPROOF and
+   KNOWNPROOF are for theirs.
+
+   Instructions (single thread) with each pass added, bendc building itself and checking itself:
+   none 12.3G / 26.1G; `i..` 9.2G / 20.7G; `i..s` 9.3G / 20.1G; `i..sp` 8.0G / 20.1G;
+   `i..spf` 8.0G / 20.1G. Its C grows 2.6%. (With the native backend in bendc, all passes take
+   the build from 14.6G to 9.1G and the check from 36.9G to 28.3G; its C grows 3%.) The native
+   backend starts from the same optimized defs: `bench/pipe.bend` runs 4.9G instructions without
+   the passes, 3.2G with them. On `bench/pipe.bend` the passes take 47.9G to 8.2G
+   (specialization to 19.7G, fusion the rest). On the official benchmarks the instruction counts
+   stay within 1%, except kmeans, where inlining small defs into a loop with many live values
+   makes clang spill: 12% more instructions, about 5% more time.
 6. **Code generation.** A state monad threads fresh names, emitted C, references and errors through
    the generator. Only defs reachable from `main` are emitted.
    - Each def becomes a C function, and self tail calls become `goto` loops.
@@ -345,6 +414,66 @@ tail calls become loops. Effects are requests answered by an event loop with the
 (`io_done`, `io_fail`, `io_tup`, `io_park_on`, `io_sys`, ...); the ones that make system calls use
 `bun:ffi`, so run the output with Bun. Parallel lets run one value after the other.
 
+## The native backend
+
+`bendc --native -o prog base.bend prog.bend` compiles a program to AArch64 machine code without a C
+compiler seeing it. The code generator (the "Native code generation" section of `bendc.bend`) and
+the assembler and object writer ([`asm.bend`](asm.bend)) are Bend. bendc encodes the instructions,
+lays out the code, resolves its labels, and writes the relocatable object itself: Mach-O on macOS,
+ELF on Linux (`Cc.elf` asks the host which). The system linker then links it with the runtime.
+
+- **What still goes through `cc`.** The runtime (`build/bendrt.o`, compiled once), `rt/native.c`
+  (external names for the runtime's inline natives, compiled once as `natives.o`), and the C of the
+  program's effects (their sources from Base's `effs/*.c`, with the ids they use), which bendc
+  writes next to the object. `cc` also links them.
+- **Same runtime, same ABI.** The code starts from the same lowered defs as the C generator and keeps
+  the runtime's value representation (see [How it works](#how-it-works)) and AAPCS64, so it calls
+  the runtime's functions (`apply`, `str_cache`, the allocator, the effect loop) as C does.
+- **Code shape.** Every value lives in a frame slot and an expression leaves its value in `x0`. A
+  def with at most 8 kept parameters takes them in `x0`..`x7`; a wider one takes the address of a
+  row of arguments. A self tail call stores the new arguments over the parameters and branches back,
+  and a tail call to another narrow def pops the frame and branches. Integer, `U32` and `F32`
+  natives are inlined (`add`, compares, shifts, `fadd`, `fmul`, `fcmp`, `ucvtf`, ...); the others
+  call their `N_` name in `rt/native.c`. A peephole pass turns a reload right after a store to the
+  same slot into a register move. String literals are cached in data slots as the C backend does.
+- **Coverage.** All 26 programs in `tests/` pass with `--native` on macOS (arm64) and on Linux
+  (arm64, in Docker), and `run_tests.sh` runs them there. bendc compiles itself with `--native`:
+  the native bendc prints the same C for `bendc.bend` as the C build, and the object it writes for
+  itself is the one the C build writes, byte for byte. `tools/ddc.sh` has this as a third leg: the
+  seed, built by GCC, compiles `bendc.bend` natively, and that bendc compiles `bendc.bend` to
+  `seed/bendc.c`.
+
+What it does not do, against the C backend:
+
+- Matches do not free what they open (programs run as with `BEND_NO_FREE=1`), so allocation-heavy
+  programs rely on the collector alone.
+- Parallel lets run in order, on one thread, and `!`-calls run on the CPU.
+- No destination passing: a def like `merge` recurses on the stack.
+- No register allocation: every value goes through memory, which is what the numbers below mostly
+  measure.
+- AArch64 only. The target is picked by the host, so there is no cross-compiling.
+
+Against the C backend (clang `-O2`), interleaved runs, best of 3, on an Apple M4 Pro that was
+running other heavy jobs at the time (load average near 50), so only the ratios mean much:
+
+| program | C backend | native | native / C |
+|---|---|---|---|
+| `forks 24` (1 thread) | 0.034s | 0.062s | 1.8 |
+| `leaves 12` (1 thread) | 5.68s | 39.2s | 6.9 |
+| `sort 1000000` (1 thread) | 0.314s | 0.535s | 1.7 |
+| `forks 24` (C: all threads) | 0.011s | 0.060s | 5.7 |
+| `leaves 12` (C: all threads) | 0.849s | 41.5s | 49 |
+| `sort 1000000` (C: all threads) | 0.114s | 0.527s | 4.6 |
+| bendc compiling `bendc.bend` to C | 1.52s | 2.73s | 1.8 |
+| bendc checking `bendc.bend` | 3.16s | 6.87s | 2.2 |
+
+On one thread, and for bendc itself, the native code takes 1.7 to 2.2 times as long, but for
+`leaves`, a float loop, where it takes 7 times as long: clang keeps `x` in a float register and fuses `x * x * 0.5 + c` into
+two instructions, while the native loop moves every value through its frame slot and between
+integer and float registers. On all threads the gap is the missing parallel lets. Building is
+where it wins: `bendc --native` builds bendc (check, code generation, assembly, link) in 3.5s,
+where `bendc -o` takes 20s, most of it clang compiling 59,000 lines of C.
+
 ## Benchmarks
 
 `bench/run.sh` builds each program in [`bench/`](bench) with bendc (`bendc -o`) and with the official
@@ -421,7 +550,8 @@ freed nodes are poisoned and kept, so a use after free stops with the C line tha
 **Reference counting (`BEND_RC=1`).** A program compiled with `BEND_RC=1` counts references
 instead, in the manner of Perceus (Reinking et al., PLDI 2021), and the tracing collector never
 runs: there are no pauses, and memory goes back as soon as the last reference to it is dropped.
-The mode is off by default: see below for where it wins and where it loses.
+The mode is off by default: see below for where it wins and where it loses. `bendc --native`
+does not implement it: native programs are traced whatever `BEND_RC` says.
 
 - The count sits in bits 48 to 61 of an object's first word, above the tag, the closure's
   function or the array's header. The count is of the references past the first, so a new
@@ -535,7 +665,9 @@ Bend 2 is a proof language, and its checker is strict about code that runs. It s
 - **`match` only on parameters.** A match cannot inspect a computed value, and neither can
   destructuring. So each decision is a small helper def whose parameter is the thing being matched.
   The parser monad avoids most of the tuple-destructuring helpers a hand-threaded token list would
-  need.
+  need. After a match, the parameters and fields before the matched one cannot be matched: a proof
+  that needs the fuel's shape deep in a case (as `REDPROOF.bend`'s redex does) takes it from a
+  separate lemma.
 - **Affine variables.** A variable is used at most once unless it is marked `+`, which requires a
   copyable `Data` type. Every AST type is `Data`, and `+` appears where values are reused.
 - **Totality.** A recursive call must shrink its first changing argument. Walks over a node and a
@@ -545,9 +677,11 @@ Bend 2 is a proof language, and its checker is strict about code that runs. It s
   `Nat` fuel argument that starts at `Fuel.max()`, about 4 billion, and fails loudly if it ever
   runs out. A branch on a computed value that recurses is `Bool.pick(T, c, u => a, u => b)(x)`:
   the termination check sees the self-call under the lambda, and bendc compiles it as a match, with
-  no closures. `bendc.bend` has no `@unsafe` def, and `check.bend` has three, where its parser calls
-  the evaluator defined after it (`tools/unsafe_min.py` keeps the markers minimal: it strips them
-  all and puts back one for each def the checker rejects).
+  no closures. Neither `bendc.bend` nor `check.bend` has an `@unsafe` def: the checker's parser
+  normalizes each def's value and prints terms in its errors, so the evaluator and the printer
+  (`higher`, `term_lower`, `term_show` and what they use) come before the parser's declarations
+  (`tools/unsafe_min.py` keeps the markers minimal: it strips them all and puts back one for each
+  def the checker rejects).
 
 The compiler compiles every one of these patterns in its own source. It handles its own laws, its
 own dependent selectors, and its own user-defined monads (`Parser`, `Gen`), which is what makes the
@@ -562,8 +696,9 @@ and the `Nat` bound.
 Each `.out` file is the stdout and exit code of the **official** `bend` running the same program.
 `run_tests.sh` compiles each program with a given `bendc`, runs it, and diffs the result; programs
 with `!`-calls run again on the GPU simulator and, on a Mac, on Metal, and must not fall back to the
-CPU. Every program is also built with `BEND_RC=1` and run again (`rc/NAME`; set `BEND_TEST_RC=0` to
-skip these runs). A `tests/NAME.env` file sets environment variables for a run (`dps` collects every megabyte, so
+CPU. On arm64 (macOS or Linux) every program runs again through `bendc --native`. Every program
+is also built with `BEND_RC=1` and run again (`rc/NAME`; set `BEND_TEST_RC=0` to skip these
+runs). A `tests/NAME.env` file sets environment variables for a run (`dps` collects every megabyte, so
 collections happen while holes are open);
 `tests/hub/run.sh` serves a package from a local hub and imports it by hash.
 `tests/check/` holds programs the checker rejects; each `.out` is the official
@@ -592,6 +727,8 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 
 ## Limitations
 
+- The native backend (`--native`) is AArch64 only, does not free on match, runs parallel lets in
+  order, and has no destination passing (see [The native backend](#the-native-backend)).
 - The GPU backend targets Metal only; elsewhere `f!(x)` runs on the CPU threads (or on the
   simulator, with `BEND_GPU=sim`).
 - No windowing effects (Base's `Window`).
@@ -610,9 +747,13 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | Path | |
 |---|---|
 | [`check.bend`](check.bend) | the type checker, a port of the official one: parser, normalizer, conversion, quantities, termination, templates, error reports |
+| [`asm.bend`](asm.bend) | the native backend's AArch64 assembler, peephole pass, and Mach-O and ELF object writers |
+| [`rt/native.c`](rt/native.c) | external names for the runtime's inline natives, which native code calls |
 | [`bendc.bend`](bendc.bend) | the compiler, organized by section: lexer, layout, parser monad, expressions, patterns, statements, declarations, operator resolution, free variables, global tables, code generation, value printers, modules, driver |
 | [`core.bend`](core.bend) | the core IR between the front end and code generation: terms with relevance-marked arguments, erasure, and a semantics |
 | [`LAWS.bend`](LAWS.bend), [`PROOF.bend`](PROOF.bend) | the law that erasure preserves the core IR's semantics, and its proof (induction on the fuel, one case per step) |
+| [`RED.bend`](RED.bend), [`REDPROOF.bend`](REDPROOF.bend) | the law that reducing applied lambdas to lets (`Core.Def.red`) preserves the core IR's semantics, and its proof |
+| [`KNOWN.bend`](KNOWN.bend), [`KNOWNPROOF.bend`](KNOWNPROOF.bend) | the law that resolving matches on known constructors (`Core.Def.known`) preserves the core IR's semantics, and its proof |
 | [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, arrays, native `Nat`, `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
 | [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the kernel cache, the simulator, copying results back |
 | [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
@@ -621,7 +762,7 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`bench/`](bench) | benchmark programs and `run.sh`, which times them against the official `bend` |
 | [`tests/`](tests) | test programs and the official `bend`'s output for each |
 | [`bootstrap.sh`](bootstrap.sh), [`run_tests.sh`](run_tests.sh), [`Makefile`](Makefile) | bootstrap and fixpoint check, test runner, build entry points |
-| [`tools/ddc.sh`](tools/ddc.sh) | diverse double-compiling: the seed, reproduced by two toolchains that share no C compiler |
+| [`tools/ddc.sh`](tools/ddc.sh) | diverse double-compiling: the seed, reproduced by two toolchains that share no C compiler, and by bendc's native build |
 | [`tools/tcc.sh`](tools/tcc.sh) | the seed built by tcc reproduces itself, and the tests pass with tcc |
 | [`tools/unsafe_min.py`](tools/unsafe_min.py) | dev tool: drops the `@unsafe` markers the checker does not need |
 | [`tools/order.py`](tools/order.py) | dev tool: section-aware dependency sort, with automatic `law` forward declarations for cycles |
