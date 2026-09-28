@@ -74,6 +74,25 @@ if command -v bun >/dev/null 2>&1; then
   done
 fi
 
+# The native backend (bendc --native: AArch64 Mach-O), on an arm64 Mac.
+if [ "$(uname -sm)" = "Darwin arm64" ]; then
+  mkdir -p build/native
+  for src in tests/*.bend; do
+    name=$(basename "$src" .bend)
+    out=build/native/$name
+    if ! "$BENDC" --native -o "$out" "$BASE" "$src" > "$out.log" 2>&1; then
+      echo "FAIL native/$name (bendc)"; sed 's/^/  /' "$out.log" | head -5; fail=$((fail+1)); continue
+    fi
+    env $(cat "tests/$name.env" 2>/dev/null) "./$out" > "$out.txt" 2> "$out.stderr"
+    echo "exit $?" >> "$out.txt"
+    if cmp -s "$out.txt" "tests/$name.out"; then
+      echo "ok   native/$name"; pass=$((pass+1))
+    else
+      echo "FAIL native/$name"; diff "$out.txt" "tests/$name.out" | head -10 | sed 's/^/  /'; fail=$((fail+1))
+    fi
+  done
+fi
+
 # Type checking: bendc --check-only prints what bend --check-only prints.
 for src in tests/check/*.bend; do
   name=check/$(basename "$src" .bend)
