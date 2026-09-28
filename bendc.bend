@@ -13674,11 +13674,22 @@ def Opt.dname(d: Core.Def) -> String:
     case Core.Def{name, ps, b, ret}:
       name
 
+# A def's return type, its law's when it writes none.
+def Opt.ret.of(d: Decl, ret: Expr) -> Expr:
+  match d:
+    case DDef{n, ps, b, r}:
+      r
+    case other:
+      ret
+
+def Opt.ret(+g: G, +name: String, ret: Expr) -> Expr:
+  Opt.ret.of(G.body(g, name), ret)
+
 def Opt.lower(+g: G, d: Decl) -> OD:
   match d:
     case DDef{+name, +ps, +body, +ret}:
       Bool.pick(Unit -> OD, G.erased_ty(Ty.head(ret)), u => OKeep{DDef{name, ps, body, ret}},
-        u => OCore{Core.Def.erase(Lo.def(g, name, ps, body, ret))})(Unit{})
+        u => OCore{Core.Def.erase(Lo.def(g, name, ps, body, Opt.ret(g, name, ret)))})(Unit{})
     case other:
       OKeep{other}
 
@@ -13885,7 +13896,9 @@ def Opt.strip(t: Core.Tm) -> Core.Tm:
     case other:
       other
 
-# Whether t is an atom: copying it copies no work.
+# Whether t is an atom: copying it copies no work. (A def's name is no
+# atom: an application of it would be a call, whose arguments the erased
+# parameters take; Opt.refs makes such calls.)
 def Opt.atom(t: Core.Tm) -> Bool:
   match t:
     case Core.CVar{x}:
@@ -13893,8 +13906,6 @@ def Opt.atom(t: Core.Tm) -> Bool:
     case Core.CLit{l}:
       True{}
     case Core.CBox{}:
-      True{}
-    case Core.CRef{f}:
       True{}
     case Core.CCtr{k, as}:
       List.is_empty(&2, Core.Tm, as)
@@ -14367,6 +14378,774 @@ def Opt.simps(+flags: String, ds: List<&2, OD>) -> List<&2, OD>:
     case d <> r:
       Opt.simp(flags, d) <> Opt.simps(flags, r)
 
+# A def's name applied to arguments (which inlining and substitution make
+# of a function parameter given a def) becomes a call of it, the erased
+# parameters boxed: raised, an application of a name is a call, and a
+# call's arguments are the def's, erased ones too.
+def Opt.refs.take(ps: List<&2, Core.Par>, as: List<&2, Core.Tm>) -> List<&2, Core.Arg>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Par{x, rel, m, ty} <> pr:
+      match rel:
+        case Core.Era{}:
+          Core.Arg{Core.Era{}, Core.CBox{}} <> Opt.refs.take(pr, as)
+        case Core.Run{}:
+          match as:
+            case Nil{}:
+              Nil{}
+            case a <> ar:
+              Core.Arg{Core.Run{}, a} <> Opt.refs.take(pr, ar)
+
+def Opt.refs.left(ps: List<&2, Core.Par>, as: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match ps:
+    case Nil{}:
+      as
+    case Core.Par{x, rel, m, ty} <> pr:
+      match rel:
+        case Core.Era{}:
+          Opt.refs.left(pr, as)
+        case Core.Run{}:
+          match as:
+            case Nil{}:
+              Nil{}
+            case a <> ar:
+              Opt.refs.left(pr, ar)
+
+def Opt.refs.fix(+g: String, +has: Bool, +ps: List<&2, Core.Par>, +as: List<&2, Core.Tm>) -> Core.Tm:
+  Bool.pick(Core.Tm, has, Inl.app(Core.CCall{g, Opt.refs.take(ps, as)}, Opt.refs.left(ps, as)),
+    Core.CApp{Core.CRef{g}, as})
+
+def Opt.refs.app(+c: Map<&2, Core.Def>, f: Core.Tm, +as: List<&2, Core.Tm>) -> Core.Tm:
+  match f:
+    case Core.CRef{+g}:
+      Opt.refs.fix(g, Pair.snd(Map<&2, Core.Def>, Bool, Map.has(&2, Core.Def, c, g)),
+        Inl.pars(Pair.snd(Map<&2, Core.Def>, Core.Def, Map.get(Core.Def, Core.Def{"", Nil{}, Core.CBox{}, Core.CBox{}}, c, g))), as)
+    case other:
+      Core.CApp{other, as}
+
+def Opt.refs.top(+c: Map<&2, Core.Def>, top: Bool, t: Core.Tm) -> Core.Tm:
+  match top:
+    case True{}:
+      match t:
+        case Core.CApp{f, as}:
+          Opt.refs.app(c, f, as)
+        case other:
+          other
+    case False{}:
+      t
+
+# t with its applications of names made calls (top: t is the node itself,
+# not one rebuilt with the rest of a list field).
+def Opt.refs(+c: Map<&2, Core.Def>, t: Core.Tm, top: Bool) -> Core.Tm:
+  match t:
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          Core.CCall{f, Nil{}}
+        case Core.Arg{r, e} <> t2:
+          Core.Tm.push.call(Core.Arg{r, Opt.refs(c, e, True{})}, Opt.refs(c, Core.CCall{f, t2}, False{}))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Opt.refs.top(c, top, Core.CApp{Opt.refs(c, f, True{}), Nil{}})
+        case a <> t2:
+          Opt.refs.top(c, top, Core.Tm.push(Opt.refs(c, a, True{}), Opt.refs(c, Core.CApp{f, t2}, False{})))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          Core.CCtr{k, Nil{}}
+        case a <> t2:
+          Core.Tm.push(Opt.refs(c, a, True{}), Opt.refs(c, Core.CCtr{k, t2}, False{}))
+    case Core.CLam{pt, b}:
+      Core.CLam{pt, Opt.refs(c, b, True{})}
+    case Core.CLet{pt, v, b}:
+      Core.CLet{pt, Opt.refs(c, v, True{}), Opt.refs(c, b, True{})}
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          Core.Tm.push(Opt.refs(c, a, True{}), Opt.refs(c, Core.CMat{t2, cases}, False{}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.CMat{Nil{}, Nil{}}
+            case cs <> t2:
+              Core.Tm.push.case(Opt.refs(c, cs, True{}), Opt.refs(c, Core.CMat{Nil{}, t2}, False{}))
+    case Core.CCse{ps, b}:
+      Core.CCse{ps, Opt.refs(c, b, True{})}
+    case Core.CSuc{k, e}:
+      Core.CSuc{k, Opt.refs(c, e, True{})}
+    case Core.COp{op, a, b}:
+      Core.COp{op, Opt.refs(c, a, True{}), Opt.refs(c, b, True{})}
+    case Core.CAnn{e, ty}:
+      Core.CAnn{Opt.refs(c, e, True{}), ty}
+    case other:
+      other
+
+
+# Specialization
+# --------------
+#
+# A call that passes a closed function (a lambda with no free variables,
+# as every ~template argument is, or a def's name) for a parameter the
+# callee passes unchanged to each of its own calls (List.map's f) calls a
+# copy of the callee for that function instead (p in BEND_OPT): the copy's
+# body takes the function in the parameter's place, simplified, so each
+# application of it is the function's body, and its self-calls drop the
+# argument. Copies are shared by name (the callee and a hash of the
+# argument's text); each round specializes the calls in the copies the
+# round before made.
+
+# A term's text, for a copy's name: it determines the term.
+def Opt.show.pt(p: Core.Pt) -> String:
+  match p:
+    case Core.PtVar{x}:
+      x
+    case Core.PtCtr{k, ps}:
+      match ps:
+        case Nil{}:
+          k ++ "{}"
+        case q <> t:
+          Opt.show.pt(q) ++ "," ++ Opt.show.pt(Core.PtCtr{k, t})
+    case Core.PtNat{n}:
+      U32.show(n) ++ "n"
+    case Core.PtSuc{k, q}:
+      U32.show(k) ++ "+" ++ Opt.show.pt(q)
+    case Core.PtNum{n}:
+      U32.show(n)
+    case Core.PtFlt{s}:
+      s ++ "f"
+
+def Opt.show.pts(ps: List<&2, Core.Pt>) -> String:
+  match ps:
+    case Nil{}:
+      ""
+    case p <> t:
+      Opt.show.pt(p) ++ " " ++ Opt.show.pts(t)
+
+def Opt.show.lit(l: Core.Lit) -> String:
+  match l:
+    case Core.LNum{n}:
+      U32.show(n)
+    case Core.LNat{n}:
+      U32.show(n) ++ "n"
+    case Core.LFlt{s}:
+      s ++ "f"
+    case Core.LStr{s}:
+      "\"" ++ s ++ "\""
+
+def Opt.show(t: Core.Tm) -> String:
+  match t:
+    case Core.CVar{x}:
+      x
+    case Core.CLit{l}:
+      Opt.show.lit(l)
+    case Core.CRef{f}:
+      "&" ++ f
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          f ++ "()"
+        case Core.Arg{r, e} <> t2:
+          "(" ++ Opt.show(e) ++ ")" ++ Opt.show(Core.CCall{f, t2})
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          "@" ++ Opt.show(f)
+        case a <> t2:
+          "(" ++ Opt.show(a) ++ ")" ++ Opt.show(Core.CApp{f, t2})
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          k ++ "{}"
+        case a <> t2:
+          "(" ++ Opt.show(a) ++ ")" ++ Opt.show(Core.CCtr{k, t2})
+    case Core.CLam{p, b}:
+      "\\" ++ Opt.show.pt(p) ++ "." ++ Opt.show(b)
+    case Core.CLet{p, v, b}:
+      "let " ++ Opt.show.pt(p) ++ "=" ++ Opt.show(v) ++ ";" ++ Opt.show(b)
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          "(" ++ Opt.show(a) ++ ")" ++ Opt.show(Core.CMat{t2, cases})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              "match"
+            case c <> t2:
+              "[" ++ Opt.show(c) ++ "]" ++ Opt.show(Core.CMat{Nil{}, t2})
+    case Core.CCse{ps, b}:
+      "case " ++ Opt.show.pts(ps) ++ ":" ++ Opt.show(b)
+    case Core.CSuc{k, e}:
+      U32.show(k) ++ "+(" ++ Opt.show(e) ++ ")"
+    case Core.COp{op, a, b}:
+      "(" ++ Opt.show(a) ++ " " ++ op ++ " " ++ Opt.show(b) ++ ")"
+    case Core.CAnn{e, ty}:
+      "(" ++ Opt.show(e) ++ ":" ++ ty ++ ")"
+    case Core.CTyp{n, as}:
+      "T"
+    case Core.CBox{}:
+      "_"
+    case Core.CErr{m}:
+      "!" ++ m
+
+# Two hashes of a string (FNV-1a, and base 31).
+def Opt.hash(s: String, +a: U32, +b: U32) -> String:
+  match s:
+    case SNil{}:
+      U32.show(a) ++ "x" ++ U32.show(b)
+    case SCon{Chr{+c}, t}:
+      Opt.hash(t, U32.mul(U32.xor(a, c), 16777619), U32.add(U32.mul(b, 31), c))
+
+# The variables t reads that it does not bind (onto acc).
+def Opt.fv(t: Core.Tm, +bound: List<&2, String>, +acc: List<&2, String>) -> List<&2, String>:
+  match t:
+    case Core.CVar{+x}:
+      Bool.pick(List<&2, String>, Str.has(bound, x), acc, x <> acc)
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          acc
+        case Core.Arg{r, e} <> t2:
+          Opt.fv(Core.CCall{f, t2}, bound, Opt.fv(e, bound, acc))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Opt.fv(f, bound, acc)
+        case a <> t2:
+          Opt.fv(Core.CApp{f, t2}, bound, Opt.fv(a, bound, acc))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          acc
+        case a <> t2:
+          Opt.fv(Core.CCtr{k, t2}, bound, Opt.fv(a, bound, acc))
+    case Core.CLam{p, b}:
+      Opt.fv(b, Inl.pvars(p, bound), acc)
+    case Core.CLet{p, v, b}:
+      Opt.fv(b, Inl.pvars(p, bound), Opt.fv(v, bound, acc))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          Opt.fv(Core.CMat{t2, cases}, bound, Opt.fv(a, bound, acc))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              acc
+            case c <> t2:
+              Opt.fv(Core.CMat{Nil{}, t2}, bound, Opt.fv(c, bound, acc))
+    case Core.CCse{ps, b}:
+      Opt.fv(b, Inl.ppvars(ps, bound), acc)
+    case Core.CSuc{k, e}:
+      Opt.fv(e, bound, acc)
+    case Core.COp{op, a, b}:
+      Opt.fv(b, bound, Opt.fv(a, bound, acc))
+    case Core.CAnn{e, ty}:
+      Opt.fv(e, bound, acc)
+    case Core.CTyp{n, as}:
+      match as:
+        case Nil{}:
+          acc
+        case a <> t2:
+          Opt.fv(Core.CTyp{n, t2}, bound, Opt.fv(a, bound, acc))
+    case other:
+      acc
+
+# Whether t is a closed function: a lambda that reads no variable it does
+# not bind, or a def's name.
+def Opt.fn(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CLam{p, +b}:
+      List.is_empty(&2, String, Opt.fv(Core.CLam{p, b}, Nil{}, Nil{}))
+    case Core.CRef{f}:
+      True{}
+    case Core.CAnn{e, ty}:
+      Opt.fn(e)
+    case other:
+      False{}
+
+def Opt.nth.arg(n: Nat, as: List<&2, Core.Arg>) -> Core.Tm:
+  match n as:
+    case k Nil{}:
+      Core.CBox{}
+    case 0n Core.Arg{r, e} <> t:
+      e
+    case 1n+m Core.Arg{r, e} <> t:
+      Opt.nth.arg(m, t)
+
+def Opt.drop.arg(n: Nat, as: List<&2, Core.Arg>) -> List<&2, Core.Arg>:
+  match n as:
+    case k Nil{}:
+      Nil{}
+    case 0n a <> t:
+      t
+    case 1n+m a <> t:
+      a <> Opt.drop.arg(m, t)
+
+def Opt.drop.par(n: Nat, ps: List<&2, Core.Par>) -> List<&2, Core.Par>:
+  match n ps:
+    case k Nil{}:
+      Nil{}
+    case 0n p <> t:
+      t
+    case 1n+m p <> t:
+      p <> Opt.drop.par(m, t)
+
+def Opt.is.var(+x: String, t: Core.Tm) -> Bool:
+  match t:
+    case Core.CVar{y}:
+      String.eq(x, y)
+    case other:
+      False{}
+
+def Opt.args.tms(as: List<&2, Core.Arg>) -> List<&2, Core.Tm>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case Core.Arg{r, e} <> t:
+      e <> Opt.args.tms(t)
+
+# Whether a call of g with as passes x at position i, with every argument,
+# if g is f.
+def Opt.static.self(+f: String, +g: String, +i: Nat, +x: String, +n: Nat, +as: List<&2, Core.Arg>) -> Bool:
+  Bool.or(Bool.not(String.eq(f, g)), Bool.and(Nat.is_eq(Inl.args.len(as), n), Opt.is.var(x, Opt.nth.arg(i, as))))
+
+# Whether each call of f in t passes x at position i, with every argument,
+# and t names f nowhere else (fuel bounds the walk, which takes a call's
+# arguments as an application's).
+def Opt.static(fu: Nat, +f: String, +i: Nat, +x: String, +n: Nat, t: Core.Tm) -> Bool:
+  match fu:
+    case 0n:
+      False{}
+    case 1n+(+p):
+      match t:
+        case Core.CRef{g}:
+          Bool.not(String.eq(f, g))
+        case Core.CCall{+g, +as}:
+          Bool.and(Opt.static.self(f, g, i, x, n, as), Opt.static(p, f, i, x, n, Core.CApp{Core.CBox{}, Opt.args.tms(as)}))
+        case Core.CApp{h, as}:
+          match as:
+            case Nil{}:
+              Opt.static(p, f, i, x, n, h)
+            case a <> t2:
+              Bool.and(Opt.static(p, f, i, x, n, a), Opt.static(p, f, i, x, n, Core.CApp{h, t2}))
+        case Core.CCtr{k, as}:
+          match as:
+            case Nil{}:
+              True{}
+            case a <> t2:
+              Bool.and(Opt.static(p, f, i, x, n, a), Opt.static(p, f, i, x, n, Core.CCtr{k, t2}))
+        case Core.CLam{pt, b}:
+          Opt.static(p, f, i, x, n, b)
+        case Core.CLet{pt, v, b}:
+          Bool.and(Opt.static(p, f, i, x, n, v), Opt.static(p, f, i, x, n, b))
+        case Core.CMat{scrs, cases}:
+          match scrs:
+            case a <> t2:
+              Bool.and(Opt.static(p, f, i, x, n, a), Opt.static(p, f, i, x, n, Core.CMat{t2, cases}))
+            case Nil{}:
+              match cases:
+                case Nil{}:
+                  True{}
+                case c <> t2:
+                  Bool.and(Opt.static(p, f, i, x, n, c), Opt.static(p, f, i, x, n, Core.CMat{Nil{}, t2}))
+        case Core.CCse{ps, b}:
+          Opt.static(p, f, i, x, n, b)
+        case Core.CSuc{k, e}:
+          Opt.static(p, f, i, x, n, e)
+        case Core.COp{op, a, b}:
+          Bool.and(Opt.static(p, f, i, x, n, a), Opt.static(p, f, i, x, n, b))
+        case Core.CAnn{e, ty}:
+          Opt.static(p, f, i, x, n, e)
+        case other:
+          True{}
+
+# A copy to make: its name, the callee, the position and the function.
+type OSp is Data:
+  OSp{name: String, f: String, i: Nat, arg: Core.Tm}
+
+# Where a call goes: to a copy of the callee (without argument i), or as
+# it is.
+type OPk is Data:
+  PkNo{}
+  PkYes{name: String, i: Nat, arg: Core.Tm}
+
+# What decides a call: the program's defs (a call that passes a closed
+# function), or a copy being made (its callee's self-calls).
+type ODec is Data:
+  DCtx{c: Map<&2, Core.Def>}
+  DSelf{f: String, i: Nat, name: String}
+
+def Opt.sp.budget() -> U32:
+  400
+
+def Opt.sp.name(+f: String, +i: Nat, +a: Core.Tm) -> String:
+  f ++ "%s" ++ Opt.hash(Opt.show(a) ++ "#" ++ U32.show(U32.from_nat(i)), 2166136261, 7)
+
+def Opt.get(+c: Map<&2, Core.Def>, +f: String) -> Core.Def:
+  Pair.snd(Map<&2, Core.Def>, Core.Def, Map.get(Core.Def, Core.Def{"", Nil{}, Core.CBox{}, Core.CBox{}}, c, f))
+
+def Opt.has(+c: Map<&2, Core.Def>, +f: String) -> Bool:
+  Pair.snd(Map<&2, Core.Def>, Bool, Map.has(&2, Core.Def, c, f))
+
+def Opt.rel.run(r: Core.Rel) -> Bool:
+  match r:
+    case Core.Run{}:
+      True{}
+    case Core.Era{}:
+      False{}
+
+# Whether a def's name names a function (a def with a runtime parameter).
+def Opt.sp.runs(ps: List<&2, Core.Par>) -> Bool:
+  match ps:
+    case Nil{}:
+      False{}
+    case Core.Par{x, rel, m, ty} <> r:
+      Bool.or(Opt.rel.run(rel), Opt.sp.runs(r))
+
+def Opt.sp.fn(+c: Map<&2, Core.Def>, t: Core.Tm) -> Bool:
+  match t:
+    case Core.CRef{+g}:
+      Bool.and(Opt.has(c, g), Opt.sp.runs(Inl.pars(Opt.get(c, g))))
+    case other:
+      Opt.fn(other)
+
+# The first position a call's closed function can be specialized at (the
+# arity when none).
+def Opt.sp.pos(+c: Map<&2, Core.Def>, ps: List<&2, Core.Par>, as: List<&2, Core.Arg>, +i: Nat, +f: String, +b: Core.Tm, +n: Nat) -> Nat:
+  match ps as:
+    case Core.Par{+x, rel, m, ty} <> pr Core.Arg{r, +e} <> ar:
+      Bool.pick(Unit -> Nat, Bool.and(Bool.and(Opt.rel.run(rel), Opt.sp.fn(c, e)),
+          Bool.and(Opt.static(Fuel.max(), f, i, x, n, b), Bool.not(Str.has(Inl.names(b, 1, Nil{}), x)))),
+        u => i, u => Opt.sp.pos(c, pr, ar, 1n+i, f, b, n))(Unit{})
+    case qs bs:
+      n
+
+def Opt.sp.at.pos(+i: Nat, +f: String, +as: List<&2, Core.Arg>) -> OPk:
+  Bool.pick(Unit -> OPk, Nat.is_eq(i, Inl.args.len(as)), u => PkNo{},
+    u => PkYes{Opt.sp.name(f, i, Opt.nth.arg(i, as)), i, Opt.nth.arg(i, as)})(Unit{})
+
+def Opt.sp.def(+c: Map<&2, Core.Def>, +f: String, +as: List<&2, Core.Arg>, d: Core.Def) -> OPk:
+  match d:
+    case Core.Def{name, +ps, +b, ret}:
+      Bool.pick(Unit -> OPk, Bool.and(Bool.and(Nat.is_eq(Inl.pars.len(ps), Inl.args.len(as)), Bool.not(Nat.is_eq(Inl.args.len(as), 0n))),
+          Bool.and(U32.is_le(Opt.size(b), Opt.sp.budget()), Bool.and(Bool.not(G.is_native(f)), Bool.not(String.starts_with(f, "IO."))))),
+        u => Opt.sp.at.pos(Opt.sp.pos(c, ps, as, 0n, f, b, Inl.pars.len(ps)), f, as),
+        u => PkNo{})(Unit{})
+
+def Opt.sp.at(dec: ODec, +f: String, +as: List<&2, Core.Arg>) -> OPk:
+  match dec:
+    case DCtx{+c}:
+      Bool.pick(Unit -> OPk, Opt.has(c, f), u => Opt.sp.def(c, f, as, Opt.get(c, f)), u => PkNo{})(Unit{})
+    case DSelf{+g, i, name}:
+      Bool.pick(OPk, String.eq(f, g), PkYes{name, i, Core.CBox{}}, PkNo{})
+
+def Opt.sp.redirect(k: OPk, t: Core.Tm) -> Core.Tm:
+  match k:
+    case PkNo{}:
+      t
+    case PkYes{name, i, a}:
+      match t:
+        case Core.CCall{f, as}:
+          Core.CCall{name, Opt.drop.arg(i, as)}
+        case other:
+          other
+
+# t with the calls dec picks sent to their copies (fuel bounds the walk;
+# top: t is the node itself, not one rebuilt with the rest of a list field).
+def Opt.sp.rw(fu: Nat, +dec: ODec, top: Bool, t: Core.Tm) -> Core.Tm:
+  match fu:
+    case 0n:
+      t
+    case 1n+(+p):
+      match top:
+        case True{}:
+          match t:
+            case Core.CCall{+f, +as}:
+              Opt.sp.redirect(Opt.sp.at(dec, f, as), Opt.sp.rw(p, dec, False{}, Core.CCall{f, as}))
+            case other:
+              Opt.sp.rw(p, dec, False{}, other)
+        case False{}:
+          match t:
+            case Core.CCall{f, as}:
+              match as:
+                case Nil{}:
+                  Core.CCall{f, Nil{}}
+                case Core.Arg{r, e} <> t2:
+                  Core.Tm.push.call(Core.Arg{r, Opt.sp.rw(p, dec, True{}, e)}, Opt.sp.rw(p, dec, False{}, Core.CCall{f, t2}))
+            case Core.CApp{f, as}:
+              match as:
+                case Nil{}:
+                  Core.CApp{Opt.sp.rw(p, dec, True{}, f), Nil{}}
+                case a <> t2:
+                  Core.Tm.push(Opt.sp.rw(p, dec, True{}, a), Opt.sp.rw(p, dec, False{}, Core.CApp{f, t2}))
+            case Core.CCtr{k, as}:
+              match as:
+                case Nil{}:
+                  Core.CCtr{k, Nil{}}
+                case a <> t2:
+                  Core.Tm.push(Opt.sp.rw(p, dec, True{}, a), Opt.sp.rw(p, dec, False{}, Core.CCtr{k, t2}))
+            case Core.CLam{pt, b}:
+              Core.CLam{pt, Opt.sp.rw(p, dec, True{}, b)}
+            case Core.CLet{pt, v, b}:
+              Core.CLet{pt, Opt.sp.rw(p, dec, True{}, v), Opt.sp.rw(p, dec, True{}, b)}
+            case Core.CMat{scrs, cases}:
+              match scrs:
+                case a <> t2:
+                  Core.Tm.push(Opt.sp.rw(p, dec, True{}, a), Opt.sp.rw(p, dec, False{}, Core.CMat{t2, cases}))
+                case Nil{}:
+                  match cases:
+                    case Nil{}:
+                      Core.CMat{Nil{}, Nil{}}
+                    case cs <> t2:
+                      Core.Tm.push.case(Opt.sp.rw(p, dec, True{}, cs), Opt.sp.rw(p, dec, False{}, Core.CMat{Nil{}, t2}))
+            case Core.CCse{ps, b}:
+              Core.CCse{ps, Opt.sp.rw(p, dec, True{}, b)}
+            case Core.CSuc{k, e}:
+              Core.CSuc{k, Opt.sp.rw(p, dec, True{}, e)}
+            case Core.COp{op, a, b}:
+              Core.COp{op, Opt.sp.rw(p, dec, True{}, a), Opt.sp.rw(p, dec, True{}, b)}
+            case Core.CAnn{e, ty}:
+              Core.CAnn{Opt.sp.rw(p, dec, True{}, e), ty}
+            case other:
+              other
+
+def Opt.calls.add(top: Bool, t: Core.Tm, acc: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match top:
+    case True{}:
+      t <> acc
+    case False{}:
+      acc
+
+# The calls in t (each call node, onto acc).
+def Opt.calls(t: Core.Tm, top: Bool, acc: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match t:
+    case Core.CCall{+f, as}:
+      match as:
+        case Nil{}:
+          Opt.calls.add(top, Core.CCall{f, Nil{}}, acc)
+        case Core.Arg{+r, +e} <> +t2:
+          Opt.calls(Core.CCall{f, t2}, False{}, Opt.calls(e, True{}, Opt.calls.add(top, Core.CCall{f, Core.Arg{r, e} <> t2}, acc)))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Opt.calls(f, True{}, acc)
+        case a <> t2:
+          Opt.calls(Core.CApp{f, t2}, False{}, Opt.calls(a, True{}, acc))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          acc
+        case a <> t2:
+          Opt.calls(Core.CCtr{k, t2}, False{}, Opt.calls(a, True{}, acc))
+    case Core.CLam{pt, b}:
+      Opt.calls(b, True{}, acc)
+    case Core.CLet{pt, v, b}:
+      Opt.calls(b, True{}, Opt.calls(v, True{}, acc))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          Opt.calls(Core.CMat{t2, cases}, False{}, Opt.calls(a, True{}, acc))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              acc
+            case cs <> t2:
+              Opt.calls(Core.CMat{Nil{}, t2}, False{}, Opt.calls(cs, True{}, acc))
+    case Core.CCse{ps, b}:
+      Opt.calls(b, True{}, acc)
+    case Core.CSuc{k, e}:
+      Opt.calls(e, True{}, acc)
+    case Core.COp{op, a, b}:
+      Opt.calls(b, True{}, Opt.calls(a, True{}, acc))
+    case Core.CAnn{e, ty}:
+      Opt.calls(e, True{}, acc)
+    case other:
+      acc
+
+# The copies the calls ask for, but those named in seen.
+def Opt.sp.pk(+f: String, k: OPk, acc: List<&2, OSp>) -> List<&2, OSp>:
+  match k:
+    case PkNo{}:
+      acc
+    case PkYes{name, i, a}:
+      OSp{name, f, i, a} <> acc
+
+def Opt.sp.picks(+c: Map<&2, Core.Def>, ts: List<&2, Core.Tm>) -> List<&2, OSp>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      match t:
+        case Core.CCall{+f, +as}:
+          Opt.sp.pk(f, Opt.sp.at(DCtx{c}, f, as), Opt.sp.picks(c, r))
+        case other:
+          Opt.sp.picks(c, r)
+
+def Opt.sp.reqs(ss: List<&2, OSp>, +seen: Set(), +acc: List<&2, OSp>) -> List<&2, OSp>:
+  match ss:
+    case Nil{}:
+      acc
+    case OSp{+name, f, i, a} <> +r:
+      Bool.pick(Unit -> List<&2, OSp>, Lo.bound(seen, name), u => Opt.sp.reqs(r, seen, acc),
+        u => Opt.sp.reqs(r, Set.add(seen, name), OSp{name, f, i, a} <> acc))(Unit{})
+
+# A def's name as a lambda that calls it (its erased parameters boxed).
+def Opt.eta.args(ps: List<&2, Core.Par>, +i: U32) -> List<&2, Core.Arg>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Par{x, rel, m, ty} <> r:
+      match rel:
+        case Core.Era{}:
+          Core.Arg{Core.Era{}, Core.CBox{}} <> Opt.eta.args(r, i)
+        case Core.Run{}:
+          Core.Arg{Core.Run{}, Core.CVar{"eta" ++ U32.show(i)}} <> Opt.eta.args(r, U32.inc(i))
+
+def Opt.eta.lams(ps: List<&2, Core.Par>, +i: U32, b: Core.Tm) -> Core.Tm:
+  match ps:
+    case Nil{}:
+      b
+    case Core.Par{x, rel, m, ty} <> r:
+      match rel:
+        case Core.Era{}:
+          Opt.eta.lams(r, i, b)
+        case Core.Run{}:
+          Core.CLam{Core.PtVar{"eta" ++ U32.show(i)}, Opt.eta.lams(r, U32.inc(i), b)}
+
+def Opt.eta(+c: Map<&2, Core.Def>, t: Core.Tm) -> Core.Tm:
+  match t:
+    case Core.CRef{+g}:
+      Opt.eta.lams(Inl.pars(Opt.get(c, g)), 0, Core.CCall{g, Opt.eta.args(Inl.pars(Opt.get(c, g)), 0)})
+    case Core.CAnn{e, ty}:
+      Opt.eta(c, e)
+    case other:
+      other
+
+# A copy's parameters keep their relevance in their modes: it fills no
+# law to take them from.
+def Opt.sp.par(p: Core.Par) -> Core.Par:
+  match p:
+    case Core.Par{x, rel, +m, ty}:
+      match rel:
+        case Core.Era{}:
+          Core.Par{x, Core.Era{}, 1, ty}
+        case Core.Run{}:
+          Core.Par{x, Core.Run{}, Bool.pick(U32, Bool.or(U32.is_eq(m, 1), U32.is_eq(m, 4)), 0, m), ty}
+
+def Opt.sp.pars(ps: List<&2, Core.Par>) -> List<&2, Core.Par>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> r:
+      Opt.sp.par(p) <> Opt.sp.pars(r)
+
+def Opt.nth.par(n: Nat, ps: List<&2, Core.Par>) -> String:
+  match n ps:
+    case k Nil{}:
+      ""
+    case 0n Core.Par{x, rel, m, ty} <> t:
+      x
+    case 1n+k Core.Par{x, rel, m, ty} <> t:
+      Opt.nth.par(k, t)
+
+def Opt.sp.make.def(+c: Map<&2, Core.Def>, +name: String, +i: Nat, a: Core.Tm, d: Core.Def) -> OD:
+  match d:
+    case Core.Def{+f, +ps, b, ret}:
+      OCore{Core.Def{name, Opt.sp.pars(Opt.drop.par(i, ps)),
+        Opt.go(Fuel.max(), OAll{}, Opt.go(Fuel.max(), OSub{Opt.nth.par(i, ps), Opt.eta(c, a), True{}},
+          Opt.sp.rw(Fuel.max(), DSelf{f, i, name}, True{}, b))), ret}}
+
+# The copy an OSp asks for.
+def Opt.sp.make(+c: Map<&2, Core.Def>, s: OSp) -> OD:
+  match s:
+    case OSp{+name, +f, +i, a}:
+      Opt.sp.make.def(c, name, i, a, Opt.get(c, f))
+
+def Opt.sp.makes(+c: Map<&2, Core.Def>, ss: List<&2, OSp>) -> List<&2, OD>:
+  match ss:
+    case Nil{}:
+      Nil{}
+    case s <> r:
+      Opt.sp.make(c, s) <> Opt.sp.makes(c, r)
+
+def Opt.defs(ds: List<&2, OD>, m: Map<&2, Core.Def>) -> Map<&2, Core.Def>:
+  match ds:
+    case Nil{}:
+      m
+    case d <> t:
+      match d:
+        case OCore{+cd}:
+          Opt.defs(t, Map.set(&2, Core.Def, m, Opt.dname(cd), cd))
+        case OKeep{k}:
+          Opt.defs(t, m)
+
+def Opt.names(ds: List<&2, OD>, s: Set()) -> Set():
+  match ds:
+    case Nil{}:
+      s
+    case d <> t:
+      match d:
+        case OCore{cd}:
+          Opt.names(t, Set.add(s, Opt.dname(cd)))
+        case OKeep{k}:
+          Opt.names(t, s)
+
+def Opt.bodies.calls(ds: List<&2, OD>, acc: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match ds:
+    case Nil{}:
+      acc
+    case d <> t:
+      match d:
+        case OCore{Core.Def{n, ps, b, ret}}:
+          Opt.bodies.calls(t, Opt.calls(b, True{}, acc))
+        case OKeep{k}:
+          Opt.bodies.calls(t, acc)
+
+def Opt.sp.rws(+c: Map<&2, Core.Def>, ds: List<&2, OD>) -> List<&2, OD>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> t:
+      match d:
+        case OCore{Core.Def{n, ps, b, ret}}:
+          OCore{Core.Def{n, ps, Opt.sp.rw(Fuel.max(), DCtx{c}, True{}, b), ret}} <> Opt.sp.rws(c, t)
+        case OKeep{k}:
+          OKeep{k} <> Opt.sp.rws(c, t)
+
+# Rounds of specialization: old are the defs done, new the ones whose
+# calls this round sends to copies.
+def Opt.sp.rounds(k: Nat, +old: List<&2, OD>, +new: List<&2, OD>) -> List<&2, OD>:
+  match k:
+    case 0n:
+      List.append(&2, OD, old, new)
+    case 1n+j:
+      +c = Opt.defs(new, Opt.defs(old, Map.new(&2, Core.Def)))
+      +made = Opt.sp.makes(c, Opt.sp.reqs(Opt.sp.picks(c, Opt.bodies.calls(new, Nil{})), Opt.names(new, Opt.names(old, Set.new())), Nil{}))
+      +done = List.append(&2, OD, old, Opt.sp.rws(c, new))
+      Bool.pick(Unit -> List<&2, OD>, List.is_empty(&2, OD, made), u => done, u => Opt.sp.rounds(j, done, made))(Unit{})
+
+def Opt.spec(+flags: String, +ds: List<&2, OD>) -> List<&2, OD>:
+  Bool.pick(Unit -> List<&2, OD>, Opt.on(flags, 112), u => Opt.sp.rounds(4n, Nil{}, ds), u => ds)(Unit{})
+
+# The last step: applications of names made calls.
+def Opt.fix(+c: Map<&2, Core.Def>, d: OD) -> OD:
+  match d:
+    case OCore{Core.Def{n, ps, b, ret}}:
+      OCore{Core.Def{n, ps, Opt.refs(c, b, True{}), ret}}
+    case OKeep{k}:
+      OKeep{k}
+
+def Opt.fixes(+c: Map<&2, Core.Def>, ds: List<&2, OD>) -> List<&2, OD>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Opt.fix(c, d) <> Opt.fixes(c, r)
+
+def Opt.finish(+ds: List<&2, OD>) -> List<&2, OD>:
+  Opt.fixes(Opt.defs(ds, Map.new(&2, Core.Def)), ds)
+
 # The program through the core IR: each def lowered, erased, optimized
 # (see Opt), and raised; a type-level def (a Type, Data, Quant or Kind)
 # keeps its body, which the printers unfold.
@@ -14374,7 +15153,7 @@ def Lo.program(+flags: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
   +g = G.new(ds)
   +ods = Opt.lowers(g, ds)
   +rank = Opt.rank(ods, 0, Map.new(&2, U32))
-  Opt.raises(Opt.simps(flags, Opt.inls(Opt.ctx(flags, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods)))
+  Opt.raises(Opt.finish(Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods)))))
 
 def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
@@ -14426,7 +15205,7 @@ def Main.opt(r: Result<&1, &1, U32 & String, String>) -> String:
     case Done{v}:
       v
     case Fail{e}:
-      "i..s"
+      "i..sp"
 
 # C for a program: matches free what they open unless BEND_NO_FREE is set
 # (bendc builds itself so: a compiler's heap is mostly shared, short-lived
