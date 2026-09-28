@@ -6364,8 +6364,13 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         case GSTail{+g, +env, cps, s}:
           match s:
             case Split{kept, all, extra, full}:
+              # (no reuse in a loop's next arguments: an accumulator built in
+              # the nodes it walks scatters them, as a split's halves)
               do Gen<Doc>:
+                +outer : String <- Gen.ru.get(Gen.rc(g))
+                Gen.ru.set(Gen.rc(g), "")
                 ds : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, kept})
+                Gen.ru.set(Gen.rc(g), outer)
                 return Doc.list([DStr{"{ "}, Gen.tail.temps(ds, 0), Gen.tail.assign(cps, 0),
                   DStr{"goto top; }\n"}])
         case GSTailSelf{+g, +env, self, args}:
