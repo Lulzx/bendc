@@ -241,6 +241,36 @@ def str(+rt: U32, +rn: U32, +k: U32) -> U32:
 def ldrw(+rt: U32, +rn: U32, +k: U32) -> U32:
   (3107979264 .|. (((k >> 2n : U32) << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32)
 
+# str wt, [rn, #k] (B9000000), k a multiple of 4.
+def strw(+rt: U32, +rn: U32, +k: U32) -> U32:
+  (3103784960 .|. (((k >> 2n : U32) << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32)
+
+# ldr rt, [rn, rm, lsl #3] and str rt, [rn, rm, lsl #3] (F8607800, F8207800).
+def ldrx(+rt: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(4167071744, rt, rn, rm)
+
+def strx(+rt: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(4162877440, rt, rn, rm)
+
+# and rd, rn, #0xffffffff00000000 (92607C00).
+def andhi(+rd: U32, +rn: U32) -> U32:
+  reg3(2455796736, rd, rn, 0)
+
+# rbit rd, rn (DAC00000); clz rd, rn (DAC01000).
+def rbit(+rd: U32, +rn: U32) -> U32:
+  reg3(3670016000, rd, rn, 0)
+
+def clz(+rd: U32, +rn: U32) -> U32:
+  reg3(3670020096, rd, rn, 0)
+
+# add rd, rn, rm, lsl #6 (8B001800).
+def add6(+rd: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(2332039168, rd, rn, rm)
+
+# madd rd, rn, rm, ra: rd = ra + rn * rm (9B000000).
+def madd(+rd: U32, +rn: U32, +rm: U32, +ra: U32) -> U32:
+  (reg3(2600468480, rd, rn, rm) .|. (ra << 10n : U32) : U32)
+
 # ldar rt, [rn] (C8DFFC00)
 def ldar(+rt: U32, +rn: U32) -> U32:
   (3370122240 .|. ((rn << 5n : U32) .|. rt : U32) : U32)

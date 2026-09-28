@@ -194,7 +194,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
     V *p = k->objs + (size_t)i * sw;
     p[0] = BEND_HOLE;
     BEND_BARRIER();
-    GC_ALLOC(k->blk)[i >> 6] |= 1ull << (i & 63);
+    k->abits[i >> 6] |= 1ull << (i & 63);
     if (!k->reuse)
       atomic_fetch_add_explicit(&gc_since, ((size_t)__builtin_popcountll(k->bits) + 1) * sw * sizeof(V),
         memory_order_relaxed);
@@ -244,6 +244,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   }
   b->owned = 1;
   k->blk = b;
+  k->abits = GC_ALLOC(b);
   pthread_mutex_unlock(&gc_lock);
   // A slot's allocation bit is set when the slot is handed out, never
   // before: a stale pointer must not mark a slot that is still free.
@@ -555,9 +556,21 @@ void fault_init(void) {
   sigaction(SIGSEGV, &sa, NULL);
   sigaction(SIGBUS, &sa, NULL);
 }
+#define BEND_STK ((uintptr_t)1 << 32)
+void thr_stack(pthread_attr_t *attr) {
+  uintptr_t pg = (uintptr_t)sysconf(_SC_PAGESIZE);
+  char *m = mmap(NULL, 2 * BEND_STK, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
+  if (m == MAP_FAILED) bend_fail("could not map a thread's stack");
+  char *a = (char *)(((uintptr_t)m + BEND_STK - 1) & ~(BEND_STK - 1));
+  if (a > m) munmap(m, (size_t)(a - m));
+  munmap(a + BEND_STK, (size_t)(m + BEND_STK - a));
+  mprotect(a + pg, pg, PROT_NONE);
+  pthread_attr_setstack(attr, a + 2 * pg, BEND_STK - 2 * pg);
+}
 void thr_register(uintptr_t top) {
   fault_stack();
   Thr *t = calloc(1, sizeof(Thr));
+  *(Thr **)(top & ~(BEND_STK - 1)) = t;
   t->top = top;
   t->id = pthread_self();
   t->live = 1;
@@ -871,7 +884,7 @@ void par_start(void) {
     for (int i = 1; i < par_nthreads; i++) {
       pthread_attr_t attr;
       pthread_attr_init(&attr);
-      pthread_attr_setstacksize(&attr, (size_t)1 << 31);
+      thr_stack(&attr);
       pthread_t th;
       if (pthread_create(&th, &attr, par_worker, NULL) == 0) pthread_detach(th);
       pthread_attr_destroy(&attr);
@@ -1508,7 +1521,7 @@ int bend_start(int argc, char **argv, V (*m)(void), int value) {
   gc_hook(io_hook);
   pthread_attr_t attr;
   pthread_attr_init(&attr);
-  pthread_attr_setstacksize(&attr, (size_t)1 << 32);
+  thr_stack(&attr);
   pthread_t th;
   if (pthread_create(&th, &attr, bend_thread, value ? (void *)1 : NULL) != 0) {
     perror("pthread_create");

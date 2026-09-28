@@ -160,11 +160,19 @@ _Static_assert(sizeof(GcBlk) <= GC_HDR, "GC_HDR holds a block header");
 // A thread's allocation cache for one size class: a fresh block is handed out
 // by bumping; a partly free one by the free bits of its bitmap, a word at a
 // time (the slots are not touched until they are handed out).
+// The first seven fields are read and written by native code too (its
+// allocation fast path; see rt/native.c): their offsets and the struct's
+// size are fixed there.
 typedef struct GcCache {
-  V *bump; V *end; GcBlk *blk; V *objs;
-  uint8_t reuse;    // the block came from the reuse queue: its slots are not new memory
+  V *bump; V *end;
+  uint64_t *abits;  // GC_ALLOC(blk)
+  uint32_t idx;     // the slot bump points at
+  uint32_t j;
   uint64_t bits;    // free slots of word j
-  uint32_t idx, j, nj;
+  V *objs;
+  uint32_t nj;
+  uint8_t reuse;    // the block came from the reuse queue: its slots are not new memory
+  GcBlk *blk;
 } GcCache;
 
 struct PDeque;
@@ -318,14 +326,14 @@ static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
     k->bump += gc_cls_w[c];
     uint32_t i = k->idx++;
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
-    GC_ALLOC(k->blk)[i >> 6] |= 1ull << (i & 63);
+    k->abits[i >> 6] |= 1ull << (i & 63);
   } else if (k->bits) {
     int t = __builtin_ctzll(k->bits);
     k->bits &= k->bits - 1;
     uint32_t i = k->j * 64 + (uint32_t)t;
     p = k->objs + (size_t)i * gc_cls_w[c];
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
-    GC_ALLOC(k->blk)[i >> 6] |= 1ull << (i & 63);
+    k->abits[i >> 6] |= 1ull << (i & 63);
   } else {
     p = gc_refill(k, atomic, c);
   }
@@ -529,6 +537,14 @@ void bend_fault(int sig);
 void fault_stack(void);
 
 void fault_init(void);
+
+// A thread that runs Bend code has a stack the runtime maps itself, at a
+// multiple of BEND_STK: the first word of that region holds the thread's Thr,
+// so native code finds its allocation caches from sp alone (see rt/native.c).
+// A guard page lies between that word and the stack.
+#define BEND_STK ((uintptr_t)1 << 32)
+
+void thr_stack(pthread_attr_t *attr);
 
 void thr_register(uintptr_t top);
 
