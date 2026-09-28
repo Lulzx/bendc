@@ -143,7 +143,7 @@ typedef struct GcBlk {
   uint32_t nblk;     // blocks spanned
   uint8_t atomic;    // holds no pointers: never scanned
   uint8_t large;
-  uint8_t owned;     // in a thread's cache: not swept
+  uint8_t owned;     // in a thread's cache (or being made): not swept, not claimed
   uint8_t cls;
   struct GcBlk *next;
 } GcBlk;
@@ -181,7 +181,12 @@ typedef struct Thr {
   volatile int live;
   struct PDeque *dq;
   uint32_t rng;
+  // Claiming a reuse block (gc_refill): a stop signal that comes meanwhile
+  // is deferred (deferred is set) until the claim is over.
+  volatile sig_atomic_t claiming, deferred;
 } Thr;
+
+void gc_park(Thr *t);
 
 typedef struct { V *p; size_t n; } GcRange;
 typedef struct { uint32_t at, len; } GcRun;
@@ -505,6 +510,9 @@ static inline void gc_mark(V w) {
 void gc_scan(const void *lo, const void *hi);
 
 void gc_drain(void);
+
+// A thread stopped for a collection: its registers on its stack, it waits.
+__attribute__((noinline)) void gc_park(Thr *t);
 
 void gc_handler(int sig);
 

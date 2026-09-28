@@ -183,7 +183,8 @@ GcBlk *gc_new_small(int atomic, unsigned c) {
   b->nblk = 1;
   b->atomic = (uint8_t)atomic;
   b->cls = (uint8_t)c;
-  gc_kind[at] = 1;
+  b->owned = 1;
+  __atomic_store_n(&gc_kind[at], 1, __ATOMIC_RELEASE);
   return b;
 }
 __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
@@ -201,15 +202,19 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
         memory_order_relaxed);
     return p;
   }
-  pthread_mutex_lock(&gc_lock);
-  if (k->blk) { k->blk->owned = 0; k->blk = NULL; }
+  if (k->blk) { __atomic_store_n(&k->blk->owned, 0, __ATOMIC_RELEASE); k->blk = NULL; }
   // First the next block, in address order, where matches freed slots and a
   // 5th is free: lists built from its free slots stay in order in memory.
-  // Candidate bits may be stale; the block is checked here.
+  // Candidate bits may be stale; the block is checked here. A block is
+  // claimed by setting its owned flag (0 to 1), without gc_lock: no
+  // collection runs meanwhile (the thread's stop is deferred), so a block
+  // that is a small one stays one, and a new one is owned before it is one.
   GcBlk *b = NULL;
   k->reuse = 0;
   if (!atomic && c < GC_RQCLS) {
     Thr *t = thr_self;
+    t->claiming = 1;
+    atomic_signal_fence(memory_order_seq_cst);
     uint64_t *cand = gc_cand + (size_t)c * GC_CANDW;
     uintptr_t nw = (gc_top + 63) >> 6;
     uintptr_t at = t->rcur[c] < gc_top ? t->rcur[c] : 0;
@@ -221,31 +226,41 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
         uintptr_t bi = (w << 6) + (uintptr_t)__builtin_ctzll(f);
         f &= f - 1;
         __atomic_fetch_and(&cand[w], ~(1ull << (bi & 63)), __ATOMIC_RELAXED);
-        if (bi >= gc_top || gc_kind[bi] != 1) continue;
+        if (bi >= gc_top || __atomic_load_n(&gc_kind[bi], __ATOMIC_ACQUIRE) != 1) continue;
         GcBlk *q = gc_blk(bi);
-        if (q->cls != c || q->atomic || q->owned) continue;
+        if (q->cls != c || q->atomic || __atomic_load_n(&q->owned, __ATOMIC_RELAXED)) continue;
+        uint8_t z = 0;
+        if (!__atomic_compare_exchange_n(&q->owned, &z, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) continue;
         uint32_t used = 0;
         for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(GC_ALLOC(q)[j]);
-        if (q->nobj - used < q->nobj / 5) continue;
+        if (q->nobj - used < q->nobj / 5) { __atomic_store_n(&q->owned, 0, __ATOMIC_RELEASE); continue; }
         b = q;
         k->reuse = 1;
         t->rcur[c] = (uint32_t)bi + 1;
       }
     }
+    atomic_signal_fence(memory_order_seq_cst);
+    t->claiming = 0;
+    atomic_signal_fence(memory_order_seq_cst);
+    if (t->deferred) { t->deferred = 0; gc_park(t); }
   }
   int fresh = 0;
   if (b == NULL) {
+    pthread_mutex_lock(&gc_lock);
     if (gc_since >= gc_limit) gc_collect_locked();
     // (A partly free block may have been claimed for reuse since the sweep.)
     b = gc_partial[atomic][c];
-    while (b && b->owned) b = b->next;
+    uint8_t z = 0;
+    while (b && !__atomic_compare_exchange_n(&b->owned, &z, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
+      b = b->next;
+      z = 0;
+    }
     fresh = b == NULL;
     if (b) gc_partial[atomic][c] = b->next;
     else b = gc_new_small(atomic, c);
+    pthread_mutex_unlock(&gc_lock);
   }
-  b->owned = 1;
   k->blk = b;
-  pthread_mutex_unlock(&gc_lock);
   // A slot's allocation bit is set when the slot is handed out, never
   // before: a stale pointer must not mark a slot that is still free.
   V *objs = gc_objs(b);
@@ -360,18 +375,22 @@ void gc_drain(void) {
     for (size_t j = 0; j < it.n; j++) gc_mark(it.p[j]);
   }
 }
+__attribute__((noinline)) void gc_park(Thr *t) {
+  jmp_buf jb;
+  setjmp(jb);
+  atomic_fetch_add(&gc_inside, 1);
+  t->sp = (uintptr_t)&jb;
+  atomic_fetch_add(&gc_acks, 1);
+  while (atomic_load(&gc_stopping)) sched_yield();
+  atomic_fetch_sub(&gc_inside, 1);
+}
 void gc_handler(int sig) {
   (void)sig;
   int saved = errno;
   Thr *t = thr_self;
   if (t != NULL && atomic_load(&gc_stopping)) {
-    jmp_buf jb;
-    setjmp(jb);
-    atomic_fetch_add(&gc_inside, 1);
-    t->sp = (uintptr_t)&jb;
-    atomic_fetch_add(&gc_acks, 1);
-    while (atomic_load(&gc_stopping)) sched_yield();
-    atomic_fetch_sub(&gc_inside, 1);
+    if (t->claiming) t->deferred = 1;
+    else gc_park(t);
   }
   errno = saved;
 }
@@ -621,6 +640,9 @@ V arr_half(V a, unsigned hi) {
   return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), arr_shared(a));
 }
 #define ARR_ATOMIC(name, op) static inline V F_Array_datomic_d##name(V a, V i, V v) { return C2(0, a, (V)__atomic_##op(arr_word(a, i), (uint32_t)v, __ATOMIC_SEQ_CST)); }
+#ifdef __TINYC__
+#else
+#endif
 V apply(V f, V x) {
   V *c = (V *)f;
   V ar = c[1], n = c[2];
@@ -911,10 +933,15 @@ V par_join(V tv) {
   PTask *p = pdq_pop(thr_self->dq);
   if (p == t) return apply(t->clo, 0);
   if (p) par_exec(p);
-  while (__atomic_load_n(&t->state, __ATOMIC_ACQUIRE) != P_DONE) {
+  // With nothing to steal, a joiner spins a little, then yields its core,
+  // then naps (the task it waits for may be running on a thread that has no
+  // core of its own when there are more threads than cores).
+  for (int spins = 0; __atomic_load_n(&t->state, __ATOMIC_ACQUIRE) != P_DONE;) {
     PTask *o = par_steal();
-    if (o) par_exec(o);
-    else cpu_relax();
+    if (o) { par_exec(o); spins = 0; continue; }
+    if (++spins < 64) cpu_relax();
+    else if (spins < 256) sched_yield();
+    else { struct timespec ts = {0, 20000}; nanosleep(&ts, NULL); }
   }
   return t->res;
 }
