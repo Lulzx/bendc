@@ -68,6 +68,11 @@ jobs:
           BEND_NO_TELEMETRY=1 bend KNOWNPROOF.bend --check-only
           ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" KNOWNPROOF.bend
 
+      - name: The optimizer's rewrites as proven laws (OPT.bend, both checkers)
+        run: |
+          BEND_NO_TELEMETRY=1 bend OPT.bend --check-only
+          ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" OPT.bend
+
       - name: Full bootstrap (official bend -> stage1 -> stage2 fixpoint)
         run: BEND_NO_TELEMETRY=1 ./bootstrap.sh
 

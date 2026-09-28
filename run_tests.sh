@@ -75,8 +75,8 @@ if command -v bun >/dev/null 2>&1; then
 fi
 
 # The native backend (bendc --native: AArch64, Mach-O or ELF), on arm64
-# macOS or Linux.
-case $(uname -sm) in "Darwin arm64"|"Linux aarch64"|"Linux arm64") native=1;; *) native=0;; esac
+# macOS or Linux (BEND_TEST_NATIVE=0 skips it).
+case $(uname -sm) in "Darwin arm64"|"Linux aarch64"|"Linux arm64") native=${BEND_TEST_NATIVE:-1};; *) native=0;; esac
 if [ $native = 1 ]; then
   mkdir -p build/native
   for src in tests/*.bend; do
