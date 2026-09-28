@@ -5,10 +5,11 @@ import ./LO.bend as Law
 
 # Proof of LO.bend's laws. The round trip (up_lo) is an induction on the
 # term; a list field is lowered as its head and the node with the rest, and
-# the Shape lemmas give that node's constructor. The scope laws: Lo.scoped
+# the Shape lemmas give that node's constructor. The scope laws: Lo.sc
 # (lo_scoped) is an induction on the term too, and L.scope (scope_ok) one
 # on the fuel, a case per step of `run`, that each state the run reaches is
-# scoped (Good.sel).
+# scoped (Good.sel). lo_prog: the defs Lo gives are scoped by their
+# parameters, so a run of main is.
 
 # Patterns
 # ========
@@ -656,3 +657,849 @@ def Lo.sc(e: Core.Expr, +ms: Map<&2, List<&2, Bool>>, +bound: List<&2, String>, 
 
 def Law.lo_scoped(e, ms, bound, top, mask, ok):
   Lo.sc(e, ms, bound, top, mask, ok)
+
+# Runs of scoped states
+# =====================
+
+# t is scoped by B, and A is B.
+def Sc.back(-t: Core.Tm, -A: List<&2, String>, -B: List<&2, String>, e: {A == B : List<&2, String>}, s: Law.Scoped(t, B))
+    -> Law.Scoped(t, A):
+  %Str.sym(A, B, e) : Law.Scoped(t, _)
+  s
+
+# The lists of scoped nodes.
+def Call.args(+f: String, as: List<&2, Core.Arg>, -L: List<&2, String>, s: Law.Scoped(Core.CCall{f, as}, L)) -> Law.Scoped.args(as, L):
+  match as:
+    case Nil{}:
+      Unit{}
+    case a <> r:
+      match a:
+        case Core.Arg{rel, e}:
+          match s:
+            case (se, sr):
+              (se, Call.args(f, r, L, sr))
+
+def App.cons(-f: Core.Tm, -a: Core.Tm, -as: List<&2, Core.Tm>, -L: List<&2, String>, sa: Law.Scoped(a, L), s: Law.Scopeds(f <> as, L))
+    -> Law.Scopeds(f <> a <> as, L):
+  match s:
+    case (sf, srs):
+      (sf, (sa, srs))
+
+def App.sc(+f: Core.Tm, as: List<&2, Core.Tm>, -L: List<&2, String>, s: Law.Scoped(Core.CApp{f, as}, L)) -> Law.Scopeds(f <> as, L):
+  match as:
+    case Nil{}:
+      (s, Unit{})
+    case a <> r:
+      match s:
+        case (sa, sr):
+          App.cons(f, a, r, L, sa, App.sc(f, r, L, sr))
+
+def Ctr.list(+k: String, as: List<&2, Core.Tm>, -L: List<&2, String>, s: Law.Scoped(Core.CCtr{k, as}, L)) -> Law.Scopeds(as, L):
+  match as:
+    case Nil{}:
+      Unit{}
+    case a <> r:
+      match s:
+        case (sa, sr):
+          (sa, Ctr.list(k, r, L, sr))
+
+def Mat.cases(cs: List<&2, Core.Tm>, -L: List<&2, String>, s: Law.Scoped(Core.CMat{Nil{}, cs}, L)) -> Law.Scopeds(cs, L):
+  match cs:
+    case Nil{}:
+      Unit{}
+    case c <> r:
+      match s:
+        case (sc, sr):
+          (sc, Mat.cases(r, L, sr))
+
+def Mat.ss(scrs: List<&2, Core.Tm>, +cs: List<&2, Core.Tm>, -L: List<&2, String>, s: Law.Scoped(Core.CMat{scrs, cs}, L)) -> Law.Scopeds(scrs, L):
+  match scrs:
+    case Nil{}:
+      Unit{}
+    case a <> r:
+      match s:
+        case (sa, sr):
+          (sa, Mat.ss(r, cs, L, sr))
+
+def Mat.cs(scrs: List<&2, Core.Tm>, +cs: List<&2, Core.Tm>, -L: List<&2, String>, s: Law.Scoped(Core.CMat{scrs, cs}, L)) -> Law.Scopeds(cs, L):
+  match scrs:
+    case Nil{}:
+      Mat.cases(cs, L, s)
+    case a <> r:
+      match s:
+        case (sa, sr):
+          Mat.cs(r, cs, L, sr)
+
+# Lists of good values.
+def Cat.goods(a: List<&2, Core.Val>, -b: List<&2, Core.Val>, ga: Law.Goods(a), gb: Law.Goods(b)) -> Law.Goods(Core.Vals.cat(a, b)):
+  match a:
+    case Nil{}:
+      gb
+    case v <> r:
+      match ga:
+        case (gv, gr):
+          (gv, Cat.goods(r, b, gr, gb))
+
+def Drop.goods(n: Nat, vs: List<&2, Core.Val>, g: Law.Goods(vs)) -> Law.Goods(Core.Vals.drop(n, vs)):
+  match n:
+    case 0n:
+      g
+    case 1n+m:
+      match vs:
+        case Nil{}:
+          Unit{}
+        case v <> r:
+          match g:
+            case (gv, gr):
+              Drop.goods(m, r, gr)
+
+def Bind.goods(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, g: Law.Goods(vs)) -> Law.Goods(Core.Scope.bind(ps, vs)):
+  match ps:
+    case Nil{}:
+      Unit{}
+    case p <> pr:
+      match p:
+        case Core.Par{x, rel, m, ty}:
+          match vs:
+            case Nil{}:
+              Unit{}
+            case v <> vr:
+              match g:
+                case (gv, gr):
+                  (gv, Bind.goods(pr, vr, gr))
+
+# With no fewer values than parameters, the scope binds the parameters.
+def Bind.names(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, lt: {False{} == Nat.is_lt(Core.Vals.len(vs), Core.Pars.len(ps)) : Bool})
+    -> {Law.Env.names(Core.Scope.bind(ps, vs)) == Law.Pars.names(ps) : List<&2, String>}:
+  match ps:
+    case Nil{}:
+      {==}
+    case p <> pr:
+      match p:
+        case Core.Par{+x, rel, m, ty}:
+          match vs:
+            case Nil{}:
+              Absurd({Nil{} == x <> Law.Pars.names(pr) : List<&2, String>}, Tru.of(False{}, DP.Bool.sym(False{}, True{}, lt)))
+            case v <> vr:
+              %Bind.names(pr, vr, lt) : {x <> Law.Env.names(Core.Scope.bind(pr, vr)) == x <> _ : List<&2, String>}
+              {==}
+
+# What a native gives, as a result.
+def Prim.lift(r: Core.Res, -F: List<&2, String>, g: Law.Good.prim(r)) -> Law.Good.res(r, F):
+  match r:
+    case Core.ROk{vs}:
+      g
+    case Core.REnv{env}:
+      Absurd(Law.Good.res(Core.REnv{env}, F), g)
+    case Core.RNo{}:
+      g
+    case Core.RFail{m}:
+      g
+
+def Look.h(h: Bool, -r: List<&2, Core.Val>, -x: String, nb: {False{} == Bool.and(Bool.not(h), Core.Dead.none(Law.Env.names(r), x)) : Bool})
+    -> Law.Look.ok(h, r, x):
+  match h:
+    case True{}:
+      Unit{}
+    case False{}:
+      nb
+
+def Enter.h(h: Bool, -vs: List<&2, Core.Val>, -ps: List<&2, Core.Par>, he: {h == Nat.is_lt(Core.Vals.len(vs), Core.Pars.len(ps)) : Bool})
+    -> Law.Enter.ok(h, vs, ps):
+  match h:
+    case True{}:
+      Unit{}
+    case False{}:
+      he
+
+def PatC.mk(h: Bool, -env: List<&2, Core.Val>, -ps: List<&2, Core.Pt>, -vs: List<&2, Core.Val>, -F: List<&2, String>, pk: Law.Pat.ok(env, ps, vs, F))
+    -> Law.Good.sel(Core.SPatC{h, env, ps, vs}, F):
+  match h:
+    case True{}:
+      pk
+    case False{}:
+      Unit{}
+
+def Eq.cat(qs: List<&2, Core.Pt>, +pr: List<&2, Core.Pt>, -env: List<&2, Core.Val>, -F: List<&2, String>,
+    eq: {Core.Lo.bind(Core.Dead.cat(Core.Dead.names(qs), Core.Dead.names(pr)), Law.Env.names(env)) == F : List<&2, String>})
+    -> {Core.Lo.bind(Core.Dead.names(Core.Pts.cat(qs, pr)), Law.Env.names(env)) == F : List<&2, String>}:
+  %DP.Names.cat(qs, pr) : {Core.Lo.bind(_, Law.Env.names(env)) == F : List<&2, String>}
+  eq
+
+# One pattern step of a good match is good.
+def Step.good(+env: List<&2, Core.Val>, pt: Core.Pt, v: Core.Val, +pr: List<&2, Core.Pt>, +vr: List<&2, Core.Val>, -F: List<&2, String>,
+    ge: Law.Goods(env), gv: Law.Good(v), gvr: Law.Goods(vr),
+    eq: {Core.Lo.bind(Core.Dead.names(pt <> pr), Law.Env.names(env)) == F : List<&2, String>})
+    -> Law.Good.sel(Core.Pat.step(env, pt, v, pr, vr), F):
+  match pt:
+    case Core.PtVar{x}:
+      ((gv, ge), (gvr, eq))
+    case Core.PtCtr{+k, +qs}:
+      match v:
+        case Core.VCtr{+k2, +fs}:
+          match gv:
+            case (u, gfs):
+              PatC.mk(Bool.and(String.eq(k, k2), Nat.is_eq(Core.Pts.len(qs), Core.Vals.len(fs))), env, Core.Pts.cat(qs, pr), Core.Vals.cat(fs, vr), F,
+                (ge, (Cat.goods(fs, vr, gfs, gvr), Eq.cat(qs, pr, env, F, eq))))
+        case Core.VLit{l9}:
+          Unit{}
+        case Core.VClo{env9, pt9, b9}:
+          Unit{}
+        case Core.VFun{f9, as9}:
+          Unit{}
+        case Core.VTrm{t9}:
+          Unit{}
+        case Core.VBnd{x9, w9}:
+          Unit{}
+    case Core.PtNat{n}:
+      match v:
+        case Core.VLit{l}:
+          PatC.mk(Core.Lit.eq(Core.LNat{n}, l), env, pr, vr, F, (ge, (gvr, eq)))
+        case Core.VCtr{k9, fs9}:
+          Unit{}
+        case Core.VClo{env9, pt9, b9}:
+          Unit{}
+        case Core.VFun{f9, as9}:
+          Unit{}
+        case Core.VTrm{t9}:
+          Unit{}
+        case Core.VBnd{x9, w9}:
+          Unit{}
+    case Core.PtNum{n}:
+      match v:
+        case Core.VLit{l}:
+          PatC.mk(Core.Lit.eq(Core.LNum{n}, l), env, pr, vr, F, (ge, (gvr, eq)))
+        case Core.VCtr{k9, fs9}:
+          Unit{}
+        case Core.VClo{env9, pt9, b9}:
+          Unit{}
+        case Core.VFun{f9, as9}:
+          Unit{}
+        case Core.VTrm{t9}:
+          Unit{}
+        case Core.VBnd{x9, w9}:
+          Unit{}
+    case Core.PtFlt{s}:
+      match v:
+        case Core.VLit{l}:
+          PatC.mk(Core.Lit.eq(Core.LFlt{s}, l), env, pr, vr, F, (ge, (gvr, eq)))
+        case Core.VCtr{k9, fs9}:
+          Unit{}
+        case Core.VClo{env9, pt9, b9}:
+          Unit{}
+        case Core.VFun{f9, as9}:
+          Unit{}
+        case Core.VTrm{t9}:
+          Unit{}
+        case Core.VBnd{x9, w9}:
+          Unit{}
+    case Core.PtSuc{+k, q}:
+      match v:
+        case Core.VLit{l}:
+          match l:
+            case Core.LNat{+m}:
+              PatC.mk(U32.is_le(k, m), env, q <> pr, Core.VLit{Core.LNat{U32.sub(m, k)}} <> vr, F, (ge, ((Unit{}, gvr), eq)))
+            case Core.LNum{m}:
+              Unit{}
+            case Core.LFlt{m}:
+              Unit{}
+            case Core.LStr{m}:
+              Unit{}
+        case Core.VCtr{k9, fs9}:
+          Unit{}
+        case Core.VClo{env9, pt9, b9}:
+          Unit{}
+        case Core.VFun{f9, as9}:
+          Unit{}
+        case Core.VTrm{t9}:
+          Unit{}
+        case Core.VBnd{x9, w9}:
+          Unit{}
+
+# A run of a good state gives a good result: never a failed lookup.
+def L.scope(~prim: String -> List<&2, Core.Val> -> Core.Res,
+    ~ok: @op:String -> @vs:List<&2, Core.Val> -> Law.Goods(vs) -> Law.Good.prim(prim(op, vs)),
+    +n: Nat, +ds: List<&2, Core.Def>, +gd: Law.Good.defs(ds), s: Core.Sel, -F: List<&2, String>, g: Law.Good.sel(s, F))
+    -> Law.Good.res(Core.run(~prim, n, ds, s), F):
+  match n:
+    case 0n:
+      {==}
+    case 1n+p:
+      match s:
+        case Core.SEval{+env, e}:
+          match e:
+            case Core.CVar{+x}:
+              L.scope(~prim, ~ok, p, ds, gd, Core.SLook{env, x}, F, g)
+            case Core.CLit{+l}:
+              L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VLit{l}}}, F, (Nil{}, (Unit{}, Unit{})))
+            case Core.CRef{+f}:
+              L.scope(~prim, ~ok, p, ds, gd, Core.SCallDef{f, Nil{}}, F, Unit{})
+            case Core.CCall{+f, +as}:
+              match g:
+                case (ge, sc):
+                  L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SArgs{env, as}), Core.KCall{f}}, F,
+                    (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SArgs{env, as}, Nil{}, (ge, Call.args(f, as, Law.Env.names(env), sc))), Unit{})))
+            case Core.CApp{+f, +as}:
+              match g:
+                case (ge, sc):
+                  L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEvals{env, f <> as}), Core.KApp{}}, F,
+                    (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEvals{env, f <> as}, Nil{}, (ge, App.sc(f, as, Law.Env.names(env), sc))), Unit{})))
+            case Core.CCtr{+k, +as}:
+              match g:
+                case (ge, sc):
+                  L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEvals{env, as}), Core.KCtr{k}}, F,
+                    (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEvals{env, as}, Nil{}, (ge, Ctr.list(k, as, Law.Env.names(env), sc))), Unit{})))
+            case Core.CLam{+pt, +bd}:
+              match g:
+                case (ge, sb):
+                  L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VClo{env, pt, bd}}}, F, (Nil{}, (Unit{}, (sb, ge))))
+            case Core.CLet{+pt, +v, +bd}:
+              match g:
+                case (+ge, sc):
+                  match sc:
+                    case (sv, sb):
+                      L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEval{env, v}), Core.KLet{env, pt, bd}}, F,
+                        (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEval{env, v}, Nil{}, (ge, sv)), (ge, sb))))
+            case Core.CMat{+scrs, +cases}:
+              match g:
+                case (+ge, +sc):
+                  L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEvals{env, scrs}), Core.KMat{env, cases}}, F,
+                    (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEvals{env, scrs}, Nil{}, (ge, Mat.ss(scrs, cases, Law.Env.names(env), sc))),
+                      (ge, Mat.cs(scrs, cases, Law.Env.names(env), sc)))))
+            case Core.CCse{+ps, +bd}:
+              L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.RFail{"a case outside a match"}, Core.KApp{}}, F, (Nil{}, ({==}, Unit{})))
+            case Core.CSuc{+k, +x}:
+              match g:
+                case (ge, sx):
+                  L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEval{env, x}), Core.KSuc{k}}, F,
+                    (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEval{env, x}, Nil{}, (ge, sx)), Unit{})))
+            case Core.COp{+op, +x, +y}:
+              match g:
+                case (ge, sc):
+                  match sc:
+                    case (sx, sy):
+                      L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEvals{env, [x, y]}), Core.KOp{op}}, F,
+                        (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEvals{env, [x, y]}, Nil{}, (ge, (sx, (sy, Unit{})))), Unit{})))
+            case Core.CAnn{+x, +ty}:
+              L.scope(~prim, ~ok, p, ds, gd, Core.SEval{env, x}, F, g)
+            case Core.CTyp{+nm, +as}:
+              L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VTrm{Core.CBox{}}}}, F, (Nil{}, (Unit{}, Unit{})))
+            case Core.CBox{}:
+              L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VTrm{Core.CBox{}}}}, F, (Nil{}, (Unit{}, Unit{})))
+            case Core.CErr{+m}:
+              match g:
+                case (ge, u):
+                  L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.RFail{m}, Core.KApp{}}, F, (Nil{}, (u, Unit{})))
+        case Core.SEvals{+env, es}:
+          match es:
+            case Nil{}:
+              Unit{}
+            case +e <> +r:
+              match g:
+                case (+ge, sc):
+                  match sc:
+                    case (se, sr):
+                      L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEval{env, e}), Core.KTail{env, r}}, F,
+                        (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEval{env, e}, Nil{}, (ge, se)), (ge, sr))))
+        case Core.SArgs{+env, as}:
+          match as:
+            case Nil{}:
+              Unit{}
+            case a <> +r:
+              match a:
+                case Core.Arg{rel, +e}:
+                  match rel:
+                    case Core.Run{}:
+                      match g:
+                        case (+ge, sc):
+                          match sc:
+                            case (se, sr):
+                              L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEval{env, e}), Core.KATail{env, r}}, F,
+                                (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEval{env, e}, Nil{}, (ge, se)), (ge, sr))))
+                    case Core.Era{}:
+                      match g:
+                        case (ge, sc):
+                          match sc:
+                            case (se, sr):
+                              L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SArgs{env, r}), Core.KCons{Core.VTrm{e}}}, F,
+                                (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SArgs{env, r}, Nil{}, (ge, sr)), Unit{})))
+        case Core.SThen{r, k}:
+          match r:
+            case Core.RFail{m}:
+              match g:
+                case (F2, gg):
+                  match gg:
+                    case (gr, gk):
+                      gr
+            case Core.RNo{}:
+              match k:
+                case Core.KCall{f9}:
+                  {==}
+                case Core.KApp{}:
+                  {==}
+                case Core.KCtr{k9}:
+                  {==}
+                case Core.KLet{env9, pt9, b9}:
+                  {==}
+                case Core.KBind{b9}:
+                  {==}
+                case Core.KMat{env9, cases9}:
+                  {==}
+                case Core.KCase{+env, +vs, b, +rest}:
+                  match g:
+                    case (F2, gg):
+                      match gg:
+                        case (gr, gk):
+                          match gk:
+                            case (ge, gk2):
+                              match gk2:
+                                case (gvs, gk3):
+                                  match gk3:
+                                    case (sb, srest):
+                                      L.scope(~prim, ~ok, p, ds, gd, Core.SMatch{env, vs, rest}, F, (ge, (gvs, srest)))
+                case Core.KSuc{k9}:
+                  {==}
+                case Core.KOp{op9}:
+                  {==}
+                case Core.KTail{env9, es9}:
+                  {==}
+                case Core.KATail{env9, as9}:
+                  {==}
+                case Core.KCons{v9}:
+                  {==}
+                case Core.KApply{vs9}:
+                  {==}
+                case Core.KBody{b9, rest9}:
+                  {==}
+            case Core.REnv{+env2}:
+              match k:
+                case Core.KCall{f9}:
+                  {==}
+                case Core.KApp{}:
+                  {==}
+                case Core.KCtr{k9}:
+                  {==}
+                case Core.KLet{env9, pt9, b9}:
+                  {==}
+                case Core.KBind{+b}:
+                  match g:
+                    case (F2, gg):
+                      match gg:
+                        case (gr, gk):
+                          match gr:
+                            case (eqn, genv2):
+                              L.scope(~prim, ~ok, p, ds, gd, Core.SEval{env2, b}, F, (genv2, Sc.back(b, Law.Env.names(env2), F2, eqn, gk)))
+                case Core.KMat{env9, cases9}:
+                  {==}
+                case Core.KCase{env, vs, +b, rest}:
+                  match g:
+                    case (F2, gg):
+                      match gg:
+                        case (gr, gk):
+                          match gr:
+                            case (eqn, genv2):
+                              match gk:
+                                case (ge, gk2):
+                                  match gk2:
+                                    case (gvs, gk3):
+                                      match gk3:
+                                        case (sb, srest):
+                                          L.scope(~prim, ~ok, p, ds, gd, Core.SEval{env2, b}, F, (genv2, Sc.back(b, Law.Env.names(env2), F2, eqn, sb)))
+                case Core.KSuc{k9}:
+                  {==}
+                case Core.KOp{op9}:
+                  {==}
+                case Core.KTail{env9, es9}:
+                  {==}
+                case Core.KATail{env9, as9}:
+                  {==}
+                case Core.KCons{v9}:
+                  {==}
+                case Core.KApply{vs9}:
+                  {==}
+                case Core.KBody{+b, +rest}:
+                  match g:
+                    case (F2, gg):
+                      match gg:
+                        case (gr, gk):
+                          match gr:
+                            case (eqn, genv2):
+                              match gk:
+                                case (sb, grest):
+                                  L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEval{env2, b}), Core.KApply{rest}}, F,
+                                    (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEval{env2, b}, Nil{}, (genv2, Sc.back(b, Law.Env.names(env2), F2, eqn, sb))), grest)))
+            case Core.ROk{+vs}:
+              match g:
+                case (F2, gg):
+                  match gg:
+                    case (gr, gk):
+                      L.scope(~prim, ~ok, p, ds, gd, Core.SOk{k, vs}, F, (gr, (F2, gk)))
+        case Core.SOk{k, +vs}:
+          match k:
+            case Core.KCall{+f}:
+              match g:
+                case (gvs, gg):
+                  match gg:
+                    case (F2, gk):
+                      L.scope(~prim, ~ok, p, ds, gd, Core.SCallDef{f, vs}, F, gvs)
+            case Core.KApp{}:
+              match vs:
+                case Nil{}:
+                  {==}
+                case +v <> +r2:
+                  match g:
+                    case (gvs, gg):
+                      match gvs:
+                        case (gv, gr):
+                          match gg:
+                            case (F2, gk):
+                              L.scope(~prim, ~ok, p, ds, gd, Core.SApply{r2, v}, F, (gr, gv))
+            case Core.KCtr{+c}:
+              match g:
+                case (gvs, gg):
+                  match gg:
+                    case (F2, gk):
+                      ((Unit{}, gvs), Unit{})
+            case Core.KLet{+env, +pt, +bd}:
+              match g:
+                case (gvs, gg):
+                  match gg:
+                    case (F2, gk):
+                      match gk:
+                        case (ge, sb):
+                          L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SPat{env, [pt], vs}), Core.KBind{bd}}, F,
+                            (Core.Lo.bind(Core.Dead.names([pt]), Law.Env.names(env)), (L.scope(~prim, ~ok, p, ds, gd, Core.SPat{env, [pt], vs}, Core.Lo.bind(Core.Dead.names([pt]), Law.Env.names(env)), (ge, (gvs, {==}))), sb)))
+            case Core.KBind{b9}:
+              {==}
+            case Core.KMat{+env, +cases}:
+              match g:
+                case (gvs, gg):
+                  match gg:
+                    case (F2, gk):
+                      match gk:
+                        case (ge, scs):
+                          L.scope(~prim, ~ok, p, ds, gd, Core.SMatch{env, vs, cases}, F, (ge, (gvs, scs)))
+            case Core.KCase{env9, vs9, b9, rest9}:
+              {==}
+            case Core.KSuc{+c}:
+              match g:
+                case (gvs, gg):
+                  match gg:
+                    case (F2, gk):
+                      Prim.lift(prim("%suc", Core.VLit{Core.LNum{c}} <> vs), F, ok("%suc", Core.VLit{Core.LNum{c}} <> vs, (Unit{}, gvs)))
+            case Core.KOp{+op}:
+              match g:
+                case (gvs, gg):
+                  match gg:
+                    case (F2, gk):
+                      Prim.lift(prim(op, vs), F, ok(op, vs, gvs))
+            case Core.KTail{+env, +es}:
+              match vs:
+                case Nil{}:
+                  {==}
+                case +v <> +r2:
+                  match g:
+                    case (gvs, gg):
+                      match gvs:
+                        case (gv, gr):
+                          match gg:
+                            case (F2, gk):
+                              match gk:
+                                case (ge, ses):
+                                  L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEvals{env, es}), Core.KCons{v}}, F,
+                                    (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEvals{env, es}, Nil{}, (ge, ses)), gv)))
+            case Core.KATail{+env, +as}:
+              match vs:
+                case Nil{}:
+                  {==}
+                case +v <> +r2:
+                  match g:
+                    case (gvs, gg):
+                      match gvs:
+                        case (gv, gr):
+                          match gg:
+                            case (F2, gk):
+                              match gk:
+                                case (ge, ses):
+                                  L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SArgs{env, as}), Core.KCons{v}}, F,
+                                    (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SArgs{env, as}, Nil{}, (ge, ses)), gv)))
+            case Core.KCons{+v}:
+              match g:
+                case (gvs, gg):
+                  match gg:
+                    case (F2, gk):
+                      (gk, gvs)
+            case Core.KApply{+rest}:
+              match vs:
+                case Nil{}:
+                  {==}
+                case +v <> +r2:
+                  match g:
+                    case (gvs, gg):
+                      match gvs:
+                        case (gv, gr):
+                          match gg:
+                            case (F2, gk):
+                              L.scope(~prim, ~ok, p, ds, gd, Core.SApply{rest, v}, F, (gk, gv))
+            case Core.KBody{b9, rest9}:
+              {==}
+        case Core.SLook{env, +x}:
+          match env:
+            case Nil{}:
+              match g:
+                case (ge, nb):
+                  nb
+            case b <> +r:
+              match b:
+                case Core.VBnd{+y, +v}:
+                  match g:
+                    case (ge, nb):
+                      match ge:
+                        case (gv, gr):
+                          L.scope(~prim, ~ok, p, ds, gd, Core.SLook2{String.eq(y, x), v, r, x}, F, (gv, (gr, Look.h(String.eq(y, x), r, x, nb))))
+                case Core.VLit{l9}:
+                  match g:
+                    case (ge, nb):
+                      match ge:
+                        case (gb, gr):
+                          L.scope(~prim, ~ok, p, ds, gd, Core.SLook{r, x}, F, (gr, nb))
+                case Core.VCtr{k9, fs9}:
+                  match g:
+                    case (ge, nb):
+                      match ge:
+                        case (gb, gr):
+                          L.scope(~prim, ~ok, p, ds, gd, Core.SLook{r, x}, F, (gr, nb))
+                case Core.VClo{env9, pt9, b9}:
+                  match g:
+                    case (ge, nb):
+                      match ge:
+                        case (gb, gr):
+                          L.scope(~prim, ~ok, p, ds, gd, Core.SLook{r, x}, F, (gr, nb))
+                case Core.VFun{f9, as9}:
+                  match g:
+                    case (ge, nb):
+                      match ge:
+                        case (gb, gr):
+                          L.scope(~prim, ~ok, p, ds, gd, Core.SLook{r, x}, F, (gr, nb))
+                case Core.VTrm{t9}:
+                  match g:
+                    case (ge, nb):
+                      match ge:
+                        case (gb, gr):
+                          L.scope(~prim, ~ok, p, ds, gd, Core.SLook{r, x}, F, (gr, nb))
+        case Core.SLook2{hit, +v, +env, +x}:
+          match hit:
+            case True{}:
+              match g:
+                case (gv, gg):
+                  (gv, Unit{})
+            case False{}:
+              match g:
+                case (gv, gg):
+                  L.scope(~prim, ~ok, p, ds, gd, Core.SLook{env, x}, F, gg)
+        case Core.SCallDef{+f, +vs}:
+          L.scope(~prim, ~ok, p, ds, gd, Core.SFind{ds, f, vs}, F, (g, gd))
+        case Core.SFind{ds2, +f, +vs}:
+          match ds2:
+            case Nil{}:
+              match g:
+                case (gvs, gds):
+                  Prim.lift(prim(f, vs), F, ok(f, vs, gvs))
+            case d <> +r:
+              match d:
+                case Core.Def{+name, +ps, +b, ret}:
+                  match g:
+                    case (gvs, gds):
+                      match gds:
+                        case (sb, gr):
+                          L.scope(~prim, ~ok, p, ds, gd, Core.SFound{String.eq(name, f), ps, b, r, f, vs}, F, (gvs, (gr, sb)))
+        case Core.SFound{hit, +ps, +b, +ds2, +f, +vs}:
+          match hit:
+            case True{}:
+              match g:
+                case (gvs, gg):
+                  match gg:
+                    case (gds, sb):
+                      L.scope(~prim, ~ok, p, ds, gd, Core.SEnter{Nat.is_lt(Core.Vals.len(vs), Core.Pars.len(ps)), f, ps, b, vs}, F,
+                        (gvs, (sb, Enter.h(Nat.is_lt(Core.Vals.len(vs), Core.Pars.len(ps)), vs, ps, {==}))))
+            case False{}:
+              match g:
+                case (gvs, gg):
+                  match gg:
+                    case (gds, sb):
+                      L.scope(~prim, ~ok, p, ds, gd, Core.SFind{ds2, f, vs}, F, (gvs, gds))
+        case Core.SEnter{short, +f, +ps, +b, +vs}:
+          match short:
+            case True{}:
+              match g:
+                case (gvs, gg):
+                  ((Unit{}, gvs), Unit{})
+            case False{}:
+              match g:
+                case (+gvs, gg):
+                  match gg:
+                    case (sb, en):
+                      L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEval{Core.Scope.bind(ps, vs), b}), Core.KApply{Core.Vals.drop(Core.Pars.len(ps), vs)}}, F,
+                        (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEval{Core.Scope.bind(ps, vs), b}, Nil{},
+                          (Bind.goods(ps, vs, gvs), Sc.back(b, Law.Env.names(Core.Scope.bind(ps, vs)), Law.Pars.names(ps), Bind.names(ps, vs, en), sb))),
+                          Drop.goods(Core.Pars.len(ps), vs, gvs))))
+        case Core.SApply{vs, fv}:
+          match vs:
+            case Nil{}:
+              match g:
+                case (gvs, gf):
+                  (gf, Unit{})
+            case +v <> +r:
+              match fv:
+                case Core.VClo{+env, +pt, +bd}:
+                  match g:
+                    case (gvs, gf):
+                      match gvs:
+                        case (gv, gr):
+                          match gf:
+                            case (sb, genv):
+                              L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SPat{env, [pt], [v]}), Core.KBody{bd, r}}, F,
+                                (Core.Lo.bind(Core.Dead.names([pt]), Law.Env.names(env)),
+                                  (L.scope(~prim, ~ok, p, ds, gd, Core.SPat{env, [pt], [v]}, Core.Lo.bind(Core.Dead.names([pt]), Law.Env.names(env)),
+                                    (genv, ((gv, Unit{}), {==}))), (sb, gr))))
+                case Core.VFun{+f, +as}:
+                  match g:
+                    case (gvs, gf):
+                      match gf:
+                        case (u, gas):
+                          L.scope(~prim, ~ok, p, ds, gd, Core.SCallDef{f, Core.Vals.cat(as, v <> r)}, F, Cat.goods(as, v <> r, gas, gvs))
+                case Core.VLit{l9}:
+                  {==}
+                case Core.VCtr{k9, fs9}:
+                  {==}
+                case Core.VTrm{t9}:
+                  {==}
+                case Core.VBnd{x9, w9}:
+                  {==}
+        case Core.SMatch{+env, +vs, cases}:
+          match cases:
+            case Nil{}:
+              {==}
+            case c <> +r:
+              match c:
+                case Core.CCse{+ps, +bd}:
+                  match g:
+                    case (+ge, gg):
+                      match gg:
+                        case (+gvs, scs):
+                          match scs:
+                            case (sc, sr):
+                              L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SPat{env, ps, vs}), Core.KCase{env, vs, bd, r}}, F,
+                                (Core.Lo.bind(Core.Dead.names(ps), Law.Env.names(env)),
+                                  (L.scope(~prim, ~ok, p, ds, gd, Core.SPat{env, ps, vs}, Core.Lo.bind(Core.Dead.names(ps), Law.Env.names(env)), (ge, (gvs, {==}))),
+                                    (ge, (gvs, (sc, sr))))))
+                case Core.CVar{x9}:
+                  {==}
+                case Core.CLit{l9}:
+                  {==}
+                case Core.CRef{f9}:
+                  {==}
+                case Core.CCall{f9, as9}:
+                  {==}
+                case Core.CApp{f9, as9}:
+                  {==}
+                case Core.CCtr{k9, as9}:
+                  {==}
+                case Core.CLam{pt9, b9}:
+                  {==}
+                case Core.CLet{pt9, v9, b9}:
+                  {==}
+                case Core.CMat{scrs9, cases9}:
+                  {==}
+                case Core.CSuc{k9, x9}:
+                  {==}
+                case Core.COp{op9, a9, b9}:
+                  {==}
+                case Core.CAnn{x9, ty9}:
+                  {==}
+                case Core.CTyp{n9, as9}:
+                  {==}
+                case Core.CBox{}:
+                  {==}
+                case Core.CErr{m9}:
+                  {==}
+        case Core.SPat{+env, ps, vs}:
+          match ps:
+            case Nil{}:
+              match vs:
+                case Nil{}:
+                  match g:
+                    case (ge, gg):
+                      match gg:
+                        case (gvs, eq):
+                          (eq, ge)
+                case v <> vr:
+                  Unit{}
+            case +pt <> +pr:
+              match vs:
+                case Nil{}:
+                  Unit{}
+                case +v <> +vr:
+                  match g:
+                    case (ge, gg):
+                      match gg:
+                        case (gvs, eq):
+                          match gvs:
+                            case (gv, gvr):
+                              L.scope(~prim, ~ok, p, ds, gd, Core.Pat.step(env, pt, v, pr, vr), F, Step.good(env, pt, v, pr, vr, F, ge, gv, gvr, eq))
+        case Core.SPatC{hit, +env, +ps, +vs}:
+          match hit:
+            case True{}:
+              L.scope(~prim, ~ok, p, ds, gd, Core.SPat{env, ps, vs}, F, g)
+            case False{}:
+              Unit{}
+
+# Each lowered def is scoped by its parameters.
+def Names.params(ps: List<&2, Core.Param>, +m: List<&2, Bool>) -> {Law.Pars.names(Core.Lo.params(ps, m)) == Core.Lo.names(ps) : List<&2, String>}:
+  match ps:
+    case Nil{}:
+      {==}
+    case p <> r:
+      match p:
+        case Core.Param{+x, md, ty}:
+          %Names.params(r, Core.Lo.tail(m)) : {x <> Law.Pars.names(Core.Lo.params(r, Core.Lo.tail(m))) == x <> _ : List<&2, String>}
+          {==}
+
+def Src.defs(+ms: Map<&2, List<&2, Bool>>, xs: List<&2, Law.Src>, sok: Law.Src.ok(xs)) -> Law.Good.defs(Law.Src.lo(ms, xs)):
+  match xs:
+    case Nil{}:
+      Unit{}
+    case x <> r:
+      match x:
+        case Law.Src{+name, +ps, +body, ret}:
+          match sok:
+            case (ob, sr):
+              (Sc.back(Core.Lo.go(body, ms, Core.Lo.names(ps), True{}, Nil{}),
+                  Law.Pars.names(Core.Lo.params(ps, Pair.snd(Map<&2, List<&2, Bool>>, List<&2, Bool>, Map.get(List<&2, Bool>, Nil{}, ms, name)))), Core.Lo.names(ps),
+                  Names.params(ps, Pair.snd(Map<&2, List<&2, Bool>>, List<&2, Bool>, Map.get(List<&2, Bool>, Nil{}, ms, name))),
+                  Lo.sc(body, ms, Core.Lo.names(ps), True{}, Nil{}, ob)),
+                Src.defs(ms, r, sr))
+
+def NoU(r: Core.Res, -F: List<&2, String>, g: Law.Good.res(r, F)) -> Law.NoUnbound(r):
+  match r:
+    case Core.ROk{vs}:
+      Unit{}
+    case Core.REnv{env}:
+      Unit{}
+    case Core.RNo{}:
+      Unit{}
+    case Core.RFail{m}:
+      g
+
+def Law.scope_ok(prim, ok, n, ds, gd, s, F, g):
+  L.scope(~prim, ~ok, n, ds, gd, s, F, g)
+
+def Prog.lo(~prim: String -> List<&2, Core.Val> -> Core.Res,
+    ~ok: @op:String -> @vs:List<&2, Core.Val> -> Law.Goods(vs) -> Law.Good.prim(prim(op, vs)),
+    +n: Nat, +ms: Map<&2, List<&2, Bool>>, +xs: List<&2, Law.Src>, sok: Law.Src.ok(xs))
+    -> Law.NoUnbound(Core.Prog.run(~prim, n, Law.Src.lo(ms, xs))):
+  NoU(Core.Prog.run(~prim, n, Law.Src.lo(ms, xs)), Nil{},
+    L.scope(~prim, ~ok, n, Law.Src.lo(ms, xs), Src.defs(ms, xs, sok), Core.SCallDef{"main", Nil{}}, Nil{}, Unit{}))
+
+def Law.lo_prog(prim, ok, n, ms, xs, sok):
+  Prog.lo(~prim, ~ok, n, ms, xs, sok)
