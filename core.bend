@@ -1583,3 +1583,337 @@ def Defs.lit(ds: List<&2, Def>) -> List<&2, Def>:
       Nil{}
     case d <> r:
       Def.lit(d) <> Defs.lit(r)
+
+# Lowering and raising
+# ====================
+
+# bendc's syntax tree, as its parser and desugaring leave it: Lo lowers a
+# def to the core IR, Up raises a def back.
+
+type Pat is Data:
+  PVar{name: String}
+  PCtor{name: String, args: List<&2, Pat>}
+  PNat{n: U32}
+  PSucc{k: U32, p: Pat}
+  PNum{n: U32}
+  PFlt{s: String}
+
+type Expr is Data:
+  EVar{name: String}
+  ENum{n: U32}
+  ENat{n: U32}
+  EFlt{s: String}
+  EStr{s: String}
+  ECall{f: Expr, args: List<&2, Expr>}
+  ECtor{name: String, args: List<&2, Expr>}
+  ELam{pat: Pat, body: Expr}
+  ELet{pat: Pat, val: Expr, body: Expr}
+  EMatch{scrs: List<&2, Expr>, cases: List<&2, Expr>}
+  ECase{pats: List<&2, Pat>, body: Expr}
+  ESucc{k: U32, e: Expr}
+  EOp{op: String, a: Expr, b: Expr}
+  EAnn{e: Expr, ty: String}
+  ETy{name: String, args: List<&2, Expr>}
+  EErr{msg: String}
+
+# mode: 0 plain, 1 erased (-), 2 shared (+), 3 template (~), 4 bare
+type Param is Data:
+  Param{name: String, mode: U32, ty: String}
+
+def Lo.pt.push(a: Pt, p: Pt) -> Pt:
+  match p:
+    case PtCtr{k, ps}:
+      PtCtr{k, a <> ps}
+    case other:
+      other
+
+def Lo.pat(p: Pat) -> Pt:
+  match p:
+    case PVar{x}:
+      PtVar{x}
+    case PCtor{n, ps}:
+      match ps:
+        case Nil{}:
+          PtCtr{n, Nil{}}
+        case a <> t:
+          Lo.pt.push(Lo.pat(a), Lo.pat(PCtor{n, t}))
+    case PNat{n}:
+      PtNat{n}
+    case PSucc{k, q}:
+      PtSuc{k, Lo.pat(q)}
+    case PNum{n}:
+      PtNum{n}
+    case PFlt{s}:
+      PtFlt{s}
+
+def Lo.pats(ps: List<&2, Pat>) -> List<&2, Pt>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      Lo.pat(p) <> Lo.pats(t)
+
+def Lo.rel(m: List<&2, Bool>) -> Rel:
+  match m:
+    case False{} <> t:
+      Era{}
+    case other:
+      Run{}
+
+def Lo.tail(m: List<&2, Bool>) -> List<&2, Bool>:
+  match m:
+    case Nil{}:
+      Nil{}
+    case h <> t:
+      t
+
+# Whether f names a global def (not a local of bound).
+def Lo.bound(+bound: List<&2, String>, +n: String) -> Bool:
+  Bool.not(Dead.none(bound, n))
+
+# The names xs bound in front of s, each in front of the ones before it: the
+# order a match binds them in (see Pat.step).
+def Lo.bind(xs: List<&2, String>, s: List<&2, String>) -> List<&2, String>:
+  match xs:
+    case Nil{}:
+      s
+    case x <> t:
+      Lo.bind(t, x <> s)
+
+def Lo.global(+bound: List<&2, String>, f: Expr) -> Bool:
+  match f:
+    case EVar{+n}:
+      Bool.not(Lo.bound(bound, n))
+    case other:
+      False{}
+
+def Lo.fname(f: Expr) -> String:
+  match f:
+    case EVar{n}:
+      n
+    case other:
+      ""
+
+# The mask of a call's arguments: the callee's (top: e is the call itself),
+# else what the walk has left of it (a list field is walked as its head and
+# the node rebuilt with the rest).
+def Lo.mask(top: Bool, +ms: Map<&2, List<&2, Bool>>, +f: Expr, mask: List<&2, Bool>) -> List<&2, Bool>:
+  match top:
+    case True{}:
+      Pair.snd(Map<&2, List<&2, Bool>>, List<&2, Bool>, Map.get(List<&2, Bool>, Nil{}, ms, Lo.fname(f)))
+    case False{}:
+      mask
+
+def Lo.arg(+m: List<&2, Bool>, a: Tm, rest: Tm) -> Tm:
+  Tm.push.call(Arg{Lo.rel(m), a}, rest)
+
+def Lo.go(e: Expr, +ms: Map<&2, List<&2, Bool>>, +bound: List<&2, String>, +top: Bool, +mask: List<&2, Bool>) -> Tm:
+  match e:
+    case EVar{+n}:
+      Bool.pick(Tm, Lo.bound(bound, n), CVar{n}, CRef{n})
+    case ENum{n}:
+      CLit{LNum{n}}
+    case ENat{n}:
+      CLit{LNat{n}}
+    case EFlt{s}:
+      CLit{LFlt{s}}
+    case EStr{s}:
+      CLit{LStr{s}}
+    case ECall{+f, args}:
+      match args:
+        case Nil{}:
+          Bool.pick(Unit -> Tm, Lo.global(bound, f), u => CCall{Lo.fname(f), Nil{}},
+            u => CApp{Lo.go(f, ms, bound, True{}, Nil{}), Nil{}})(Unit{})
+        case +a <> +t:
+          Bool.pick(Unit -> Tm, Lo.global(bound, f),
+            u => Lo.arg(Lo.mask(top, ms, f, mask), Lo.go(a, ms, bound, True{}, Nil{}),
+              Lo.go(ECall{f, t}, ms, bound, False{}, Lo.tail(Lo.mask(top, ms, f, mask)))),
+            u => Tm.push(Lo.go(a, ms, bound, True{}, Nil{}), Lo.go(ECall{f, t}, ms, bound, False{}, Nil{})))(Unit{})
+    case ECtor{+n, args}:
+      match args:
+        case Nil{}:
+          CCtr{n, Nil{}}
+        case a <> t:
+          Tm.push(Lo.go(a, ms, bound, True{}, Nil{}), Lo.go(ECtor{n, t}, ms, bound, False{}, Nil{}))
+    case ELam{+p, b}:
+      CLam{Lo.pat(p), Lo.go(b, ms, Lo.bind(Dead.names([Lo.pat(p)]), bound), True{}, Nil{})}
+    case ELet{+p, v, b}:
+      CLet{Lo.pat(p), Lo.go(v, ms, bound, True{}, Nil{}), Lo.go(b, ms, Lo.bind(Dead.names([Lo.pat(p)]), bound), True{}, Nil{})}
+    case EMatch{scrs, +cases}:
+      match scrs:
+        case a <> t:
+          Tm.push(Lo.go(a, ms, bound, True{}, Nil{}), Lo.go(EMatch{t, cases}, ms, bound, False{}, Nil{}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              CMat{Nil{}, Nil{}}
+            case c <> t:
+              Tm.push.case(Lo.go(c, ms, bound, True{}, Nil{}), Lo.go(EMatch{Nil{}, t}, ms, bound, False{}, Nil{}))
+    case ECase{+ps, b}:
+      CCse{Lo.pats(ps), Lo.go(b, ms, Lo.bind(Dead.names(Lo.pats(ps)), bound), True{}, Nil{})}
+    case ESucc{k, x}:
+      CSuc{k, Lo.go(x, ms, bound, True{}, Nil{})}
+    case EOp{op, a, b}:
+      COp{op, Lo.go(a, ms, bound, True{}, Nil{}), Lo.go(b, ms, bound, True{}, Nil{})}
+    case EAnn{x, ty}:
+      CAnn{Lo.go(x, ms, bound, True{}, Nil{}), ty}
+    case ETy{+n, args}:
+      match args:
+        case Nil{}:
+          CTyp{n, Nil{}}
+        case a <> t:
+          Tm.push(Lo.go(a, ms, bound, True{}, Nil{}), Lo.go(ETy{n, t}, ms, bound, False{}, Nil{}))
+    case EErr{m}:
+      CErr{m}
+
+def Lo.names(ps: List<&2, Param>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Param{x, m, t} <> r:
+      x <> Lo.names(r)
+
+def Lo.params(ps: List<&2, Param>, +mask: List<&2, Bool>) -> List<&2, Par>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Param{x, m, t} <> r:
+      Par{x, Lo.rel(mask), m, t} <> Lo.params(r, Lo.tail(mask))
+
+def Lo.def(+ms: Map<&2, List<&2, Bool>>, +name: String, +ps: List<&2, Param>, body: Expr, ret: Expr) -> Def:
+  +bound = Lo.names(ps)
+  Def{name, Lo.params(ps, Pair.snd(Map<&2, List<&2, Bool>>, List<&2, Bool>, Map.get(List<&2, Bool>, Nil{}, ms, name))), Lo.go(body, ms, bound, True{}, Nil{}),
+    Lo.go(ret, ms, bound, True{}, Nil{})}
+
+# e with a in front of its fields (the raising's list walk, as Tm.push).
+def Expr.push(a: Expr, e: Expr) -> Expr:
+  match e:
+    case ECall{f, xs}:
+      ECall{f, a <> xs}
+    case ECtor{n, xs}:
+      ECtor{n, a <> xs}
+    case ETy{n, xs}:
+      ETy{n, a <> xs}
+    case EMatch{xs, cs}:
+      EMatch{a <> xs, cs}
+    case other:
+      other
+
+def Expr.push.case(c: Expr, e: Expr) -> Expr:
+  match e:
+    case EMatch{xs, cs}:
+      EMatch{xs, c <> cs}
+    case other:
+      other
+
+def Up.pt.push(a: Pat, p: Pat) -> Pat:
+  match p:
+    case PCtor{k, ps}:
+      PCtor{k, a <> ps}
+    case other:
+      other
+
+def Up.pat(p: Pt) -> Pat:
+  match p:
+    case PtVar{x}:
+      PVar{x}
+    case PtCtr{n, ps}:
+      match ps:
+        case Nil{}:
+          PCtor{n, Nil{}}
+        case a <> t:
+          Up.pt.push(Up.pat(a), Up.pat(PtCtr{n, t}))
+    case PtNat{n}:
+      PNat{n}
+    case PtSuc{k, q}:
+      PSucc{k, Up.pat(q)}
+    case PtNum{n}:
+      PNum{n}
+    case PtFlt{s}:
+      PFlt{s}
+
+def Up.pats(ps: List<&2, Pt>) -> List<&2, Pat>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      Up.pat(p) <> Up.pats(t)
+
+def Up.lit(l: Lit) -> Expr:
+  match l:
+    case LNum{n}:
+      ENum{n}
+    case LNat{n}:
+      ENat{n}
+    case LFlt{s}:
+      EFlt{s}
+    case LStr{s}:
+      EStr{s}
+
+def Up.go(t: Tm) -> Expr:
+  match t:
+    case CVar{x}:
+      EVar{x}
+    case CLit{l}:
+      Up.lit(l)
+    case CRef{f}:
+      EVar{f}
+    case CCall{f, as}:
+      match as:
+        case Nil{}:
+          ECall{EVar{f}, Nil{}}
+        case a <> r:
+          match a:
+            case Arg{rel, e}:
+              Expr.push(Up.go(e), Up.go(CCall{f, r}))
+    case CApp{f, as}:
+      match as:
+        case Nil{}:
+          ECall{Up.go(f), Nil{}}
+        case a <> r:
+          Expr.push(Up.go(a), Up.go(CApp{f, r}))
+    case CCtr{k, as}:
+      match as:
+        case Nil{}:
+          ECtor{k, Nil{}}
+        case a <> r:
+          Expr.push(Up.go(a), Up.go(CCtr{k, r}))
+    case CLam{p, b}:
+      ELam{Up.pat(p), Up.go(b)}
+    case CLet{p, v, b}:
+      ELet{Up.pat(p), Up.go(v), Up.go(b)}
+    case CMat{scrs, cases}:
+      match scrs:
+        case a <> r:
+          Expr.push(Up.go(a), Up.go(CMat{r, cases}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              EMatch{Nil{}, Nil{}}
+            case c <> r:
+              Expr.push.case(Up.go(c), Up.go(CMat{Nil{}, r}))
+    case CCse{ps, b}:
+      ECase{Up.pats(ps), Up.go(b)}
+    case CSuc{k, e}:
+      ESucc{k, Up.go(e)}
+    case COp{op, a, b}:
+      EOp{op, Up.go(a), Up.go(b)}
+    case CAnn{e, ty}:
+      EAnn{Up.go(e), ty}
+    case CTyp{n, as}:
+      match as:
+        case Nil{}:
+          ETy{n, Nil{}}
+        case a <> r:
+          Expr.push(Up.go(a), Up.go(CTyp{n, r}))
+    case CBox{}:
+      ETy{"", Nil{}}
+    case CErr{m}:
+      EErr{m}
+
+def Up.params(ps: List<&2, Par>) -> List<&2, Param>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Par{x, rel, m, t} <> r:
+      Param{x, m, t} <> Up.params(r)
