@@ -15579,16 +15579,19 @@ def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String) -> CO
 # platform's calling convention (AAPCS64), so the code calls the runtime
 # (build/bendrt.o, and rt/native.c's names for its inline natives) as C does.
 #
-# The code is simple: every value lives in a slot of the function's frame
-# ([sp + 8 i]), an expression leaves its value in x0, and the operands of a
-# call are loaded from their slots into x0..x7 just before it. A def with at
+# Every value lives in a slot of the function's frame, an expression leaves
+# its value in x0, and the operands of a call are loaded from their slots
+# into x0..x7 just before it. The first 10 slots are the callee-saved
+# registers x19..x28 (see Registers); the rest are [sp + 8 i]. A def with at
 # most 8 kept parameters takes them in x0..x7; a wider one takes x0, the
-# address of its arguments in a row. A tail call to itself stores the new
+# address of its arguments in a row. A tail call to itself moves the new
 # arguments over the parameters and jumps back; one to another narrow def
-# pops the frame and branches. What it does not do, against the C backend:
-# freeing on match (it runs as BEND_NO_FREE), parallel lets (they run in
-# order), destination passing, and !-calls on the device (they run on the
-# CPU).
+# pops the frame and branches. As the C backend does, matches free the nodes
+# they open (bend_take, bend_share), parallel lets fork on the runtime's
+# pool (par_fork, par_join; a seq def gets an S_ clone), and a def of a
+# destination-passing group stores its result through dst (N.def.dst).
+# Nested F32 operations compute in FP registers (Float trees), and a loop's
+# F32 parameters stay in them (twins). !-calls run on the CPU.
 
 # An operand: a frame slot or a constant.
 type NO is Data:
