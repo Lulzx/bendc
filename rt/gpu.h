@@ -156,7 +156,7 @@ KINLINE KW k_word(KTHR KCtx *c, KW v, KW i) {
   if (k_in(c, v)) return c->H[((v - c->ab) >> 3) + i];
   return c->G[((v - c->gb) >> 3) + i];
 }
-KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : (k_word(c, v, 0) & ~(KW)0x300000); }
+KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : (k_word(c, v, 0) & (KW)0xffcfffff); }
 #define KTAG(v) k_tag(c, v)
 #define KFLD(v, i) k_word(c, v, 1 + (i))
 
@@ -493,7 +493,7 @@ KINLINE KW k_kq(KTHR KCtx *c, KTHR bool *ok);
 // Applies closure f to x; the value goes to block ret.
 KINLINE void k_call_clo(KTHR KCtx *c, KW f, KW x, KW ret) {
   KW fw = k_word(c, f, 0), ar = k_word(c, f, 1), n = k_word(c, f, 2);
-  KW l = (fw >> 52) == 0x7ff ? (fw & 0xffffffffu) : k_fn_label(c, fw);
+  KW l = (fw >> 52) == 0x7ff ? (fw & 0xffffffffu) : k_fn_label(c, fw & (((KW)1 << 48) - 1));
   KW fs = k_frame_size(l);
   if (l == 0 || fs == 0) {
     k_fail(c, KE_FX);
