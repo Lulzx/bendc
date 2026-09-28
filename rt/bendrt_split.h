@@ -1145,7 +1145,9 @@ static inline V F_Map_dget(V d, V m, V key) {
   if (leaf) {
     r = FLD(leaf, 1);
     // (the value is the map's and the answer's now)
-    if (gc_hot.rc) rc_dup_in(r, ((V *)leaf)[0] & RC_TS);
+    // (marked once threads run: the walk took no node, so the leaf's
+    // mark may lag, as a borrowed node's does)
+    if (gc_hot.rc) rc_dup_in(r, rc_bmark());
     else bend_share(r);
     bend_drop(d);
   }
