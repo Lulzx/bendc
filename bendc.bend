@@ -14769,12 +14769,15 @@ type OSp is Data:
 type OPk is Data:
   PkNo{}
   PkYes{name: String, i: Nat, arg: Core.Tm}
+  PkFuse{name: String, j: Nat, g: String, p: String}
 
 # What decides a call: the program's defs (a call that passes a closed
 # function), or a copy being made (its callee's self-calls).
 type ODec is Data:
   DCtx{c: Map<&2, Core.Def>}
   DSelf{f: String, i: Nat, name: String}
+  DFuCtx{c: Map<&2, Core.Def>}
+  DFuSelf{g: String, j: Nat, p: String, n: Nat, name: String}
 
 def Opt.sp.budget() -> U32:
   400
@@ -14833,12 +14836,132 @@ def Opt.sp.def(+c: Map<&2, Core.Def>, +f: String, +as: List<&2, Core.Arg>, d: Co
         u => Opt.sp.at.pos(Opt.sp.pos(c, ps, as, 0n, f, b, Inl.pars.len(ps)), f, as),
         u => PkNo{})(Unit{})
 
+# Fusion decides a call g(.., p(..), ..) where g matches on that argument
+# alone and uses it nowhere else, and some result of p is a constructor.
+def Opt.fu.ok(+f: String) -> Bool:
+  Bool.and(Bool.not(G.is_native(f)), Bool.not(String.starts_with(f, "IO.")))
+
+def Opt.fu.name(+g: String, +j: Nat, +p: String) -> String:
+  g ++ "%f" ++ Opt.hash(p ++ "#" ++ U32.show(U32.from_nat(j)), 2166136261, 7)
+
+# The variable a body matches on, alone ("" when it does not).
+def Opt.fu.scr(b: Core.Tm) -> String:
+  match b:
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case Core.CVar{x} <> Nil{}:
+          x
+        case other:
+          ""
+    case Core.CAnn{e, ty}:
+      Opt.fu.scr(e)
+    case other:
+      ""
+
+def Opt.par.pos(ps: List<&2, Core.Par>, +x: String, +i: Nat) -> Nat:
+  match ps:
+    case Nil{}:
+      i
+    case Core.Par{y, rel, m, ty} <> r:
+      Bool.pick(Unit -> Nat, String.eq(x, y), u => i, u => Opt.par.pos(r, x, 1n+i))(Unit{})
+
+# Whether a field of a constructor is a call of p.
+def Opt.fu.self.field(+p: String, as: List<&2, Core.Tm>) -> Bool:
+  match as:
+    case Nil{}:
+      False{}
+    case a <> r:
+      match a:
+        case Core.CCall{q, qs}:
+          Bool.or(String.eq(p, q), Opt.fu.self.field(p, r))
+        case other:
+          Opt.fu.self.field(p, r)
+
+# Whether some result of t is a constructor with a field that calls p
+# (p builds a structure, one node a call).
+def Opt.fu.ctail(+p: String, t: Core.Tm) -> Bool:
+  match t:
+    case Core.CCtr{k, as}:
+      Opt.fu.self.field(p, as)
+    case Core.CLet{pt, v, b}:
+      Opt.fu.ctail(p, b)
+    case Core.CAnn{e, ty}:
+      Opt.fu.ctail(p, e)
+    case Core.CMat{scrs, cases}:
+      match cases:
+        case Nil{}:
+          False{}
+        case c <> t2:
+          Bool.or(Opt.fu.ctail(p, c), Opt.fu.ctail(p, Core.CMat{scrs, t2}))
+    case Core.CCse{ps, b}:
+      Opt.fu.ctail(p, b)
+    case other:
+      False{}
+
+def Opt.fu.gbudget() -> U32:
+  120
+
+def Opt.fu.pbudget() -> U32:
+  300
+
+# The position a consumer g matches on (n, the arity, when none).
+def Opt.fu.j(d: Core.Def, +n: Nat) -> Nat:
+  match d:
+    case Core.Def{+name, +ps, +b, ret}:
+      +x = Opt.fu.scr(b)
+      Bool.pick(Unit -> Nat, Bool.and(Bool.and(Bool.and(Nat.is_eq(Inl.pars.len(ps), n), U32.is_le(Opt.size(b), Opt.fu.gbudget())),
+          Str.has(Inl.names(b, 3, Nil{}), name)),
+          Bool.and(Bool.not(String.eq(x, "")), U32.is_eq(Inl.uses(b, 0, x), 1))),
+        u => Opt.par.pos(ps, x, 0n), u => n)(Unit{})
+
+def Opt.fu.prod(d: Core.Def, +n: Nat) -> Bool:
+  match d:
+    case Core.Def{+name, ps, +b, ret}:
+      Bool.and(Nat.is_eq(Inl.pars.len(ps), n), Bool.and(U32.is_le(Opt.size(b), Opt.fu.pbudget()), Opt.fu.ctail(name, b)))
+
+def Opt.fu.pick(+c: Map<&2, Core.Def>, +g: String, +j: Nat, a: Core.Tm) -> OPk:
+  match a:
+    case Core.CCall{+p, pas}:
+      Bool.pick(Unit -> OPk, Bool.and(Bool.and(Opt.has(c, p), Opt.fu.ok(p)), Bool.not(String.eq(g, p))),
+        u => Bool.pick(OPk, Opt.fu.prod(Opt.get(c, p), Inl.args.len(pas)), PkFuse{Opt.fu.name(g, j, p), j, g, p}, PkNo{}),
+        u => PkNo{})(Unit{})
+    case other:
+      PkNo{}
+
+def Opt.fu.at.j(+c: Map<&2, Core.Def>, +g: String, +j: Nat, +as: List<&2, Core.Arg>) -> OPk:
+  Bool.pick(Unit -> OPk, Nat.is_lt(j, Inl.args.len(as)), u => Opt.fu.pick(c, g, j, Opt.nth.arg(j, as)), u => PkNo{})(Unit{})
+
+def Opt.fu.at(+c: Map<&2, Core.Def>, +g: String, +as: List<&2, Core.Arg>) -> OPk:
+  Bool.pick(Unit -> OPk, Bool.and(Opt.has(c, g), Opt.fu.ok(g)),
+    u => Opt.fu.at.j(c, g, Opt.fu.j(Opt.get(c, g), Inl.args.len(as)), as),
+    u => PkNo{})(Unit{})
+
+def Opt.fu.is.call(+p: String, +n: Nat, a: Core.Tm) -> Bool:
+  match a:
+    case Core.CCall{q, pas}:
+      Bool.and(String.eq(p, q), Nat.is_eq(Inl.args.len(pas), n))
+    case other:
+      False{}
+
+def Opt.fu.redirect(+name: String, +f: String, +j: Nat, +p: String, +as: List<&2, Core.Arg>, a: Core.Tm) -> Core.Tm:
+  match a:
+    case Core.CCall{+q, pas}:
+      Bool.pick(Unit -> Core.Tm, String.eq(p, q), u => Core.CCall{name, List.append(&2, Core.Arg, Opt.drop.arg(j, as), pas)},
+        u => Core.CCall{f, as})(Unit{})
+    case other:
+      Core.CCall{f, as}
+
 def Opt.sp.at(dec: ODec, +f: String, +as: List<&2, Core.Arg>) -> OPk:
   match dec:
     case DCtx{+c}:
       Bool.pick(Unit -> OPk, Opt.has(c, f), u => Opt.sp.def(c, f, as, Opt.get(c, f)), u => PkNo{})(Unit{})
     case DSelf{+g, i, name}:
       Bool.pick(OPk, String.eq(f, g), PkYes{name, i, Core.CBox{}}, PkNo{})
+    case DFuCtx{+c}:
+      Opt.fu.at(c, f, as)
+    case DFuSelf{+g, +j, +p, +n, name}:
+      Bool.pick(Unit -> OPk, String.eq(f, g), u => Bool.pick(OPk, Opt.fu.is.call(p, n, Opt.nth.arg(j, as)), PkFuse{name, j, g, p}, PkNo{}),
+        u => PkNo{})(Unit{})
 
 def Opt.sp.redirect(k: OPk, t: Core.Tm) -> Core.Tm:
   match k:
@@ -14848,6 +14971,12 @@ def Opt.sp.redirect(k: OPk, t: Core.Tm) -> Core.Tm:
       match t:
         case Core.CCall{f, as}:
           Core.CCall{name, Opt.drop.arg(i, as)}
+        case other:
+          other
+    case PkFuse{+name, +j, g, +p}:
+      match t:
+        case Core.CCall{+f, +as}:
+          Opt.fu.redirect(name, f, j, p, as, Opt.nth.arg(j, as))
         case other:
           other
 
@@ -14862,7 +14991,7 @@ def Opt.sp.rw(fu: Nat, +dec: ODec, top: Bool, t: Core.Tm) -> Core.Tm:
         case True{}:
           match t:
             case Core.CCall{+f, +as}:
-              Opt.sp.redirect(Opt.sp.at(dec, f, as), Opt.sp.rw(p, dec, False{}, Core.CCall{f, as}))
+              Opt.sp.rw(p, dec, False{}, Opt.sp.redirect(Opt.sp.at(dec, f, as), Core.CCall{f, as}))
             case other:
               Opt.sp.rw(p, dec, False{}, other)
         case False{}:
@@ -14970,17 +15099,19 @@ def Opt.sp.pk(+f: String, k: OPk, acc: List<&2, OSp>) -> List<&2, OSp>:
       acc
     case PkYes{name, i, a}:
       OSp{name, f, i, a} <> acc
+    case PkFuse{name, j, g, p}:
+      OSp{name, g, j, Core.CRef{p}} <> acc
 
-def Opt.sp.picks(+c: Map<&2, Core.Def>, ts: List<&2, Core.Tm>) -> List<&2, OSp>:
+def Opt.sp.picks(+dec: ODec, ts: List<&2, Core.Tm>) -> List<&2, OSp>:
   match ts:
     case Nil{}:
       Nil{}
     case t <> r:
       match t:
         case Core.CCall{+f, +as}:
-          Opt.sp.pk(f, Opt.sp.at(DCtx{c}, f, as), Opt.sp.picks(c, r))
+          Opt.sp.pk(f, Opt.sp.at(dec, f, as), Opt.sp.picks(dec, r))
         case other:
-          Opt.sp.picks(c, r)
+          Opt.sp.picks(dec, r)
 
 def Opt.sp.reqs(ss: List<&2, OSp>, +seen: Set(), +acc: List<&2, OSp>) -> List<&2, OSp>:
   match ss:
@@ -15102,16 +15233,16 @@ def Opt.bodies.calls(ds: List<&2, OD>, acc: List<&2, Core.Tm>) -> List<&2, Core.
         case OKeep{k}:
           Opt.bodies.calls(t, acc)
 
-def Opt.sp.rws(+c: Map<&2, Core.Def>, ds: List<&2, OD>) -> List<&2, OD>:
+def Opt.sp.rws(+dec: ODec, ds: List<&2, OD>) -> List<&2, OD>:
   match ds:
     case Nil{}:
       Nil{}
     case d <> t:
       match d:
         case OCore{Core.Def{n, ps, b, ret}}:
-          OCore{Core.Def{n, ps, Opt.sp.rw(Fuel.max(), DCtx{c}, True{}, b), ret}} <> Opt.sp.rws(c, t)
+          OCore{Core.Def{n, ps, Opt.sp.rw(Fuel.max(), dec, True{}, b), ret}} <> Opt.sp.rws(dec, t)
         case OKeep{k}:
-          OKeep{k} <> Opt.sp.rws(c, t)
+          OKeep{k} <> Opt.sp.rws(dec, t)
 
 # Rounds of specialization: old are the defs done, new the ones whose
 # calls this round sends to copies.
@@ -15121,12 +15252,160 @@ def Opt.sp.rounds(k: Nat, +old: List<&2, OD>, +new: List<&2, OD>) -> List<&2, OD
       List.append(&2, OD, old, new)
     case 1n+j:
       +c = Opt.defs(new, Opt.defs(old, Map.new(&2, Core.Def)))
-      +made = Opt.sp.makes(c, Opt.sp.reqs(Opt.sp.picks(c, Opt.bodies.calls(new, Nil{})), Opt.names(new, Opt.names(old, Set.new())), Nil{}))
-      +done = List.append(&2, OD, old, Opt.sp.rws(c, new))
+      +made = Opt.sp.makes(c, Opt.sp.reqs(Opt.sp.picks(DCtx{c}, Opt.bodies.calls(new, Nil{})), Opt.names(new, Opt.names(old, Set.new())), Nil{}))
+      +done = List.append(&2, OD, old, Opt.sp.rws(DCtx{c}, new))
       Bool.pick(Unit -> List<&2, OD>, List.is_empty(&2, OD, made), u => done, u => Opt.sp.rounds(j, done, made))(Unit{})
 
 def Opt.spec(+flags: String, +ds: List<&2, OD>) -> List<&2, OD>:
   Bool.pick(Unit -> List<&2, OD>, Opt.on(flags, 112), u => Opt.sp.rounds(4n, Nil{}, ds), u => ds)(Unit{})
+
+# Fusion
+# ------
+#
+# A call g(.., p(as), ..) where g matches on that argument alone, and p
+# has a result that is a constructor, calls a fused def instead (f in
+# BEND_OPT): p's body with g around each of its results, g unfolded where
+# the result is a constructor (so the match on it is known), and each
+# g(.., p(bs), ..) that leaves made a call of the fused def. The list
+# p built is never built. Each round fuses the calls the round before
+# made; fused defs no call names are dropped at the end.
+def Opt.fu.oarg(q: Core.Par, +s: String) -> Core.Arg:
+  match q:
+    case Core.Par{x, rel, m, ty}:
+      match rel:
+        case Core.Era{}:
+          Core.Arg{Core.Era{}, Core.CBox{}}
+        case Core.Run{}:
+          Core.Arg{Core.Run{}, Core.CVar{x ++ s}}
+
+def Opt.fu.oargs(ps: List<&2, Core.Par>, +s: String) -> List<&2, Core.Arg>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case q <> r:
+      Opt.fu.oarg(q, s) <> Opt.fu.oargs(r, s)
+
+def Opt.fu.opars(ps: List<&2, Core.Par>, +s: String) -> List<&2, Core.Par>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Par{x, rel, m, ty} <> r:
+      Core.Par{x ++ s, rel, m, ty} <> Opt.fu.opars(r, s)
+
+def Opt.fu.ins(n: Nat, as: List<&2, Core.Arg>, +a: Core.Arg) -> List<&2, Core.Arg>:
+  match n as:
+    case 0n bs:
+      a <> bs
+    case 1n+k Nil{}:
+      a <> Nil{}
+    case 1n+k b <> r:
+      b <> Opt.fu.ins(k, r, a)
+
+# g around a result t of p: unfolded when t is a constructor.
+def Opt.fu.hole(+g: String, +dg: Core.Def, +j: Nat, +os: List<&2, Core.Arg>, +suf: String, t: Core.Tm) -> Core.Tm:
+  match t:
+    case Core.CCtr{+k, +xs}:
+      Inl.go(Fuel.max(), Map.new(&2, Core.Def), IPlan{Inl.pars(dg), Opt.fu.ins(j, os, Core.Arg{Core.Run{}, Core.CCtr{k, xs}}), suf},
+        Inl.ren(Inl.body(dg), suf))
+    case other:
+      Core.CCall{g, Opt.fu.ins(j, os, Core.Arg{Core.Run{}, other})}
+
+def Opt.fu.tails(+g: String, +dg: Core.Def, +j: Nat, +os: List<&2, Core.Arg>, +suf: String, t: Core.Tm) -> Core.Tm:
+  match t:
+    case Core.CLet{pt, v, b}:
+      Core.CLet{pt, v, Opt.fu.tails(g, dg, j, os, suf, b)}
+    case Core.CAnn{e, ty}:
+      Opt.fu.tails(g, dg, j, os, suf, e)
+    case Core.CMat{scrs, cases}:
+      match cases:
+        case Nil{}:
+          Core.CMat{scrs, Nil{}}
+        case c <> t2:
+          Core.Tm.push.case(Opt.fu.tails(g, dg, j, os, suf, c), Opt.fu.tails(g, dg, j, os, suf, Core.CMat{scrs, t2}))
+    case Core.CCse{ps, b}:
+      Core.CCse{ps, Opt.fu.tails(g, dg, j, os, suf, b)}
+    case other:
+      Opt.fu.hole(g, dg, j, os, suf, other)
+
+def Opt.fu.ret(d: Core.Def) -> Core.Tm:
+  match d:
+    case Core.Def{name, ps, b, ret}:
+      ret
+
+def Opt.fu.make.def(+name: String, +g: String, +j: Nat, +p: String, +dg: Core.Def, dp: Core.Def) -> OD:
+  match dp:
+    case Core.Def{f, +ps, b, ret}:
+      +gps = Opt.drop.par(j, Inl.pars(dg))
+      +h = Opt.hash(name, 2166136261, 7)
+      +body = Opt.fu.tails(g, dg, j, Opt.fu.oargs(gps, "%z" ++ h), "@" ++ h, b)
+      OCore{Core.Def{name, Opt.sp.pars(List.append(&2, Core.Par, Opt.fu.opars(gps, "%z" ++ h), ps)),
+        Opt.sp.rw(Fuel.max(), DFuSelf{g, j, p, Inl.pars.len(ps), name}, True{}, Opt.go(Fuel.max(), OAll{}, body)), Opt.fu.ret(dg)}}
+
+def Opt.fu.refname(t: Core.Tm) -> String:
+  match t:
+    case Core.CRef{f}:
+      f
+    case other:
+      ""
+
+def Opt.fu.make(+c: Map<&2, Core.Def>, s: OSp) -> OD:
+  match s:
+    case OSp{+name, +g, +j, a}:
+      +p = Opt.fu.refname(a)
+      Opt.fu.make.def(name, g, j, p, Opt.get(c, g), Opt.get(c, p))
+
+def Opt.fu.makes(+c: Map<&2, Core.Def>, ss: List<&2, OSp>) -> List<&2, OD>:
+  match ss:
+    case Nil{}:
+      Nil{}
+    case s <> r:
+      Opt.fu.make(c, s) <> Opt.fu.makes(c, r)
+
+def Opt.fu.rounds(k: Nat, +ds: List<&2, OD>) -> List<&2, OD>:
+  match k:
+    case 0n:
+      ds
+    case 1n+j:
+      +c = Opt.defs(ds, Map.new(&2, Core.Def))
+      +made = Opt.fu.makes(c, Opt.sp.reqs(Opt.sp.picks(DFuCtx{c}, Opt.bodies.calls(ds, Nil{})), Opt.names(ds, Set.new()), Nil{}))
+      Bool.pick(Unit -> List<&2, OD>, List.is_empty(&2, OD, made), u => ds,
+        u => Opt.fu.rounds(j, List.append(&2, OD, Opt.sp.rws(DFuCtx{c}, ds), made)))(Unit{})
+
+# The names the bodies of ds call or refer to.
+def Opt.used(ds: List<&2, OD>, +acc: List<&2, String>) -> List<&2, String>:
+  match ds:
+    case Nil{}:
+      acc
+    case d <> t:
+      match d:
+        case OCore{Core.Def{n, ps, b, ret}}:
+          Opt.used(t, Inl.names(b, 3, acc))
+        case OKeep{k}:
+          Opt.used(t, acc)
+
+# ds without the fused defs no def names.
+def Opt.drop.dead(ds: List<&2, OD>, +used: Set()) -> List<&2, OD>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> +t:
+      match d:
+        case OCore{+cd}:
+          +n = Opt.dname(cd)
+          Bool.pick(Unit -> List<&2, OD>, Bool.and(String.contains(n, "%f"), Bool.not(Lo.bound(used, n))),
+            u => Opt.drop.dead(t, used), u => OCore{cd} <> Opt.drop.dead(t, used))(Unit{})
+        case OKeep{k}:
+          OKeep{k} <> Opt.drop.dead(t, used)
+
+def Opt.dead(k: Nat, +ds: List<&2, OD>) -> List<&2, OD>:
+  match k:
+    case 0n:
+      ds
+    case 1n+j:
+      Opt.dead(j, Opt.drop.dead(ds, Set.from_list(Opt.used(ds, Nil{}))))
+
+def Opt.fuse(+flags: String, +ds: List<&2, OD>) -> List<&2, OD>:
+  Bool.pick(Unit -> List<&2, OD>, Opt.on(flags, 102), u => Opt.dead(3n, Opt.fu.rounds(4n, ds)), u => ds)(Unit{})
 
 # The last step: applications of names made calls.
 def Opt.fix(+c: Map<&2, Core.Def>, d: OD) -> OD:
@@ -15153,7 +15432,7 @@ def Lo.program(+flags: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
   +g = G.new(ds)
   +ods = Opt.lowers(g, ds)
   +rank = Opt.rank(ods, 0, Map.new(&2, U32))
-  Opt.raises(Opt.finish(Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods)))))
+  Opt.raises(Opt.finish(Opt.fuse(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods))))))
 
 def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
@@ -15205,7 +15484,7 @@ def Main.opt(r: Result<&1, &1, U32 & String, String>) -> String:
     case Done{v}:
       v
     case Fail{e}:
-      "i..sp"
+      "i..spf"
 
 # C for a program: matches free what they open unless BEND_NO_FREE is set
 # (bendc builds itself so: a compiler's heap is mostly shared, short-lived
