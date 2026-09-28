@@ -15612,10 +15612,12 @@ def NEnv.has(+env: NEnv(), +x: String) -> Bool:
   Maybe.is_some(&2, NO, NEnv.find(env, x))
 
 # Where a statement's value goes: returned, or stored in a slot, then a jump
-# to the join label.
+# to the join label, or stored through the address in slot d (in a D_
+# function of destination-passing group id).
 type NT is Data:
   NTRet{}
   NTSet{s: U32, join: String}
+  NTDst{d: U32, id: String}
 
 # The def being generated: its name, parameter mask and the label after its
 # prologue (a tail call to itself jumps there).
@@ -15969,6 +15971,9 @@ def N.adr(+r: U32, l: String) -> As.Code:
 # x0 = a new block of w words (bn_alloc, in rt/native.c).
 def N.alloc(+w: U32) -> As.Code:
   As.CCat{N.k(0, w), N.call("bn_alloc")}
+
+def N.alloc.hole(+w: U32) -> As.Code:
+  As.CCat{N.k(0, w), N.call("bn_alloc_hole")}
 
 # Stores operands at [x0 + off], [x0 + off + 8], ... (through x9).
 def N.fields(os: List<&2, NO>, +off: U32) -> As.Code:
@@ -17059,6 +17064,8 @@ def N.fin(t: NT) -> As.Code:
       N.epilogue()
     case NTSet{+s, j}:
       As.CCat{N.st(0, s), N.b(j)}
+    case NTDst{+d, id}:
+      N.cat([N.ld(9, d), N.w(As.str(0, 9, 0)), N.epilogue()])
 
 def N.is_ret(t: NT) -> Bool:
   match t:
@@ -17066,6 +17073,74 @@ def N.is_ret(t: NT) -> Bool:
       True{}
     case NTSet{s, j}:
       False{}
+    case NTDst{d, id}:
+      True{}
+
+def N.dst.slot(t: NT) -> U32:
+  match t:
+    case NTDst{d, id}:
+      d
+    case other:
+      0
+
+# Destination passing (Dps, as the C backend does it: Gen.def.dst). D_name
+# takes its parameters in x0..x7 and dst in x8, and stores its result
+# through dst; a constructor node with a field that is a call to the group
+# is stored with BEND_HOLE there, and dst moves to that field before the
+# call (a jump). A group whose members take more than 8 parameters has
+# none here.
+def N.dps.go(g: DGrp) -> String:
+  DGrp{+id, +n} = g
+  Bool.pick(String, U32.is_le(n, 8), id, "")
+
+def N.dps(+g: G, +name: String) -> String:
+  N.dps.go(G.dps(g, name))
+
+# Whether a call in a D_ function's tail jumps to a D_ function: name is of
+# the group, applied to all its parameters.
+def N.dst.call(+g: G, +env: NEnv(), +tgt: NT, +name: String, +args: List<&2, Expr>) -> Bool:
+  match tgt:
+    case NTDst{d, +id}:
+      Bool.and(Str.eq(id, N.dps(g, name)), Bool.and(Bool.not(NEnv.has(env, name)),
+        Nat.is_eq(List.length(&2, Bool, DInfo.mask(G.def(g, name))), List.length(&2, Expr, args))))
+    case other:
+      False{}
+
+def N.dst.hole.at(+g: G, +env: NEnv(), +tgt: NT, a: Expr, +i: U32, acc: U32) -> U32:
+  match a:
+    case ECall{EVar{+h}, +hargs}:
+      Bool.pick(U32, N.dst.call(g, env, tgt, h, hargs), U32.inc(i), acc)
+    case other:
+      acc
+
+# The field of a constructor node left as a hole: the last one that is a
+# call to the group (1-based; 0 when there is none).
+def N.dst.hole(+g: G, +env: NEnv(), +tgt: NT, node: Bool, as: List<&2, Expr>, +i: U32, acc: U32) -> U32:
+  match node as:
+    case True{} a <> t:
+      N.dst.hole(g, env, tgt, True{}, t, U32.inc(i), N.dst.hole.at(g, env, tgt, a, i, acc))
+    case n l:
+      acc
+
+# The fields with the hole's (the i-th, from 1) as BEND_HOLE (IMM(0x7ffff)).
+def N.dst.fields(as: List<&2, Expr>, +i: U32, +hole: U32) -> List<&2, Expr>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case a <> t:
+      Bool.pick(Expr, U32.is_eq(i, hole), ENum{4194297}, a) <> N.dst.fields(t, U32.inc(i), hole)
+
+# x0 = a node with a hole: its tag word holds BEND_HOLE until its fields are
+# in (bn_alloc_hole, as CH2 and the like do).
+def N.hnode(+tag: U32, +os: List<&2, NO>) -> As.Code:
+  N.cat([N.alloc.hole(U32.inc(U32.from_nat(List.length(&2, NO, os)))), N.fields(os, 8), N.k(9, tag),
+    N.w(As.str(9, 0, 0))])
+
+# F_name: D_name with dst at a cell of its frame, then the cell.
+def N.dst.entry(+m: String, +f: String) -> As.Code:
+  N.cat([N.one(As.ISym{f, False{}}),
+    N.ws([As.push_fp(), As.set_fp(), As.subi(31, 31, 16), As.str(31, 31, 0), As.addi(8, 31, 0)]),
+    N.one(As.IB{As.bl(), "D_" ++ m}), N.ws([As.ldr(0, 31, 0), As.sp_fp(), As.pop_fp(), As.ret()])])
 
 def N.is_tail(+env: NEnv(), +self: NSelf, +tgt: NT, +name: String, +args: List<&2, Expr>) -> Bool:
   NSelf{+sn, +mask, top} = self
@@ -17241,6 +17316,9 @@ type NS is Data:
   NSTailCall{g: G, env: NEnv(), name: String, args: List<&2, Expr>, ok: Bool}
   NSStmtCallTo{g: G, env: NEnv(), tgt: NT, name: String, args: List<&2, Expr>}
   NSStmtCall{g: G, env: NEnv(), self: NSelf, tgt: NT, name: String, args: List<&2, Expr>, tail: Bool}
+  NSDstCall{g: G, env: NEnv(), d: U32, id: String, name: String, args: List<&2, Expr>, ok: Bool}
+  NSStmtCtor{none: Bool, g: G, env: NEnv(), self: NSelf, tgt: NT, name: String, args: List<&2, Expr>,
+    hole: U32}
   NSLetVar{g: G, env: NEnv(), self: NSelf, tgt: NT, x: String, v: Expr, body: Expr, m: Maybe<&2, NO>}
   NSLetHole{g: G, env: NEnv(), self: NSelf, tgt: NT, v: Expr, body: Expr}
   NSLetPat{g: G, env: NEnv(), self: NSelf, tgt: NT, p: Pat, v: Expr, body: Expr}
@@ -17570,6 +17648,41 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
               do NG<As.Code>:
                 c : As.Code <- N.rec(fu, NSExpr{g, env, ECall{EVar{name}, args}})
                 return As.CCat{c, N.fin(NTSet{s, j})}
+            case NTDst{+d, +id}:
+              N.rec(fu, NSDstCall{g, env, d, id, name, args, N.dst.call(g, env, NTDst{d, id}, name, args)})
+        # A call to the group: its arguments, dst into x8, and a jump.
+        case NSDstCall{+g, +env, +d, +id, +name, +args, ok}:
+          match ok:
+            case True{}:
+              +kept = N.split.kept(N.split0(DInfo.mask(G.def(g, name)), args))
+              do NG<As.Code>:
+                N.ref(name)
+                +base : U32 <- N.slots(N.cx(env, kept))
+                a : As.Code <- N.rec(fu, NSArgs{g, env, kept, base})
+                return N.cat([a, N.lregs.b(N.ops(env, kept, base), base), N.ld(8, d), N.pop(),
+                  N.one(As.IB{As.b(), "D_" ++ Gen.mangle(name)})])
+            case False{}:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSExpr{g, env, ECall{EVar{name}, args}})
+                return As.CCat{c, N.fin(NTDst{d, id})}
+        # C(.., f(..), ..) with f in the group: the node is stored through dst
+        # with a hole where f's result goes, dst moves to the hole, and f's
+        # code follows.
+        case NSStmtCtor{none, +g, +env, +self, +tgt, +name, +args, +hole}:
+          match none:
+            case True{}:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSExpr{g, env, ECtor{name, args}})
+                return As.CCat{c, N.fin(tgt)}
+            case False{}:
+              +fs = N.dst.fields(args, 1, hole)
+              +d = N.dst.slot(tgt)
+              do NG<As.Code>:
+                +base : U32 <- N.slots(N.cx(env, fs))
+                a : As.Code <- N.rec(fu, NSArgs{g, env, fs, base})
+                b : As.Code <- N.rec(fu, NSStmt{g, env, self, tgt, Gen.dst.nth(U32.to_nat(hole), EErr{"hole"} <> args)})
+                return N.cat([a, N.hnode(Gen.stmt.ctor.tag(g, name), N.ops(env, fs, base)), N.ld(9, d),
+                  N.w(As.str(0, 9, 0)), N.addk(0, 0, (hole * 8 : U32)), N.st(0, d), b])
         case NSLetVar{+g, +env, +self, +tgt, +x, v, +body, m}:
           match m:
             case Some{+o}:
@@ -17744,6 +17857,9 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
               N.rec(fu, NSMatch{g, env, self, tgt, scrs, cases})
             case ECall{EVar{+name}, +args}:
               N.rec(fu, NSStmtCall{g, env, self, tgt, name, args, N.is_tail(env, self, tgt, name, args)})
+            case ECtor{+name, +args}:
+              +hole = N.dst.hole(g, env, tgt, Gen.dst.node(G.ctor(g, name)), args, 0, 0)
+              N.rec(fu, NSStmtCtor{U32.is_zero(hole), g, env, self, tgt, name, args, hole})
             case other:
               do NG<As.Code>:
                 c : As.Code <- N.rec(fu, NSExpr{g, env, other})
@@ -17799,10 +17915,36 @@ def N.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +ps: List<&
     case False{}:
       NG.pure(Unit, Unit{})
 
+# D_name and F_name, a def of destination-passing group id (see N.dps).
+def N.def.dst(+g: G, +name: String, +mask: List<&2, Bool>, +ps: List<&2, Param>, +e: Expr, +id: String) ->
+  NG(Unit):
+  +n = N.kept(mask)
+  +m = Gen.mangle(name)
+  do NG<Unit>:
+    saved : U32 & U32 <- N.enter()
+    +p0 : U32 <- N.slots(n)
+    +d : U32 <- N.slots(1)
+    +top : String <- N.label()
+    b : As.Code <- N.stmt(g, N.params(ps, mask, 0, Nil{}), NSelf{name, mask, top}, NTDst{d, id}, e)
+    +max : U32 <- N.leave(saved)
+    N.emit(N.func("D_" ++ m, max, N.cat([N.params.in(U32.to_nat(n), 0, False{}), N.st(8, d), N.lab(top),
+      N.shares.g(g, N.params.boxed(ps, mask, 0), e), b])))
+    N.emit(N.dst.entry(m, Gen.f(name)))
+
+def N.def.pick(plain: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +ps: List<&2, Param>, +e: Expr,
+  +id: String
+) -> NG(Unit):
+  match plain:
+    case True{}:
+      N.def.fn(g, Gen.f(name), name, mask, ps, e)
+    case False{}:
+      N.def.dst(g, name, mask, ps, e, id)
+
 def N.def.body(+g: G, +name: String, +mask: List<&2, Bool>, +ps: List<&2, Param>, body: Expr) -> NG(Unit):
   +e = R.ops(body, "Nat")
+  +id = N.dps(g, name)
   do NG<Unit>:
-    N.def.fn(g, Gen.f(name), name, mask, ps, e)
+    N.def.pick(String.is_empty(id), g, name, mask, ps, e, id)
     N.wrapper(name, mask, False{})
     N.def.seq(Bool.and(Expr.has_par(e), Gen.isseq(g, name)), g, name, mask, ps, e)
 

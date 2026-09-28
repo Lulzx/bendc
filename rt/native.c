@@ -15,6 +15,7 @@
 #include "bendrt_split.h"
 
 V *bn_alloc(V words) { return halloc((size_t)words); }
+V *bn_alloc_hole(V words) { return halloc_hole((size_t)words); }
 
 // A float literal's bits, read once as C reads it (the slot holds them
 // with bit 32 set: a read 0.0 is then not an empty slot).
