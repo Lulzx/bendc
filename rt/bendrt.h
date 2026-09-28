@@ -841,6 +841,18 @@ static inline void rc_drop(V v) {
   if (rc_obj(v) && rc_release(v)) rc_free_obj(v);
 }
 
+// Drops n references to v (a case that uses v fewer times than another).
+static inline void rc_dropn(V v, V n) {
+  if (!rc_obj(v)) return;
+  V *p = (V *)v;
+  // (all but the last at once: v outlives them)
+  if (n > 1 && !(__atomic_load_n(p, __ATOMIC_RELAXED) & RC_STICKY)) {
+    if (gc_hot.mt) __atomic_fetch_sub(p, (n - 1) * RC_ONE, __ATOMIC_RELEASE);
+    else *p -= (n - 1) * RC_ONE;
+  }
+  if (rc_release(v)) rc_free_obj(v);
+}
+
 // A shared node of w words opened: its fields get a reference each, then it
 // loses one (freed, fields and all, when that was the last).
 __attribute__((noinline)) static void rc_take_shared(V v, unsigned w) {

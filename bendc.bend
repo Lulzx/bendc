@@ -3749,6 +3749,10 @@ def G.dps(+g: G, +name: String) -> DGrp:
   G{ctors, defs, bodies, dps} = g
   G.get(DGrp, DGrp{"", 0}, dps, name)
 
+def DGrp.id(d: DGrp) -> String:
+  DGrp{id, n} = d
+  id
+
 def Natives() -> List<&2, String>:
   ["U32.inc", "U32.add", "U32.sub", "U32.mul", "U32.div", "U32.mod", "U32.not",
    "U32.and", "U32.or", "U32.xor", "U32.shl", "U32.shr", "U32.shln", "U32.shrn",
@@ -4098,6 +4102,11 @@ def Gen.ret(t: Tgt, d: Doc) -> Doc:
 type PatR is Data:
   PatR{conds: List<&2, String>, binds: Env()}
 
+# A counted program (BEND_RC=1) binds a pattern's _ too, as _%, to drop
+# what it matches (Gen.free and Gen.rc are below).
+def Gen.pat.rcname(+g: G, +x: String) -> String:
+  Bool.pick(String, Bool.and(Str.eq(DGrp.id(G.dps(g, "%free")), "2"), Str.eq(x, "_")), "_%", x)
+
 def Gen.pat.var(+x: String, path: String, r: PatR) -> PatR:
   PatR{conds, +binds} = r
   PatR{conds, Bool.pick(Env(), Str.eq(x, "_"), binds, Bind{x, path} <> binds)}
@@ -4154,6 +4163,16 @@ def Gen.pat.node(opens: Bool, +ar: U32, +path: String, r: PatR) -> PatR:
 def Gen.pat.arr(+path: String, r: PatR) -> PatR:
   PatR{conds, binds} = r
   PatR{conds, Bind{"%arr", path} <> binds}
+
+# Counted, an ALeaf's cell gets a reference ("%leaf") before the array is
+# dropped ("%arr").
+def Gen.pat.leaf(rc: Bool, +path: String, r: PatR) -> PatR:
+  match rc:
+    case True{}:
+      PatR{conds, binds} = r
+      PatR{conds, Bind{"%arr", path} <> Bind{"%leaf", "FLD(" ++ path ++ ", 0)"} <> binds}
+    case False{}:
+      r
 
 # A machine word's structural view, under U32{..} or F32{..}: WCon{head,
 # tail} is its low bit and the rest shifted down, WNil what is left (the
@@ -4254,7 +4273,8 @@ def Gen.pat.go(
                       Gen.pat.go(PCtor{name, [a]}, 0n, g, "nat_subk(" ++ path ++ ", 1)", 99, None{}, 0n,
                         Gen.pat.cond("(" ++ path ++ ") != 0", r))
                     case 5n:
-                      Gen.pat.go(PCtor{name, [a]}, 0n, g, path, 0, None{}, 0n, Gen.pat.cond("arr_cls(" ++ path ++ ") == 0", r))
+                      Gen.pat.leaf(Str.eq(DGrp.id(G.dps(g, "%free")), "2"), path,
+                        Gen.pat.go(PCtor{name, [a]}, 0n, g, path, 0, None{}, 0n, Gen.pat.cond("arr_cls(" ++ path ++ ") == 0", r)))
                     case 6n+q:
                       Gen.pat.cond("arr_cls(" ++ path ++ ") != 0", r)
             case 2n:
@@ -4393,11 +4413,11 @@ def Gen.pat.go(
         case 2n:
           r
         case 3n:
-          Gen.pat.var(x, path, r)
+          Gen.pat.var(Gen.pat.rcname(g, x), path, r)
         case 4n:
           match k:
             case 2n+z:
-              Gen.pat.var(x, path, r)
+              Gen.pat.var(Gen.pat.rcname(g, x), path, r)
             case other:
               r
         case other:
@@ -4709,10 +4729,6 @@ def Expr.wordk(e: Expr) -> Nat:
     case other:
       2n
 
-def DGrp.id(d: DGrp) -> String:
-  DGrp{id, n} = d
-  id
-
 # Whether a tail call jumps to a D_ function: the target is a D_ function's
 # (tgt) and name a def of its group, applied to all its parameters.
 def Gen.dst.call(+g: G, +env: Env(), +tgt: Tgt, +name: String, +args: List<&2, Expr>) -> Bool:
@@ -4885,7 +4901,7 @@ def Gen.shares(binds: Env(), +body: Expr) -> Doc:
 # Whether matches free the nodes they open (BEND_NO_FREE turns it off: no
 # sharing, no bend_take, the code of a traced heap only).
 def Gen.free(+g: G) -> Bool:
-  Str.eq(DGrp.id(G.dps(g, "%free")), "1")
+  Str.has(["1", "2"], DGrp.id(G.dps(g, "%free")))
 
 def Gen.shares.if(free: Bool, binds: Env(), +body: Expr) -> Doc:
   match free:
@@ -4896,6 +4912,266 @@ def Gen.shares.if(free: Bool, binds: Env(), +body: Expr) -> Doc:
 
 def Gen.shares.g(+g: G, binds: Env(), +body: Expr) -> Doc:
   Gen.shares.if(Gen.free(g), binds, body)
+
+# Reference counting
+# ------------------
+#
+# A program compiled with BEND_RC=1 counts references (see "Reference
+# counting" in bendrt.h). A variable owns one reference where it is bound;
+# each use of it hands one on (to a call, a constructor, a closure that
+# captures it, a match that opens it). So where a variable is bound, it gets
+# a reference more for each use past the first on the path through its scope
+# that uses it most (rc_dupn), or is dropped when no path uses it (rc_drop);
+# a case that uses an outer variable fewer times than the most any case of
+# its match does drops the difference first (RC.arm).
+def Gen.rc(+g: G) -> Bool:
+  Str.eq(DGrp.id(G.dps(g, "%free")), "2")
+
+def Env.names(env: Env()) -> List<&2, String>:
+  match env:
+    case Nil{}:
+      Nil{}
+    case Bind{x, c} <> t:
+      x <> Env.names(t)
+
+# The arguments of a call to a def that are evaluated: those its mask keeps
+# (and any past it).
+def RC.kept(mask: List<&2, Bool>, args: List<&2, Expr>) -> List<&2, Expr>:
+  match mask args:
+    case Nil{} xs:
+      xs
+    case m <> mt Nil{}:
+      Nil{}
+    case True{} <> mt a <> at:
+      a <> RC.kept(mt, at)
+    case False{} <> mt a <> at:
+      RC.kept(mt, at)
+
+def RC.global(info: DInfo, args: List<&2, Expr>) -> List<&2, Expr>:
+  DInfo{+kind, mask} = info
+  Bool.pick(List<&2, Expr>, U32.is_eq(kind, 3), Nil{}, RC.kept(mask, args))
+
+def RC.call.args(+g: G, +loc: List<&2, String>, +h: String, +args: List<&2, Expr>) -> List<&2, Expr>:
+  Bool.pick(List<&2, Expr>, Str.has(loc, h), EVar{h} <> args, RC.global(G.def(g, h), args))
+
+def RC.view.gpu(args: List<&2, Expr>) -> Expr:
+  match args:
+    case Nil{}:
+      ENum{0}
+    case h <> t:
+      ECtor{"", [ECall{h, t}]}
+
+def RC.view.named(+g: G, +loc: List<&2, String>, +h: String, +args: List<&2, Expr>, gpu: Bool) -> Expr:
+  match gpu:
+    case True{}:
+      RC.view.gpu(args)
+    case False{}:
+      ECtor{"", RC.call.args(g, loc, h, args)}
+
+def RC.view.call(+g: G, +loc: List<&2, String>, f: Expr, +args: List<&2, Expr>) -> Expr:
+  match f:
+    case EVar{+h}:
+      RC.view.named(g, loc, h, args, Str.eq(h, "%gpu"))
+    case other:
+      ECtor{"", other <> args}
+
+def RC.view.let(shadow: Bool, p: Pat, v: Expr, b: Expr) -> Expr:
+  match shadow:
+    case True{}:
+      ECtor{"", [v]}
+    case False{}:
+      ELet{p, v, b}
+
+def RC.view.case(shadow: Bool, ps: List<&2, Pat>, b: Expr) -> Expr:
+  match shadow:
+    case True{}:
+      ENum{0}
+    case False{}:
+      ECase{ps, b}
+
+# e, one level down, for counting x's uses (RC.uses.v): ENum{k}, k uses;
+# ECtor, the sum of its fields'; ELet, ECase and EMatch (whose cases count
+# their most), which bind names; what the generated code evaluates only.
+def RC.view(+g: G, +loc: List<&2, String>, +x: String, e: Expr) -> Expr:
+  match e:
+    case EVar{+y}:
+      ENum{Bool.pick(U32, Str.eq(y, x), 1, 0)}
+    case ECall{f, +args}:
+      RC.view.call(g, loc, f, args)
+    case ECtor{n, args}:
+      ECtor{"", args}
+    case ELam{+p, +b}:
+      ENum{Bool.pick(U32, Str.has(FV.expr(b, Pat.vars(p, Nil{}), Nil{}), x), 1, 0)}
+    case ELet{+p, v, b}:
+      RC.view.let(Str.has(Pat.vars(p, Nil{}), x), p, v, b)
+    case EMatch{scrs, cases}:
+      EMatch{scrs, cases}
+    case ECase{+ps, b}:
+      RC.view.case(Str.has(Pats.vars(ps, Nil{}), x), ps, b)
+    case ESucc{k, y}:
+      ECtor{"", [y]}
+    case EOp{op, a, b}:
+      ECtor{"", [a, b]}
+    case EAnn{y, t}:
+      ECtor{"", [y]}
+    case other:
+      ENum{0}
+
+def RC.uses.v(n: Nat, +g: G, +loc: List<&2, String>, +x: String, e: Expr) -> U32:
+  match n:
+    case 0n:
+      0
+    case 1n+ +m:
+      match e:
+        case ENum{k}:
+          k
+        case ECtor{c, args}:
+          match args:
+            case Nil{}:
+              0
+            case a <> t:
+              (RC.uses.v(m, g, loc, x, RC.view(g, loc, x, a)) + RC.uses.v(m, g, loc, x, ECtor{c, t}) : U32)
+        case ELet{+p, v, b}:
+          (RC.uses.v(m, g, loc, x, RC.view(g, loc, x, v)) +
+            RC.uses.v(m, g, Pat.vars(p, loc), x, RC.view(g, Pat.vars(p, loc), x, b)) : U32)
+        case EMatch{scrs, cases}:
+          match scrs:
+            case a <> t:
+              (RC.uses.v(m, g, loc, x, RC.view(g, loc, x, a)) + RC.uses.v(m, g, loc, x, EMatch{t, cases}) : U32)
+            case Nil{}:
+              match cases:
+                case Nil{}:
+                  0
+                case c <> t:
+                  U32.max(RC.uses.v(m, g, loc, x, RC.view(g, loc, x, c)), RC.uses.v(m, g, loc, x, EMatch{Nil{}, t}))
+        case ECase{+ps, b}:
+          RC.uses.v(m, g, Pats.vars(ps, loc), x, RC.view(g, Pats.vars(ps, loc), x, b))
+        case other:
+          0
+
+# The uses of x on the path through e that uses it most (loc: the local
+# names, whose calls pass every argument).
+def RC.uses(+g: G, +loc: List<&2, String>, +x: String, e: Expr) -> U32:
+  RC.uses.v(Fuel.max(), g, loc, x, RC.view(g, loc, x, e))
+
+# Numbers, characters and erased values are not counted.
+def RC.skip(+c: String) -> Bool:
+  Bool.or(Str.eq(c, "0"), Gen.scalar.c(c))
+
+def RC.op(+c: String, +u: U32) -> Doc:
+  Bool.pick(Doc, U32.is_zero(u), DStr{"rc_drop(" ++ c ++ ");\n"},
+    Bool.pick(Doc, U32.is_le(u, 1), DNil{}, DStr{"rc_dupn(" ++ c ++ ", " ++ U32.show((u - 1 : U32)) ++ ");\n"}))
+
+def RC.bind(skip: Bool, +g: G, +loc: List<&2, String>, +x: String, +c: String, +body: Expr) -> Doc:
+  match skip:
+    case True{}:
+      DNil{}
+    case False{}:
+      RC.op(c, RC.uses(g, loc, x, body))
+
+def RC.binds(+g: G, +loc: List<&2, String>, binds: Env(), +body: Expr) -> Doc:
+  match binds:
+    case Nil{}:
+      DNil{}
+    case Bind{+x, +c} <> t:
+      Doc.list([RC.bind(RC.skip(c), g, loc, x, c, body), RC.binds(g, loc, t, body)])
+
+def Gen.own.pick(rc: Bool, +g: G, +scope: Env(), binds: Env(), +body: Expr) -> Doc:
+  match rc:
+    case True{}:
+      RC.binds(g, Env.names(scope), binds, body)
+    case False{}:
+      Gen.shares.g(g, binds, body)
+
+# What variables bound where body starts get: references (counted) or a
+# shared mark (see Gen.shares); scope is every name bound there.
+def Gen.own(+g: G, +scope: Env(), binds: Env(), +body: Expr) -> Doc:
+  Gen.own.pick(Gen.rc(g), g, scope, binds, body)
+
+# An outer variable a match's cases use: its C name and the most uses of a
+# case.
+type RcM is Data:
+  RcM{x: String, c: String, m: U32}
+
+def RC.mx.keep(skip: Bool, r: RcM, rest: List<&2, RcM>) -> List<&2, RcM>:
+  match skip:
+    case True{}:
+      rest
+    case False{}:
+      r <> rest
+
+def RC.mx.put(m: Maybe<&2, String>, +g: G, +loc: List<&2, String>, +x: String, +all: Expr,
+  rest: List<&2, RcM>) -> List<&2, RcM>:
+  match m:
+    case None{}:
+      rest
+    case Some{+c}:
+      RC.mx.keep(RC.skip(c), RcM{x, c, RC.uses(g, loc, x, all)}, rest)
+
+def RC.mx.vars(+g: G, +loc: List<&2, String>, +env: Env(), xs: List<&2, String>, +all: Expr) -> List<&2, RcM>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case +x <> t:
+      RC.mx.put(Env.find(env, x), g, loc, x, all, RC.mx.vars(g, loc, env, t, all))
+
+# The outer variables e uses (counted).
+def RC.mx(+g: G, +env: Env(), +e: Expr) -> List<&2, RcM>:
+  RC.mx.vars(g, Env.names(env), env, FV.expr(e, Nil{}, Nil{}), e)
+
+def RC.mx.if(rc: Bool, +g: G, +env: Env(), cases: List<&2, Expr>) -> List<&2, RcM>:
+  match rc:
+    case True{}:
+      RC.mx(g, env, EMatch{Nil{}, cases})
+    case False{}:
+      Nil{}
+
+def RC.dropn(+c: String, +n: U32) -> Doc:
+  Bool.pick(Doc, U32.is_zero(n), DNil{}, DStr{"rc_dropn(" ++ c ++ ", " ++ U32.show(n) ++ ");\n"})
+
+# A case's drops: what its match's most using case uses of each outer
+# variable, less its own uses.
+def RC.arm(+g: G, +loc: List<&2, String>, mx: List<&2, RcM>, +c: Expr) -> Doc:
+  match mx:
+    case Nil{}:
+      DNil{}
+    case RcM{+x, +cn, +m} <> t:
+      Doc.list([RC.dropn(cn, (m - RC.uses(g, loc, x, c) : U32)), RC.arm(g, loc, t, c)])
+
+# A forked value's closure takes one reference of each variable it
+# captures: it had its uses (the in-order path evaluates it in place).
+def RC.fork.one(+c: String, +u: U32) -> Doc:
+  Bool.pick(Doc, U32.is_zero(u), DStr{"rc_dup(" ++ c ++ ");\n"}, RC.dropn(c, (u - 1 : U32)))
+
+def RC.fork.go(mx: List<&2, RcM>) -> Doc:
+  match mx:
+    case Nil{}:
+      DNil{}
+    case RcM{x, +c, +m} <> t:
+      Doc.list([RC.fork.one(c, m), RC.fork.go(t)])
+
+def RC.fork(rc: Bool, +g: G, +env: Env(), +v: Expr) -> Doc:
+  match rc:
+    case True{}:
+      RC.fork.go(RC.mx(g, env, v))
+    case False{}:
+      DNil{}
+
+# Counted, an opened ALeaf's cell gets a reference and each opened Array is
+# dropped (its halves are copies).
+def RC.arrs.go(binds: Env(), +kind: String, +op: String) -> Doc:
+  match binds:
+    case Nil{}:
+      DNil{}
+    case Bind{+x, +c} <> t:
+      Doc.list([Bool.pick(Doc, Str.eq(x, kind), DStr{op ++ "(" ++ c ++ ");\n"}, DNil{}), RC.arrs.go(t, kind, op)])
+
+def RC.arrs(rc: Bool, +binds: Env()) -> Doc:
+  match rc:
+    case True{}:
+      Doc.list([RC.arrs.go(binds, "%leaf", "rc_dup"), RC.arrs.go(binds, "%arr", "rc_drop")])
+    case False{}:
+      DNil{}
 
 def PatR.binds(r: PatR) -> Env():
   PatR{conds, binds} = r
@@ -4924,13 +5200,13 @@ def Gen.take.words(x: String) -> String:
       ""
 
 # bend_take calls for the nodes a pattern opens (kind: "%top" or "%sub").
-def Gen.takes(binds: Env(), +kind: String) -> List<&2, String>:
+def Gen.takes(binds: Env(), +kind: String, +fn: String) -> List<&2, String>:
   match binds:
     case Nil{}:
       Nil{}
     case Bind{+x, +c} <> t:
-      Gen.takes.if(Str.eq(Gen.take.kind(x), kind), "bend_take(" ++ c ++ ", " ++ Gen.take.words(x) ++ ")",
-        Gen.takes(t, kind))
+      Gen.takes.if(Str.eq(Gen.take.kind(x), kind), fn ++ "(" ++ c ++ ", " ++ Gen.take.words(x) ++ ")",
+        Gen.takes(t, kind, fn))
 
 def Gen.is_take(x: String) -> Bool:
   match x:
@@ -5005,6 +5281,16 @@ def Gen.par.env(ps: List<&2, Pat>, +k: U32, +i: U32, +env: Env()) -> Env():
         Bind{x, Gen.par.name(k, i)} <> env))
     case other <> t:
       Gen.par.env(t, k, U32.inc(i), env)
+
+# Counted, a parallel let's _ is bound (as _%), to be dropped.
+def RC.unders(+rc: Bool, ps: List<&2, Pat>) -> List<&2, Pat>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case PVar{+x} <> t:
+      PVar{Bool.pick(String, Bool.and(rc, Str.eq(x, "_")), "_%", x)} <> RC.unders(rc, t)
+    case p <> t:
+      p <> RC.unders(rc, t)
 
 # 1: in S_name (in order); 3: elsewhere (forks, and, in a def with a
 # sequential clone, only above the frontier).
@@ -5528,7 +5814,7 @@ type GSel is Data:
   GSExpr{g: G, env: Env(), e: Expr}
   GSLetVar{g: G, env: Env(), self: Self, tgt: Tgt, x: String, v: Expr, body: Expr, hole: Bool}
   GSCasesNext{g: G, env: Env(), self: Self, tgt: Tgt, cs: List<&2, String>,
-    rest: List<&2, Expr>, conds: List<&2, String>, b: Doc}
+    rest: List<&2, Expr>, conds: List<&2, String>, b: Doc, mx: List<&2, RcM>}
   GSMatchGo{g: G, env: Env(), self: Self, tgt: Tgt, cases: List<&2, Expr>, r: Scrs}
   GSMatch{g: G, env: Env(), self: Self, tgt: Tgt, scrs: List<&2, Expr>, cases: List<&2, Expr>}
   GSStmt{g: G, env: Env(), self: Self, tgt: Tgt, e: Expr}
@@ -5548,7 +5834,8 @@ type GSel is Data:
   GSLetCtor{g: G, env: Env(), self: Self, tgt: Tgt, name: String, ps: List<&2, Pat>, v: Expr,
     body: Expr, par: Bool}
   GSLet{g: G, env: Env(), self: Self, tgt: Tgt, p: Pat, v: Expr, body: Expr}
-  GSCases{g: G, env: Env(), self: Self, tgt: Tgt, cs: List<&2, String>, cases: List<&2, Expr>}
+  GSCases{g: G, env: Env(), self: Self, tgt: Tgt, cs: List<&2, String>, cases: List<&2, Expr>,
+    mx: List<&2, RcM>}
 
 def GSel.ty(k: GSel) -> Type:
   match k:
@@ -5653,7 +5940,7 @@ def GSel.none(k: GSel) -> GSel.ty(k):
       DNil{}
     case GSLetVar{g, env, self, tgt, x, v, body, hole}:
       DNil{}
-    case GSCasesNext{g, env, self, tgt, cs, rest, conds, b}:
+    case GSCasesNext{g, env, self, tgt, cs, rest, conds, b, mx}:
       DNil{}
     case GSMatchGo{g, env, self, tgt, cases, r}:
       DNil{}
@@ -5689,7 +5976,7 @@ def GSel.none(k: GSel) -> GSel.ty(k):
       DNil{}
     case GSLet{g, env, self, tgt, p, v, body}:
       DNil{}
-    case GSCases{g, env, self, tgt, cs, cases}:
+    case GSCases{g, env, self, tgt, cs, cases, mx}:
       DNil{}
 
 # Out of fuel: an error, and a value of the step's type.
@@ -6034,28 +6321,28 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
                 b : Doc <- Gen.rec(fu, GSStmt{g, env, self, tgt, body})
-                return Doc.list([DStr{"(void)("}, d, DStr{");\n"}, b])
+                return Doc.list([DStr{Bool.pick(String, Gen.rc(g), "rc_drop(", "(void)(")}, d, DStr{");\n"}, b])
             case False{}:
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
                 +c : String <- Gen.pure(String, Gen.scalar.wrap(Gen.scalar.var(env, v), "v" ++ U32.show(k)))
                 d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
                 b : Doc <- Gen.rec(fu, GSStmt{g, Bind{x, c} <> env, self, tgt, body})
-                return Doc.list([DStr{"V " ++ c ++ " = "}, d, DStr{";\n"}, Gen.shares.g(g, [Bind{x, c}], body), b])
-        case GSCasesNext{+g, +env, +self, +tgt, +cs, rest, conds, b}:
+                return Doc.list([DStr{"V " ++ c ++ " = "}, d, DStr{";\n"}, Gen.own(g, Bind{x, c} <> env, [Bind{x, c}], body), b])
+        case GSCasesNext{+g, +env, +self, +tgt, +cs, rest, conds, b, mx}:
           match conds:
             case Nil{}:
               Gen.pure(Doc, Doc.list([DStr{"{\n"}, b, DStr{"}\n"}]))
             case h <> t:
               do Gen<Doc>:
-                more : Doc <- Gen.rec(fu, GSCases{g, env, self, tgt, cs, rest})
+                more : Doc <- Gen.rec(fu, GSCases{g, env, self, tgt, cs, rest, mx})
                 return Doc.list([DStr{"if (" ++ Gen.and(h <> t) ++ ") {\n"}, b,
                   DStr{"} else "}, more])
-        case GSMatchGo{+g, +env, +self, +tgt, cases, r}:
+        case GSMatchGo{+g, +env, +self, +tgt, +cases, r}:
           match r:
             case Scrs{cs, decls}:
               do Gen<Doc>:
-                body : Doc <- Gen.rec(fu, GSCases{g, env, self, tgt, cs, cases})
+                body : Doc <- Gen.rec(fu, GSCases{g, env, self, tgt, cs, cases, RC.mx.if(Gen.rc(g), g, env, cases)})
                 return Doc.list([decls, body])
         case GSMatch{+g, +env, +self, +tgt, scrs, cases}:
           do Gen<Doc>:
@@ -6085,14 +6372,15 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               +vars = Gen.vars(mb)
               do Gen<Doc>:
                 b : Doc <- Gen.rec(fu, GSStmt{g, List.append(&2, Bind, vars, env), self, tgt, body})
-                return Doc.list([loads, DStr{Gen.takes.stmts(Gen.takes(mb, "%top")) ++
-                  Gen.takes.stmts(List.reverse(&2, String, Gen.takes(mb, "%sub")))}, Gen.shares.g(g, vars, body), b])
+                +tk : String <- Gen.pure(String, Bool.pick(String, Gen.rc(g), "rc_take", "bend_take"))
+                return Doc.list([loads, RC.arrs(Gen.rc(g), mb), DStr{Gen.takes.stmts(Gen.takes(mb, "%top", tk)) ++
+                  Gen.takes.stmts(List.reverse(&2, String, Gen.takes(mb, "%sub", tk)))}, Gen.own(g, List.append(&2, Bind, vars, env), vars, body), b])
         case GSCaseBodyGo{opens, +g, +env, +self, +tgt, +binds, +body}:
           match opens:
             case False{}:
               do Gen<Doc>:
                 b : Doc <- Gen.rec(fu, GSStmt{g, List.append(&2, Bind, binds, env), self, tgt, body})
-                return Doc.list([Gen.shares.g(g, binds, body), b])
+                return Doc.list([Gen.own(g, List.append(&2, Bind, binds, env), binds, body), b])
             case True{}:
               do Gen<Doc>:
                 r : Env() & Doc <- Gen.mat(binds)
@@ -6111,7 +6399,9 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             Gen.proto(DStr{"static V " ++ name ++ "(V *a);\n"})
             +binds : Env() <- Gen.pure(Env(), PatR.binds(Gen.pat(g, p, "a[" ++ U32.show(n) ++ "]",
               PatR{Nil{}, Nil{}})))
-            b : Doc <- Gen.rec(fu, GSCaseBody{g, Gen.caps.inner(caps, 0), Self.none(), TRet{}, binds, body})
+            +inner : Env() <- Gen.pure(Env(), Gen.caps.inner(caps, 0))
+            b : Doc <- Gen.rec(fu, GSCaseBody{g, inner, Self.none(), TRet{},
+              Bool.pick(Env(), Gen.rc(g), List.append(&2, Bind, binds, inner), binds), body})
             Gen.code(Doc.list([DStr{"static V " ++ name ++ "(V *a) {\n"}, b, DStr{"}\n"}]))
             return Doc.list([DStr{"mk_clo(" ++ name ++ ", " ++ U32.show(U32.inc(n)) ++ ", " ++
               U32.show(n) ++ ", "}, Gen.arr(Gen.caps.outer(caps)), DStr{")"}])
@@ -6133,11 +6423,11 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
                 return Doc.list([DStr{"V " ++ Gen.par.name(k, i) ++ " = "}, d, DStr{";\n"}])
-            case v <> t:
+            case +v <> t:
               do Gen<Doc>:
                 c : Doc <- Gen.rec(fu, GSLam{g, env, PVar{"_"}, v})
                 rest : Doc <- Gen.rec(fu, GSParVals{g, env, k, U32.inc(i), t})
-                return Doc.list([DStr{"V " ++ Gen.par.name(k, i) ++ "t = par_fork("}, c, DStr{");\n"},
+                return Doc.list([RC.fork(Gen.rc(g), g, env, v), DStr{"V " ++ Gen.par.name(k, i) ++ "t = par_fork("}, c, DStr{");\n"},
                   rest, DStr{"V " ++ Gen.par.name(k, i) ++ " = par_join(" ++ Gen.par.name(k, i) ++
                   "t);\n"}])
         # The values in order: declared (in S_name), or assigned (at the
@@ -6181,8 +6471,9 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 +k : U32 <- Gen.fresh()
                 mode : Maybe<&2, String> <- Gen.memo.find("%seqmode")
                 pre : Doc <- Gen.rec(fu, GSParPick{Gen.par.mode(mode, sn), g, env, sn, k, vs})
-                b : Doc <- Gen.rec(fu, GSStmt{g, Gen.par.env(ps, k, 0, env), Self{sn, sm, sc}, tgt, body})
-                return Doc.list([pre, Gen.shares.g(g, Gen.par.env(ps, k, 0, Nil{}), body), b])
+                +qs : List<&2, Pat> <- Gen.pure(List<&2, Pat>, RC.unders(Gen.rc(g), ps))
+                b : Doc <- Gen.rec(fu, GSStmt{g, Gen.par.env(qs, k, 0, env), Self{sn, sm, sc}, tgt, body})
+                return Doc.list([pre, Gen.own(g, Gen.par.env(qs, k, 0, env), Gen.par.env(qs, k, 0, Nil{}), body), b])
         case GSLetPar{+g, +env, +self, +tgt, ps, v, body}:
           match v:
             case ECtor{n, vs}:
@@ -6203,7 +6494,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               Gen.rec(fu, GSLetCtor{g, env, self, tgt, name, ps, v, body, Str.eq(name, "%par")})
             case other:
               Gen.rec(fu, GSLetPat{g, env, self, tgt, other, v, body})
-        case GSCases{+g, +env, +self, +tgt, +cs, cases}:
+        case GSCases{+g, +env, +self, +tgt, +cs, cases, +mx}:
           match cases:
             case Nil{}:
               Gen.pure(Doc, DStr{"{ bend_fail(\"runtime fail-stop\"); }\n"})
@@ -6213,9 +6504,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               +binds = PatR.binds(pr)
               do Gen<Doc>:
                 b : Doc <- Gen.rec(fu, GSCaseBody{g, env, self, tgt, binds, body})
-                Gen.rec(fu, GSCasesNext{g, env, self, tgt, cs, t, List.reverse(&2, String, conds), b})
+                Gen.rec(fu, GSCasesNext{g, env, self, tgt, cs, t, List.reverse(&2, String, conds),
+                  Doc.list([RC.arm(g, Env.names(env), mx, ECase{ps, body}), b]), mx})
             case other <> t:
-              Gen.rec(fu, GSCases{g, env, self, tgt, cs, t})
+              Gen.rec(fu, GSCases{g, env, self, tgt, cs, t, mx})
 
 def Gen.stmt(+g: G, +env: Env(), +self: Self, +tgt: Tgt, e: Expr) -> Gen(Doc):
   Gen.rec(Fuel.max(), GSStmt{g, env, self, tgt, e})
@@ -6265,7 +6557,7 @@ def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Ex
         b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
         Gen.memo.add(Bind{"%seqmode", ""})
         Gen.code(Doc.list([DStr{"#define " ++ Gen.f(name) ++ " S_" ++ Gen.mangle(name) ++ "\n" ++ head ++ " {\ntop:;\n"},
-          Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n#undef " ++ Gen.f(name) ++ "\n"}]))
+          Gen.own(g, env, env, R.ops(body, "Nat")), b, DStr{"}\n#undef " ++ Gen.f(name) ++ "\n"}]))
     case False{}:
       Gen.pure(Unit, Unit{})
 
@@ -6293,7 +6585,7 @@ def Gen.def.dst(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr, +param
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n" ++ dhead ++ ";\n"})
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TDst{id, n}, R.ops(body, "Nat"))
-    Gen.code(Doc.list([DStr{dhead ++ " {\ntop:;\n"}, Gen.shares.g(g, env, R.ops(body, "Nat")), b,
+    Gen.code(Doc.list([DStr{dhead ++ " {\ntop:;\n"}, Gen.own(g, env, env, R.ops(body, "Nat")), b,
       DStr{"}\n"}]))
     Gen.code(DStr{head ++ " { V r; D_" ++ m ++ "(" ++ String.join("&r" <> Gen.dst.pad(U32.to_nat(n), params,
       False{}, 0), ", ") ++ "); return r; }\n"})
@@ -6353,7 +6645,7 @@ def Gen.def.plain(+g: G, +name: String, +mask: List<&2, Bool>, +body: Expr,
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n"})
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
-    Gen.code(Doc.list([DStr{head ++ " {\ntop:;\n"}, Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
+    Gen.code(Doc.list([DStr{head ++ " {\ntop:;\n"}, Gen.own(g, env, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
     Gen.wrapper(name, wargs)
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
 
@@ -7440,11 +7732,13 @@ def Dps.edges(+g: G, ds: List<&2, Decl>, m: Map<&2, List<&2, DEdge>>) -> Map<&2,
     case d <> t:
       Dps.edges(g, t, m)
 
-def Dps.build(+g: G, +ds: List<&2, Decl>, free: Bool) -> G:
+# "%free" holds the memory mode: 0 traced only, 1 matches free what they
+# open, 2 reference counted.
+def Dps.build(+g: G, +ds: List<&2, Decl>, free: Bool, rc: Bool) -> G:
   +em = Dps.edges(g, ds, MTip{})
   +ks = Map.keys(&2, List<&2, DEdge>, em)
   G.with_dps(g, Map.set(&2, DGrp, Dps.groups(g, ks, em, Dps.rev(ks, em, MTip{}), MTip{}), "%free",
-    DGrp{Bool.pick(String, free, "1", "0"), 0}))
+    DGrp{Bool.pick(String, rc, "2", Bool.pick(String, free, "1", "0")), 0}))
 
 # Value printers
 # ==============
@@ -8495,6 +8789,14 @@ def Main.emit(+ds: List<&2, Decl>, r: COut) -> IO(Unit):
       do IO<Unit>:
         IO.print_err(String.join(List.reverse(&2, String, e <> t), "\n"))
         IO.die(Unit, 1, "bendc: compilation failed")
+
+# BEND_RC=1: reference counting (see "Reference counting" in bendrt.h).
+def Main.rc(r: Result<&1, &1, U32 & String, String>) -> Bool:
+  match r:
+    case Done{v}:
+      String.eq(v, "1")
+    case Fail{e}:
+      False{}
 
 def Main.free(r: Result<&1, &1, U32 & String, String>) -> Bool:
   match r:
@@ -13671,15 +13973,18 @@ def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
     Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
     DStr{"\n" ++ entry}])), errs}
 
+def Gen.rc.main(+g: G) -> String:
+  Bool.pick(String, Gen.rc(g), " bend_rc_req = 1;", "")
+
 def Gen.entry.ty(+g: G, +ret: Expr, io: Bool) -> Gen(String):
   match io:
     case True{}:
       Gen.pure(String,
-        "int main(int argc, char **argv) {" ++ Gen.ctors.call() ++ " return bend_run(argc, argv, F_main); }\n")
+        "int main(int argc, char **argv) {" ++ Gen.ctors.call() ++ Gen.rc.main(g) ++ " return bend_run(argc, argv, F_main); }\n")
     case False{}:
       do Gen<String>:
         p : String <- Gen.printer(g, ret)
-        return "int main(int argc, char **argv) {" ++ Gen.ctors.call() ++
+        return "int main(int argc, char **argv) {" ++ Gen.ctors.call() ++ Gen.rc.main(g) ++
           " return bend_run_value(argc, argv, F_main, " ++ p ++ "); }\n"
 
 def Gen.entry.ret(+g: G, +ret: Expr) -> Gen(String):
@@ -13701,9 +14006,9 @@ def Gen.program.m(+g: G) -> Gen(String):
     Gen.all(g, ["main"], Set.new())
     Gen.entry(g, G.body(g, "main"))
 
-def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool) -> COut:
+def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, rc: Bool) -> COut:
   +ds = Par.auto(par, Lo.program(Pick.decls(ds0)))
-  +g = Dps.build(G.new(ds), ds, free)
+  +g = Dps.build(G.new(ds), ds, free, rc)
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
 
@@ -13715,7 +14020,8 @@ def Main.emit.c(+ds: List<&2, Decl>) -> IO(Unit):
     r : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
     r2 : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
     ap : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_AUTO_PAR")
-    Main.emit(ds, Gen.program(ds, Main.free(r), Main.auto_par(ap, Main.free(r2))))
+    rc : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_RC")
+    Main.emit(ds, Gen.program(ds, Main.free(r), Main.auto_par(ap, Main.free(r2)), Main.rc(rc)))
 
 def J.entry.ty(+j: JG, +ret: Expr, io: Bool) -> Gen(String):
   match io:
