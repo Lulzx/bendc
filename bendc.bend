@@ -14155,13 +14155,35 @@ def Opt.mat(+scrs: List<&2, Core.Tm>, +cases: List<&2, Core.Tm>) -> OR:
   Opt.mat.go(Opt.known(scrs, cases), scrs, cases)
 
 # A let's rules.
+def Opt.let.cases(+x: String, +v: Core.Tm, cs: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case c <> r:
+      match c:
+        case Core.CCse{ps, b}:
+          Core.CCse{ps, Core.CLet{Core.PtVar{x}, v, b}} <> Opt.let.cases(x, v, r)
+        case other:
+          other <> Opt.let.cases(x, v, r)
+
+# A small let over a match that reads it only in its cases goes into them.
+def Opt.let.sink(+x: String, +v: Core.Tm, b: Core.Tm) -> OR:
+  match b:
+    case Core.CMat{+scrs, +cases}:
+      Bool.pick(Unit -> OR, Bool.and(Bool.and(U32.is_le(Opt.size(v), 16), Bool.not(Str.has(Inl.names(Core.CMat{scrs, Nil{}}, 0, Nil{}), x))),
+          Inl.apart(x <> Inl.names(v, 0, Nil{}), Inl.names(Core.CMat{Nil{}, cases}, 1, Nil{}))),
+        u => RAll{Core.CMat{scrs, Opt.let.cases(x, v, cases)}},
+        u => RKeep{Core.CLet{Core.PtVar{x}, v, Core.CMat{scrs, cases}}})(Unit{})
+    case other:
+      RKeep{Core.CLet{Core.PtVar{x}, v, other}}
+
 def Opt.let.var(+x: String, +v: Core.Tm, +b: Core.Tm) -> OR:
   +n = Inl.uses(b, 0, x)
   Bool.pick(Unit -> OR, U32.is_zero(n), u => RTo{b},
     u => Bool.pick(Unit -> OR, Bool.and(Bool.and(Bool.or(Opt.atom(v), Bool.and(U32.is_eq(n, 1), U32.is_eq(Inl.uses(b, 2, x), 1))),
         Inl.apart(Inl.names(v, 0, Nil{}), Inl.names(b, 1, Nil{}))), True{}),
       u2 => RSub{x, v, b},
-      u2 => RKeep{Core.CLet{Core.PtVar{x}, v, b}})(Unit{}))(Unit{})
+      u2 => Opt.let.sink(x, v, b))(Unit{}))(Unit{})
 
 def Opt.let.ctr(+k: String, +qs: List<&2, Core.Pt>, v: Core.Tm, +b: Core.Tm) -> OR:
   match v:
