@@ -14241,6 +14241,133 @@ def Opt.app(f: Core.Tm, +as: List<&2, Core.Tm>) -> OR:
     case other:
       RKeep{Core.CApp{other, as}}
 
+# A comparison of literal numbers, folded; a comparison of a match whose
+# cases give literals goes into the cases, where it folds (b2u-style code:
+# U32.is_zero(match c: 0, 1) is a match on c).
+def Opt.bool(b: Bool) -> Core.Tm:
+  match b:
+    case True{}:
+      Core.CCtr{"True", Nil{}}
+    case False{}:
+      Core.CCtr{"False", Nil{}}
+
+def Opt.cmp2(+f: String, +a: U32, +b: U32) -> Core.Tm:
+  Bool.pick(Core.Tm, String.eq(f, "U32.is_eq"), Opt.bool(U32.is_eq(a, b)),
+    Bool.pick(Core.Tm, String.eq(f, "U32.is_ne"), Opt.bool(U32.is_ne(a, b)),
+    Bool.pick(Core.Tm, String.eq(f, "U32.is_lt"), Opt.bool(U32.is_lt(a, b)),
+    Bool.pick(Core.Tm, String.eq(f, "U32.is_le"), Opt.bool(U32.is_le(a, b)),
+    Bool.pick(Core.Tm, String.eq(f, "U32.is_gt"), Opt.bool(U32.is_gt(a, b)),
+    Bool.pick(Core.Tm, String.eq(f, "U32.is_ge"), Opt.bool(U32.is_ge(a, b)), Core.CErr{"%nofold"}))))))
+
+def Opt.cmps(+f: String) -> Bool:
+  Bool.or(Bool.or(Bool.or(String.eq(f, "U32.is_zero"), String.eq(f, "U32.is_eq")), Bool.or(String.eq(f, "U32.is_ne"), String.eq(f, "U32.is_lt"))),
+    Bool.or(String.eq(f, "U32.is_le"), Bool.or(String.eq(f, "U32.is_gt"), String.eq(f, "U32.is_ge"))))
+
+def Opt.fold(+f: String, as: List<&2, Core.Arg>) -> Core.Tm:
+  match as:
+    case Core.Arg{r, Core.CLit{Core.LNum{+n}}} <> Nil{}:
+      Bool.pick(Core.Tm, String.eq(f, "U32.is_zero"), Opt.bool(U32.is_zero(n)), Core.CErr{"%nofold"})
+    case Core.Arg{r, Core.CLit{Core.LNum{n}}} <> Core.Arg{r2, Core.CLit{Core.LNum{m}}} <> Nil{}:
+      Opt.cmp2(f, n, m)
+    case other:
+      Core.CErr{"%nofold"}
+
+def Opt.nofold(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CErr{m}:
+      String.eq(m, "%nofold")
+    case other:
+      False{}
+
+# Whether each case of cs gives a literal number.
+def Opt.lits(cs: List<&2, Core.Tm>) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case c <> r:
+      match c:
+        case Core.CCse{ps, Core.CLit{Core.LNum{n}}}:
+          Opt.lits(r)
+        case other:
+          False{}
+
+# The first argument that is a match whose cases give literals (the count
+# when none).
+def Opt.lit.mat(as: List<&2, Core.Arg>, +i: Nat) -> Nat:
+  match as:
+    case Nil{}:
+      i
+    case Core.Arg{r, e} <> t:
+      match e:
+        case Core.CMat{scrs, cs}:
+          Bool.pick(Unit -> Nat, Opt.lits(cs), u => i, u => Opt.lit.mat(t, 1n+i))(Unit{})
+        case other:
+          Opt.lit.mat(t, 1n+i)
+
+def Opt.arg.at(n: Nat, as: List<&2, Core.Arg>) -> Core.Tm:
+  match n as:
+    case k Nil{}:
+      Core.CBox{}
+    case 0n Core.Arg{r, e} <> t:
+      e
+    case 1n+k a <> t:
+      Opt.arg.at(k, t)
+
+def Opt.arg.set(n: Nat, as: List<&2, Core.Arg>, +e: Core.Tm) -> List<&2, Core.Arg>:
+  match n as:
+    case k Nil{}:
+      Nil{}
+    case 0n Core.Arg{r, x} <> t:
+      Core.Arg{r, e} <> t
+    case 1n+k a <> t:
+      a <> Opt.arg.set(k, t, e)
+
+def Opt.arg.tms(as: List<&2, Core.Arg>) -> List<&2, Core.Tm>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case Core.Arg{r, e} <> t:
+      e <> Opt.arg.tms(t)
+
+def Opt.arg.others(n: Nat, as: List<&2, Core.Arg>) -> List<&2, Core.Tm>:
+  match n as:
+    case k Nil{}:
+      Nil{}
+    case 0n a <> t:
+      Opt.arg.tms(t)
+    case 1n+k Core.Arg{r, e} <> t:
+      e <> Opt.arg.others(k, t)
+
+def Opt.push.cases(+f: String, +j: Nat, +as: List<&2, Core.Arg>, cs: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case c <> r:
+      match c:
+        case Core.CCse{ps, b}:
+          Core.CCse{ps, Core.CCall{f, Opt.arg.set(j, as, b)}} <> Opt.push.cases(f, j, as, r)
+        case other:
+          other <> Opt.push.cases(f, j, as, r)
+
+def Opt.push.at(+f: String, +j: Nat, +as: List<&2, Core.Arg>, m: Core.Tm) -> OR:
+  match m:
+    case Core.CMat{+scrs, +cs}:
+      Bool.pick(Unit -> OR, Bool.and(Opt.atoms(Opt.arg.others(j, as)),
+          Inl.apart(Inl.names(Core.CMat{Nil{}, cs}, 1, Nil{}), Inl.names(Core.CCtr{"", Opt.arg.others(j, as)}, 0, Nil{}))),
+        u => RAll{Core.CMat{scrs, Opt.push.cases(f, j, as, cs)}},
+        u => RKeep{Core.CCall{f, as}})(Unit{})
+    case other:
+      RKeep{Core.CCall{f, as}}
+
+def Opt.push(+f: String, +as: List<&2, Core.Arg>) -> OR:
+  +j = Opt.lit.mat(as, 0n)
+  Bool.pick(Unit -> OR, Bool.and(Opt.cmps(f), Nat.is_lt(j, Inl.args.len(as))),
+    u => Opt.push.at(f, j, as, Opt.arg.at(j, as)), u => RKeep{Core.CCall{f, as}})(Unit{})
+
+def Opt.call(+f: String, +as: List<&2, Core.Arg>) -> OR:
+  +k = Opt.fold(f, as)
+  Bool.pick(Unit -> OR, Opt.nofold(k), u => Opt.push(f, as), u => RTo{k})(Unit{})
+
 def Opt.rule(t: Core.Tm) -> OR:
   match t:
     case Core.CLet{p, v, b}:
@@ -14249,6 +14376,8 @@ def Opt.rule(t: Core.Tm) -> OR:
       Opt.mat(scrs, cases)
     case Core.CApp{f, as}:
       Opt.app(f, as)
+    case Core.CCall{f, as}:
+      Opt.call(f, as)
     case other:
       RKeep{other}
 

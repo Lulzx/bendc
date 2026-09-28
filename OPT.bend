@@ -157,5 +157,25 @@ def case_of_case(c, a, b):
     case False{}:
       {==}
 
+# A comparison of a match whose cases give literals goes into the cases,
+# where it folds: U32.is_zero(b2u(c)) is a match on c.
+def b2u(b: Bool) -> U32:
+  match b:
+    case False{}:
+      0
+    case True{}:
+      1
+
+law fold_cmp:
+  for c: Bool
+  {U32.is_zero(b2u(c)) == Bool.not(c) : Bool}
+
+def fold_cmp(c):
+  match c:
+    case True{}:
+      {==}
+    case False{}:
+      {==}
+
 def main() -> IO(Unit):
   IO.print(U32.show(sum_double([1, 2, 3], 0)))

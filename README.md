@@ -243,6 +243,35 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    and the places it lands are reduced: an applied lambda becomes a `let`, and a `let` or `match` of
    a known constructor takes its case. A `do` block becomes one closure, and the checker, which
    runs on these monads, runs 9% fewer instructions.
+
+   Then the optimizer (`Opt` in `bendc.bend`) works on the whole program in the core IR.
+   `BEND_OPT` names its passes by letter: the default is `i..spf`, and `BEND_OPT=` turns it off.
+   - `i` inlines small defs: a body of size at most 4 plus 2 per `.` (8 for `i..`) that calls only
+     defs declared before it (so inlining ends), and is neither native nor `IO`. Most of the gain
+     comes from `Bool.pick`, `Bool.and`, `Bool.or` and `Bool.not`, whose arguments move into the
+     branches, so only the taken one runs.
+   - `s` simplifies each body bottom up. A dead let goes. A let of an atom, or one used once outside
+     a lambda, takes its variable's place. A small let over a match that reads it only in its cases
+     goes into them. A match on a known constructor or literal takes the first case whose patterns
+     match, and stops at one that may not. Lets float out of matches and applications. A match on
+     a match whose cases all end in constructors goes into those cases (case of case), when the
+     copies are small. An applied lambda becomes a let. Parallel lets stay parallel.
+   - `p` specializes a higher-order def. A call that passes a closed function (a lambda with no
+     free variables, as every `~f` template argument is, or a def's name) for a parameter the
+     callee passes unchanged to its own calls calls a copy instead. In the copy the function takes
+     the parameter's place and is simplified, and its self-calls drop the argument. Copies are
+     shared by the callee's name and a hash of the function's text.
+   - `f` fuses a consumer with a producer. Take a call `g(.., p(..), ..)` where `g` is recursive
+     and matches on that argument alone, and some result of `p` is a constructor with a field that
+     calls `p` (`p` builds a list or tree). It calls a fused def instead: `p`'s body with `g`
+     around each result, `g` unfolded where the result is a constructor, and each
+     `g(.., p(..), ..)` left over made a call of the fused def. The structure `p` built is never
+     built. `sum(filter(xs))`, `foldr(map(map(xs)))` and `length(map(xs))` become single loops.
+     Fused defs that nothing calls are dropped.
+
+   [`OPT.bend`](OPT.bend) states these rewrites as laws on the instances the optimizer meets
+   (map/map, foldr/map, foldl/map, length/map, a fused consumer, a specialized copy, case of case)
+   and proves each by induction. Both checkers verify it in CI.
 6. **Code generation.** A state monad threads fresh names, emitted C, references and errors through
    the generator. Only defs reachable from `main` are emitted.
    - Each def becomes a C function, and self tail calls become `goto` loops.
