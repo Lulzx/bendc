@@ -294,12 +294,19 @@ void gc_collect_locked(void);
 GcBlk *gc_new_small(int atomic, unsigned c);
 
 // The next word of free bits in the cache's block; 0 when none is left.
+// The free slots' marks go here too: a slot handed out is young (bend_take_at
+// leaves a freed slot's mark when other threads run), or a minor collection
+// would take the new object for an old one and not trace what it holds.
 static inline uint64_t gc_next_bits(GcCache *k) {
   GcBlk *b = k->blk;
   while (++k->j < k->nj) {
-    uint64_t f = ~GC_ALLOC(b)[k->j];
+    uint64_t f = ~__atomic_load_n(&GC_ALLOC(b)[k->j], __ATOMIC_RELAXED);
     if (k->j == (b->nobj >> 6)) f &= (1ull << (b->nobj & 63)) - 1;
-    if (f) return f;
+    if (f) {
+      uint64_t *m = &GC_MARK(b)[k->j];
+      if (__atomic_load_n(m, __ATOMIC_RELAXED) & f) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
+      return f;
+    }
   }
   return 0;
 }
@@ -354,7 +361,7 @@ static inline V *halloc_hole(size_t words) { return gc_alloc_x(words, 0, 1); }
 // hands it to bend_take: a shared node stays (and the fields it hands out
 // become shared too), any other is dead once its fields are read, so its slot
 // goes on the thread's free list, and the next allocation of its size takes
-// it. A freed slot's mark is cleared: reused, it is a young object for minor
+// it. A reused slot's mark is cleared: it holds a young object for minor
 // collections. The free lists are roots, so a collection keeps them.
 
 // The small block and slot index of a heap object, or 0 when v is not one.
@@ -424,14 +431,15 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
 #endif
   (void)line;
   uint64_t *cw = &h->cand[(size_t)(w - 2) * GC_CANDW + (bi >> 6)];
-  // A freed slot is young when it is handed out again: its mark goes too,
-  // after its allocation bit (no collection marks it then), and in one
-  // instruction when other threads run (a collection may stop this one
-  // anywhere and set other marks of the word).
+  // A freed slot is young when it is handed out again. On one thread its
+  // mark goes here; when other threads run, the thread that hands the slot
+  // out clears it (gc_next_bits): cleared here, after the allocation bit, it
+  // could be the mark of the object another thread made in the slot since
+  // and a collection marked old, which the next minor collection would then
+  // not trace from (tests/par_reuse.bend).
   uint64_t *mw = &gc_mbits[bi * 64 + (i >> 6)];
   if (UNLIKELY(h->mt)) {
     __atomic_fetch_and(aw, ~bit, __ATOMIC_RELAXED);
-    if (UNLIKELY(*mw & bit)) __atomic_fetch_and(mw, ~bit, __ATOMIC_RELAXED);
     // (a sample of the frees keeps the shared candidate words cool)
     if ((i & 15) == 0 && !(*cw & (1ull << (bi & 63))))
       __atomic_fetch_or(cw, 1ull << (bi & 63), __ATOMIC_RELAXED);
