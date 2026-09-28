@@ -351,6 +351,8 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w) {
 #define RC_TS ((V)1 << 63)
 #define RC_ADDR (RC_ONE - 1)
 #define RC_REFS(w0) (((w0) >> 48) & 0x7fff)
+#define rc_bdupFLD(p, i) rc_dup_in(FLD(p, i), ((V *)(p))[0] & RC_TS)
+#define rc_bdup(x) rc_dup_in((x), RC_TS)
 __attribute__((noinline)) void rc_free_large(uintptr_t bi) {
   pthread_mutex_lock(&gc_lock);
   GcBlk *b = gc_blk(bi);

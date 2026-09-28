@@ -541,6 +541,11 @@ static inline void rc_dup_in(V x, V ts) {
 }
 // ALeaf{x} = a (counted): x gets a reference.
 static inline void rc_dup_leaf(V a) { rc_dup_in(((V *)a)[1], ((V *)a)[0] & RC_TS); }
+// A reference more to a borrowed value (see Bor in bendc.bend): field i
+// of borrowed node p, marked as p is; or one whose holder is not known,
+// marked.
+#define rc_bdupFLD(p, i) rc_dup_in(FLD(p, i), ((V *)(p))[0] & RC_TS)
+#define rc_bdup(x) rc_dup_in((x), RC_TS)
 static inline void rc_dup(V v) { rc_dupn(v, 1); }
 static inline V rc_dupv(V v) { rc_dup(v); return v; }
 
@@ -1084,8 +1089,9 @@ static inline V F_Map_dbit(V key, V pos) {
 
 // String.cmp(a, b) and String.eq(a, b), by code point. Base's String.cmp
 // rebuilds both strings to hand them back, which copies a shared string
-// (and, counted, frees the copy right after: String.eq drops it); here
-// the strings themselves go back, and String.eq drops them.
+// (and, counted, frees the copy right after); here the strings themselves
+// go back, and String.eq borrows them (counted, its callers keep their
+// references: see Bor in bendc.bend).
 #ifdef BEND_NATIVE_STR
 static inline V str_cmp(V a, V b) {
   for (;;) {
@@ -1098,12 +1104,7 @@ static inline V str_cmp(V a, V b) {
   }
 }
 static inline V F_String_dcmp(V a, V b) { return C2(0, C2(0, a, b), str_cmp(a, b)); }
-static inline V F_String_deq(V a, V b) {
-  V r = BOOL(str_cmp(a, b) == IMM(1));
-  bend_drop(a);
-  bend_drop(b);
-  return r;
-}
+static inline V F_String_deq(V a, V b) { return BOOL(str_cmp(a, b) == IMM(1)); }
 #endif
 
 // Natives: U32
