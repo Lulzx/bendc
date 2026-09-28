@@ -73,6 +73,11 @@ jobs:
           BEND_NO_TELEMETRY=1 bend DEADPROOF.bend --check-only
           ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" DEADPROOF.bend
 
+      - name: Putting let-bound numbers in place of their lookups preserves it (LITPROOF.bend, both checkers)
+        run: |
+          BEND_NO_TELEMETRY=1 bend LITPROOF.bend --check-only
+          ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" LITPROOF.bend
+
       - name: Full bootstrap (official bend -> stage1 -> stage2 fixpoint)
         run: BEND_NO_TELEMETRY=1 ./bootstrap.sh
 

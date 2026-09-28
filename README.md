@@ -270,11 +270,19 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    run out of fuel). `dead_prog` says that when `main`'s result holds no closure (and is not a
    failure), the program without dead lets gives exactly that result with the pass taken. The
    dropped let's steps are the source's alone, so the proof follows the source's fuel and lets the
-   other program wait at the let's body. The proven functions are the ones bendc runs; the inliner
-   no longer resolves matches itself. The inliner's own rules (the substitution of arguments, a
-   `let` of a known constructor, applications of more than one argument) are not proven, nor are
-   lowering, raising back to an `Expr`, or code generation. Both checkers verify the four proofs
-   in CI.
+   other program wait at the let's body. Before dropping dead lets, `Core.Def.lit` puts a number (a
+   `U32`, `I32`, `Nat` or `F32` literal) in place of each lookup of a variable let-bound to it,
+   unless a nearer binding of the name hides it; the let is then dead.
+   [`LITPROOF.bend`](LITPROOF.bend) proves the law in [`LIT.bend`](LIT.bend), `lit_ok` (and
+   `lit_prog`), stated as `dead_ok` is (a source that fails is related to anything). A closure made
+   past a substituted let keeps the binding in its scope, but its body no longer looks it up, so
+   values are related when the pass, run with the lets known at the closure (a list of names, each
+   with its number or none), takes one body to the other, and the scope holds those bindings. The
+   let is taken as a relation step rather than by running the source ahead. The proven functions
+   are the ones bendc runs; the inliner no longer resolves matches itself. The inliner's own rules
+   (the substitution of arguments, a `let` of a known constructor, applications of more than one
+   argument) are not proven, nor are lowering, raising back to an `Expr`, or code generation. Both
+   checkers verify the five proofs in CI.
 6. **Code generation.** A state monad threads fresh names, emitted C, references and errors through
    the generator. Only defs reachable from `main` are emitted.
    - Each def becomes a C function, and self tail calls become `goto` loops.
@@ -567,6 +575,7 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`RED.bend`](RED.bend), [`REDPROOF.bend`](REDPROOF.bend) | the law that reducing applied lambdas to lets (`Core.Def.red`) preserves the core IR's semantics, and its proof |
 | [`KNOWN.bend`](KNOWN.bend), [`KNOWNPROOF.bend`](KNOWNPROOF.bend) | the law that resolving matches on known constructors (`Core.Def.known`) preserves the core IR's semantics, and its proof |
 | [`DEAD.bend`](DEAD.bend), [`DEADPROOF.bend`](DEADPROOF.bend) | the law that dropping dead lets (`Core.Def.dead`) gives related results (equal ones without closures), and its proof |
+| [`LIT.bend`](LIT.bend), [`LITPROOF.bend`](LITPROOF.bend) | the law that putting let-bound numbers in place of their lookups (`Core.Def.lit`) gives related results (equal ones without closures), and its proof |
 | [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, arrays, native `Nat`, `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
 | [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the kernel cache, the simulator, copying results back |
 | [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
