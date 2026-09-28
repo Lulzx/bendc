@@ -15964,12 +15964,236 @@ def N.fix.fp(c: As.Code, +np: U32, +fp: Bool) -> As.Code:
 def N.fix(c: As.Code, +np: U32) -> As.Code:
   N.fix.fp(c, np, False{})
 
+# Register allocation
+# -------------------
+#
+# The generator hands out slots 0..9 (x19..x28) in order and frees them
+# after the expression or case that took them, so a register holds many
+# values in turn, and a function would save as many as it used at its
+# deepest. N.ra, over a function's code before its prologue, finds where
+# each of them is live (a backward pass over the code, again until the
+# labels' sets stay the same) and which are live across a call, then gives
+# each one register for the whole function: one of x11..x15 (which the
+# generated code does not use otherwise) when it is never live across a call,
+# else the first of x19.. that no register live with it has. A function then
+# saves only the callee-saved registers that keep a value across a call.
+# Code it cannot follow (an encoding As.du does not know that names one of
+# these registers, a branch by offset back or far) keeps its registers.
+
+# x19..x28, and x11..x15.
+def N.ra.slots() -> U32:
+  536346624
+
+def N.ra.free() -> U32:
+  63488
+
+# The pass's state: each label's live set, whether one changed, the
+# registers live where each of x19..x28 is written (at i), the ones live
+# across a call, and the set of the label last looked up.
+type NRa is Data:
+  NRa{m: Map<&2, U32>, ch: Bool, ig: List<&2, U32>, cross: U32, v: U32}
+
+def N.ra.set(+l: String, +out: U32, r: Map<&2, U32> & U32, ch: Bool, ig: List<&2, U32>, cross: U32) -> NRa:
+  (m, +old) = r
+  NRa{Map.set(&2, U32, m, l, out), Bool.or(ch, U32.is_ne(old, out)), ig, cross, 0}
+
+def N.ra.label(+l: String, +out: U32, st: NRa) -> NRa:
+  NRa{m, ch, ig, cross, v} = st
+  N.ra.set(l, out, Map.get(U32, 0, m, l), ch, ig, cross)
+
+def N.ra.got(r: Map<&2, U32> & U32, ch: Bool, ig: List<&2, U32>, cross: U32) -> NRa:
+  (m, v) = r
+  NRa{m, ch, ig, cross, v}
+
+# A branch to label l (kind 2 or 3): its set, in v.
+def N.ra.look(+kind: U32, +l: String, st: NRa) -> NRa:
+  NRa{+m, +ch, +ig, +cross, v} = st
+  Bool.pick(Unit -> NRa, U32.is_lt((kind - 2 : U32), 2),
+    z => N.ra.got(Map.get(U32, 0, m, l), ch, ig, cross),
+    z => NRa{m, ch, ig, cross, 0})(Unit{})
+
+def N.ra.v(+st: NRa) -> U32:
+  NRa{m, ch, ig, cross, v} = st
+  v
+
+def N.ra.ch(+st: NRa) -> Bool:
+  NRa{m, ch, ig, cross, v} = st
+  ch
+
+def N.ra.igs(+st: NRa) -> List<&2, U32>:
+  NRa{m, ch, ig, cross, v} = st
+  ig
+
+def N.ra.cross(+st: NRa) -> U32:
+  NRa{m, ch, ig, cross, v} = st
+  cross
+
+# The registers live after an instruction of kind k: out after it in
+# order, lab at its label, raw at its offset.
+def N.ra.succ(+k: U32, +out: U32, +lab: U32, +raw: U32) -> U32:
+  Bool.pick(U32, U32.is_eq(k, 2), (out .|. lab : U32),
+  Bool.pick(U32, U32.is_eq(k, 3), lab,
+  Bool.pick(U32, U32.is_eq(k, 4), 0,
+  Bool.pick(U32, U32.is_eq(k, 5), (out .|. raw : U32),
+  Bool.pick(U32, U32.is_eq(k, 6), raw, out)))))
+
+# The live set off words ahead (win: the next words', nearest first).
+def N.ra.at(win: List<&2, U32>, +off: U32) -> U32:
+  Maybe.default(&2, U32, List.get(&2, U32, win, U32.to_nat(((off - 1 : U32) .&. 15 : U32))), 0)
+
+def N.ra.win(+x: U32, +n: U32, +win: List<&2, U32>) -> List<&2, U32>:
+  Bool.pick(List<&2, U32>, U32.is_zero(n), win,
+    List.take(&2, U32, x <> Bool.pick(List<&2, U32>, U32.is_eq(n, 2), x <> win, win), 8n))
+
+# s added to the sets of the registers written (d), from x(19 + r).
+def N.ra.ig(ig: List<&2, U32>, +d: U32, +s: U32, +r: U32) -> List<&2, U32>:
+  match ig:
+    case Nil{}:
+      Nil{}
+    case +x <> t:
+      +b = As.reg.bit((19 + r : U32))
+      Bool.pick(U32, U32.is_zero((d .&. b : U32)), x, (x .|. (s .&. (b .^. 4294967295 : U32) : U32) : U32)) <>
+        N.ra.ig(t, d, s, U32.inc(r))
+
+def N.ra.note(+d: U32, +s: U32, call: Bool, st: NRa) -> NRa:
+  NRa{m, ch, ig, +cross, v} = st
+  NRa{m, ch, N.ra.ig(ig, (d .&. N.ra.slots() : U32), s, 0), Bool.pick(U32, call, (cross .|. s : U32), cross), v}
+
+# One backward pass over the code (reversed): out, the registers live after
+# the instruction.
+def N.ra.pass(us: List<&2, As.Use>, +out: U32, +win: List<&2, U32>, +st: NRa) -> NRa:
+  match us:
+    case Nil{}:
+      st
+    case As.Use{+d, +u, +kind, +l, +off, +n} <> +t:
+      +st1 = N.ra.look(kind, l, st)
+      +s = N.ra.succ(kind, out, N.ra.v(st1), N.ra.at(win, off))
+      +live = (((s .&. (d .^. 4294967295 : U32) : U32) .|. u : U32) .&. N.ra.slots() : U32)
+      Bool.pick(Unit -> NRa, U32.is_eq(kind, 8),
+        z => N.ra.pass(t, out, win, N.ra.label(l, out, st)),
+        z => N.ra.pass(t, live, N.ra.win(live, n, win), N.ra.note(d, s, U32.is_eq(kind, 1), st1)))(Unit{})
+
+def N.ra.zeros(k: Nat) -> List<&2, U32>:
+  match k:
+    case 0n:
+      Nil{}
+    case 1n+j:
+      0 <> N.ra.zeros(j)
+
+def N.ra.reset(st: NRa) -> NRa:
+  NRa{m, ch, ig, cross, v} = st
+  NRa{m, False{}, N.ra.zeros(10n), 0, 0}
+
+# Passes until no label's set changes (None past k of them).
+def N.ra.live(k: Nat, +us: List<&2, As.Use>, st: NRa) -> Maybe<&2, NRa>:
+  match k:
+    case 0n:
+      None{}
+    case 1n+j:
+      +r = N.ra.pass(us, 0, Nil{}, N.ra.reset(st))
+      Bool.pick(Unit -> Maybe<&2, NRa>, N.ra.ch(r), z => N.ra.live(j, us, r), z => Some{r})(Unit{})
+
+# The instructions as uses, reversed; whether one cannot be followed; the
+# registers named.
+def N.ra.uses(ins: List<&2, As.Ins>, acc: List<&2, As.Use>) -> List<&2, As.Use>:
+  match ins:
+    case Nil{}:
+      acc
+    case i <> t:
+      N.ra.uses(t, As.use(i, (N.ra.slots() .|. N.ra.free() : U32), N.epi.w()) <> acc)
+
+def N.ra.bad(us: List<&2, As.Use>) -> Bool:
+  match us:
+    case Nil{}:
+      False{}
+    case As.Use{d, u, +kind, l, off, n} <> t:
+      Bool.or(U32.is_eq(kind, 7), N.ra.bad(t))
+
+def N.ra.named(us: List<&2, As.Use>, +acc: U32) -> U32:
+  match us:
+    case Nil{}:
+      acc
+    case As.Use{d, u, kind, l, off, n} <> t:
+      N.ra.named(t, (acc .|. (d .|. u : U32) : U32))
+
+# The colors that registers before x(19 + i) live with it have (cs: theirs
+# in order, from x(19 + j); mine: the set live where it is written).
+def N.ra.nb(cs: List<&2, U32>, +ig: List<&2, U32>, +i: U32, +j: U32, +mine: U32) -> U32:
+  match cs:
+    case Nil{}:
+      0
+    case +c <> t:
+      +ij = Bool.or(As.du.bit(mine, As.reg.bit((19 + j : U32))),
+        As.du.bit(Maybe.default(&2, U32, List.get(&2, U32, ig, U32.to_nat(j)), 0), As.reg.bit((19 + i : U32))))
+      (As.du.if(ij, As.reg.bit(c)) .|. N.ra.nb(t, ig, i, U32.inc(j), mine) : U32)
+
+# The first of k registers from r not in bad (99: none).
+def N.ra.first(k: Nat, +r: U32, +bad: U32) -> U32:
+  match k:
+    case 0n:
+      99
+    case 1n+j:
+      Bool.pick(U32, As.du.bit(bad, As.reg.bit(r)), N.ra.first(j, U32.inc(r), bad), r)
+
+def N.ra.pick(+caller: Bool, +bad: U32) -> U32:
+  +c = N.ra.first(5n, 11, bad)
+  Bool.pick(U32, Bool.and(caller, U32.is_lt(c, 99)), c, N.ra.first(10n, 19, bad))
+
+# The registers for x19..x28 in order (one not named keeps its own).
+def N.ra.colors(k: Nat, +i: U32, +ig: List<&2, U32>, +cross: U32, +named: U32, +free: Bool, +cs: List<&2, U32>) ->
+  List<&2, U32>:
+  match k:
+    case 0n:
+      cs
+    case 1n+j:
+      +b = As.reg.bit((19 + i : U32))
+      +mine = Maybe.default(&2, U32, List.get(&2, U32, ig, U32.to_nat(i)), 0)
+      +c = Bool.pick(U32, As.du.bit(named, b),
+        N.ra.pick(Bool.and(free, Bool.not(As.du.bit(cross, b))), N.ra.nb(cs, ig, i, 0, mine)), (19 + i : U32))
+      N.ra.colors(j, U32.inc(i), ig, cross, named, free, List.append(&2, U32, cs, [c]))
+
+# How many of x19.. the colors of the named registers reach.
+def N.ra.top(cs: List<&2, U32>, +i: U32, +named: U32, +acc: U32) -> U32:
+  match cs:
+    case Nil{}:
+      acc
+    case +c <> t:
+      N.ra.top(t, U32.inc(i), named, Bool.pick(U32,
+        Bool.and(As.du.bit(named, As.reg.bit((19 + i : U32))), U32.is_ge(c, 19)), U32.max(acc, (c - 18 : U32)), acc))
+
+def N.ra.ren(ins: List<&2, As.Ins>, +cs: List<&2, U32>) -> As.Code:
+  match ins:
+    case Nil{}:
+      As.CNil{}
+    case i <> t:
+      As.CCat{As.COne{As.ren(i, 19, cs)}, N.ra.ren(t, cs)}
+
+def N.ra.fin(+ins: List<&2, As.Ins>, +named: U32, +max: U32, r: Maybe<&2, NRa>) -> As.Code & U32:
+  match r:
+    case None{}:
+      (N.ra.ren(ins, Nil{}), N.pairs(max))
+    case Some{+st}:
+      +cs = N.ra.colors(10n, 0, N.ra.igs(st), N.ra.cross(st), (named .&. N.ra.slots() : U32),
+        U32.is_zero((named .&. N.ra.free() : U32)), Nil{})
+      (N.ra.ren(ins, cs), (U32.inc(N.ra.top(cs, 0, named, 0)) >> 1n : U32))
+
+# A function's body with its registers given, and the pairs of x19.. its
+# prologue saves.
+def N.ra(body: As.Code, +max: U32) -> As.Code & U32:
+  +ins = As.Code.flat(body)
+  +us = N.ra.uses(ins, Nil{})
+  N.ra.fin(ins, N.ra.named(us, 0), max, Bool.pick(Unit -> Maybe<&2, NRa>, N.ra.bad(us), z => None{},
+    z => N.ra.live(8n, us, NRa{Map.new(&2, U32), False{}, Nil{}, 0, 0}))(Unit{}))
+
+def N.func.ra(+name: String, +max: U32, +fp: Bool, r: As.Code & U32) -> As.Code:
+  (body, +np) = r
+  N.cat([N.one(As.ISym{name, False{}}), N.prologue.fp(max, np, fp), N.fix.fp(body, np, fp)])
+
 # A function: its symbol, its prologue for a frame of max slots (saving the
-# registers of the ones it uses), and its body.
+# callee-saved registers N.ra leaves it), and its body.
 # The same, saving d8..d15 too (fp: a def with twins, N.twins).
 def N.func.fp(+name: String, +max: U32, +fp: Bool, body: As.Code) -> As.Code:
-  +np = N.pairs(max)
-  N.cat([N.one(As.ISym{name, False{}}), N.prologue.fp(max, np, fp), N.fix.fp(body, np, fp)])
+  N.func.ra(name, max, fp, N.ra(body, max))
 
 def N.func(+name: String, +max: U32, body: As.Code) -> As.Code:
   N.func.fp(name, max, False{}, body)
