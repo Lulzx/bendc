@@ -17667,14 +17667,22 @@ def N.printer(+g: G, +ty: Expr) -> NG(String):
 def N.entry.head() -> As.Code:
   N.cat([N.one(As.ISym{"main", True{}}), N.adr(2, Gen.f("main"))])
 
+# main goes through bn_run (or bn_run_value), C beside the effects: under
+# tcc, which ignores constructor attributes, it registers them first, as
+# the C backend's main does (Gen.ctors.call).
+def N.runs() -> String:
+  "\nint bn_run(int argc, char **argv, V (*m)(void)) {" ++ Gen.ctors.call() ++ "  return bend_run(argc, argv, m);\n}\n" ++
+    "int bn_run_value(int argc, char **argv, V (*m)(void), void (*p)(V)) {" ++ Gen.ctors.call() ++
+    "  return bend_run_value(argc, argv, m, p);\n}\n"
+
 def N.entry.ty(+g: G, +ret: Expr, io: Bool) -> NG(As.Code):
   match io:
     case True{}:
-      NG.pure(As.Code, As.CCat{N.entry.head(), N.one(As.ICall{As.b(), "bend_run"})})
+      NG.pure(As.Code, As.CCat{N.entry.head(), N.one(As.ICall{As.b(), "bn_run"})})
     case False{}:
       do NG<As.Code>:
         p : String <- N.printer(g, ret)
-        return N.cat([N.entry.head(), N.adr(3, p), N.one(As.ICall{As.b(), "bend_run_value"})])
+        return N.cat([N.entry.head(), N.adr(3, p), N.one(As.ICall{As.b(), "bn_run_value"})])
 
 def N.entry.ret(+g: G, +ret: Expr) -> NG(As.Code):
   N.entry.ty(g, ret, Str.eq(Ty.head(ret), "IO"))
@@ -17911,7 +17919,7 @@ def Main.native.obj(+out: String, o: As.Obj) -> IO(Unit):
 def Main.native.ok(+ds: List<&2, Decl>, +out: String, head: String, effs: List<&2, String>, obj: As.Obj) -> IO(Unit):
   do IO<Unit>:
     +srcs : String <- Main.effs(effs, ds, Main.ids.known(ds), "")
-    IO.write(head ++ srcs ++ Ctors.def(Ctors.scan(srcs)))
+    IO.write(head ++ srcs ++ Ctors.def(Ctors.scan(srcs)) ++ N.runs())
     Main.native.obj(out, obj)
 
 def Main.native.emit(+ds: List<&2, Decl>, +out: String, r: NOut) -> IO(Unit):

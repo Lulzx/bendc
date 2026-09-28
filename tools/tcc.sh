@@ -23,8 +23,7 @@ cmp build/tcc/self.c seed/bendc.c
 echo "tcc: the tcc-built bendc compiles bendc.bend to the seed"
 # The runtime object, built by tcc (run_tests.sh reuses a newer one).
 rm -f build/bendrt.o
-# Native programs link a tcc-built runtime that does not run them yet.
-BEND_TEST_NATIVE=0 CC=$TCC BENDC_RT=$PWD/rt BEND_BASE=$BASE ./run_tests.sh build/tcc/bendc > build/tcc/tests.txt 2>&1 || true
+CC=$TCC BENDC_RT=$PWD/rt BEND_BASE=$BASE ./run_tests.sh build/tcc/bendc > build/tcc/tests.txt 2>&1 || true
 rm -f build/bendrt.o
 grep -v "^ok" build/tcc/tests.txt
 tail -1 build/tcc/tests.txt | grep -q " 0 failed"
