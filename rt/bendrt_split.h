@@ -1280,10 +1280,15 @@ V F_F32_dread(V s);
 // the tasks in reverse. Each thread owns a Chase-Lev deque: it pushes and
 // pops at the bottom, idle threads steal from the top. A task nobody stole
 // runs inline at its join, so a fork costs little more than a closure.
+// Reference counted, a task is queued held (P_HELD): marking what its
+// closure reaches (rc_publish) is paid for the tasks that are stolen only.
+// A thief that finds the oldest task held asks its owner (want), which
+// marks it and lets it go (P_QUEUED) at its next fork or join.
 
 #define P_LOCAL 0
 #define P_QUEUED 1
 #define P_DONE 2
+#define P_HELD 3
 
 typedef struct PTask { V clo; V res; V state; V depth; } PTask;
 
@@ -1298,6 +1303,7 @@ extern int par_front;
 typedef struct PDeque {
   _Atomic long top;
   _Atomic long bot;
+  _Atomic int want;
   long mask;
   PTask **buf;
 } PDeque;
@@ -1335,6 +1341,13 @@ void *par_worker(void *arg);
 void par_hook(void);
 
 void par_start(void);
+
+// A thief asked (want): the oldest held task in this thread's deque d is
+// marked and let go.
+__attribute__((noinline)) void par_serve(PDeque *d);
+static inline void par_serve_if(PDeque *d) {
+  if (UNLIKELY(atomic_load_explicit(&d->want, memory_order_relaxed))) par_serve(d);
+}
 
 // Forks clo (a closure taking one dummy argument); returns the task. Only a
 // thread whose deque is nearly empty queues it (the oldest tasks, which

@@ -921,6 +921,7 @@ V F_F32_dread(V s) {
 #define P_LOCAL 0
 #define P_QUEUED 1
 #define P_DONE 2
+#define P_HELD 3
 #ifndef __TINYC__
 __thread int par_depth;
 #endif
@@ -961,6 +962,13 @@ PTask *pdq_steal(PDeque *d) {
   long b = atomic_load_explicit(&d->bot, memory_order_acquire);
   if (t < b) {
     PTask *x = __atomic_load_n(&d->buf[t & d->mask], __ATOMIC_RELAXED);
+    // (x may be gone, when the CAS fails; a task is held only before it
+    // is let go)
+    if (__atomic_load_n(&x->state, __ATOMIC_ACQUIRE) == P_HELD) {
+      if (!atomic_load_explicit(&d->want, memory_order_relaxed))
+        atomic_store_explicit(&d->want, 1, memory_order_relaxed);
+      return NULL;
+    }
     if (!atomic_compare_exchange_strong_explicit(&d->top, &t, t + 1, memory_order_seq_cst,
           memory_order_relaxed))
       return NULL;
@@ -1034,6 +1042,18 @@ void par_start(void) {
   }
   pthread_mutex_unlock(&par_mu);
 }
+__attribute__((noinline)) void par_serve(PDeque *d) {
+  atomic_store_explicit(&d->want, 0, memory_order_relaxed);
+  long b = atomic_load_explicit(&d->bot, memory_order_relaxed);
+  for (long i = atomic_load_explicit(&d->top, memory_order_acquire); i < b; i++) {
+    PTask *x = __atomic_load_n(&d->buf[i & d->mask], __ATOMIC_RELAXED);
+    if (__atomic_load_n(&x->state, __ATOMIC_RELAXED) == P_HELD) {
+      rc_publish(x->clo);
+      __atomic_store_n(&x->state, P_QUEUED, __ATOMIC_RELEASE);
+      return;
+    }
+  }
+}
 V par_fork(V clo) {
 #ifdef BEND_DEBUG_FREE
   // Debugging, on one thread: BEND_DEBUG_EAGER runs forks as they are made,
@@ -1046,15 +1066,15 @@ V par_fork(V clo) {
 #endif
   if (par_nthreads <= 1) return clo | 2;
   PDeque *d = thr_self->dq;
+  par_serve_if(d);
   long b = atomic_load_explicit(&d->bot, memory_order_relaxed);
   long tp = atomic_load_explicit(&d->top, memory_order_relaxed);
   if (b - tp >= 4) return clo | 2;
   if (UNLIKELY(!atomic_load_explicit(&par_started, memory_order_relaxed))) par_start();
-  if (gc_hot.rc) rc_publish(clo);
   PTask *t = (PTask *)halloc(4);
   t->clo = clo;
   t->depth = (V)par_depth;
-  t->state = P_QUEUED;
+  t->state = gc_hot.rc ? P_HELD : P_QUEUED;
   __atomic_store_n(&d->buf[b & d->mask], t, __ATOMIC_RELAXED);
   atomic_thread_fence(memory_order_release);
   atomic_store_explicit(&d->bot, b + 1, memory_order_relaxed);
@@ -1065,7 +1085,9 @@ V par_join(V tv) {
   if (tv & 4) return ((V *)(tv & ~(V)4))[0];
   if (tv & 2) return apply(tv & ~(V)2, 0);
   PTask *t = (PTask *)tv;
-  PTask *p = pdq_pop(thr_self->dq);
+  PDeque *d = thr_self->dq;
+  par_serve_if(d);
+  PTask *p = pdq_pop(d);
   if (p == t) {
     V clo = t->clo;
     if (gc_hot.rc) rc_free_at((V)t, 4);
@@ -1073,6 +1095,7 @@ V par_join(V tv) {
   }
   if (p) par_exec(p);
   while (__atomic_load_n(&t->state, __ATOMIC_ACQUIRE) != P_DONE) {
+    par_serve_if(d);
     PTask *o = par_steal();
     if (o) par_exec(o);
     else cpu_relax();

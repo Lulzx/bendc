@@ -1997,10 +1997,15 @@ static V F_F32_dread(V s) {
 // the tasks in reverse. Each thread owns a Chase-Lev deque: it pushes and
 // pops at the bottom, idle threads steal from the top. A task nobody stole
 // runs inline at its join, so a fork costs little more than a closure.
+// Reference counted, a task is queued held (P_HELD): marking what its
+// closure reaches (rc_publish) is paid for the tasks that are stolen only.
+// A thief that finds the oldest task held asks its owner (want), which
+// marks it and lets it go (P_QUEUED) at its next fork or join.
 
 #define P_LOCAL 0
 #define P_QUEUED 1
 #define P_DONE 2
+#define P_HELD 3
 
 typedef struct PTask { V clo; V res; V state; V depth; } PTask;
 
@@ -2015,6 +2020,7 @@ static int par_front = 0;
 typedef struct PDeque {
   _Atomic long top;
   _Atomic long bot;
+  _Atomic int want;
   long mask;
   PTask **buf;
 } PDeque;
@@ -2059,6 +2065,13 @@ static PTask *pdq_steal(PDeque *d) {
   long b = atomic_load_explicit(&d->bot, memory_order_acquire);
   if (t < b) {
     PTask *x = __atomic_load_n(&d->buf[t & d->mask], __ATOMIC_RELAXED);
+    // (x may be gone, when the CAS fails; a task is held only before it
+    // is let go)
+    if (__atomic_load_n(&x->state, __ATOMIC_ACQUIRE) == P_HELD) {
+      if (!atomic_load_explicit(&d->want, memory_order_relaxed))
+        atomic_store_explicit(&d->want, 1, memory_order_relaxed);
+      return NULL;
+    }
     if (!atomic_compare_exchange_strong_explicit(&d->top, &t, t + 1, memory_order_seq_cst,
           memory_order_relaxed))
       return NULL;
@@ -2148,6 +2161,24 @@ static void par_start(void) {
   pthread_mutex_unlock(&par_mu);
 }
 
+// A thief asked (want): the oldest held task in this thread's deque d is
+// marked and let go.
+__attribute__((noinline)) static void par_serve(PDeque *d) {
+  atomic_store_explicit(&d->want, 0, memory_order_relaxed);
+  long b = atomic_load_explicit(&d->bot, memory_order_relaxed);
+  for (long i = atomic_load_explicit(&d->top, memory_order_acquire); i < b; i++) {
+    PTask *x = __atomic_load_n(&d->buf[i & d->mask], __ATOMIC_RELAXED);
+    if (__atomic_load_n(&x->state, __ATOMIC_RELAXED) == P_HELD) {
+      rc_publish(x->clo);
+      __atomic_store_n(&x->state, P_QUEUED, __ATOMIC_RELEASE);
+      return;
+    }
+  }
+}
+static inline void par_serve_if(PDeque *d) {
+  if (UNLIKELY(atomic_load_explicit(&d->want, memory_order_relaxed))) par_serve(d);
+}
+
 // Forks clo (a closure taking one dummy argument); returns the task. Only a
 // thread whose deque is nearly empty queues it (the oldest tasks, which
 // thieves take, are the big ones); otherwise the fork is the closure itself,
@@ -2164,15 +2195,15 @@ static V par_fork(V clo) {
 #endif
   if (par_nthreads <= 1) return clo | 2;
   PDeque *d = thr_self->dq;
+  par_serve_if(d);
   long b = atomic_load_explicit(&d->bot, memory_order_relaxed);
   long tp = atomic_load_explicit(&d->top, memory_order_relaxed);
   if (b - tp >= 4) return clo | 2;
   if (UNLIKELY(!atomic_load_explicit(&par_started, memory_order_relaxed))) par_start();
-  if (gc_hot.rc) rc_publish(clo);
   PTask *t = (PTask *)halloc(4);
   t->clo = clo;
   t->depth = (V)par_depth;
-  t->state = P_QUEUED;
+  t->state = gc_hot.rc ? P_HELD : P_QUEUED;
   __atomic_store_n(&d->buf[b & d->mask], t, __ATOMIC_RELAXED);
   atomic_thread_fence(memory_order_release);
   atomic_store_explicit(&d->bot, b + 1, memory_order_relaxed);
@@ -2185,7 +2216,9 @@ static V par_join(V tv) {
   if (tv & 4) return ((V *)(tv & ~(V)4))[0];
   if (tv & 2) return apply(tv & ~(V)2, 0);
   PTask *t = (PTask *)tv;
-  PTask *p = pdq_pop(thr_self->dq);
+  PDeque *d = thr_self->dq;
+  par_serve_if(d);
+  PTask *p = pdq_pop(d);
   if (p == t) {
     V clo = t->clo;
     if (gc_hot.rc) rc_free_at((V)t, 4);
@@ -2193,6 +2226,7 @@ static V par_join(V tv) {
   }
   if (p) par_exec(p);
   while (__atomic_load_n(&t->state, __ATOMIC_ACQUIRE) != P_DONE) {
+    par_serve_if(d);
     PTask *o = par_steal();
     if (o) par_exec(o);
     else cpu_relax();
