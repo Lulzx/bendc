@@ -700,3 +700,216 @@ def run(~prim: String -> List<&2, Val> -> Res, +n: Nat, +ds: List<&2, Def>, s: S
 # A program's result: main, called with no arguments.
 def Prog.run(~prim: String -> List<&2, Val> -> Res, n: Nat, ds: List<&2, Def>) -> Res:
   run(~prim, n, ds, SCallDef{"main", Nil{}})
+
+# Reduction
+# =========
+
+# The inliner's reductions (Inl in bendc.bend), as a pass: Tm.red makes them
+# at every node, and RED.bend proves that this preserves `run`. An applied
+# lambda with one argument becomes a let.
+
+def Red.is_lam(f: Tm) -> Bool:
+  match f:
+    case CLam{p, b}:
+      True{}
+    case other:
+      False{}
+
+# Whether f applied to a, then to r, is a redex.
+def Red.is_beta(r: List<&2, Tm>, f: Tm) -> Bool:
+  match r:
+    case Nil{}:
+      Red.is_lam(f)
+    case a <> t:
+      False{}
+
+def Red.beta(f: Tm, a: Tm) -> Tm:
+  match f:
+    case CLam{p, b}:
+      CLet{p, a, b}
+    case other:
+      CApp{other, [a]}
+
+# t with its redexes reduced. A list field is walked as its head and the node
+# rebuilt with the rest, which is not a node of t (top is False there).
+def Tm.red(t: Tm, top: Bool) -> Tm:
+  match t:
+    case CCall{f, as}:
+      match as:
+        case Nil{}:
+          CCall{f, Nil{}}
+        case a <> r:
+          match a:
+            case Arg{rel, e}:
+              Tm.push.call(Arg{rel, Tm.red(e, True{})}, Tm.red(CCall{f, r}, False{}))
+    case CApp{+f, as}:
+      match as:
+        case Nil{}:
+          CApp{Tm.red(f, True{}), Nil{}}
+        case +a <> +r:
+          Bool.pick(Unit -> Tm, Bool.and(top, Red.is_beta(r, f)),
+            u => Red.beta(Tm.red(f, True{}), Tm.red(a, True{})),
+            u => Tm.push(Tm.red(a, True{}), Tm.red(CApp{f, r}, False{})))(Unit{})
+    case CCtr{k, as}:
+      match as:
+        case Nil{}:
+          CCtr{k, Nil{}}
+        case a <> r:
+          Tm.push(Tm.red(a, True{}), Tm.red(CCtr{k, r}, False{}))
+    case CLam{p, b}:
+      CLam{p, Tm.red(b, True{})}
+    case CLet{p, v, b}:
+      CLet{p, Tm.red(v, True{}), Tm.red(b, True{})}
+    case CMat{scrs, cases}:
+      match scrs:
+        case a <> r:
+          Tm.push(Tm.red(a, True{}), Tm.red(CMat{r, cases}, False{}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              CMat{Nil{}, Nil{}}
+            case c <> r:
+              Tm.push.case(Tm.red(c, True{}), Tm.red(CMat{Nil{}, r}, False{}))
+    case CCse{ps, b}:
+      CCse{ps, Tm.red(b, True{})}
+    case CSuc{k, e}:
+      CSuc{k, Tm.red(e, True{})}
+    case COp{op, a, b}:
+      COp{op, Tm.red(a, True{}), Tm.red(b, True{})}
+    case CAnn{e, ty}:
+      CAnn{Tm.red(e, True{}), ty}
+    case other:
+      other
+
+def Tms.red(ts: List<&2, Tm>) -> List<&2, Tm>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      Tm.red(t, True{}) <> Tms.red(r)
+
+def Arg.red(a: Arg) -> Arg:
+  match a:
+    case Arg{rel, e}:
+      Arg{rel, Tm.red(e, True{})}
+
+def Args.red(as: List<&2, Arg>) -> List<&2, Arg>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case a <> r:
+      Arg.red(a) <> Args.red(r)
+
+def Def.red(d: Def) -> Def:
+  match d:
+    case Def{n, ps, b, ret}:
+      Def{n, ps, Tm.red(b, True{}), ret}
+
+def Defs.red(ds: List<&2, Def>) -> List<&2, Def>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Def.red(d) <> Defs.red(r)
+
+# The pass on the semantics' states: every term in them reduced.
+def Val.red(v: Val) -> Val:
+  match v:
+    case VCtr{k, fs}:
+      match fs:
+        case Nil{}:
+          VCtr{k, Nil{}}
+        case f <> r:
+          Val.push(Val.red(f), Val.red(VCtr{k, r}))
+    case VFun{f, as}:
+      match as:
+        case Nil{}:
+          VFun{f, Nil{}}
+        case a <> r:
+          Val.push(Val.red(a), Val.red(VFun{f, r}))
+    case VClo{env, p, b}:
+      match env:
+        case Nil{}:
+          VClo{Nil{}, p, Tm.red(b, True{})}
+        case e <> r:
+          Val.push.env(Val.red(e), Val.red(VClo{r, p, b}))
+    case VBnd{x, y}:
+      VBnd{x, Val.red(y)}
+    case VTrm{t}:
+      VTrm{Tm.red(t, True{})}
+    case VLit{l}:
+      VLit{l}
+
+def Vals.red(vs: List<&2, Val>) -> List<&2, Val>:
+  match vs:
+    case Nil{}:
+      Nil{}
+    case v <> r:
+      Val.red(v) <> Vals.red(r)
+
+def Res.red(r: Res) -> Res:
+  match r:
+    case ROk{vs}:
+      ROk{Vals.red(vs)}
+    case REnv{env}:
+      REnv{Vals.red(env)}
+    case RNo{}:
+      RNo{}
+    case RFail{m}:
+      RFail{m}
+
+def Kont.red(k: Kont) -> Kont:
+  match k:
+    case KLet{env, p, b}:
+      KLet{Vals.red(env), p, Tm.red(b, True{})}
+    case KBind{b}:
+      KBind{Tm.red(b, True{})}
+    case KMat{env, cases}:
+      KMat{Vals.red(env), Tms.red(cases)}
+    case KCase{env, vs, b, rest}:
+      KCase{Vals.red(env), Vals.red(vs), Tm.red(b, True{}), Tms.red(rest)}
+    case KTail{env, es}:
+      KTail{Vals.red(env), Tms.red(es)}
+    case KATail{env, as}:
+      KATail{Vals.red(env), Args.red(as)}
+    case KCons{v}:
+      KCons{Val.red(v)}
+    case KApply{vs}:
+      KApply{Vals.red(vs)}
+    case KBody{b, rest}:
+      KBody{Tm.red(b, True{}), Vals.red(rest)}
+    case other:
+      other
+
+def Sel.red(s: Sel) -> Sel:
+  match s:
+    case SEval{env, e}:
+      SEval{Vals.red(env), Tm.red(e, True{})}
+    case SEvals{env, es}:
+      SEvals{Vals.red(env), Tms.red(es)}
+    case SArgs{env, as}:
+      SArgs{Vals.red(env), Args.red(as)}
+    case SThen{r, k}:
+      SThen{Res.red(r), Kont.red(k)}
+    case SOk{k, vs}:
+      SOk{Kont.red(k), Vals.red(vs)}
+    case SLook{env, x}:
+      SLook{Vals.red(env), x}
+    case SLook2{hit, v, env, x}:
+      SLook2{hit, Val.red(v), Vals.red(env), x}
+    case SCallDef{f, vs}:
+      SCallDef{f, Vals.red(vs)}
+    case SFind{ds, f, vs}:
+      SFind{Defs.red(ds), f, Vals.red(vs)}
+    case SFound{hit, ps, b, ds, f, vs}:
+      SFound{hit, ps, Tm.red(b, True{}), Defs.red(ds), f, Vals.red(vs)}
+    case SEnter{short, f, ps, b, vs}:
+      SEnter{short, f, ps, Tm.red(b, True{}), Vals.red(vs)}
+    case SApply{vs, fv}:
+      SApply{Vals.red(vs), Val.red(fv)}
+    case SMatch{env, vs, cases}:
+      SMatch{Vals.red(env), Vals.red(vs), Tms.red(cases)}
+    case SPat{env, ps, vs}:
+      SPat{Vals.red(env), ps, Vals.red(vs)}
+    case SPatC{hit, env, ps, vs}:
+      SPatC{hit, Vals.red(env), ps, Vals.red(vs)}
