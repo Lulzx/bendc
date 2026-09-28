@@ -915,3 +915,272 @@ def Sel.red(s: Sel) -> Sel:
       SPat{Vals.red(env), ps, Vals.red(vs)}
     case SPatC{hit, env, ps, vs}:
       SPatC{hit, Vals.red(env), ps, Vals.red(vs)}
+
+# Known constructors
+# ==================
+
+# The inliner's case-of-known-constructor rule (Inl in bendc.bend) as a pass
+# of its own: Tm.known drops each case of a match on K{as} whose pattern is
+# another constructor's, and when the first case left is K's with a variable
+# for each field, makes the match one on as, with that case alone (bendc
+# compiles it as lets: no K is built). KNOWNPROOF.bend proves that this
+# preserves `run` (KNOWN.bend states the law).
+
+# Whether every pattern is a variable.
+def Known.vars(ps: List<&2, Pt>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case p <> r:
+      match p:
+        case PtVar{x}:
+          Known.vars(r)
+        case other:
+          False{}
+
+# Whether there are as many patterns as terms.
+def Known.same(ps: List<&2, Pt>, ts: List<&2, Tm>) -> Bool:
+  match ps ts:
+    case Nil{} Nil{}:
+      True{}
+    case p <> pr t <> tr:
+      Known.same(pr, tr)
+    case a b:
+      False{}
+
+# A match on K{as} with these cases, resolved as far as it can be.
+def Known.cases(+k: String, +as: List<&2, Tm>, cases: List<&2, Tm>) -> Tm:
+  match cases:
+    case Nil{}:
+      CMat{[CCtr{k, as}], Nil{}}
+    case c <> +r:
+      match c:
+        case CCse{ps, +b}:
+          match ps:
+            case Nil{}:
+              CMat{[CCtr{k, as}], CCse{Nil{}, b} <> r}
+            case p <> pr:
+              match p:
+                case PtCtr{+pk, +qs}:
+                  match pr:
+                    case Nil{}:
+                      Bool.pick(Unit -> Tm, String.eq(pk, k),
+                        u => Bool.pick(Tm, Bool.and(Known.vars(qs), Known.same(qs, as)), CMat{as, [CCse{qs, b}]},
+                          CMat{[CCtr{k, as}], CCse{[PtCtr{pk, qs}], b} <> r}),
+                        u => Known.cases(k, as, r))(Unit{})
+                    case q <> pr2:
+                      CMat{[CCtr{k, as}], CCse{PtCtr{pk, qs} <> q <> pr2, b} <> r}
+                case other:
+                  CMat{[CCtr{k, as}], CCse{other <> pr, b} <> r}
+        case other:
+          CMat{[CCtr{k, as}], other <> r}
+
+def Known.mat(scrs: List<&2, Tm>, cases: List<&2, Tm>) -> Tm:
+  match scrs:
+    case Nil{}:
+      CMat{Nil{}, cases}
+    case s <> r:
+      match s:
+        case CCtr{+k, +as}:
+          match r:
+            case Nil{}:
+              Known.cases(k, as, cases)
+            case t <> r2:
+              CMat{CCtr{k, as} <> t <> r2, cases}
+        case other:
+          CMat{other <> r, cases}
+
+def Known.node(t: Tm) -> Tm:
+  match t:
+    case CMat{scrs, cases}:
+      Known.mat(scrs, cases)
+    case other:
+      other
+
+def Known.top(top: Bool, t: Tm) -> Tm:
+  match top:
+    case True{}:
+      Known.node(t)
+    case False{}:
+      t
+
+# t with its matches on known constructors resolved (top as in Tm.red).
+def Tm.known(t: Tm, top: Bool) -> Tm:
+  match t:
+    case CCall{f, as}:
+      match as:
+        case Nil{}:
+          CCall{f, Nil{}}
+        case a <> r:
+          match a:
+            case Arg{rel, e}:
+              Tm.push.call(Arg{rel, Tm.known(e, True{})}, Tm.known(CCall{f, r}, False{}))
+    case CApp{f, as}:
+      match as:
+        case Nil{}:
+          CApp{Tm.known(f, True{}), Nil{}}
+        case a <> r:
+          Tm.push(Tm.known(a, True{}), Tm.known(CApp{f, r}, False{}))
+    case CCtr{k, as}:
+      match as:
+        case Nil{}:
+          CCtr{k, Nil{}}
+        case a <> r:
+          Tm.push(Tm.known(a, True{}), Tm.known(CCtr{k, r}, False{}))
+    case CLam{p, b}:
+      CLam{p, Tm.known(b, True{})}
+    case CLet{p, v, b}:
+      CLet{p, Tm.known(v, True{}), Tm.known(b, True{})}
+    case CMat{scrs, cases}:
+      match scrs:
+        case a <> r:
+          Known.top(top, Tm.push(Tm.known(a, True{}), Tm.known(CMat{r, cases}, False{})))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Known.top(top, CMat{Nil{}, Nil{}})
+            case c <> r:
+              Known.top(top, Tm.push.case(Tm.known(c, True{}), Tm.known(CMat{Nil{}, r}, False{})))
+    case CCse{ps, b}:
+      CCse{ps, Tm.known(b, True{})}
+    case CSuc{k, e}:
+      CSuc{k, Tm.known(e, True{})}
+    case COp{op, a, b}:
+      COp{op, Tm.known(a, True{}), Tm.known(b, True{})}
+    case CAnn{e, ty}:
+      CAnn{Tm.known(e, True{}), ty}
+    case other:
+      other
+
+def Tms.known(ts: List<&2, Tm>) -> List<&2, Tm>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      Tm.known(t, True{}) <> Tms.known(r)
+
+def Arg.known(a: Arg) -> Arg:
+  match a:
+    case Arg{rel, e}:
+      Arg{rel, Tm.known(e, True{})}
+
+def Args.known(as: List<&2, Arg>) -> List<&2, Arg>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case a <> r:
+      Arg.known(a) <> Args.known(r)
+
+def Def.known(d: Def) -> Def:
+  match d:
+    case Def{n, ps, b, ret}:
+      Def{n, ps, Tm.known(b, True{}), ret}
+
+def Defs.known(ds: List<&2, Def>) -> List<&2, Def>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Def.known(d) <> Defs.known(r)
+
+# The pass on the semantics' states: every term in them resolved.
+def Val.known(v: Val) -> Val:
+  match v:
+    case VCtr{k, fs}:
+      match fs:
+        case Nil{}:
+          VCtr{k, Nil{}}
+        case f <> r:
+          Val.push(Val.known(f), Val.known(VCtr{k, r}))
+    case VFun{f, as}:
+      match as:
+        case Nil{}:
+          VFun{f, Nil{}}
+        case a <> r:
+          Val.push(Val.known(a), Val.known(VFun{f, r}))
+    case VClo{env, p, b}:
+      match env:
+        case Nil{}:
+          VClo{Nil{}, p, Tm.known(b, True{})}
+        case e <> r:
+          Val.push.env(Val.known(e), Val.known(VClo{r, p, b}))
+    case VBnd{x, y}:
+      VBnd{x, Val.known(y)}
+    case VTrm{t}:
+      VTrm{Tm.known(t, True{})}
+    case VLit{l}:
+      VLit{l}
+
+def Vals.known(vs: List<&2, Val>) -> List<&2, Val>:
+  match vs:
+    case Nil{}:
+      Nil{}
+    case v <> r:
+      Val.known(v) <> Vals.known(r)
+
+def Res.known(r: Res) -> Res:
+  match r:
+    case ROk{vs}:
+      ROk{Vals.known(vs)}
+    case REnv{env}:
+      REnv{Vals.known(env)}
+    case RNo{}:
+      RNo{}
+    case RFail{m}:
+      RFail{m}
+
+def Kont.known(k: Kont) -> Kont:
+  match k:
+    case KLet{env, p, b}:
+      KLet{Vals.known(env), p, Tm.known(b, True{})}
+    case KBind{b}:
+      KBind{Tm.known(b, True{})}
+    case KMat{env, cases}:
+      KMat{Vals.known(env), Tms.known(cases)}
+    case KCase{env, vs, b, rest}:
+      KCase{Vals.known(env), Vals.known(vs), Tm.known(b, True{}), Tms.known(rest)}
+    case KTail{env, es}:
+      KTail{Vals.known(env), Tms.known(es)}
+    case KATail{env, as}:
+      KATail{Vals.known(env), Args.known(as)}
+    case KCons{v}:
+      KCons{Val.known(v)}
+    case KApply{vs}:
+      KApply{Vals.known(vs)}
+    case KBody{b, rest}:
+      KBody{Tm.known(b, True{}), Vals.known(rest)}
+    case other:
+      other
+
+def Sel.known(s: Sel) -> Sel:
+  match s:
+    case SEval{env, e}:
+      SEval{Vals.known(env), Tm.known(e, True{})}
+    case SEvals{env, es}:
+      SEvals{Vals.known(env), Tms.known(es)}
+    case SArgs{env, as}:
+      SArgs{Vals.known(env), Args.known(as)}
+    case SThen{r, k}:
+      SThen{Res.known(r), Kont.known(k)}
+    case SOk{k, vs}:
+      SOk{Kont.known(k), Vals.known(vs)}
+    case SLook{env, x}:
+      SLook{Vals.known(env), x}
+    case SLook2{hit, v, env, x}:
+      SLook2{hit, Val.known(v), Vals.known(env), x}
+    case SCallDef{f, vs}:
+      SCallDef{f, Vals.known(vs)}
+    case SFind{ds, f, vs}:
+      SFind{Defs.known(ds), f, Vals.known(vs)}
+    case SFound{hit, ps, b, ds, f, vs}:
+      SFound{hit, ps, Tm.known(b, True{}), Defs.known(ds), f, Vals.known(vs)}
+    case SEnter{short, f, ps, b, vs}:
+      SEnter{short, f, ps, Tm.known(b, True{}), Vals.known(vs)}
+    case SApply{vs, fv}:
+      SApply{Vals.known(vs), Val.known(fv)}
+    case SMatch{env, vs, cases}:
+      SMatch{Vals.known(env), Vals.known(vs), Tms.known(cases)}
+    case SPat{env, ps, vs}:
+      SPat{Vals.known(env), ps, Vals.known(vs)}
+    case SPatC{hit, env, ps, vs}:
+      SPatC{hit, Vals.known(env), ps, Vals.known(vs)}

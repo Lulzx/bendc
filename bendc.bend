@@ -12779,7 +12779,8 @@ def Gen.gpu.tail(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> String:
 # and the types left in the body (PROOF.bend proves that this preserves the
 # IR's semantics); Inl inlines monadic binds; Core.Tm.red makes each lambda
 # applied to one argument a let (REDPROOF.bend proves that this preserves
-# the semantics too); Up raises the result back to an Expr.
+# the semantics too); Core.Tm.known resolves each match on a known
+# constructor (KNOWNPROOF.bend); Up raises the result back to an Expr.
 
 def Lo.pt.push(a: Core.Pt, p: Core.Pt) -> Core.Pt:
   match p:
@@ -13064,7 +13065,8 @@ def Up.def(d: Core.Def) -> Decl:
 # callee's body, renamed apart and inlined in turn, takes each argument in
 # place of its parameter when that moves no work into a lambda (else a let
 # binds it), and each place an argument lands is reduced: an applied lambda
-# becomes a let, and a let or a match of a known constructor takes its case.
+# becomes a let, and a let of a known constructor takes its fields (a match
+# of one is Core.Tm.known's, after the inliner).
 # A do block becomes one closure. The callee's names are fresh (a suffix
 # per depth), so no substitution captures, and each expansion walks only
 # the callee's body: the pass is linear in the program.
@@ -13375,64 +13377,6 @@ def Inl.app(f: Core.Tm, as: List<&2, Core.Tm>) -> Core.Tm:
     case a <> t:
       Core.CApp{f, a <> t}
 
-# Whether every pattern is a variable (a let of each always binds).
-def Inl.vars(ps: List<&2, Core.Pt>) -> Bool:
-  match ps:
-    case Nil{}:
-      True{}
-    case p <> r:
-      match p:
-        case Core.PtVar{x}:
-          Inl.vars(r)
-        case other:
-          False{}
-
-# The case of a match on K{as} (the first case whose pattern is K's, or a
-# variable), as lets; t itself when a case needs more than that: its fields'
-# patterns are not all variables (a field that does not match goes on to the
-# next case, a let would fail).
-def Inl.known(+k: String, +as: List<&2, Core.Tm>, cases: List<&2, Core.Tm>, +t: Core.Tm) -> Core.Tm:
-  match cases:
-    case Nil{}:
-      t
-    case c <> r:
-      match c:
-        case Core.CCse{ps, b}:
-          match ps:
-            case p <> pr:
-              match p:
-                case Core.PtVar{x}:
-                  Core.CLet{Core.PtVar{x}, Core.CCtr{k, as}, b}
-                case Core.PtCtr{+k2, +qs}:
-                  Bool.pick(Unit -> Core.Tm, String.eq(k, k2),
-                    u => Bool.pick(Core.Tm, Bool.and(Inl.vars(qs), Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as))), Inl.lets(qs, as, b), t),
-                    u => Inl.known(k, as, r, t))(Unit{})
-                case other:
-                  t
-            case other:
-              t
-        case other:
-          t
-
-def Inl.miss(t: Core.Tm) -> Bool:
-  match t:
-    case Core.CErr{m}:
-      String.eq(m, "%miss")
-    case other:
-      False{}
-
-# A match on a constructor, resolved (CErr{"%miss"} when it is not one).
-def Inl.mat(scrs: List<&2, Core.Tm>, +cases: List<&2, Core.Tm>) -> Core.Tm:
-  match scrs:
-    case s <> r:
-      match s:
-        case Core.CCtr{+k, +as}:
-          Bool.pick(Core.Tm, List.is_empty(&2, Core.Tm, r), Inl.known(k, as, cases, Core.CErr{"%miss"}), Core.CErr{"%miss"})
-        case other:
-          Core.CErr{"%miss"}
-    case Nil{}:
-      Core.CErr{"%miss"}
-
 def Inl.fsuf(n: Nat) -> String:
   "@i" ++ U32.show(U32.from_nat(n))
 
@@ -13589,9 +13533,6 @@ def Inl.go(+n: Nat, +c: Map<&2, Core.Def>, mode: IM, +t: Core.Tm) -> Core.Tm:
                       Core.CLet{Core.PtCtr{k, qs}, other, b}
                 case other:
                   Core.CLet{other, v, b}
-            case Core.CMat{+scrs, +cases}:
-              Bool.pick(Unit -> Core.Tm, Inl.miss(Inl.mat(scrs, cases)), u => Core.CMat{scrs, cases},
-                u => Inl.mat(scrs, cases))(Unit{})
             case other:
               other
 
@@ -13659,13 +13600,14 @@ def Inl.def(+c: Map<&2, Core.Def>, d: Core.Def) -> Core.Def:
 
 # The program through the core IR: each def lowered, erased, with monadic
 # binds inlined, its redexes reduced (Core.Def.red, which REDPROOF.bend
-# proves correct), and raised; a type-level def (a Type, Data, Quant or
+# proves correct), its matches on known constructors resolved
+# (Core.Def.known, which KNOWNPROOF.bend proves correct), and raised; a type-level def (a Type, Data, Quant or
 # Kind) keeps its body, which the printers unfold.
 def Lo.pass(+g: G, +c: Map<&2, Core.Def>, d: Decl) -> Decl:
   match d:
     case DDef{+name, +ps, +body, +ret}:
       Bool.pick(Unit -> Decl, G.erased_ty(Ty.head(ret)), u => DDef{name, ps, body, ret},
-        u => Up.def(Core.Def.red(Inl.def(c, Core.Def.erase(Lo.def(g, name, ps, body, ret))))))(Unit{})
+        u => Up.def(Core.Def.known(Core.Def.red(Inl.def(c, Core.Def.erase(Lo.def(g, name, ps, body, ret)))))))(Unit{})
     case other:
       other
 
