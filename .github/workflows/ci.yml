@@ -43,17 +43,30 @@ jobs:
 
       - name: bendc's checker accepts bendc itself, as the official one does
         run: |
-          # bendc has unsafe defs, so both report them and exit 1
+          # bendc has defs that rely on foreign code, so both report them and exit 1
           ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" bendc.bend > build/ours.txt 2>&1 \
             && echo "exit 0" >> build/ours.txt || echo "exit $?" >> build/ours.txt
           BEND_NO_TELEMETRY=1 bend bendc.bend --check-only > build/official.txt 2>&1 \
             && echo "exit 0" >> build/official.txt || echo "exit $?" >> build/official.txt
           cmp build/ours.txt build/official.txt
+          # check.bend has no unsafe or foreign def: both accept it outright
+          ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" check.bend
+          BEND_NO_TELEMETRY=1 bend check.bend --check-only
 
       - name: Erasure preserves the core IR's semantics (PROOF.bend, both checkers)
         run: |
           BEND_NO_TELEMETRY=1 bend PROOF.bend --check-only
           ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" PROOF.bend
+
+      - name: Reducing applied lambdas preserves it (REDPROOF.bend, both checkers)
+        run: |
+          BEND_NO_TELEMETRY=1 bend REDPROOF.bend --check-only
+          ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" REDPROOF.bend
+
+      - name: Resolving matches on known constructors preserves it (KNOWNPROOF.bend, both checkers)
+        run: |
+          BEND_NO_TELEMETRY=1 bend KNOWNPROOF.bend --check-only
+          ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" KNOWNPROOF.bend
 
       - name: The optimizer's rewrites as proven laws (OPT.bend, both checkers)
         run: |
