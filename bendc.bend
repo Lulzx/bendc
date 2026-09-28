@@ -4687,6 +4687,86 @@ def Gen.ctor.kind.ru(+tok: String, +tag: U32, +kind: Nat, +ds: List<&2, Doc>) ->
 def Gen.ctor.hnode.ru(+tok: String, +tag: U32, +ds: List<&2, Doc>) -> Doc:
   Bool.pick(Doc, String.is_empty(tok), Gen.ctor.hnode(tag, ds), Gen.ctor.ru(tok, "CRH", tag, ds))
 
+# Constants
+# ---------
+#
+# A constructor of literals (a node, and the nodes and strings and numbers
+# in it) is built once and cached (KONST, see bendrt.h), as a string
+# literal is: Natives() is a list of strings, built at each call before.
+
+# A constructor kind a constant can hold: a node or a nullary.
+def Gen.konst.kind(m: Maybe<&2, CInfo>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{CInfo{tag, ar, +kind, single}}:
+      Bool.or(U32.is_eq(kind, 0), U32.is_eq(kind, 1))
+
+def Gen.konst.node(m: Maybe<&2, CInfo>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{CInfo{tag, ar, +kind, single}}:
+      U32.is_eq(kind, 0)
+
+# Whether e is made of constructors of those kinds, strings and numbers
+# only (a list field as its head and the node rebuilt with the rest).
+def Gen.konst.ok(+g: G, e: Expr) -> Bool:
+  match e:
+    case EStr{s}:
+      True{}
+    case ENum{n}:
+      True{}
+    case ENat{n}:
+      True{}
+    case ECtor{+name, args}:
+      match args:
+        case Nil{}:
+          Gen.konst.kind(G.ctor(g, name))
+        case a <> t:
+          Bool.and(Gen.konst.ok(g, a), Gen.konst.ok(g, ECtor{name, t}))
+    case other:
+      False{}
+
+def Gen.konst.info(m: Maybe<&2, CInfo>, ds: List<&2, Doc>) -> Doc:
+  match m:
+    case None{}:
+      DStr{"0"}
+    case Some{CInfo{+tag, ar, kind, single}}:
+      Gen.ctor.kind(tag, U32.to_nat(kind), ds)
+
+# The C code building constants es (each Gen.konst.ok).
+def Gen.konst.docs(+g: G, es: List<&2, Expr>) -> List<&2, Doc>:
+  match es:
+    case Nil{}:
+      Nil{}
+    case e <> t:
+      match e:
+        case EStr{s}:
+          DStr{"MKS(\"" ++ Gen.lit(s) ++ "\")"} <> Gen.konst.docs(g, t)
+        case ENum{n}:
+          DStr{U32.show(n) ++ "u"} <> Gen.konst.docs(g, t)
+        case ENat{n}:
+          DStr{U32.show(n) ++ "u"} <> Gen.konst.docs(g, t)
+        case ECtor{+name, args}:
+          Gen.konst.info(G.ctor(g, name), Gen.konst.docs(g, args)) <> Gen.konst.docs(g, t)
+        case other:
+          DStr{"0"} <> Gen.konst.docs(g, t)
+
+# Whether constructor name of args is a constant worth caching (a node).
+def Gen.konst.is(+g: G, +name: String, +args: List<&2, Expr>) -> Bool:
+  Bool.and(Gen.konst.node(G.ctor(g, name)), Gen.konst.ok(g, ECtor{name, args}))
+
+# A constant, built once: K<k>() answers it.
+def Gen.konst(+g: G, +name: String, +args: List<&2, Expr>) -> Gen(Doc):
+  do Gen<Doc>:
+    +k : U32 <- Gen.fresh()
+    +f : String <- Gen.pure(String, "K" ++ U32.show(k))
+    Gen.proto(DStr{"static V " ++ f ++ "(void);\n"})
+    Gen.code(Doc.list([DStr{"static V " ++ f ++ "(void) { static V c; return KONST(c, "},
+      Gen.konst.info(G.ctor(g, name), Gen.konst.docs(g, args)), DStr{"); }\n"}]))
+    return DStr{f ++ "()"}
+
 def Gen.caps.put(x: String, m: Maybe<&2, String>, rest: Env()) -> Env():
   match m:
     case None{}:
@@ -6684,8 +6764,9 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               Gen.str(s)
             case ECall{f, args}:
               Gen.rec(fu, GSCall{g, env, f, args})
-            case ECtor{name, args}:
-              Gen.rec(fu, GSCtor{g, env, name, args})
+            case ECtor{+name, +args}:
+              Bool.pick(Unit -> Gen(Doc), Gen.konst.is(g, name, args), u => Gen.konst(g, name, args),
+                u => Gen.rec(fu, GSCtor{g, env, name, args}))(Unit{})
             case ELam{p, body}:
               Gen.rec(fu, GSLam{g, env, p, body})
             case ELet{p, v, body}:

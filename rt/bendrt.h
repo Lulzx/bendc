@@ -1654,6 +1654,22 @@ __attribute__((noinline)) static V str_cache(V *slot, const char *s, size_t n) {
   return v;
 }
 
+// A constant (a constructor of literals, see Gen.konst in bendc.bend),
+// built once as a string literal is (slot is its cache, a root).
+__attribute__((noinline)) static V konst_cache(V *slot, V v) {
+  if (gc_hot.rc) rc_immortal(v);
+  else bend_share(v);
+  pthread_mutex_lock(&gc_lock);
+  if (*slot == 0) {
+    __atomic_store_n(slot, v, __ATOMIC_RELEASE);
+    gc_root_add_locked(slot, 1);
+  }
+  v = *slot;
+  pthread_mutex_unlock(&gc_lock);
+  return v;
+}
+#define KONST(c, e) (__atomic_load_n(&(c), __ATOMIC_ACQUIRE) ? (c) : konst_cache(&(c), (e)))
+
 // Encodes a String as a malloc'd UTF-8 buffer.
 static char *str_to_c(V s, size_t *len) {
   size_t cap = 64, n = 0;
