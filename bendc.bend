@@ -15992,12 +15992,17 @@ def N.lab(l: String) -> As.Code:
 def N.adr(+r: U32, l: String) -> As.Code:
   N.one(As.IAdr{r, l})
 
-# x0 = a new block of w words (bn_alloc, in rt/native.c).
+# x0 = a new block of w words (bn_alloc, in rt/native.c; bn_alloc2 ..
+# bn_alloc6 for the common sizes).
+def N.alloc.by(+f: String, +w: U32) -> As.Code:
+  Bool.pick(As.Code, Bool.and(U32.is_ge(w, 2), U32.is_le(w, 6)), N.call(f ++ U32.show(w)),
+    As.CCat{N.k(0, w), N.call(f)})
+
 def N.alloc(+w: U32) -> As.Code:
-  As.CCat{N.k(0, w), N.call("bn_alloc")}
+  N.alloc.by("bn_alloc", w)
 
 def N.alloc.hole(+w: U32) -> As.Code:
-  As.CCat{N.k(0, w), N.call("bn_alloc_hole")}
+  N.alloc.by("bn_alloc_hole", w)
 
 # Stores operands at [x0 + off], [x0 + off + 8], ... (through x9).
 def N.fields(os: List<&2, NO>, +off: U32) -> As.Code:

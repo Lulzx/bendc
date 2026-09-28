@@ -17,6 +17,17 @@
 V *bn_alloc(V words) { return halloc((size_t)words); }
 V *bn_alloc_hole(V words) { return halloc_hole((size_t)words); }
 
+// The common sizes, each with its size class known here, as the C
+// backend's CN2, CN3, ... know theirs.
+#define BN_ALLOC(n) \
+  V *bn_alloc##n(void) { return halloc(n); } \
+  V *bn_alloc_hole##n(void) { return halloc_hole(n); }
+BN_ALLOC(2)
+BN_ALLOC(3)
+BN_ALLOC(4)
+BN_ALLOC(5)
+BN_ALLOC(6)
+
 // A float literal's bits, read once as C reads it (the slot holds them
 // with bit 32 set: a read 0.0 is then not an empty slot).
 V bn_flt(V *slot, const char *s) {
