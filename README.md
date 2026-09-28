@@ -41,6 +41,7 @@ backend that runs `f!(x)` calls on Metal.
 - [Language support](#language-support)
 - [How it works](#how-it-works)
 - [The GPU backend](#the-gpu-backend)
+- [The native backend](#the-native-backend)
 - [Benchmarks](#benchmarks)
 - [Writing a compiler under Bend's rules](#writing-a-compiler-under-bends-rules)
 - [Testing](#testing)
@@ -175,7 +176,9 @@ flowchart LR
   translates to C and GCC builds, once with the seed GCC builds. Both outputs must equal
   `seed/bendc.c` byte for byte. The first path shares nothing with the seed (not its C, and not
   clang, which the official `bend -o` calls), so a tampered seed would have to be matched by the
-  official Bend and GCC together. It needs GCC 15 or newer (the official C uses `musttail`).
+  official Bend and GCC together. It needs GCC 15 or newer (the official C uses `musttail`). On
+  arm64 a third leg builds bendc with its own native backend (see [The native
+  backend](#the-native-backend)) and checks that it compiles `bendc.bend` to the seed too.
 - **`make tcc`** builds the seed with the [Tiny C Compiler](https://repo.or.cz/tinycc.git), which
   [bootstrappable builds](https://bootstrappable.org) reach from a few hundred bytes of hex (through
   M2-Planet and GNU Mes), so bendc can join that chain. The tcc-built bendc must compile `bendc.bend`
@@ -345,6 +348,66 @@ tail calls become loops. Effects are requests answered by an event loop with the
 (`io_done`, `io_fail`, `io_tup`, `io_park_on`, `io_sys`, ...); the ones that make system calls use
 `bun:ffi`, so run the output with Bun. Parallel lets run one value after the other.
 
+## The native backend
+
+`bendc --native -o prog base.bend prog.bend` compiles a program to AArch64 machine code without a C
+compiler seeing it. The code generator (the "Native code generation" section of `bendc.bend`) and
+the assembler and object writer ([`asm.bend`](asm.bend)) are Bend. bendc encodes the instructions,
+lays out the code, resolves its labels, and writes the relocatable object itself: Mach-O on macOS,
+ELF on Linux (`Cc.elf` asks the host which). The system linker then links it with the runtime.
+
+- **What still goes through `cc`.** The runtime (`build/bendrt.o`, compiled once), `rt/native.c`
+  (external names for the runtime's inline natives, compiled once as `natives.o`), and the C of the
+  program's effects (their sources from Base's `effs/*.c`, with the ids they use), which bendc
+  writes next to the object. `cc` also links them.
+- **Same runtime, same ABI.** The code starts from the same lowered defs as the C generator and keeps
+  the runtime's value representation (see [How it works](#how-it-works)) and AAPCS64, so it calls
+  the runtime's functions (`apply`, `str_cache`, the allocator, the effect loop) as C does.
+- **Code shape.** Every value lives in a frame slot and an expression leaves its value in `x0`. A
+  def with at most 8 kept parameters takes them in `x0`..`x7`; a wider one takes the address of a
+  row of arguments. A self tail call stores the new arguments over the parameters and branches back,
+  and a tail call to another narrow def pops the frame and branches. Integer, `U32` and `F32`
+  natives are inlined (`add`, compares, shifts, `fadd`, `fmul`, `fcmp`, `ucvtf`, ...); the others
+  call their `N_` name in `rt/native.c`. A peephole pass turns a reload right after a store to the
+  same slot into a register move. String literals are cached in data slots as the C backend does.
+- **Coverage.** All 26 programs in `tests/` pass with `--native` on macOS (arm64) and on Linux
+  (arm64, in Docker), and `run_tests.sh` runs them there. bendc compiles itself with `--native`:
+  the native bendc prints the same C for `bendc.bend` as the C build, and the object it writes for
+  itself is the one the C build writes, byte for byte. `tools/ddc.sh` has this as a third leg: the
+  seed, built by GCC, compiles `bendc.bend` natively, and that bendc compiles `bendc.bend` to
+  `seed/bendc.c`.
+
+What it does not do, against the C backend:
+
+- Matches do not free what they open (programs run as with `BEND_NO_FREE=1`), so allocation-heavy
+  programs rely on the collector alone.
+- Parallel lets run in order, on one thread, and `!`-calls run on the CPU.
+- No destination passing: a def like `merge` recurses on the stack.
+- No register allocation: every value goes through memory, which is what the numbers below mostly
+  measure.
+- AArch64 only. The target is picked by the host, so there is no cross-compiling.
+
+Against the C backend (clang `-O2`), interleaved runs, best of 3, on an Apple M4 Pro that was
+running other heavy jobs at the time (load average near 50), so only the ratios mean much:
+
+| program | C backend | native | native / C |
+|---|---|---|---|
+| `forks 24` (1 thread) | 0.034s | 0.062s | 1.8 |
+| `leaves 12` (1 thread) | 5.68s | 39.2s | 6.9 |
+| `sort 1000000` (1 thread) | 0.314s | 0.535s | 1.7 |
+| `forks 24` (C: all threads) | 0.011s | 0.060s | 5.7 |
+| `leaves 12` (C: all threads) | 0.849s | 41.5s | 49 |
+| `sort 1000000` (C: all threads) | 0.114s | 0.527s | 4.6 |
+| bendc compiling `bendc.bend` to C | 1.52s | 2.73s | 1.8 |
+| bendc checking `bendc.bend` | 3.16s | 6.87s | 2.2 |
+
+On one thread, and for bendc itself, the native code takes 1.7 to 2.2 times as long, but for
+`leaves`, a float loop, where it takes 7 times as long: clang keeps `x` in a float register and fuses `x * x * 0.5 + c` into
+two instructions, while the native loop moves every value through its frame slot and between
+integer and float registers. On all threads the gap is the missing parallel lets. Building is
+where it wins: `bendc --native` builds bendc (check, code generation, assembly, link) in 3.5s,
+where `bendc -o` takes 20s, most of it clang compiling 59,000 lines of C.
+
 ## Benchmarks
 
 `bench/run.sh` builds each program in [`bench/`](bench) with bendc (`bendc -o`) and with the official
@@ -478,7 +541,8 @@ and the `Nat` bound.
 Each `.out` file is the stdout and exit code of the **official** `bend` running the same program.
 `run_tests.sh` compiles each program with a given `bendc`, runs it, and diffs the result; programs
 with `!`-calls run again on the GPU simulator and, on a Mac, on Metal, and must not fall back to the
-CPU. A `tests/NAME.env` file sets environment variables for a run (`dps` collects every megabyte, so
+CPU. On arm64 (macOS or Linux) every program runs again through `bendc --native`. A
+`tests/NAME.env` file sets environment variables for a run (`dps` collects every megabyte, so
 collections happen while holes are open);
 `tests/hub/run.sh` serves a package from a local hub and imports it by hash.
 `tests/check/` holds programs the checker rejects; each `.out` is the official
@@ -507,6 +571,8 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 
 ## Limitations
 
+- The native backend (`--native`) is AArch64 only, does not free on match, runs parallel lets in
+  order, and has no destination passing (see [The native backend](#the-native-backend)).
 - The GPU backend targets Metal only; elsewhere `f!(x)` runs on the CPU threads (or on the
   simulator, with `BEND_GPU=sim`).
 - No windowing effects (Base's `Window`).
@@ -525,6 +591,8 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | Path | |
 |---|---|
 | [`check.bend`](check.bend) | the type checker, a port of the official one: parser, normalizer, conversion, quantities, termination, templates, error reports |
+| [`asm.bend`](asm.bend) | the native backend's AArch64 assembler, peephole pass, and Mach-O and ELF object writers |
+| [`rt/native.c`](rt/native.c) | external names for the runtime's inline natives, which native code calls |
 | [`bendc.bend`](bendc.bend) | the compiler, organized by section: lexer, layout, parser monad, expressions, patterns, statements, declarations, operator resolution, free variables, global tables, code generation, value printers, modules, driver |
 | [`core.bend`](core.bend) | the core IR between the front end and code generation: terms with relevance-marked arguments, erasure, and a semantics |
 | [`LAWS.bend`](LAWS.bend), [`PROOF.bend`](PROOF.bend) | the law that erasure preserves the core IR's semantics, and its proof (induction on the fuel, one case per step) |
@@ -536,7 +604,7 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`bench/`](bench) | benchmark programs and `run.sh`, which times them against the official `bend` |
 | [`tests/`](tests) | test programs and the official `bend`'s output for each |
 | [`bootstrap.sh`](bootstrap.sh), [`run_tests.sh`](run_tests.sh), [`Makefile`](Makefile) | bootstrap and fixpoint check, test runner, build entry points |
-| [`tools/ddc.sh`](tools/ddc.sh) | diverse double-compiling: the seed, reproduced by two toolchains that share no C compiler |
+| [`tools/ddc.sh`](tools/ddc.sh) | diverse double-compiling: the seed, reproduced by two toolchains that share no C compiler, and by bendc's native build |
 | [`tools/tcc.sh`](tools/tcc.sh) | the seed built by tcc reproduces itself, and the tests pass with tcc |
 | [`tools/unsafe_min.py`](tools/unsafe_min.py) | dev tool: drops the `@unsafe` markers the checker does not need |
 | [`tools/order.py`](tools/order.py) | dev tool: section-aware dependency sort, with automatic `law` forward declarations for cycles |
