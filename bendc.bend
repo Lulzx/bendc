@@ -14070,7 +14070,10 @@ def N.flt(s: String) -> NG(As.Code):
   do NG<As.Code>:
     +d : U32 <- N.dslot()
     +l : String <- N.cstr(s)
-    return N.cat([N.dslot.at(d), N.adr(1, l), N.call("bn_flt")])
+    +slow : String <- N.label()
+    +done : String <- N.label()
+    return N.cat([N.dslot.at(d), N.w(As.ldar(9, 0)), N.one(As.IBc{As.cbz(9), slow}), N.w(As.ubfm(0, 9, 0, 31)),
+      N.b(done), N.lab(slow), N.adr(1, l), N.call("bn_flt"), N.lab(done)])
 
 # Patterns
 # --------
@@ -14602,6 +14605,56 @@ def N.split.kept(s: Split) -> List<&2, Expr>:
 def N.split0(mask: List<&2, Bool>, args: List<&2, Expr>) -> Split:
   Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}})
 
+# Natives inlined: their operands in x0 and x1, their result in x0.
+type NI is Data:
+  NI{name: String, code: As.Code}
+
+# BOOL(c) of the flags.
+def N.bool(+c: U32) -> List<&2, U32>:
+  [As.cset(0, c), As.lsli(0, 0, 3), As.orr1(0, 0)]
+
+def N.fop(+w: U32) -> As.Code:
+  N.ws([As.fmovsw(0, 0), As.fmovsw(1, 1), w, As.fmovws(0, 0)])
+
+def N.fcmp(+c: U32) -> As.Code:
+  N.ws(As.fmovsw(0, 0) <> As.fmovsw(1, 1) <> As.fcmp(0, 1) <> N.bool(c))
+
+def N.ucmp(+c: U32) -> As.Code:
+  N.ws(As.cmp(0, 1) <> N.bool(c))
+
+def N.inlines() -> List<&2, NI>:
+  [NI{"U32.add", N.w(As.addw(0, 0, 1))}, NI{"U32.sub", N.w(As.subw(0, 0, 1))},
+   NI{"U32.mul", N.w(As.mulw(0, 0, 1))}, NI{"U32.inc", As.CCat{N.k(1, 1), N.w(As.addw(0, 0, 1))}},
+   NI{"U32.and", N.w(As.and(0, 0, 1))}, NI{"U32.or", N.w(As.orr(0, 0, 1))}, NI{"U32.xor", N.w(As.eor(0, 0, 1))},
+   NI{"U32.is_eq", N.ucmp(As.eq())}, NI{"U32.is_ne", N.ucmp(As.ne())}, NI{"U32.is_lt", N.ucmp(As.lo())},
+   NI{"U32.is_le", N.ucmp(As.ls())}, NI{"U32.is_gt", N.ucmp(As.hi())}, NI{"U32.is_ge", N.ucmp(As.hs())},
+   NI{"U32.is_zero", N.ws(As.cmpi(0, 0) <> N.bool(As.eq()))}, NI{"U32.to_nat", As.CNil{}},
+   NI{"U32.to_f32", N.ws([As.ucvtf(0, 0), As.fmovws(0, 0)])},
+   NI{"Nat.is_eq", N.ucmp(As.eq())}, NI{"Nat.is_ne", N.ucmp(As.ne())}, NI{"Nat.is_lt", N.ucmp(As.lo())},
+   NI{"Nat.is_le", N.ucmp(As.ls())}, NI{"Nat.is_gt", N.ucmp(As.hi())}, NI{"Nat.is_ge", N.ucmp(As.hs())},
+   NI{"Nat.add", N.cat([N.w(As.add(0, 0, 1)), N.ws(As.mov64(9, 4294967295, 65535)), N.w(As.cmp(0, 9)),
+     N.w((As.bc(As.ls()) .|. 64 : U32)), N.call("nat_wall")])},
+   NI{"Nat.sub", N.ws([As.cmp(0, 1), As.sub(0, 0, 1), As.csel(0, 0, 31, As.hi())])},
+   NI{"F32.add", N.fop(As.fadd(0, 0, 1))}, NI{"F32.sub", N.fop(As.fsub(0, 0, 1))},
+   NI{"F32.mul", N.fop(As.fmul(0, 0, 1))}, NI{"F32.div", N.fop(As.fdiv(0, 0, 1))},
+   NI{"F32.is_eq", N.fcmp(As.eq())}, NI{"F32.is_ne", N.fcmp(As.ne())}, NI{"F32.is_lt", N.fcmp(As.mi())},
+   NI{"F32.is_le", N.fcmp(As.ls())}, NI{"F32.is_gt", N.fcmp(As.gt())}, NI{"F32.is_ge", N.fcmp(As.ge())},
+   NI{"F32.neg", N.ws([As.fmovsw(0, 0), As.fneg(0, 0), As.fmovws(0, 0)])}]
+
+def N.inline.find(xs: List<&2, NI>, +name: String) -> Maybe<&2, As.Code>:
+  match xs:
+    case Nil{}:
+      None{}
+    case NI{+n, c} <> t:
+      Bool.pick(Unit -> Maybe<&2, As.Code>, String.eq(n, name), u => Some{c}, u => N.inline.find(t, name))(Unit{})
+
+def N.inline.or(m: Maybe<&2, As.Code>, +w: U32, +name: String) -> As.Code:
+  match m:
+    case Some{c}:
+      c
+    case None{}:
+      N.one(As.ICall{w, "N_" ++ Gen.mangle(name)})
+
 # A call's branch: to a native's name in rt/native.c, or to a def here.
 def N.target(native: Bool, +w: U32, +name: String) -> As.Code:
   match native:
@@ -14609,6 +14662,30 @@ def N.target(native: Bool, +w: U32, +name: String) -> As.Code:
       N.one(As.ICall{w, "N_" ++ Gen.mangle(name)})
     case False{}:
       N.one(As.IB{w, Gen.f(name)})
+
+# A call: a native inlined when it can be (its code in place of the branch).
+def N.ncall(native: Bool, +name: String) -> As.Code:
+  match native:
+    case True{}:
+      N.inline.or(N.inline.find(N.inlines(), name), As.bl(), name)
+    case False{}:
+      N.one(As.IB{As.bl(), Gen.f(name)})
+
+def N.ntail.go(m: Maybe<&2, As.Code>, +name: String) -> As.Code:
+  match m:
+    case Some{c}:
+      As.CCat{c, N.epilogue()}
+    case None{}:
+      As.CCat{N.pop(), N.one(As.ICall{As.b(), "N_" ++ Gen.mangle(name)})}
+
+# A tail call's end: an inlined native, then the epilogue; else pop the frame
+# and branch.
+def N.ntail(native: Bool, +name: String) -> As.Code:
+  match native:
+    case True{}:
+      N.ntail.go(N.inline.find(N.inlines(), name), name)
+    case False{}:
+      As.CCat{N.pop(), N.one(As.IB{As.b(), Gen.f(name)})}
 
 # The operands of a call into x0..x7, or (a wide call) into the row from
 # slot base up, whose address goes in x0.
@@ -14896,7 +14973,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
                 a : As.Code <- N.rec(fu, NSArgs{g, env, kept, base})
                 +r : U32 <- N.slots(1)
                 x : As.Code <- N.rec(fu, NSApp{g, env, extra, r})
-                return N.cat([a, N.callops(N.ops(env, kept, base), base, n), N.target(native, As.bl(), name), x])
+                return N.cat([a, N.callops(N.ops(env, kept, base), base, n), N.ncall(native, name), x])
             case False{}:
               +n = U32.from_nat(List.length(&2, Expr, all))
               do NG<As.Code>:
@@ -15045,7 +15122,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
                 N.ref(name)
                 +base : U32 <- N.slots(n)
                 a : As.Code <- N.rec(fu, NSArgs{g, env, kept, base})
-                return N.cat([a, N.lregs(N.ops(env, kept, base), 0), N.pop(), N.target(U32.is_eq(kind, 2), As.b(), name)])
+                return N.cat([a, N.lregs(N.ops(env, kept, base), 0), N.ntail(U32.is_eq(kind, 2), name)])
         case NSTailCall{+g, +env, +name, +args, ok}:
           match ok:
             case True{}:

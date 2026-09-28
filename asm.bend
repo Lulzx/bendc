@@ -238,6 +238,30 @@ def fmovsw(+rd: U32, +rn: U32) -> U32:
 def fmovws(+rd: U32, +rn: U32) -> U32:
   reg3(505806848, rd, rn, 0)
 
+# Single-precision fadd, fsub, fmul, fdiv sd, sn, sm (1E202800, 1E203800,
+# 1E200800, 1E201800); fcmp sn, sm (1E202000); fneg sd, sn (1E214000);
+# ucvtf sd, wn (1E230000).
+def fadd(+rd: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(505423872, rd, rn, rm)
+
+def fsub(+rd: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(505427968, rd, rn, rm)
+
+def fmul(+rd: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(505415680, rd, rn, rm)
+
+def fdiv(+rd: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(505419776, rd, rn, rm)
+
+def fcmp(+rn: U32, +rm: U32) -> U32:
+  reg3(505421824, 0, rn, rm)
+
+def fneg(+rd: U32, +rn: U32) -> U32:
+  reg3(505495552, rd, rn, 0)
+
+def ucvtf(+rd: U32, +rn: U32) -> U32:
+  reg3(505610240, rd, rn, 0)
+
 # Branch bases: b (14000000), bl (94000000), b.cond (54000000), cbz
 # (B4000000), cbnz (B5000000), tbz (36000000), tbnz (37000000).
 def b() -> U32:
@@ -286,6 +310,9 @@ def ge() -> U32:
 
 def lt() -> U32:
   11
+
+def mi() -> U32:
+  4
 
 def gt() -> U32:
   12
