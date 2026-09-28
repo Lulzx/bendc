@@ -309,6 +309,18 @@ def fneg(+rd: U32, +rn: U32) -> U32:
 def ucvtf(+rd: U32, +rn: U32) -> U32:
   reg3(505610240, rd, rn, 0)
 
+# fmadd sd, sn, sm, sa (1F000000): sn * sm + sa, rounded once; fmov sd, sn
+# (1E204000).
+def fmadd(+rd: U32, +rn: U32, +rm: U32, +ra: U32) -> U32:
+  (reg3(520093696, rd, rn, rm) .|. (ra << 10n : U32) : U32)
+
+def fmovss(+rd: U32, +rn: U32) -> U32:
+  reg3(505430016, rd, rn, 0)
+
+# ubfx wd, wn, #lsb, #w (53000000).
+def ubfxw(+rd: U32, +rn: U32, +lsb: U32, +w: U32) -> U32:
+  (1392508928 .|. ((lsb << 16n : U32) .|. ((((lsb + w : U32) - 1 : U32) << 10n : U32) .|. ((rn << 5n : U32) .|. rd : U32) : U32) : U32) : U32)
+
 # Branch bases: b (14000000), bl (94000000), b.cond (54000000), cbz
 # (B4000000), cbnz (B5000000), tbz (36000000), tbnz (37000000).
 def b() -> U32:

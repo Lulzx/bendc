@@ -16847,23 +16847,56 @@ def N.fop(+w: U32) -> As.Code:
 # first, into slots, as a call's arguments are. Past depth 20 a node is an
 # operand.
 
-# 0..3: F32.add, sub, mul, div of two; 4: F32.neg of one; 5: not a node.
+# 0..3: F32.add, sub, mul, div of two; 4: F32.neg of one; 5: x * k + b
+# and 6: b + x * k, for a literal k that is a power of two (see N.ft.fma);
+# 7: not a node.
 def N.ft.arity(k: Nat, n: Nat) -> Nat:
   match k:
     case 4n:
-      Bool.pick(Nat, Nat.is_eq(n, 1n), 4n, 5n)
+      Bool.pick(Nat, Nat.is_eq(n, 1n), 4n, 7n)
     case 5n+q:
-      5n
+      7n
     case other:
-      Bool.pick(Nat, Nat.is_eq(n, 2n), other, 5n)
+      Bool.pick(Nat, Nat.is_eq(n, 2n), other, 7n)
+
+# A float's bits, a power of two (its product with a normal float is exact
+# when it is normal).
+def N.ft.pow2(m: Maybe<&2, U32>) -> Bool:
+  match m:
+    case Some{+b}:
+      +e = ((b >> 23n : U32) .&. 255 : U32)
+      Bool.and(U32.is_zero((b .&. 8388607 : U32)), Bool.and(U32.is_ne(e, 0), U32.is_ne(e, 255)))
+    case None{}:
+      False{}
+
+# Whether e is x * k, k such a literal.
+def N.ft.mk(+env: NEnv(), e: Expr) -> Bool:
+  match e:
+    case ECall{EVar{+f}, x <> EFlt{s} <> Nil{}}:
+      Bool.and(Bool.and(Str.eq(f, "F32.mul"), Bool.not(NEnv.has(env, f))), N.ft.pow2(Flt.bits(s)))
+    case other:
+      False{}
+
+def N.ft.fused(k: Nat, +env: NEnv(), args: List<&2, Expr>, +d: U32) -> Nat:
+  match k:
+    case 0n:
+      match args:
+        case a <> b <> Nil{}:
+          Bool.pick(Nat, U32.is_ge(d, 18), 0n,
+            Bool.pick(Nat, N.ft.mk(env, a), 5n, Bool.pick(Nat, N.ft.mk(env, b), 6n, 0n)))
+        case other:
+          0n
+    case other:
+      other
 
 def N.ft.kind(+env: NEnv(), e: Expr, +d: U32) -> Nat:
   match e:
-    case ECall{EVar{+name}, args}:
-      Bool.pick(Nat, Bool.or(NEnv.has(env, name), U32.is_ge(d, 20)), 5n,
-        N.ft.arity(P.which(name, ["F32.add", "F32.sub", "F32.mul", "F32.div", "F32.neg"]), List.length(&2, Expr, args)))
+    case ECall{EVar{+name}, +args}:
+      Bool.pick(Nat, Bool.or(NEnv.has(env, name), U32.is_ge(d, 20)), 7n,
+        N.ft.fused(N.ft.arity(P.which(name, ["F32.add", "F32.sub", "F32.mul", "F32.div", "F32.neg"]),
+          List.length(&2, Expr, args)), env, args, d))
     case other:
-      5n
+      7n
 
 def N.ft.sreg(+d: U32) -> U32:
   Bool.pick(U32, U32.is_lt(d, 8), d, (d + 8 : U32))
@@ -16883,7 +16916,7 @@ def N.ft.leaves(n: Nat, kind: Nat, +env: NEnv(), +e: Expr, +d: U32, acc: List<&2
       acc
     case 1n+ +fu:
       match kind:
-        case 5n+q:
+        case 7n+q:
           N.ft.push(Maybe.is_some(&2, NO, N.simple(env, e)), e, acc)
         case other:
           match e:
@@ -16902,7 +16935,7 @@ def N.ft.count(n: Nat, kind: Nat, +env: NEnv(), +e: Expr, +d: U32) -> U32:
       0
     case 1n+ +fu:
       match kind:
-        case 5n+q:
+        case 7n+q:
           Bool.pick(U32, Maybe.is_some(&2, NO, N.simple(env, e)), 0, 1)
         case other:
           match e:
@@ -16930,6 +16963,19 @@ def N.ft.leaf(m: Maybe<&2, NO>, +d: U32, +k: U32) -> As.Code:
     case None{}:
       N.ft.lo(NOS{k}, d)
 
+# rd = rx * k + rb (rk holds k, a power of two, with biased exponent ke):
+# one fmadd when rx * k is a normal float, for then the product is exact
+# and fmadd rounds the sum as fadd would; else the two, as written (the
+# C backend's F32_mulk_add). rx's exponent e is in range when e + ke - 127
+# is in 1..254.
+def N.ft.fma(+kb: U32, +rd: U32, +rx: U32, +rb: U32, +rk: U32) -> As.Code:
+  +ke = ((kb >> 23n : U32) .&. 255 : U32)
+  +lo = Bool.pick(U32, U32.is_lt(ke, 127), (128 - ke : U32), 1)
+  +hi = Bool.pick(U32, U32.is_gt(ke, 127), (381 - ke : U32), 254)
+  As.CCat{N.k(9, kb), N.ws([As.fmovsw(rk, 9), As.fmovws(9, rx), As.ubfxw(9, 9, 23, 8), As.subi(9, 9, lo),
+    As.cmpi(9, (hi - lo : U32)), (As.bc(As.hi()) .|. 96 : U32), As.fmadd(rd, rx, rk, rb), (As.b() .|. 3 : U32),
+    As.fmul(rx, rx, rk), As.fadd(rd, rx, rb)])}
+
 def N.ft.ins(op: Nat, +rd: U32, +rn: U32, +rm: U32) -> U32:
   match op:
     case 0n:
@@ -16949,8 +16995,28 @@ def N.ft.code(n: Nat, kind: Nat, +env: NEnv(), +e: Expr, +d: U32, +k: U32) -> As
       As.CNil{}
     case 1n+ +fu:
       match kind:
-        case 5n+q:
+        case 7n+q:
           N.ft.leaf(N.simple(env, e), d, k)
+        case 5n:
+          match e:
+            case ECall{f, ECall{m, +x <> EFlt{ks} <> Nil{}} <> +b <> Nil{}}:
+              N.cat([N.ft.code(fu, N.ft.kind(env, x, d), env, x, d, k),
+                N.ft.code(fu, N.ft.kind(env, b, U32.inc(d)), env, b, U32.inc(d),
+                  (k + N.ft.count(fu, N.ft.kind(env, x, d), env, x, d) : U32)),
+                N.ft.fma(Maybe.default(&2, U32, Flt.bits(ks), 0), N.ft.sreg(d), N.ft.sreg(d), N.ft.sreg(U32.inc(d)),
+                  N.ft.sreg((d + 2 : U32)))])
+            case other:
+              As.CNil{}
+        case 6n:
+          match e:
+            case ECall{f, +a <> ECall{m, +x <> EFlt{ks} <> Nil{}} <> Nil{}}:
+              N.cat([N.ft.code(fu, N.ft.kind(env, a, d), env, a, d, k),
+                N.ft.code(fu, N.ft.kind(env, x, U32.inc(d)), env, x, U32.inc(d),
+                  (k + N.ft.count(fu, N.ft.kind(env, a, d), env, a, d) : U32)),
+                N.ft.fma(Maybe.default(&2, U32, Flt.bits(ks), 0), N.ft.sreg(d), N.ft.sreg(U32.inc(d)), N.ft.sreg(d),
+                  N.ft.sreg((d + 2 : U32)))])
+            case other:
+              As.CNil{}
         case 4n:
           match e:
             case ECall{f, +a <> Nil{}}:
@@ -17367,7 +17433,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
             case ECall{+f, +args}:
               do NG<As.Code>:
                 +m : U32 <- N.mark()
-                c : As.Code <- N.rec(fu, NSCallF{Nat.is_lt(N.ft.kind(env, ECall{f, args}, 0), 5n), g, env, f, args})
+                c : As.Code <- N.rec(fu, NSCallF{Nat.is_lt(N.ft.kind(env, ECall{f, args}, 0), 7n), g, env, f, args})
                 N.release(m)
                 return c
             case ECtor{name, args}:
