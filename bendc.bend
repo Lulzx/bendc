@@ -15921,12 +15921,29 @@ def N.saves(k: Nat, +i: U32, +ld: Bool) -> List<&2, U32>:
       Bool.pick(U32, ld, As.ldpo(r, U32.inc(r), 29, off), As.stpo(r, U32.inc(r), 29, off)) <>
         N.saves(j, U32.inc(i), ld)
 
-def N.prologue(+max: U32, +np: U32) -> As.Code:
-  +f = (N.frame(max) + (16 * np : U32) : U32)
+# stp or ldp of d8..d15, below the np pairs of x19...
+def N.fsaves(k: Nat, +j: U32, +np: U32, +ld: Bool) -> List<&2, U32>:
+  match k:
+    case 0n:
+      Nil{}
+    case 1n+q:
+      +off = (0 - (16 * U32.inc((np + j : U32)) : U32) : U32)
+      +r = (8 + (2 * j : U32) : U32)
+      Bool.pick(U32, ld, As.ldpd(r, U32.inc(r), 29, off), As.stpd(r, U32.inc(r), 29, off)) <>
+        N.fsaves(q, U32.inc(j), np, ld)
+
+def N.fpairs(+fp: Bool) -> U32:
+  Bool.pick(U32, fp, 4, 0)
+
+def N.prologue.fp(+max: U32, +np: U32, +fp: Bool) -> As.Code:
+  +f = (N.frame(max) + (16 * (np + N.fpairs(fp) : U32) : U32) : U32)
   N.cat([N.ws([As.push_fp(), As.set_fp()]),
     Bool.pick(As.Code, U32.is_lt(f, 4096), N.w(As.subi(31, 31, f)),
       N.ws([As.subh(31, 31, (f >> 12n : U32)), As.subi(31, 31, (f .&. 4095 : U32))])),
-    N.ws(N.saves(U32.to_nat(np), 0, False{}))])
+    N.ws(N.saves(U32.to_nat(np), 0, False{})), N.ws(N.fsaves(U32.to_nat(N.fpairs(fp)), 0, np, False{}))])
+
+def N.prologue(+max: U32, +np: U32) -> As.Code:
+  N.prologue.fp(max, np, False{})
 
 # Placeholders for the restores, then the frame popped (and a return).
 def N.pop.w() -> U32:
@@ -15942,16 +15959,23 @@ def N.epilogue() -> As.Code:
   N.w(N.epi.w())
 
 # The placeholders filled in, for a frame saving np pairs.
-def N.fix(c: As.Code, +np: U32) -> As.Code:
-  +rs = N.saves(U32.to_nat(np), 0, True{})
+def N.fix.fp(c: As.Code, +np: U32, +fp: Bool) -> As.Code:
+  +rs = List.append(&2, U32, N.saves(U32.to_nat(np), 0, True{}), N.fsaves(U32.to_nat(N.fpairs(fp)), 0, np, True{}))
   As.Code.subst(c, N.epi.w(), N.ws(List.append(&2, U32, rs, [As.sp_fp(), As.pop_fp(), As.ret()])),
     N.pop.w(), N.ws(List.append(&2, U32, rs, [As.sp_fp(), As.pop_fp()])))
 
+def N.fix(c: As.Code, +np: U32) -> As.Code:
+  N.fix.fp(c, np, False{})
+
 # A function: its symbol, its prologue for a frame of max slots (saving the
 # registers of the ones it uses), and its body.
-def N.func(+name: String, +max: U32, body: As.Code) -> As.Code:
+# The same, saving d8..d15 too (fp: a def with twins, N.twins).
+def N.func.fp(+name: String, +max: U32, +fp: Bool, body: As.Code) -> As.Code:
   +np = N.pairs(max)
-  N.cat([N.one(As.ISym{name, False{}}), N.prologue(max, np), N.fix(body, np)])
+  N.cat([N.one(As.ISym{name, False{}}), N.prologue.fp(max, np, fp), N.fix.fp(body, np, fp)])
+
+def N.func(+name: String, +max: U32, body: As.Code) -> As.Code:
+  N.func.fp(name, max, False{}, body)
 
 def N.call(s: String) -> As.Code:
   N.one(As.ICall{As.bl(), s})
@@ -16947,21 +16971,137 @@ def N.ft.count(n: Nat, kind: Nat, +env: NEnv(), +e: Expr, +d: U32) -> U32:
             case other:
               0
 
-# s(d) = an operand.
-def N.ft.lo(o: NO, +d: U32) -> As.Code:
+# Twins: a def that calls itself in tail position keeps its F32 parameters
+# among the first 4 (bit i of tw for slot i) in s8 + i as well as in their
+# slots, so a loop's float trees read and write them with no trip through
+# the integer registers; a tail call to itself computes a float tree for
+# such a parameter into s12 + i, then moves it to s8 + i and its slot. The
+# def saves d8..d15.
+def N.tw.bit(+tw: U32, +i: U32) -> Bool:
+  Bool.and(U32.is_lt(i, 4), U32.is_ne((tw .&. U32.shln(1, U32.to_nat(i)) : U32), 0))
+
+def N.twins(ps: List<&2, Param>, mask: List<&2, Bool>, +i: U32) -> U32:
+  match ps mask:
+    case Param{x, m, +t} <> pt True{} <> mt:
+      (Bool.pick(U32, Bool.and(Str.eq(t, "F32"), U32.is_lt(i, 4)), U32.shln(1, U32.to_nat(i)), 0) .|.
+        N.twins(pt, mt, U32.inc(i)) : U32)
+    case Param{x, m, t} <> pt False{} <> mt:
+      N.twins(pt, mt, i)
+    case pl ml:
+      0
+
+def N.tw.find(m: Maybe<&2, NO>) -> U32:
+  match m:
+    case Some{NOK{+k}}:
+      k
+    case other:
+      0
+
+# The def's twins, from the environment's "%fp" (lambdas have none).
+def N.tw.get(+env: NEnv()) -> U32:
+  N.tw.find(NEnv.find(env, "%fp"))
+
+def N.tw.entry(k: Nat, +tw: U32, +i: U32) -> As.Code:
+  match k:
+    case 0n:
+      As.CNil{}
+    case 1n+q:
+      As.CCat{Bool.pick(As.Code, N.tw.bit(tw, i), N.w(As.fmovsw((8 + i : U32), N.sreg(i))), As.CNil{}),
+        N.tw.entry(q, tw, U32.inc(i))}
+
+# Whether argument i of a tail call to itself is a float tree for a twin.
+def N.tw.is(+env: NEnv(), e: Expr, +tw: U32, +i: U32) -> Bool:
+  Bool.and(N.tw.bit(tw, i), Nat.is_lt(N.ft.kind(env, e, 0), 7n))
+
+# Those arguments as no code (they are computed apart).
+def N.tw.strip(xs: List<&2, Expr>, +env: NEnv(), +tw: U32, +i: U32) -> List<&2, Expr>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case +e <> t:
+      Bool.pick(Expr, N.tw.is(env, e, tw, i), ENum{0}, e) <> N.tw.strip(t, env, tw, U32.inc(i))
+
+# ... and their operands as the parameters themselves (the move leaves them).
+def N.tw.ops(os: List<&2, NO>, xs: List<&2, Expr>, +env: NEnv(), +tw: U32, +i: U32) -> List<&2, NO>:
+  match os xs:
+    case o <> ot +e <> xt:
+      Bool.pick(NO, N.tw.is(env, e, tw, i), NOS{i}, o) <> N.tw.ops(ot, xt, env, tw, U32.inc(i))
+    case ol xl:
+      Nil{}
+
+def N.is_param(o: NO, +i: U32) -> Bool:
   match o:
     case NOS{+s}:
-      Bool.pick(As.Code, U32.is_lt(s, N.nregs()), N.w(As.fmovsw(N.ft.sreg(d), N.sreg(s))),
-        As.CCat{N.ldx(9, (s * 8 : U32)), N.w(As.fmovsw(N.ft.sreg(d), 9))})
+      U32.is_eq(s, i)
+    case NOK{k}:
+      False{}
+
+def N.tw.fin1(+tree: Bool, +last: Bool, o: NO, +i: U32) -> As.Code:
+  Bool.pick(As.Code, tree, Bool.pick(As.Code, last, N.w(As.fmovws(N.sreg(i), (8 + i : U32))),
+    N.ws([As.fmovss((8 + i : U32), (12 + i : U32)), As.fmovws(N.sreg(i), (12 + i : U32))])),
+    Bool.pick(As.Code, N.is_param(o, i), As.CNil{}, N.w(As.fmovsw((8 + i : U32), N.sreg(i)))))
+
+# Whether no argument after the i-th is a float tree for a twin (the i-th's
+# then goes to s8 + i at once: none reads it after).
+def N.tw.last(xs: List<&2, Expr>, +env: NEnv(), +tw: U32, +i: U32) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case +e <> t:
+      Bool.and(Bool.not(N.tw.is(env, e, tw, U32.inc(i))), N.tw.last(t, env, tw, U32.inc(i)))
+
+# Where the i-th argument's tree goes (xs: the ones after it).
+def N.tw.dst(xs: List<&2, Expr>, +env: NEnv(), +tw: U32, +i: U32) -> U32:
+  Bool.pick(U32, N.tw.last(xs, env, tw, i), (8 + i : U32), (12 + i : U32))
+
+# After the move: each twin from s12 + i (a float tree's) or its slot.
+def N.tw.fin(os: List<&2, NO>, xs: List<&2, Expr>, +env: NEnv(), +tw: U32, +i: U32) -> As.Code:
+  match os xs:
+    case o <> ot +e <> +xt:
+      As.CCat{Bool.pick(As.Code, N.tw.bit(tw, i), N.tw.fin1(N.tw.is(env, e, tw, i), N.tw.last(xt, env, tw, i), o, i),
+        As.CNil{}), N.tw.fin(ot, xt, env, tw, U32.inc(i))}
+    case ol xl:
+      As.CNil{}
+
+# s(d) = an operand (none for a twin: its FP register is read in place).
+def N.ft.lo(o: NO, +d: U32, +tw: U32) -> As.Code:
+  match o:
+    case NOS{+s}:
+      Bool.pick(As.Code, N.tw.bit(tw, s), As.CNil{},
+        Bool.pick(As.Code, U32.is_lt(s, N.nregs()), N.w(As.fmovsw(N.ft.sreg(d), N.sreg(s))),
+          As.CCat{N.ldx(9, (s * 8 : U32)), N.w(As.fmovsw(N.ft.sreg(d), 9))}))
     case NOK{+k}:
       As.CCat{N.k(9, k), N.w(As.fmovsw(N.ft.sreg(d), 9))}
 
-def N.ft.leaf(m: Maybe<&2, NO>, +d: U32, +k: U32) -> As.Code:
+def N.ft.reg.leaf(m: Maybe<&2, NO>, +d: U32, +tw: U32) -> U32:
+  match m:
+    case Some{NOS{+s}}:
+      Bool.pick(U32, N.tw.bit(tw, s), (8 + s : U32), N.ft.sreg(d))
+    case other:
+      N.ft.sreg(d)
+
+# The register an operand of depth d is in: s(d), or a twin's.
+def N.ft.reg(kind: Nat, +env: NEnv(), e: Expr, +d: U32, +tw: U32) -> U32:
+  match kind:
+    case 7n+q:
+      N.ft.reg.leaf(N.simple(env, e), d, tw)
+    case other:
+      N.ft.sreg(d)
+
+def N.ft.leaf(m: Maybe<&2, NO>, +d: U32, +k: U32, +tw: U32) -> As.Code:
   match m:
     case Some{o}:
-      N.ft.lo(o, d)
+      N.ft.lo(o, d, tw)
     case None{}:
-      N.ft.lo(NOS{k}, d)
+      N.ft.lo(NOS{k}, d, tw)
+
+# Whether a def's tail calls include one to itself.
+def N.tails.self(es: List<&2, DEdge>, +name: String) -> Bool:
+  match es:
+    case Nil{}:
+      False{}
+    case DEdge{+to, c} <> t:
+      Bool.or(Str.eq(to, name), N.tails.self(t, name))
 
 # rd = rx * k + rb (rk holds k, a power of two, with biased exponent ke):
 # one fmadd when rx * k is a normal float, for then the product is exact
@@ -16974,7 +17114,7 @@ def N.ft.fma(+kb: U32, +rd: U32, +rx: U32, +rb: U32, +rk: U32) -> As.Code:
   +hi = Bool.pick(U32, U32.is_gt(ke, 127), (381 - ke : U32), 254)
   As.CCat{N.k(9, kb), N.ws([As.fmovsw(rk, 9), As.fmovws(9, rx), As.ubfxw(9, 9, 23, 8), As.subi(9, 9, lo),
     As.cmpi(9, (hi - lo : U32)), (As.bc(As.hi()) .|. 96 : U32), As.fmadd(rd, rx, rk, rb), (As.b() .|. 3 : U32),
-    As.fmul(rx, rx, rk), As.fadd(rd, rx, rb)])}
+    As.fmul(rk, rx, rk), As.fadd(rd, rk, rb)])}
 
 def N.ft.ins(op: Nat, +rd: U32, +rn: U32, +rm: U32) -> U32:
   match op:
@@ -16987,49 +17127,54 @@ def N.ft.ins(op: Nat, +rd: U32, +rn: U32, +rm: U32) -> U32:
     case other:
       As.fdiv(rd, rn, rm)
 
-# The tree's value into s(d), its operands that need code in slots k, k + 1,
-# ... (a node's second operand's after its first's).
-def N.ft.code(n: Nat, kind: Nat, +env: NEnv(), +e: Expr, +d: U32, +k: U32) -> As.Code:
+# The tree's value into rd (a node below the root: s(d)), its operands
+# that need code in slots k, k + 1, ... (a node's second operand's after its
+# first's).
+def N.ft.code(n: Nat, kind: Nat, +env: NEnv(), +e: Expr, +d: U32, +k: U32, +tw: U32, +rd: U32) -> As.Code:
   match n:
     case 0n:
       As.CNil{}
     case 1n+ +fu:
       match kind:
         case 7n+q:
-          N.ft.leaf(N.simple(env, e), d, k)
+          N.ft.leaf(N.simple(env, e), d, k, tw)
         case 5n:
           match e:
             case ECall{f, ECall{m, +x <> EFlt{ks} <> Nil{}} <> +b <> Nil{}}:
-              N.cat([N.ft.code(fu, N.ft.kind(env, x, d), env, x, d, k),
-                N.ft.code(fu, N.ft.kind(env, b, U32.inc(d)), env, b, U32.inc(d),
-                  (k + N.ft.count(fu, N.ft.kind(env, x, d), env, x, d) : U32)),
-                N.ft.fma(Maybe.default(&2, U32, Flt.bits(ks), 0), N.ft.sreg(d), N.ft.sreg(d), N.ft.sreg(U32.inc(d)),
-                  N.ft.sreg((d + 2 : U32)))])
+              +d1 = U32.inc(d)
+              N.cat([N.ft.code(fu, N.ft.kind(env, x, d), env, x, d, k, tw, N.ft.sreg(d)),
+                N.ft.code(fu, N.ft.kind(env, b, d1), env, b, d1, (k + N.ft.count(fu, N.ft.kind(env, x, d), env, x, d) : U32),
+                  tw, N.ft.sreg(d1)),
+                N.ft.fma(Maybe.default(&2, U32, Flt.bits(ks), 0), rd, N.ft.reg(N.ft.kind(env, x, d), env, x, d, tw),
+                  N.ft.reg(N.ft.kind(env, b, d1), env, b, d1, tw), N.ft.sreg((d + 2 : U32)))])
             case other:
               As.CNil{}
         case 6n:
           match e:
             case ECall{f, +a <> ECall{m, +x <> EFlt{ks} <> Nil{}} <> Nil{}}:
-              N.cat([N.ft.code(fu, N.ft.kind(env, a, d), env, a, d, k),
-                N.ft.code(fu, N.ft.kind(env, x, U32.inc(d)), env, x, U32.inc(d),
-                  (k + N.ft.count(fu, N.ft.kind(env, a, d), env, a, d) : U32)),
-                N.ft.fma(Maybe.default(&2, U32, Flt.bits(ks), 0), N.ft.sreg(d), N.ft.sreg(U32.inc(d)), N.ft.sreg(d),
-                  N.ft.sreg((d + 2 : U32)))])
+              +d1 = U32.inc(d)
+              N.cat([N.ft.code(fu, N.ft.kind(env, a, d), env, a, d, k, tw, N.ft.sreg(d)),
+                N.ft.code(fu, N.ft.kind(env, x, d1), env, x, d1, (k + N.ft.count(fu, N.ft.kind(env, a, d), env, a, d) : U32),
+                  tw, N.ft.sreg(d1)),
+                N.ft.fma(Maybe.default(&2, U32, Flt.bits(ks), 0), rd, N.ft.reg(N.ft.kind(env, x, d1), env, x, d1, tw),
+                  N.ft.reg(N.ft.kind(env, a, d), env, a, d, tw), N.ft.sreg((d + 2 : U32)))])
             case other:
               As.CNil{}
         case 4n:
           match e:
             case ECall{f, +a <> Nil{}}:
-              As.CCat{N.ft.code(fu, N.ft.kind(env, a, d), env, a, d, k), N.w(As.fneg(N.ft.sreg(d), N.ft.sreg(d)))}
+              As.CCat{N.ft.code(fu, N.ft.kind(env, a, d), env, a, d, k, tw, N.ft.sreg(d)),
+                N.w(As.fneg(rd, N.ft.reg(N.ft.kind(env, a, d), env, a, d, tw)))}
             case other:
               As.CNil{}
         case +op:
           match e:
             case ECall{f, +a <> +b <> Nil{}}:
-              N.cat([N.ft.code(fu, N.ft.kind(env, a, d), env, a, d, k),
-                N.ft.code(fu, N.ft.kind(env, b, U32.inc(d)), env, b, U32.inc(d),
-                  (k + N.ft.count(fu, N.ft.kind(env, a, d), env, a, d) : U32)),
-                N.w(N.ft.ins(op, N.ft.sreg(d), N.ft.sreg(d), N.ft.sreg(U32.inc(d))))])
+              +d1 = U32.inc(d)
+              N.cat([N.ft.code(fu, N.ft.kind(env, a, d), env, a, d, k, tw, N.ft.sreg(d)),
+                N.ft.code(fu, N.ft.kind(env, b, d1), env, b, d1, (k + N.ft.count(fu, N.ft.kind(env, a, d), env, a, d) : U32),
+                  tw, N.ft.sreg(d1)),
+                N.w(N.ft.ins(op, rd, N.ft.reg(N.ft.kind(env, a, d), env, a, d, tw), N.ft.reg(N.ft.kind(env, b, d1), env, b, d1, tw)))])
             case other:
               As.CNil{}
 
@@ -17368,6 +17513,9 @@ type NS is Data:
   NSCall{g: G, env: NEnv(), f: Expr, args: List<&2, Expr>}
   NSCallF{ft: Bool, g: G, env: NEnv(), f: Expr, args: List<&2, Expr>}
   NSFloat{g: G, env: NEnv(), e: Expr}
+  NSFloatS{g: G, env: NEnv(), e: Expr, rd: U32}
+  NSTwins{g: G, env: NEnv(), xs: List<&2, Expr>, tw: U32, i: U32}
+  NSTwin{ok: Bool, g: G, env: NEnv(), e: Expr, r: U32}
   NSBitsGo{g: G, env: NEnv(), k: Nat, e: Expr}
   NSBits{g: G, env: NEnv(), e: Expr}
   NSCtorBits{g: G, env: NEnv(), args: List<&2, Expr>}
@@ -17582,12 +17730,32 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
               N.rec(fu, NSCall{g, env, f, args})
         # A tree of float operations: its other operands that need code into
         # slots, then the tree in FP registers (N.ft.code).
-        case NSFloat{+g, +env, +e}:
+        case NSFloat{+g, +env, e}:
+          do NG<As.Code>:
+            c : As.Code <- N.rec(fu, NSFloatS{g, env, e, 0})
+            return As.CCat{c, N.w(As.fmovws(0, 0))}
+        case NSFloatS{+g, +env, +e, +rd}:
           +ls = N.ft.leaves(24n, N.ft.kind(env, e, 0), env, e, 0, Nil{})
           do NG<As.Code>:
             +base : U32 <- N.slots(U32.from_nat(List.length(&2, Expr, ls)))
             a : As.Code <- N.rec(fu, NSArgs{g, env, ls, base})
-            return N.cat([a, N.ft.code(24n, N.ft.kind(env, e, 0), env, e, 0, base), N.w(As.fmovws(0, 0))])
+            return As.CCat{a, N.ft.code(24n, N.ft.kind(env, e, 0), env, e, 0, base, N.tw.get(env), rd)}
+        # A tail call's float trees for twins, each into s12 + i.
+        case NSTwins{+g, +env, xs, +tw, +i}:
+          match xs:
+            case Nil{}:
+              NG.pure(As.Code, As.CNil{})
+            case +e <> +t:
+              do NG<As.Code>:
+                c : As.Code <- N.rec(fu, NSTwin{N.tw.is(env, e, tw, i), g, env, e, N.tw.dst(t, env, tw, i)})
+                r : As.Code <- N.rec(fu, NSTwins{g, env, t, tw, U32.inc(i)})
+                return As.CCat{c, r}
+        case NSTwin{ok, +g, +env, e, +r}:
+          match ok:
+            case True{}:
+              N.rec(fu, NSFloatS{g, env, e, r})
+            case False{}:
+              NG.pure(As.Code, As.CNil{})
         case NSCall{+g, +env, f, args}:
           match f:
             case EVar{+name}:
@@ -17677,11 +17845,15 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
             case NSelf{sn, +mask, +top}:
               +kept = N.split.kept(N.split0(mask, args))
               +n = U32.from_nat(List.length(&2, Expr, kept))
+              +tw = N.tw.get(env)
+              +ks = N.tw.strip(kept, env, tw, 0)
               do NG<As.Code>:
-                +base : U32 <- N.slots(N.cx(env, kept))
-                a : As.Code <- N.rec(fu, NSArgs{g, env, kept, base})
+                +base : U32 <- N.slots(N.cx(env, ks))
+                a : As.Code <- N.rec(fu, NSArgs{g, env, ks, base})
+                f : As.Code <- N.rec(fu, NSTwins{g, env, kept, tw, 0})
                 +row : U32 <- N.slots(N.wide(n))
-                return N.cat([a, N.tail.move(N.ops(env, kept, base), base, row, n), N.b(top)])
+                +os : List<&2, NO> <- NG.pure(List<&2, NO>, N.tw.ops(N.ops(env, ks, base), kept, env, tw, 0))
+                return N.cat([a, f, N.tail.move(os, base, row, n), N.tw.fin(os, kept, env, tw, 0), N.b(top)])
         case NSTailGo{+g, +env, +name, info, args}:
           match info:
             case DInfo{+kind, +mask}:
@@ -17960,14 +18132,15 @@ def N.wrapper(+name: String, +mask: List<&2, Bool>, +native: Bool) -> NG(Unit):
 
 def N.def.fn(+g: G, +sym: String, +name: String, +mask: List<&2, Bool>, +ps: List<&2, Param>, +e: Expr) -> NG(Unit):
   +n = N.kept(mask)
+  +tw = Bool.pick(U32, Bool.and(U32.is_le(n, 8), N.tails.self(Dps.tails(g, e, Nil{}), name)), N.twins(ps, mask, 0), 0)
   do NG<Unit>:
     saved : U32 & U32 <- N.enter()
     +p0 : U32 <- N.slots(n)
     +top : String <- N.label()
-    b : As.Code <- N.stmt(g, N.params(ps, mask, 0, Nil{}), NSelf{name, mask, top}, NTRet{}, e)
+    b : As.Code <- N.stmt(g, NB{"%fp", NOK{tw}} <> N.params(ps, mask, 0, Nil{}), NSelf{name, mask, top}, NTRet{}, e)
     +max : U32 <- N.leave(saved)
-    N.emit(N.func(sym, max, N.cat([N.params.in(U32.to_nat(n), 0, U32.is_gt(n, 8)), N.lab(top),
-      N.shares.g(g, N.params.boxed(ps, mask, 0), e), b])))
+    N.emit(N.func.fp(sym, max, U32.is_ne(tw, 0), N.cat([N.params.in(U32.to_nat(n), 0, U32.is_gt(n, 8)),
+      N.tw.entry(4n, tw, 0), N.lab(top), N.shares.g(g, N.params.boxed(ps, mask, 0), e), b])))
 
 # S_name, a seq def's sequential clone (Gen.def.seq): its parallel lets run
 # in order and its calls to itself stay in it.

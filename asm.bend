@@ -260,6 +260,13 @@ def stpo(+rt: U32, +rt2: U32, +rn: U32, +off: U32) -> U32:
 def ldpo(+rt: U32, +rt2: U32, +rn: U32, +off: U32) -> U32:
   (2839543808 .|. ((((off >> 3n : U32) .&. 127 : U32) << 15n : U32) .|. ((rt2 << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32) : U32)
 
+# The same for FP registers dt, dt2 (6D000000, 6D400000).
+def stpd(+rt: U32, +rt2: U32, +rn: U32, +off: U32) -> U32:
+  (1828716544 .|. ((((off >> 3n : U32) .&. 127 : U32) << 15n : U32) .|. ((rt2 << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32) : U32)
+
+def ldpd(+rt: U32, +rt2: U32, +rn: U32, +off: U32) -> U32:
+  (1832910848 .|. ((((off >> 3n : U32) .&. 127 : U32) << 15n : U32) .|. ((rt2 << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32) : U32)
+
 # mov x29, sp (910003FD)
 def set_fp() -> U32:
   2432697341
