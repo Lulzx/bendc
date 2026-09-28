@@ -142,6 +142,7 @@ void compile_program(Vec ds);
 Fn *find_fn(const char *name);
 void define_native(const char *name, int arity, NativeFn f);
 V apply(V f, int n, V *args);
+V global_value(const char *name);
 V call_fn(Fn *f, V *args);
 V mk_node(CtorInfo *c, V *fields);
 V mk_closure(Fn *f, int n, V *held);
