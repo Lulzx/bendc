@@ -16295,8 +16295,9 @@ def Opt.sp.def(+c: Map<&2, Core.Def>, +f: String, +as: List<&2, Core.Arg>, d: Co
   match d:
     case Core.Def{name, +ps, +b, ret}:
       Bool.pick(Unit -> OPk, Bool.and(Bool.and(Nat.is_eq(Inl.pars.len(ps), Inl.args.len(as)), Bool.not(Nat.is_eq(Inl.args.len(as), 0n))),
-          Bool.and(Opt.size.le(b, Opt.sp.budget()), Bool.and(Bool.not(G.is_native(f)), Bool.not(String.starts_with(f, "IO."))))),
-        u => Opt.sp.at.pos(Opt.sp.pos(c, ps, as, 0n, f, b, Inl.pars.len(ps)), f, as),
+          Bool.and(Bool.not(G.is_native(f)), Bool.not(String.starts_with(f, "IO.")))),
+        u => Bool.pick(Unit -> OPk, Opt.size.le(b, Opt.sp.budget()),
+          u2 => Opt.sp.at.pos(Opt.sp.pos(c, ps, as, 0n, f, b, Inl.pars.len(ps)), f, as), u2 => PkNo{})(Unit{}),
         u => PkNo{})(Unit{})
 
 # Fusion decides a call g(.., p(..), ..) where g matches on that argument
@@ -16368,19 +16369,25 @@ def Opt.fu.pbudget() -> U32:
   300
 
 # The position a consumer g matches on (n, the arity, when none).
+# (the tests from the cheapest, each only when those before it hold)
+def Opt.fu.j.go(+name: String, +ps: List<&2, Core.Par>, +b: Core.Tm, +x: String, +n: Nat) -> Nat:
+  Bool.pick(Unit -> Nat, Bool.and(Str.has(Inl.names(b, 3, Nil{}), name), U32.is_eq(Inl.uses(b, 0, x), 1)),
+    u => Opt.par.pos(ps, x, 0n), u => n)(Unit{})
+
 def Opt.fu.j(d: Core.Def, +n: Nat) -> Nat:
   match d:
     case Core.Def{+name, +ps, +b, ret}:
       +x = Opt.fu.scr(b)
-      Bool.pick(Unit -> Nat, Bool.and(Bool.and(Bool.and(Nat.is_eq(Inl.pars.len(ps), n), Opt.size.le(b, Opt.fu.gbudget())),
-          Str.has(Inl.names(b, 3, Nil{}), name)),
-          Bool.and(Bool.not(String.eq(x, "")), U32.is_eq(Inl.uses(b, 0, x), 1))),
-        u => Opt.par.pos(ps, x, 0n), u => n)(Unit{})
+      Bool.pick(Unit -> Nat, Bool.and(Nat.is_eq(Inl.pars.len(ps), n), Bool.not(String.eq(x, ""))),
+        u => Bool.pick(Unit -> Nat, Opt.size.le(b, Opt.fu.gbudget()), u2 => Opt.fu.j.go(name, ps, b, x, n), u2 => n)(Unit{}),
+        u => n)(Unit{})
 
 def Opt.fu.prod(d: Core.Def, +n: Nat) -> Bool:
   match d:
     case Core.Def{+name, ps, +b, ret}:
-      Bool.and(Nat.is_eq(Inl.pars.len(ps), n), Bool.and(Opt.size.le(b, Opt.fu.pbudget()), Opt.fu.ctail(name, b)))
+      Bool.pick(Unit -> Bool, Nat.is_eq(Inl.pars.len(ps), n),
+        u => Bool.pick(Unit -> Bool, Opt.size.le(b, Opt.fu.pbudget()), u2 => Opt.fu.ctail(name, b), u2 => False{})(Unit{}),
+        u => False{})(Unit{})
 
 def Opt.fu.pick(+c: Map<&2, Core.Def>, +g: String, +j: Nat, a: Core.Tm) -> OPk:
   match a:

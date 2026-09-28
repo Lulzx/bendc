@@ -2398,17 +2398,27 @@ OUTLINE char *io_cstr(Env e, Term s, u64 *len) {
   Term s0 = s;
   u64 cap = 64, n = 0;
   char *buf = io_mem(malloc(cap));
+  // (Counted: the cons cells this holds the only reference to are freed
+  // as they are read, while in cache; the rest, from the first shared
+  // one, is dropped at the end.)
+  int own = gc_hot.rc;
   while (!(s & 1) && TAG(s) == 1) {
     if (n + 5 > cap) {
       cap *= 2;
       buf = io_mem(realloc(buf, cap));
     }
     n += io_utf8(buf + n, FLD(s, 0));
-    s = FLD(s, 1);
+    Term t = FLD(s, 1);
+    if (own) {
+      if ((uintptr_t)s - gc_hot.base < gc_hot.span && rc_unique(s)) rc_free_at(s, 0);
+      else { own = 0; s0 = s; }
+    }
+    s = t;
   }
   buf[n] = 0;
   *len = n;
-  bend_drop(s0);
+  if (own) bend_drop(s);
+  else bend_drop(s0);
   return buf;
 }
 
