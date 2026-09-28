@@ -6,8 +6,10 @@ import Base
 # list of instructions (Ins): most are encoded words, and the rest name a
 # label (a branch, an address) or an external symbol (a runtime function).
 # As.object lays the code out, resolves its labels, and writes a relocatable
-# object file around it (Mach-O on macOS, ELF on Linux) with relocations for
+# object file around it (Mach-O, for macOS on arm64) with relocations for
 # the external symbols, which the system linker then links with the runtime.
+# Before that, a peephole pass (peep) turns a reload after a store to the
+# same frame slot into a move.
 #
 # The object has two sections: the code (with the bytes of string literals),
 # aligned to a page, and a zeroed data section of 8-byte slots (the caches of
