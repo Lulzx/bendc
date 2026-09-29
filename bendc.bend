@@ -4104,18 +4104,6 @@ def Gen.arr(xs: List<&2, Doc>) -> Doc:
     case h <> t:
       Doc.list([DStr{"(V[]){"}, Gen.commas(h <> t), DStr{"}"}])
 
-# The value of a lambda lifted into name, with n captured values: a
-# closure, or (lat) a latent task (see par_push in bendrt.h), its captured
-# values on the stack, with room for the argument name takes.
-def Gen.lam.doc(lat: Bool, +name: String, +n: U32, caps: List<&2, Doc>) -> Doc:
-  match lat:
-    case True{}:
-      Doc.list([DStr{"{" ++ name ++ ", (V[" ++ U32.show(U32.inc(n)) ++ "]){"},
-        Bool.pick(Doc, U32.is_zero(n), DStr{"0"}, Gen.commas(caps)), DStr{"}, " ++ U32.show(n) ++ "}"}])
-    case False{}:
-      Doc.list([DStr{"mk_clo(" ++ name ++ ", " ++ U32.show(U32.inc(n)) ++ ", " ++ U32.show(n) ++ ", "}, Gen.arr(caps),
-        DStr{")"}])
-
 # Where a statement's value goes: returned, assigned to a C variable, or
 # stored through dst (in a D_ function of destination-passing group id).
 # TOut: a flat result (see Gen.def.unb), its k fields stored through o.
@@ -6215,6 +6203,32 @@ def Gen.par.mode(m: Maybe<&2, String>, +sn: String) -> Nat:
     case None{}:
       3n
 
+# A parallel let of n values forks lg(n) levels deep: par_depth counts
+# log2 of the tasks above, so the frontier (par_front) is 2^par_front tasks
+# whatever the fan-out.
+def Gen.par.lg(n: Nat) -> U32:
+  match n:
+    case 0n:
+      1
+    case 1n:
+      1
+    case 2n:
+      1
+    case 3n:
+      2
+    case 4n:
+      2
+    case 5n:
+      3
+    case 6n:
+      3
+    case 7n:
+      3
+    case 8n:
+      3
+    case 9n+m:
+      4
+
 # Past the frontier, a def with a sequential clone (S_name) calls it; any
 # other def runs its parallel let's values in order (sn = "").
 def Gen.par.def(+sn: String) -> String:
@@ -6824,7 +6838,7 @@ type GSel is Data:
   GSCaseBodyMat{g: G, env: Env(), self: Self, tgt: Tgt, body: Core.Expr, pre: Env(), r: Loads}
   GSCaseBodyGo{opens: Bool, g: G, env: Env(), self: Self, tgt: Tgt, binds: Env(), body: Core.Expr}
   GSCaseBody{g: G, env: Env(), self: Self, tgt: Tgt, binds: Env(), body: Core.Expr}
-  GSLam{lat: Bool, g: G, env: Env(), p: Core.Pat, body: Core.Expr}
+  GSLam{g: G, env: Env(), p: Core.Pat, body: Core.Expr}
   GSLetPat{g: G, env: Env(), self: Self, tgt: Tgt, p: Core.Pat, v: Core.Expr, body: Core.Expr}
   GSParVals{g: G, env: Env(), k: U32, i: U32, vs: List<&2, Core.Expr>}
   GSParSeq{g: G, env: Env(), k: U32, i: U32, vs: List<&2, Core.Expr>, decl: Bool}
@@ -6977,7 +6991,7 @@ def GSel.none(k: GSel) -> GSel.ty(k):
       DNil{}
     case GSCaseBody{g, env, self, tgt, binds, body}:
       DNil{}
-    case GSLam{lat, g, env, p, body}:
+    case GSLam{g, env, p, body}:
       DNil{}
     case GSLetPat{g, env, self, tgt, p, v, body}:
       DNil{}
@@ -7364,7 +7378,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 u => Bool.pick(Unit -> Gen(Doc), Gen.konst.is(g, name, args), u2 => Gen.konst(g, name, args),
                   u2 => Gen.rec(fu, GSCtor{g, env, name, args}))(Unit{}))(Unit{})
             case Core.ELam{p, body}:
-              Gen.rec(fu, GSLam{False{}, g, env, p, body})
+              Gen.rec(fu, GSLam{g, env, p, body})
             case Core.ELet{p, v, body}:
               Gen.rec(fu, GSBlock{g, env, Core.ELet{p, v, body}})
             case Core.EMatch{scrs, cases}:
@@ -7473,7 +7487,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
           +binds = RC.bfilter(binds0)
           Gen.rec(fu, GSCaseBodyGo{Bool.or(Bool.and(Gen.free(g), Gen.opens(binds)), Gen.halves(binds)), g, env,
             self, tgt, binds, body})
-        case GSLam{lat, +g, +env, +p, +body}:
+        case GSLam{+g, +env, +p, +body}:
           +caps = Gen.caps(FV.expr(body, Pat.vars(p, Nil{}), Nil{}), env)
           +n = U32.from_nat(List.length(&2, Bind, caps))
           do Gen<Doc>:
@@ -7489,7 +7503,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               Bool.pick(Env(), Gen.rc(g), List.append(&2, Bind, binds, inner), binds), body})
             Gen.ru.set(Gen.rc(g), outer)
             Gen.code(Doc.list([DStr{"static V " ++ name ++ "(V *a) {\n"}, b, DStr{"}\n"}]))
-            return Gen.lam.doc(lat, name, n, Gen.caps.outer(caps))
+            return Doc.list([DStr{"mk_clo(" ++ name ++ ", " ++ U32.show(U32.inc(n)) ++ ", " ++
+              U32.show(n) ++ ", "}, Gen.arr(Gen.caps.outer(caps)), DStr{")"}])
         case GSLetPat{+g, +env, +self, +tgt, +p, v, +body}:
           do Gen<Doc>:
             +k : U32 <- Gen.fresh()
@@ -7510,11 +7525,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 return Doc.list([DStr{"V " ++ Gen.par.name(k, i) ++ " = "}, d, DStr{";\n"}])
             case +v <> t:
               do Gen<Doc>:
-                c : Doc <- Gen.rec(fu, GSLam{True{}, g, env, Core.PVar{"_"}, v})
+                c : Doc <- Gen.rec(fu, GSLam{g, env, Core.PVar{"_"}, v})
                 rest : Doc <- Gen.rec(fu, GSParVals{g, env, k, U32.inc(i), t})
-                return Doc.list([RC.fork(Gen.rc(g), g, env, v), DStr{"PLat " ++ Gen.par.name(k, i) ++ "t = "}, c,
-                  DStr{";\npar_push(&" ++ Gen.par.name(k, i) ++ "t);\n"},
-                  rest, DStr{"V " ++ Gen.par.name(k, i) ++ " = par_pop(&" ++ Gen.par.name(k, i) ++
+                return Doc.list([RC.fork(Gen.rc(g), g, env, v), DStr{"V " ++ Gen.par.name(k, i) ++ "t = par_fork("}, c, DStr{");\n"},
+                  rest, DStr{"V " ++ Gen.par.name(k, i) ++ " = par_join(" ++ Gen.par.name(k, i) ++
                   "t);\n"}])
         # The values in order: declared (in S_name), or assigned (at the
         # frontier).
@@ -7527,17 +7541,18 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
                 rest : Doc <- Gen.rec(fu, GSParSeq{g, env, k, U32.inc(i), t, decl})
                 return Doc.list([DStr{Bool.pick(String, decl, "V ", "") ++ Gen.par.name(k, i) ++ " = "}, d, DStr{";\n"}, rest])
-        # A parallel let: its values but the last are latent tasks (see
-        # par_push in bendrt.h), and on one thread (par_seq) they run in
-        # order, through S_name for a seq def.
+        # A seq def's parallel let: forks above the frontier (par_depth), and
+        # in order below it, through S_name.
         case GSParFront{+g, +env, +sn, +k, +vs}:
           +n = List.length(&2, Core.Expr, vs)
+          +lg = U32.show(Gen.par.lg(n))
           do Gen<Doc>:
             sq : Doc <- Gen.rec(fu, GSParSeq{g, env, k, 0, vs, False{}})
             +j : U32 <- Gen.fresh()
             fk : Doc <- Gen.rec(fu, GSParVals{g, env, j, 0, vs})
-            return Doc.list([DStr{Gen.par.decls(n, k, 0) ++ "\nif (!par_go()) {\n" ++ Gen.par.def(sn)}, sq,
-              DStr{Gen.par.undef(sn) ++ "} else {\n"}, fk, DStr{Gen.par.copy(n, k, j, 0) ++ "\npar_end();\n}\n"}])
+            return Doc.list([DStr{Gen.par.decls(n, k, 0) ++ "\nif (par_depth >= par_front) {\n" ++ Gen.par.def(sn)}, sq,
+              DStr{Gen.par.undef(sn) ++ "} else {\npar_depth += " ++ lg ++ ";\n"}, fk,
+              DStr{Gen.par.copy(n, k, j, 0) ++ "\npar_depth -= " ++ lg ++ ";\n}\n"}])
         case GSParSq{sq, +g, +env, +sn, +k, +vs}:
           match sq:
             case True{}:
@@ -18935,9 +18950,9 @@ def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
   COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#define BEND_NATIVE_STR 1\n#define BEND_NATIVE_MAP 1\n#ifdef BEND_RT_SPLIT\n#include \"bendrt_split.h\"\n#else\n#include \"bendrt.h\"\n#endif\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
-    Doc.flat(Doc.list([DStr{"BEND_CODE_BEGIN\n"}, protos, DStr{"\n"}, code, DStr{Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
+    Doc.flat(Doc.list([protos, DStr{"\n"}, code, DStr{Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
     Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
-    DStr{"\nBEND_CODE_END\n" ++ entry}])), errs}
+    DStr{"\n" ++ entry}])), errs}
 
 def Gen.rc.main(+g: G) -> String:
   Bool.pick(String, Gen.rc(g), " bend_rc_req = 1;", "")

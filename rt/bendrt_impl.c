@@ -736,7 +736,6 @@ void thr_register(uintptr_t top) {
   t->live = 1;
   t->rng = (uint32_t)(uintptr_t)t ^ 0x9e3779b9u;
   t->dq = pdq_new();
-  t->sch = psch_new();
   thr_set(t);
   pthread_mutex_lock(&gc_lock);
   if (gc_nthr == GC_MAXTHR) bend_fail("too many threads");
@@ -1056,133 +1055,12 @@ PTask *par_steal(void) {
   }
   return NULL;
 }
-#define PL_LATENT 0
-#define PL_STOLEN 1
-#define PL_DONE 2
-#define PL_NONE ((PLat *)1)
-#define PL_START (-1)
-#if defined(__clang__) && defined(__has_attribute)
-#if __has_attribute(no_stack_protector)
-#define BEND_CODE_BEGIN _Pragma("clang attribute push(__attribute__((no_stack_protector)), apply_to = function)")
-#define BEND_CODE_END _Pragma("clang attribute pop")
-#endif
-#endif
-#ifndef BEND_CODE_BEGIN
-#define BEND_CODE_BEGIN
-#define BEND_CODE_END
-#endif
-PSch *par_schs[GC_MAXTHR];
-_Atomic int par_nsch;
-int par_seq = 1;
-struct PSch *psch_new(void) {
-  PSch *s;
-  if (posix_memalign((void **)&s, 128, sizeof(PSch))) bend_fail("out of memory");
-  memset(s, 0, sizeof *s);
-  s->cap = 1024;
-  s->lat = malloc((size_t)s->cap * sizeof(PLat *));
-  atomic_store(&s->busy, 1);
-  atomic_store(&s->want, PL_START);
-  int i = atomic_fetch_add(&par_nsch, 1);
-  s->id = i;
-  __atomic_store_n(&par_schs[i], s, __ATOMIC_RELEASE);
-  return s;
-}
-__attribute__((noinline)) void par_grow(PSch *s) {
-  s->cap *= 2;
-  s->lat = realloc(s->lat, (size_t)s->cap * sizeof(PLat *));
-  if (!s->lat) bend_fail("out of memory");
-}
-__attribute__((noinline)) void par_answer(PSch *s) {
-  int w = atomic_exchange_explicit(&s->want, 0, memory_order_acquire);
-  if (w == PL_START) {
-    if (par_nthreads > 1 && !atomic_load_explicit(&par_started, memory_order_relaxed)) par_start();
-    return;
-  }
-  if (w <= 0) return;
-  PSch *t = __atomic_load_n(&par_schs[w - 1], __ATOMIC_ACQUIRE);
-  PLat *d = PL_NONE;
-  if (s->top < s->bot) {
-    d = s->lat[s->top++];
-    if (gc_hot.rc)
-      for (V i = 0; i < d->k; i++) rc_publish(d->a[i]);
-    d->by = (V)(w - 1);
-    __atomic_store_n(&d->st, PL_STOLEN, __ATOMIC_RELAXED);
-  }
-  atomic_store_explicit(&t->mail, d, memory_order_release);
-}
-void par_run(PLat *d) {
-  PSch *s = thr_self->sch;
-  int depth = s->depth;
-  s->depth = 0;
-  V r = d->fn(d->a);
-  s->depth = depth;
-  d->res = r;
-  __atomic_store_n(&d->st, PL_DONE, __ATOMIC_RELEASE);
-}
-PLat *par_ask_one(PSch *me, PSch *v) {
-  if (!v || v == me || !atomic_load_explicit(&v->busy, memory_order_relaxed) ||
-      atomic_load_explicit(&v->want, memory_order_relaxed))
-    return NULL;
-  atomic_store_explicit(&me->mail, NULL, memory_order_relaxed);
-  int z = 0;
-  if (!atomic_compare_exchange_strong(&v->want, &z, me->id + 1)) return NULL;
-  for (long spins = 0;; spins++) {
-    PLat *d = atomic_load_explicit(&me->mail, memory_order_acquire);
-    if (d) return d == PL_NONE ? NULL : d;
-    // (an ask of this thread, meanwhile, is answered: asks never wait on
-    // each other in a cycle)
-    if (atomic_load_explicit(&me->want, memory_order_relaxed)) par_answer(me);
-    if (spins == 4096) {
-      int m = me->id + 1;
-      if (atomic_compare_exchange_strong(&v->want, &m, 0)) return NULL;
-    }
-    cpu_relax();
-  }
-}
-PLat *par_ask(PSch *me) {
-  int n = atomic_load_explicit(&par_nsch, memory_order_acquire);
-  if (n <= 1) return NULL;
-  Thr *t = thr_self;
-  t->rng = t->rng * 1664525u + 1013904223u;
-  int s = (int)(t->rng >> 8) % n;
-  for (int i = 0; i < n; i++) {
-    PLat *d = par_ask_one(me, __atomic_load_n(&par_schs[(s + i) % n], __ATOMIC_ACQUIRE));
-    if (d) return d;
-  }
-  return NULL;
-}
-__attribute__((noinline)) V par_wait(PSch *s, PLat *d) {
-  s->top = s->bot;
-  PSch *by = par_schs[d->by];
-  for (int spins = 0; __atomic_load_n(&d->st, __ATOMIC_ACQUIRE) != PL_DONE;) {
-    if (atomic_load_explicit(&s->want, memory_order_relaxed)) par_answer(s);
-    PLat *x = par_ask_one(s, by);
-    if (!x && spins > 16) x = par_ask(s);
-    if (x) { par_run(x); spins = 0; continue; }
-    if (++spins < 64) cpu_relax();
-    else if (spins < 256) sched_yield();
-    else { struct timespec ts = {0, 20000}; nanosleep(&ts, NULL); }
-  }
-  return d->res;
-}
 void *par_worker(void *arg) {
   (void)arg;
   thr_register((uintptr_t)__builtin_frame_address(0) + 16);
-  PSch *me = thr_self->sch;
-  atomic_store(&me->busy, 0);
-  atomic_store(&me->want, 0);
   for (int spins = 0;;) {
-    if (atomic_load_explicit(&me->want, memory_order_relaxed)) par_answer(me);
     PTask *t = par_steal();
     if (t) { par_exec(t); spins = 0; continue; }
-    PLat *d = par_ask(me);
-    if (d) {
-      atomic_store_explicit(&me->busy, 1, memory_order_relaxed);
-      par_run(d);
-      atomic_store_explicit(&me->busy, 0, memory_order_relaxed);
-      spins = 0;
-      continue;
-    }
     if (++spins < 512) { cpu_relax(); continue; }
     pthread_mutex_lock(&par_mu);
     atomic_fetch_add(&par_sleepers, 1);
@@ -1883,7 +1761,6 @@ int bend_start(int argc, char **argv, V (*m)(void), int value) {
     }
   }
   par_nthreads = thr > 0 ? (int)thr : cpu_count();
-  par_seq = par_nthreads <= 1;
   // Fork 2^6 tasks a thread deep, then run subtrees in order.
   if (par_nthreads > 1) {
     int f = 0;

@@ -193,7 +193,6 @@ typedef struct GcCache {
 } GcCache;
 
 struct PDeque;
-struct PSch;
 
 // Classes of up to 16 words (nodes) reuse the slots matches free.
 #define GC_RQCLS 15
@@ -207,7 +206,6 @@ typedef struct Thr {
   pthread_t id;
   volatile int live;
   struct PDeque *dq;
-  struct PSch *sch;
   uint32_t rng;
   // Claiming a reuse block (gc_refill): a stop signal that comes meanwhile
   // is deferred (deferred is set) until the claim is over.
@@ -878,7 +876,6 @@ __attribute__((noinline)) void gc_collect_locked(void);
 void gc_collect(void);
 
 struct PDeque *pdq_new(void);
-struct PSch *psch_new(void);
 
 // Registers the calling thread; top is an address near the base of its stack.
 // A fault (a deep recursion past the machine stack, most likely) reports
@@ -1463,121 +1460,6 @@ static inline void cpu_relax(void) {
 #elif defined(__aarch64__)
   __asm__ __volatile__("yield");
 #endif
-}
-
-// Latent tasks
-// ------------
-//
-// The C backend's parallel lets do not use the deques above. Every value
-// but the last is a latent task: a descriptor on the forking thread's stack
-// (the lambda-lifted code of the value, its captured values, a state),
-// pushed on a stack that only this thread reads (PSch.lat). Pushing a task
-// and joining one that nobody took are plain loads and stores, and the
-// value then runs as a call. So every parallel let may fork, at any depth,
-// and there is no depth frontier to tune. A thread with nothing to do asks
-// a busy one for work: it writes its id into the busy thread's want. The
-// busy one answers at its next push, or while it waits at a join, with its
-// oldest latent task (the one nearest the root of its recursion, so the
-// biggest), or with none (PL_NONE). The asker runs the task and marks it
-// done. At the join the owner waits for it, running other work meanwhile,
-// and asks the thread that took it first. This is work stealing with
-// private deques (Acar, Chargueraud and Rainey, PPoPP 2013). On one thread
-// (par_seq) the generated code runs a parallel let's values in order and
-// pushes nothing.
-
-#define PL_LATENT 0
-#define PL_STOLEN 1
-#define PL_DONE 2
-#define PL_NONE ((PLat *)1)
-// A new thread's want: its first push starts the pool (par_answer).
-#define PL_START (-1)
-
-// A latent task: fn applied to a, its k captured values and a dummy
-// argument, as a closure's code is (the generated code makes one as
-// {fn, (V[k + 1]){captured values}, k}).
-typedef struct PLat { V (*fn)(V *); V *a; V k; V res; V st; V by; } PLat;
-
-// Those descriptors are stack structs whose address is taken, so clang's
-// default stack protector (-fstack-protector-strong on macOS) guards every
-// function with a parallel let, its one-thread path too (4% more
-// instructions on tree-matmul). The generated code, which indexes no array
-// but with constants, turns it off between BEND_CODE_BEGIN and _END.
-#if defined(__clang__) && defined(__has_attribute)
-#if __has_attribute(no_stack_protector)
-#define BEND_CODE_BEGIN _Pragma("clang attribute push(__attribute__((no_stack_protector)), apply_to = function)")
-#define BEND_CODE_END _Pragma("clang attribute pop")
-#endif
-#endif
-#ifndef BEND_CODE_BEGIN
-#define BEND_CODE_BEGIN
-#define BEND_CODE_END
-#endif
-
-typedef struct PSch {
-  PLat **lat;          // latent tasks, oldest first (the owner's alone)
-  long bot, top, cap;  // lat[top..bot) are latent, lat[..top) were taken
-  int id;
-  int depth;           // parallel lets that push, above the running code
-  _Atomic int busy;    // runs Bend code: worth asking
-  // (want and mail sit in lines of their own: other threads write them)
-  _Atomic int want __attribute__((aligned(128)));   // the asker's id + 1
-  PLat *_Atomic mail __attribute__((aligned(128))); // the answer to this thread's ask
-} PSch;
-
-extern PSch *par_schs[GC_MAXTHR];
-extern _Atomic int par_nsch;
-// 1: parallel lets run their values in order (one thread).
-extern int par_seq;
-
-void par_start(void);
-
-struct PSch *psch_new(void);
-
-__attribute__((noinline)) void par_grow(PSch *s);
-
-// Answers the thread that asks s's owner (the caller): with the oldest
-// latent task, marked taken (reference counted, what it captures is
-// marked first: see rc_publish), or with none.
-__attribute__((noinline)) void par_answer(PSch *s);
-
-static inline void par_push(PLat *d) {
-  PSch *s = thr_self->sch;
-  if (UNLIKELY(s->bot == s->cap)) par_grow(s);
-  s->lat[s->bot++] = d;
-  if (UNLIKELY(atomic_load_explicit(&s->want, memory_order_relaxed))) par_answer(s);
-}
-
-void par_run(PLat *d);
-
-// Asks v for a task: its answer, or NULL (none, or v did not answer in
-// time and the ask was taken back).
-PLat *par_ask_one(PSch *me, PSch *v);
-
-// Asks the busy threads, from a random one, until one gives a task.
-PLat *par_ask(PSch *me);
-
-// At the join of d, which another thread took: runs other work until d is
-// done, asking the thread that took d first.
-__attribute__((noinline)) V par_wait(PSch *s, PLat *d);
-
-// Whether a parallel let pushes its values (then par_end follows its
-// joins): not on one thread, nor par_front lets deep in the running task.
-static inline int par_go(void) {
-  if (par_seq) return 0;
-  PSch *s = thr_self->sch;
-  if (s->depth >= par_front) return 0;
-  s->depth++;
-  return 1;
-}
-static inline void par_end(void) { thr_self->sch->depth--; }
-
-// The join of the latent task d, the last one pushed: a call when nobody
-// took it.
-static inline V par_pop(PLat *d) {
-  PSch *s = thr_self->sch;
-  s->bot--;
-  if (LIKELY(__atomic_load_n(&d->st, __ATOMIC_RELAXED) == PL_LATENT)) return d->fn(d->a);
-  return par_wait(s, d);
 }
 
 void *par_worker(void *arg);
