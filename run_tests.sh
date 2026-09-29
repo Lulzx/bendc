@@ -61,7 +61,7 @@ for src in $(grep -l '[a-z0-9_]!(' tests/*.bend); do
   name=$(basename "$src" .bend)
   out=build/tests/$name
   for mode in $gpu_modes; do
-    BEND_GPU=$mode BEND_GPU_LOG=1 "./$out" > "$out.$mode.txt" 2> "$out.$mode.log"
+    env $(cat "tests/$name.env" 2>/dev/null) BEND_GPU=$mode BEND_GPU_LOG=1 "./$out" > "$out.$mode.txt" 2> "$out.$mode.log"
     echo "exit $?" >> "$out.$mode.txt"
     if [ "$mode" = metal ] && grep -q "no GPU\|no Metal" "$out.$mode.log"; then continue; fi
     want=$(cat "tests/$name.fallbacks" 2>/dev/null || echo 0)
