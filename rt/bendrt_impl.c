@@ -63,6 +63,7 @@ __attribute__((noreturn)) void bend_fail(const char *msg) {
 #define GC_MAXTHR 256
 #define GC_SIG SIGUSR2
 #define GC_RQCLS 15
+#define ARR_SPARES 8
 const uint16_t gc_cls_w[GC_NCLS] = {
   2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
   20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256,
@@ -845,9 +846,25 @@ void rc_let_go_arr(V a) {
 }
 V arr_alloc(unsigned c) {
   if (c > 31) bend_fail("an array past the deepest block class 31");
+  Thr *t = thr_self;
+  if (t)
+    for (int i = 0; i < ARR_SPARES; i++) {
+      V a = t->spare[i];
+      if (a && arr_cls(a) == c) {
+        t->spare[i] = 0;
+        return a;
+      }
+    }
   V *p = halloc(1 + ((size_t)1 << c));
   p[0] = ARR_HDR(c);
   return (V)p;
+}
+void arr_dead(V a) {
+  Thr *t = thr_self;
+  if (t) t->spare[t->nspare++ % ARR_SPARES] = a;
+}
+void arr_hook(void) {
+  for (int i = 0; i < gc_nthr; i++) memset(gc_thrs[i]->spare, 0, sizeof gc_thrs[i]->spare);
 }
 V arr_copy(unsigned c, const V *src, int share, V ts) {
   size_t n = (size_t)1 << c;
@@ -872,7 +889,9 @@ V arr_new(V depth, V v) {
     else bend_share(v);
   }
   if (v >= ((V)1 << 32)) arr_dirty(a);
-  for (size_t i = 0; i < n; i++) d[i] = v;
+  // (four cells a step: a whole number of steps from 4 cells up)
+  if (n < 4) for (size_t i = 0; i < n; i++) d[i] = v;
+  else for (size_t i = 0; i < n; i += 4) { d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = v; }
   return a;
 }
 V arr_node(V l, V r) {
@@ -1865,6 +1884,7 @@ int bend_start(int argc, char **argv, V (*m)(void), int value) {
   fault_init();
   gc_hook(par_hook);
   gc_hook(io_hook);
+  gc_hook(arr_hook);
   pthread_attr_t attr;
   pthread_attr_init(&attr);
   thr_stack(&attr);

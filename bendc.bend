@@ -4945,13 +4945,6 @@ def Gen.stmt.ctor.tag.go(info: Maybe<&2, CInfo>) -> U32:
 def Gen.stmt.ctor.tag(+g: G, +name: String) -> U32:
   Gen.stmt.ctor.tag.go(G.ctor(g, name))
 
-def Gen.share.if(ok: Bool, c: String) -> Doc:
-  match ok:
-    case True{}:
-      DStr{"bend_share(" ++ c ++ ");\n"}
-    case False{}:
-      DNil{}
-
 # Scalars (numbers, characters, booleans) are never shared: a variable known
 # to hold one is bound to its C name in parentheses, "(a1)", which
 # Gen.shares skips, as it skips a Nat pattern's nat_subk(..).
@@ -4976,6 +4969,15 @@ def Gen.scalar.find(m: Maybe<&2, String>) -> Bool:
       Gen.scalar.c(c)
     case None{}:
       False{}
+
+# What a variable holds, as Gen.scalar.let says: a let's U32 local is
+# "(uN)" (a uint32_t), any other scalar's name is in parentheses.
+def Gen.scalar.u32.find(m: Maybe<&2, String>) -> U32:
+  match m:
+    case Some{+c}:
+      Bool.pick(U32, String.starts_with(c, "(u"), 2, Bool.pick(U32, Gen.scalar.c(c), 1, 0))
+    case None{}:
+      0
 
 # Whether a let's value is a variable holding a scalar.
 def Gen.scalar.var(+env: Env(), v: Core.Expr) -> Bool:
@@ -5030,17 +5032,54 @@ def Gen.scalar.bound(m: Maybe<&2, String>) -> Bool:
 
 # What a let's value is: 2 a U32 (its C local is a uint32_t), 1 another
 # scalar (never shared), 0 anything else. A variable holding a scalar is 1;
-# a call is what its def or native returns.
-def Gen.scalar.let(+g: G, +env: Env(), v: Core.Expr) -> U32:
+# a call is what its def or native returns; a match, what its cases give
+# (the least of them), a let what its body gives.
+# Names bound inside a let's value: a let's variable stands for what its
+# value is ("(u)" a U32, "(v)" another scalar, "x" anything else), a
+# pattern's for anything.
+def Gen.scalar.hide(xs: List<&2, String>, env: Env()) -> Env():
+  match xs:
+    case Nil{}:
+      env
+    case x <> t:
+      Bind{x, "x"} <> Gen.scalar.hide(t, env)
+
+def Gen.scalar.stand(+k: U32) -> String:
+  Bool.pick(String, U32.is_eq(k, 2), "(u)", Bool.pick(String, U32.is_eq(k, 1), "(v)", "x"))
+
+def Gen.scalar.tail(+g: G, v: Core.Expr, +env: Env()) -> U32:
   match v:
     case Core.EVar{+y}:
-      Bool.pick(U32, Gen.scalar.find(Env.find(env, y)), 1, 0)
+      Gen.scalar.u32.find(Env.find(env, y))
     case Core.ENum{n}:
       2
     case Core.ECall{Core.EVar{+f}, args}:
       Gen.scalar.fn(g, f, Gen.scalar.bound(Env.find(env, f)))
+    case Core.ELet{p, x, b}:
+      match p:
+        case Core.PVar{+y}:
+          Gen.scalar.tail(g, b, Bind{y, Gen.scalar.stand(Gen.scalar.tail(g, x, env))} <> env)
+        case q:
+          Gen.scalar.tail(g, b, Gen.scalar.hide(Pat.vars(q, Nil{}), env))
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Gen.scalar.tail(g, Core.EMatch{t, cases}, env)
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              2
+            case c <> t:
+              U32.min(Gen.scalar.tail(g, c, env), Gen.scalar.tail(g, Core.EMatch{Nil{}, t}, env))
+    case Core.ECase{ps, b}:
+      Gen.scalar.tail(g, b, Gen.scalar.hide(Pats.vars(ps, Nil{}), env))
+    case Core.EAnn{y, t}:
+      Gen.scalar.tail(g, y, env)
     case other:
       0
+
+def Gen.scalar.let(+g: G, +env: Env(), v: Core.Expr) -> U32:
+  Gen.scalar.tail(g, v, env)
 
 def Gen.scalar.cty(+k: U32) -> String:
   Bool.pick(String, U32.is_eq(k, 2), "uint32_t ", "V ")
@@ -5099,14 +5138,23 @@ def Use.n(+x: String, e: Core.Expr) -> U32:
     case other:
       0
 
-# bend_share for each binding whose variable body uses twice.
+# A binding's variable that body uses twice gets bend_share; one no path of
+# body uses, bend_dead (an unshared array is then kept for Array.new).
+def Gen.share.use(ok: Bool, +c: String, +u: U32) -> Doc:
+  match ok:
+    case True{}:
+      Bool.pick(Doc, U32.is_le(2, u), DStr{"bend_share(" ++ c ++ ");\n"},
+        Bool.pick(Doc, U32.is_zero(u), DStr{"bend_dead(" ++ c ++ ");\n"}, DNil{}))
+    case False{}:
+      DNil{}
+
 def Gen.shares(binds: Env(), +body: Core.Expr) -> Doc:
   match binds:
     case Nil{}:
       DNil{}
     case Bind{+x, +c} <> t:
-      Doc.list([Gen.share.if(Bool.and(Bool.not(Bool.or(Bool.or(Str.eq(x, "_"), Str.eq(c, "0")), Gen.scalar.c(c))),
-        U32.is_le(2, Use.n(x, body))), c), Gen.shares(t, body)])
+      Doc.list([Gen.share.use(Bool.not(Bool.or(Bool.or(Str.eq(x, "_"), Str.eq(c, "0")), Gen.scalar.c(c))),
+        c, Use.n(x, body)), Gen.shares(t, body)])
 
 # Whether matches free the nodes they open (BEND_NO_FREE turns it off: no
 # sharing, no bend_take, the code of a traced heap only).
@@ -5764,12 +5812,35 @@ def RC.mx.vars(+g: G, +loc: List<&2, String>, +env: Env(), xs: List<&2, String>,
 def RC.mx(+g: G, +env: Env(), +e: Core.Expr) -> List<&2, RcM>:
   RC.mx.vars(g, Env.names(env), env, FV.expr(e, Nil{}, Nil{}), e)
 
+# Traced (matches free what they open), the outer variables a match's cases
+# use, for Dead.arm.
+def Dead.put(m: Maybe<&2, String>, +x: String, rest: List<&2, RcM>) -> List<&2, RcM>:
+  match m:
+    case None{}:
+      rest
+    case Some{+c}:
+      RC.mx.keep(RC.skip(c), RcM{x, c, 1}, rest)
+
+def Dead.vars(+env: Env(), xs: List<&2, String>) -> List<&2, RcM>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case +x <> t:
+      Dead.put(Env.find(env, x), x, Dead.vars(env, t))
+
+def Dead.mx(free: Bool, +env: Env(), cases: List<&2, Core.Expr>) -> List<&2, RcM>:
+  match free:
+    case True{}:
+      Dead.vars(env, FV.expr(Core.EMatch{Nil{}, cases}, Nil{}, Nil{}))
+    case False{}:
+      Nil{}
+
 def RC.mx.if(rc: Bool, +g: G, +env: Env(), cases: List<&2, Core.Expr>) -> List<&2, RcM>:
   match rc:
     case True{}:
       RC.mx(g, env, Core.EMatch{Nil{}, cases})
     case False{}:
-      Nil{}
+      Dead.mx(Gen.free(g), env, cases)
 
 def RC.dropn(+c: String, +n: U32) -> Doc:
   Bool.pick(Doc, U32.is_zero(n), DNil{}, DStr{"rc_dropn(" ++ c ++ ", " ++ U32.show(n) ++ ");\n"})
@@ -5790,6 +5861,22 @@ def RC.arm(+g: G, +loc: List<&2, String>, mx: List<&2, RcM>, +c: Core.Expr) -> D
       DNil{}
     case RcM{+x, +cn, +m} <> t:
       Doc.list([RC.arm.one(RC.bor(cn), cn, m, RC.uses(g, loc, RC.bor(cn), x, c)), RC.arm(g, loc, t, c)])
+
+# Traced, a case's bend_dead for each outer variable another case of its
+# match uses and it does not.
+def Dead.arm(mx: List<&2, RcM>, +c: Core.Expr) -> Doc:
+  match mx:
+    case Nil{}:
+      DNil{}
+    case RcM{+x, +cn, m} <> t:
+      Doc.list([Bool.pick(Doc, U32.is_zero(Use.n(x, c)), DStr{"bend_dead(" ++ cn ++ ");\n"}, DNil{}), Dead.arm(t, c)])
+
+def RC.arm.pick(rc: Bool, +g: G, +loc: List<&2, String>, mx: List<&2, RcM>, +c: Core.Expr) -> Doc:
+  match rc:
+    case True{}:
+      RC.arm(g, loc, mx, c)
+    case False{}:
+      Dead.arm(mx, c)
 
 # A forked value's closure takes one reference of each variable it
 # captures: it had its uses (the in-order path evaluates it in place).
@@ -7351,13 +7438,15 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         # where f's result goes, dst moves to the hole, and f's code follows.
         case GSStmtCtor{+g, +env, +self, +tgt, +name, +args, +hole}:
           Gen.rec(fu, GSStmtCtorPick{U32.is_zero(hole), g, env, self, tgt, name, args, hole})
-        # A statement-level expression used as a value: ({ V r; ...; r; }).
-        case GSBlock{+g, +env, e}:
+        # A statement-level expression used as a value: ({ V r; ...; r; }),
+        # r a uint32_t when e is a U32 (so C selects and compares a U32 in
+        # 32 bits: editdist's min, 11.1G -> 8.6G cycles).
+        case GSBlock{+g, +env, +e}:
           do Gen<Doc>:
             +k : U32 <- Gen.fresh()
             +r : String <- Gen.pure(String, "r" ++ U32.show(k))
             b : Doc <- Gen.rec(fu, GSStmt{g, env, Self.none(), TSet{r}, e})
-            return Doc.list([DStr{"({ V " ++ r ++ ";\n"}, b, DStr{r ++ "; })"}])
+            return Doc.list([DStr{"({ " ++ Gen.scalar.cty(Gen.scalar.let(g, env, e)) ++ r ++ ";\n"}, b, DStr{r ++ "; })"}])
         case GSExpr{+g, +env, e}:
           match e:
             case Core.EVar{name}:
@@ -7408,7 +7497,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
                 +sk : U32 <- Gen.pure(U32, Gen.scalar.let(g, env, v))
-                +c : String <- Gen.pure(String, Gen.scalar.wrap(U32.is_ne(sk, 0), "v" ++ U32.show(k)))
+                +c : String <- Gen.pure(String, Gen.scalar.wrap(U32.is_ne(sk, 0),
+                  Bool.pick(String, U32.is_eq(sk, 2), "u", "v") ++ U32.show(k)))
                 d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
                 b : Doc <- Gen.rec(fu, GSStmt{g, Bind{x, c} <> env, self, tgt, body})
                 return Doc.list([DStr{Gen.scalar.cty(sk) ++ c ++ " = "}, d, DStr{";\n"}, Gen.own(g, Bind{x, c} <> env, [Bind{x, c}], body), b])
@@ -7743,7 +7833,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 after : String <- Gen.ru.get(Gen.rc(g))
                 Gen.ru.set(Gen.rc(g), outer)
                 Gen.rec(fu, GSCasesNext{g, env, self, tgt, cs, t, List.reverse(&2, String, conds),
-                  Doc.list([RC.arm(g, Env.names(env), mx, Core.ECase{ps, body}), RU.frees(RU.list(after)), b]), mx})
+                  Doc.list([RC.arm.pick(Gen.rc(g), g, Env.names(env), mx, Core.ECase{ps, body}), RU.frees(RU.list(after)), b]), mx})
             case other <> t:
               Gen.rec(fu, GSCases{g, env, self, tgt, cs, t, mx})
 
@@ -9370,13 +9460,123 @@ def Unb.types(+ctor: Bool, ds: List<&2, Decl>, m: Map<&2, Unb>) -> Map<&2, Unb>:
 def Unb.find(+m: Map<&2, Unb>, +t: String) -> Unb:
   G.get(Unb, Unb.none(), m, t)
 
-# A def's parameters that may go unboxed: plain or shared, of a flat type.
-def Unb.cands(+ts: Map<&2, Unb>, ps: List<&2, Core.Param>) -> List<&2, Unb>:
+# A parameter whose type is no flat one by name (a pair's component, as a
+# worker takes it, say) is of the type of a flat constructor that a let in
+# the body opens it with (x not rebound on the way).
+def Unb.infer.n(+u: Unb, +n: Nat) -> Unb:
+  Bool.pick(Unb, Bool.and(Unb.is(u), Nat.is_eq(Unb.arity(u), n)), u, Unb.none())
+
+def Unb.infer.or.go(hit: Bool, a: Unb, b: Unb) -> Unb:
+  match hit:
+    case True{}:
+      a
+    case False{}:
+      b
+
+def Unb.infer.or(+a: Unb, b: Unb) -> Unb:
+  Unb.infer.or.go(Unb.is(a), a, b)
+
+def Unb.infer.v(v: Core.Expr, +x: String, +cm: Map<&2, Unb>, +k: String, +n: Nat) -> Unb:
+  match v:
+    case Core.EVar{+y}:
+      Bool.pick(Unb, Str.eq(x, y), Unb.infer.n(Unb.find(cm, k), n), Unb.none())
+    case other:
+      Unb.none()
+
+def Unb.infer.let(p: Core.Pat, v: Core.Expr, +x: String, +cm: Map<&2, Unb>) -> Unb:
+  match p:
+    case Core.PCtor{+k, qs}:
+      Unb.infer.v(v, x, cm, k, List.length(&2, Core.Pat, qs))
+    case other:
+      Unb.none()
+
+# The name x has in a let's body: the variable a let y = x binds, x when
+# the let does not bind it again, else none ("").
+def Unb.infer.alias.v(v: Core.Expr, +x: String, +y: String) -> String:
+  match v:
+    case Core.EVar{+z}:
+      Bool.pick(String, Str.eq(z, x), y, Bool.pick(String, Str.eq(y, x), "", x))
+    case other:
+      Bool.pick(String, Str.eq(y, x), "", x)
+
+def Unb.infer.next(p: Core.Pat, v: Core.Expr, +x: String) -> String:
+  match p:
+    case Core.PVar{+y}:
+      Unb.infer.alias.v(v, x, y)
+    case other:
+      Bool.pick(String, Str.has(Pat.vars(other, Nil{}), x), "", x)
+
+def Unb.infer(e: Core.Expr, +x: String, +cm: Map<&2, Unb>) -> Unb:
+  match e:
+    case Core.ELet{+pt, +v, b}:
+      +y = Unb.infer.next(pt, v, x)
+      Unb.infer.or(Unb.infer.let(pt, v, x, cm), Unb.infer.or(Unb.infer(v, x, cm),
+        Bool.pick(Unit -> Unb, String.is_empty(y), u => Unb.none(), u => Unb.infer(b, y, cm))(Unit{})))
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Unb.none()
+        case a <> t:
+          Unb.infer.or(Unb.infer(a, x, cm), Unb.infer(Core.ECall{f, t}, x, cm))
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          Unb.none()
+        case a <> t:
+          Unb.infer.or(Unb.infer(a, x, cm), Unb.infer(Core.ECtor{n, t}, x, cm))
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Unb.infer.or(Unb.infer(a, x, cm), Unb.infer(Core.EMatch{t, cases}, x, cm))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Unb.none()
+            case c <> t:
+              Unb.infer.or(Unb.infer(c, x, cm), Unb.infer(Core.EMatch{Nil{}, t}, x, cm))
+    case Core.ECase{+ps, b}:
+      Bool.pick(Unb, Str.has(Pats.vars(ps, Nil{}), x), Unb.none(), Unb.infer(b, x, cm))
+    case Core.EAnn{y, ty}:
+      Unb.infer(y, x, cm)
+    case other:
+      Unb.none()
+
+# Whether e answers the variable x itself (in a tail position, x not
+# rebound on the way): then x is of the def's result type.
+def Unb.tail(e: Core.Expr, +x: String) -> Bool:
+  match e:
+    case Core.EVar{+y}:
+      Str.eq(x, y)
+    case Core.ELet{pt, v, b}:
+      Bool.and(Bool.not(Str.has(Pat.vars(pt, Nil{}), x)), Unb.tail(b, x))
+    case Core.EMatch{scrs, cases}:
+      match cases:
+        case Nil{}:
+          False{}
+        case c <> t:
+          Bool.or(Unb.tail(c, x), Unb.tail(Core.EMatch{scrs, t}, x))
+    case Core.ECase{+ps, b}:
+      Bool.and(Bool.not(Str.has(Pats.vars(ps, Nil{}), x)), Unb.tail(b, x))
+    case Core.EAnn{y, ty}:
+      Unb.tail(y, x)
+    case other:
+      False{}
+
+def Unb.cand.two(+u: Unb, +x: String, +ts: Map<&2, Unb>, +rt: String, +body: Core.Expr) -> Unb:
+  Bool.pick(Unit -> Unb, Bool.or(Unb.is(u), Bool.not(Unb.tail(body, x))), w => u, w => Unb.find(ts, rt))(Unit{})
+
+def Unb.cand.one(+u: Unb, +x: String, +ts: Map<&2, Unb>, +cm: Map<&2, Unb>, +rt: String, +body: Core.Expr) -> Unb:
+  Bool.pick(Unit -> Unb, Unb.is(u), w => u, w => Unb.cand.two(Unb.infer(body, x, cm), x, ts, rt, body))(Unit{})
+
+# A def's parameters that may go unboxed: plain or shared, of a flat type
+# (or of one Unb.infer finds).
+def Unb.cands(+ts: Map<&2, Unb>, +cm: Map<&2, Unb>, +rt: String, +body: Core.Expr, ps: List<&2, Core.Param>) -> List<&2, Unb>:
   match ps:
     case Nil{}:
       Nil{}
-    case Core.Param{x, +m, +t} <> r:
-      Bool.pick(Unb, Bool.or(U32.is_zero(m), U32.is_eq(m, 2)), Unb.find(ts, t), Unb.none()) <> Unb.cands(ts, r)
+    case Core.Param{+x, +m, +t} <> r:
+      Bool.pick(Unb, Bool.or(U32.is_zero(m), U32.is_eq(m, 2)), Unb.cand.one(Unb.find(ts, t), x, ts, cm, rt, body), Unb.none()) <>
+        Unb.cands(ts, cm, rt, body, r)
 
 def Unb.any(us: List<&2, Unb>) -> Bool:
   match us:
@@ -9401,15 +9601,15 @@ def Unb.cand(+name: String, +ret: Core.Expr, +laws: Map<&2, Decl>, +us: List<&2,
   m: Map<&2, List<&2, Unb>>) -> Map<&2, List<&2, Unb>>:
   Unb.put(Bool.and(Unb.ok.def(name, ret, laws), Unb.any(us)), name, us, m)
 
-def Unb.cands.all(+ts: Map<&2, Unb>, +laws: Map<&2, Decl>, ds: List<&2, Decl>,
+def Unb.cands.all(+ts: Map<&2, Unb>, +cm: Map<&2, Unb>, +laws: Map<&2, Decl>, ds: List<&2, Decl>,
   m: Map<&2, List<&2, Unb>>) -> Map<&2, List<&2, Unb>>:
   match ds:
     case Nil{}:
       m
     case DDef{+name, ps, body, +ret} <> t:
-      Unb.cands.all(ts, laws, t, Unb.cand(name, ret, laws, Unb.cands(ts, ps), m))
+      Unb.cands.all(ts, cm, laws, t, Unb.cand(name, ret, laws, Unb.cands(ts, cm, Ty.head(ret), body, ps), m))
     case d <> t:
-      Unb.cands.all(ts, laws, t, m)
+      Unb.cands.all(ts, cm, laws, t, m)
 
 # A def's worker flags (Nil when it has no worker).
 def Unb.flags(+wm: Map<&2, List<&2, Unb>>, +f: String) -> List<&2, Unb>:
@@ -9851,10 +10051,38 @@ def Unb.mat.top(top: Bool, +cm: Map<&2, Unb>, e: Core.Expr) -> Core.Expr:
 # A let opening a flat constructor's node: a match on its fields' values,
 # which binds them all at once (a value may name a variable the pattern
 # binds).
+# Fields that are a worker's parameters (fresh names) bound to plain
+# variables: the variables are renamed to the parameters.
+def Unb.alias.ok(qs: List<&2, Core.Pat>, es: List<&2, Core.Expr>) -> Bool:
+  match qs es:
+    case Core.PVar{x} <> qt Core.EVar{+y} <> et:
+      Bool.and(String.starts_with(y, "_ub"), Unb.alias.ok(qt, et))
+    case Nil{} Nil{}:
+      True{}
+    case ql el:
+      False{}
+
+def Unb.alias.sub(qs: List<&2, Core.Pat>, es: List<&2, Core.Expr>, b: Core.Expr) -> Core.Expr:
+  match qs es:
+    case Core.PVar{+x} <> qt Core.EVar{+y} <> et:
+      Unb.alias.sub(qt, et, Unb.sub(b, x, Core.EVar{y}))
+    case ql el:
+      b
+
+def Unb.let.hit(ok: Bool, qs: List<&2, Core.Pat>, es: List<&2, Core.Expr>, b: Core.Expr) -> Core.Expr:
+  match ok:
+    case True{}:
+      Unb.alias.sub(qs, es, b)
+    case False{}:
+      Core.EMatch{es, [Core.ECase{qs, b}]}
+
+def Unb.let.es(+qs: List<&2, Core.Pat>, +es: List<&2, Core.Expr>, b: Core.Expr) -> Core.Expr:
+  Unb.let.hit(Unb.alias.ok(qs, es), qs, es, b)
+
 def Unb.let.go(hit: Bool, +k: String, qs: List<&2, Core.Pat>, v: Core.Expr, b: Core.Expr) -> Core.Expr:
   match hit:
     case True{}:
-      Core.EMatch{Unb.args(v), [Core.ECase{qs, b}]}
+      Unb.let.es(qs, Unb.args(v), b)
     case False{}:
       Core.ELet{Core.PCtor{k, qs}, v, b}
 
@@ -9927,10 +10155,27 @@ def Unb.arg.ctor(same: Bool, +k: String, es: List<&2, Core.Expr>, +names: List<&
     case False{}:
       Unb.arg.open(k, Core.ECtor{k, es}, names, r)
 
+# A let of Nest's or of a worker call's arguments (their names apart)
+# around an argument goes around the call instead.
+def Unb.nc(xs: List<&2, String>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case +x <> t:
+      Bool.and(Bool.or(String.starts_with(x, "_nc"), Bool.and(String.starts_with(x, "_ub"),
+        Bool.not(Bool.or(String.starts_with(x, "_ub_"), String.starts_with(x, "_ubl"))))), Unb.nc(t))
+
+def Unb.arg.float(p: Core.Pat, v: Core.Expr, r: UArgs) -> UArgs:
+  UArgs{args, lets} = r
+  UArgs{args, ULet{p, v} <> lets}
+
 def Unb.arg.flat(a: Core.Expr, +k: String, +n: Nat, +names: List<&2, String>, r: UArgs) -> UArgs:
   match a:
     case Core.ECtor{+c, +es}:
       Unb.arg.ctor(Bool.and(Str.eq(c, k), Nat.is_eq(n, List.length(&2, Core.Expr, es))), k, es, names, r)
+    case Core.ELet{+p, +v, +b}:
+      Bool.pick(UArgs -> UArgs, Unb.nc(Pat.vars(p, Nil{})), w => Unb.arg.float(p, v, Unb.arg.flat(b, k, n, names, w)),
+        w => Unb.arg.open(k, Core.ELet{p, v, b}, names, w))(r)
     case other:
       Unb.arg.open(k, other, names, r)
 
@@ -10144,12 +10389,111 @@ def Unb.flet(e: Core.Expr, +rm: Map<&2, URet>, +d: U32) -> Core.Expr:
 def Unb.fix(+rm: Map<&2, URet>, +rk: String, +wm: Map<&2, List<&2, Unb>>, +cm: Map<&2, Unb>, e: Core.Expr) -> Core.Expr:
   Unb.calls(Unb.known(cm, Unb.lvars(Unb.flet(e, rm, 0), True{}, rm, rk, wm, Nil{}), True{}), wm, Nil{}, 0, True{})
 
+# A worker's parameter of a type variable's type (a pair's component, say)
+# that the body hands to a U32 native where it takes a U32 (an array's
+# index, say) is a U32 (so the code generator keeps it in a uint32_t, never
+# shared).
+def Unb.u32.fs() -> List<&2, String>:
+  ["U32.inc", "U32.add", "U32.sub", "U32.mul", "U32.div", "U32.mod", "U32.not", "U32.and", "U32.or",
+   "U32.xor", "U32.shl", "U32.shr", "U32.min", "U32.max", "U32.is_eq", "U32.is_ne", "U32.is_lt",
+   "U32.is_le", "U32.is_gt", "U32.is_ge", "U32.is_zero", "U32.is_even", "U32.to_nat", "U32.to_f32",
+   "U32.show", "U32.log2"]
+
+def Unb.u32.args(as: List<&2, Core.Expr>, +x: String) -> Bool:
+  match as:
+    case Nil{}:
+      False{}
+    case a <> t:
+      Bool.or(Unb.is_var(a, x), Unb.u32.args(t, x))
+
+def Unb.u32.first(as: List<&2, Core.Expr>, +x: String) -> Bool:
+  match as:
+    case Nil{}:
+      False{}
+    case a <> t:
+      Unb.is_var(a, x)
+
+def Unb.u32.second(as: List<&2, Core.Expr>, +x: String) -> Bool:
+  match as:
+    case Nil{}:
+      False{}
+    case a <> t:
+      Unb.u32.first(t, x)
+
+# (an array native's arguments: the erased type, the array, the index)
+def Unb.u32.third(as: List<&2, Core.Expr>, +x: String) -> Bool:
+  match as:
+    case Nil{}:
+      False{}
+    case a <> t:
+      Unb.u32.second(t, x)
+
+def Unb.u32.arg(+f: String, +as: List<&2, Core.Expr>, +x: String) -> Bool:
+  Bool.or(Bool.or(Bool.and(Str.has(Unb.u32.fs(), f), Unb.u32.args(as, x)),
+    Bool.and(Str.has(["U32.shln", "U32.shrn", "U32.pow"], f), Unb.u32.first(as, x))),
+    Bool.and(Str.has(["Array.get", "Array.set", "Array.swap", "Array.get%w", "Array.set%w", "Array.swap%w"], f),
+      Unb.u32.third(as, x)))
+
+def Unb.u32.call(f: Core.Expr, +as: List<&2, Core.Expr>, +x: String) -> Bool:
+  match f:
+    case Core.EVar{+n}:
+      Unb.u32.arg(n, as, x)
+    case other:
+      False{}
+
+def Unb.u32(e: Core.Expr, +x: String, top: Bool) -> Bool:
+  match e:
+    case Core.ECall{+f, args}:
+      match args:
+        case Nil{}:
+          Unb.u32(f, x, True{})
+        case +a <> +t:
+          Bool.or(Bool.or(Bool.and(top, Unb.u32.call(f, a <> t, x)), Unb.u32(a, x, True{})), Unb.u32(Core.ECall{f, t}, x, False{}))
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          False{}
+        case a <> t:
+          Bool.or(Unb.u32(a, x, True{}), Unb.u32(Core.ECtor{n, t}, x, True{}))
+    case Core.ELam{pt, +b}:
+      Bool.and(Bool.not(Str.has(Pat.vars(pt, Nil{}), x)), Unb.u32(b, x, True{}))
+    case Core.ELet{pt, v, +b}:
+      Bool.or(Unb.u32(v, x, True{}), Bool.and(Bool.not(Str.has(Pat.vars(pt, Nil{}), x)), Unb.u32(b, x, True{})))
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Bool.or(Unb.u32(a, x, True{}), Unb.u32(Core.EMatch{t, cases}, x, True{}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case c <> t:
+              Bool.or(Unb.u32(c, x, True{}), Unb.u32(Core.EMatch{Nil{}, t}, x, True{}))
+    case Core.ECase{ps, +b}:
+      Bool.and(Bool.not(Str.has(Pats.vars(ps, Nil{}), x)), Unb.u32(b, x, True{}))
+    case Core.ESucc{k, y}:
+      Unb.u32(y, x, True{})
+    case Core.EOp{op, a, b}:
+      Bool.or(Unb.u32(a, x, True{}), Unb.u32(b, x, True{}))
+    case Core.EAnn{y, ty}:
+      Unb.u32(y, x, True{})
+    case other:
+      False{}
+
+def Unb.typed(ps: List<&2, Core.Param>, +body: Core.Expr) -> List<&2, Core.Param>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Param{+x, +m, +t} <> r:
+      Core.Param{x, m, Bool.pick(String, Bool.and(Nat.is_eq(String.length(t), 1n), Unb.u32(body, x, True{})), "U32", t)} <>
+        Unb.typed(r, body)
+
 def Unb.decl.pick(hit: Bool, +us: List<&2, Unb>, +rm: Map<&2, URet>, +wm: Map<&2, List<&2, Unb>>,
   +cm: Map<&2, Unb>, +name: String, +ps: List<&2, Core.Param>, body: Core.Expr, +ret: Core.Expr) -> List<&2, Decl>:
   match hit:
     case True{}:
-      [DDef{name ++ "%u", Unb.params(ps, us), Unb.fix(rm, Unb.ctor.of(Unb.ret(rm, name)), wm, cm,
-        Unb.subs(ps, us, body)), ret}, DDef{name, ps, Unb.call.fin(name, Unb.wrapper(ps, us)), ret}]
+      +b = Unb.fix(rm, Unb.ctor.of(Unb.ret(rm, name)), wm, cm, Unb.subs(ps, us, body))
+      [DDef{name ++ "%u", Unb.typed(Unb.params(ps, us), b), b, ret}, DDef{name, ps, Unb.call.fin(name, Unb.wrapper(ps, us)), ret}]
     case False{}:
       [DDef{name, ps, Unb.fix(rm, Unb.ctor.of(Unb.ret(rm, name)), wm, cm, body), ret}]
 
@@ -10177,13 +10521,395 @@ def Unb.decls(+rm: Map<&2, URet>, +wm: Map<&2, List<&2, Unb>>, +cm: Map<&2, Unb>
 def Unb.run(+ds: List<&2, Decl>, +rm: Map<&2, URet>, +w0: Map<&2, List<&2, Unb>>) -> List<&2, Decl>:
   Unb.decls(rm, Unb.prune(ds, rm, Unb.prune(ds, rm, w0, MTip{}), MTip{}), Unb.types(True{}, ds, MTip{}), ds)
 
+# Defs with a worker already, as if laws (a second round leaves them be).
+def Unb.done.put(ok: Bool, +r: String, m: Map<&2, Decl>) -> Map<&2, Decl>:
+  match ok:
+    case True{}:
+      Map.set(&2, Decl, m, Str.rev(String.drop(r, 2n)), DLaw{"", Nil{}, Core.EVar{""}})
+    case False{}:
+      m
+
+def Unb.done(ds: List<&2, Decl>, m: Map<&2, Decl>) -> Map<&2, Decl>:
+  match ds:
+    case Nil{}:
+      m
+    case DDef{+name, ps, body, ret} <> t:
+      Unb.done(t, Unb.done.put(String.starts_with(Str.rev(name), "u%"), Str.rev(name), m))
+    case d <> t:
+      Unb.done(t, m)
+
 def Unb.program.go(+ds: List<&2, Decl>, +ts: Map<&2, Unb>) -> List<&2, Decl>:
-  Unb.run(ds, Unb.rets(ts, ds, MTip{}), Unb.cands.all(ts, G.laws(ds, MTip{}), ds, MTip{}))
+  Unb.run(ds, Unb.rets(ts, ds, MTip{}), Unb.cands.all(ts, Unb.types(True{}, ds, MTip{}), Unb.done(ds, G.laws(ds, MTip{})), ds, MTip{}))
 
 def Unb.program(on: Bool, +ds: List<&2, Decl>) -> List<&2, Decl>:
   match on:
     case True{}:
       Unb.program.go(ds, Unb.types(False{}, ds, MTip{}))
+    case False{}:
+      ds
+
+# Nested results. A def whose result is a pair with a record in it (a type
+# of one constructor of two to eight fields and no parameters, like bfs's
+# pop: St & Bool) gets a worker, f%n, that returns the pair's leaves as a
+# record of their own, N%f, which the unboxing below returns flat; f then
+# rebuilds the pair from it (for closures and partial calls). A full call
+# of f elsewhere calls f%n and rebuilds the pair where it is, so a match or
+# a worker call that opens it builds neither node (Unb.known, Unb.calls). In
+# f%n, a result pair's components go in field by field (a record built in
+# place gives its fields, another one is opened with a let), and a tail
+# call of another such def of the same components stays a tail call.
+type NComp is Data:
+  NComp{k: String, fs: List<&2, Field>}
+
+type NRet is Data:
+  NRet{cs: List<&2, NComp>, n: Nat}
+
+def NRet.cs(r: NRet) -> List<&2, NComp>:
+  NRet{cs, n} = r
+  cs
+
+def NRet.n(r: NRet) -> Nat:
+  NRet{cs, n} = r
+  n
+
+def Nest.put.type(ok: Bool, +key: String, c: Ctor, m: Map<&2, Ctor>) -> Map<&2, Ctor>:
+  match ok:
+    case True{}:
+      Map.set(&2, Ctor, m, key, c)
+    case False{}:
+      m
+
+def Nest.type(+name: String, ps: List<&2, String>, cs: List<&2, Ctor>, m: Map<&2, Ctor>) -> Map<&2, Ctor>:
+  match ps cs:
+    case Nil{} Ctor{+k, +fs} <> Nil{}:
+      Nest.put.type(Unb.fits(fs), name, Ctor{k, fs}, m)
+    case pl cl:
+      m
+
+# The records: types of one constructor of two to eight fields, with no
+# parameters, by name.
+def Nest.types(ds: List<&2, Decl>, m: Map<&2, Ctor>) -> Map<&2, Ctor>:
+  match ds:
+    case Nil{}:
+      m
+    case DType{+name, ps, cs} <> t:
+      Nest.types(t, Nest.type(name, ps, cs, m))
+    case d <> t:
+      Nest.types(t, m)
+
+def Nest.sigma(f: Core.Expr, ok: Bool, a: Core.Expr) -> List<&2, Core.Expr>:
+  match f:
+    case Core.ELam{p, b}:
+      Bool.pick(List<&2, Core.Expr>, ok, [a, b], Nil{})
+    case other:
+      Nil{}
+
+# The components of a pair type.
+def Nest.comps(ty: Core.Expr) -> List<&2, Core.Expr>:
+  match ty:
+    case Core.ETy{+n, args}:
+      match args:
+        case a <> b <> Nil{}:
+          Bool.pick(List<&2, Core.Expr>, Str.eq(n, "&"), [a, b], Nil{})
+        case q1 <> q2 <> a <> f <> Nil{}:
+          Nest.sigma(f, Str.eq(n, "Sigma"), a)
+        case other:
+          Nil{}
+    case other:
+      Nil{}
+
+def Nest.comp.pick(leaf: Bool, +n: String, fs: List<&2, Field>, c: Core.Expr) -> NComp:
+  match leaf:
+    case True{}:
+      NComp{"", [Field{"x", c}]}
+    case False{}:
+      NComp{n, fs}
+
+def Nest.comp.go(k: Ctor, c: Core.Expr) -> NComp:
+  match k:
+    case Ctor{+n, fs}:
+      Nest.comp.pick(String.is_empty(n), n, fs, c)
+
+def Nest.comp(+tm: Map<&2, Ctor>, +c: Core.Expr) -> NComp:
+  Nest.comp.go(G.get(Ctor, Ctor{"", Nil{}}, tm, Ty.head(c)), c)
+
+def Nest.comps.of(+tm: Map<&2, Ctor>, cs: List<&2, Core.Expr>) -> List<&2, NComp>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case c <> t:
+      Nest.comp(tm, c) <> Nest.comps.of(tm, t)
+
+# Whether a component is a record.
+def Nest.nested(cs: List<&2, NComp>) -> Bool:
+  match cs:
+    case Nil{}:
+      False{}
+    case NComp{k, fs} <> t:
+      Bool.or(Bool.not(String.is_empty(k)), Nest.nested(t))
+
+# The components' fields, in order.
+def Nest.fields(cs: List<&2, NComp>) -> List<&2, Field>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case NComp{k, fs} <> t:
+      List.append(&2, Field, fs, Nest.fields(t))
+
+def Nest.cand.go(+cs: List<&2, NComp>, ok: Bool, +n: Nat) -> NRet:
+  Bool.pick(NRet, Bool.and(ok, Bool.and(Nest.nested(cs), Unb.fits(Nest.fields(cs)))), NRet{cs, n}, NRet{Nil{}, 0n})
+
+def Nest.cand(+tm: Map<&2, Ctor>, +laws: Map<&2, Decl>, +name: String, ps: List<&2, Core.Param>, +ret: Core.Expr) -> NRet:
+  Nest.cand.go(Nest.comps.of(tm, Nest.comps(ret)), Unb.ok.def(name, ret, laws), List.length(&2, Core.Param, ps))
+
+def Nest.put(r: NRet, +name: String, m: Map<&2, NRet>) -> Map<&2, NRet>:
+  match r:
+    case NRet{cs, n}:
+      match cs:
+        case Nil{}:
+          m
+        case c <> t:
+          Map.set(&2, NRet, m, name, NRet{c <> t, n})
+
+def Nest.cands(+tm: Map<&2, Ctor>, +laws: Map<&2, Decl>, ds: List<&2, Decl>, m: Map<&2, NRet>) -> Map<&2, NRet>:
+  match ds:
+    case Nil{}:
+      m
+    case DDef{+name, ps, body, +ret} <> t:
+      Nest.cands(tm, laws, t, Nest.put(Nest.cand(tm, laws, name, ps, ret), name, m))
+    case d <> t:
+      Nest.cands(tm, laws, t, m)
+
+def Nest.get(+cm: Map<&2, NRet>, +f: String) -> NRet:
+  G.get(NRet, NRet{Nil{}, 0n}, cm, f)
+
+# Names of the fields fs (pre0, pre1, ..).
+def Nest.fnames(+pre: String, fs: List<&2, Field>, +j: U32) -> List<&2, String>:
+  match fs:
+    case Nil{}:
+      Nil{}
+    case f <> t:
+      (pre ++ U32.show(j)) <> Nest.fnames(pre, t, U32.inc(j))
+
+# Names of the leaves, component i's fields as pre{i}_{j}.
+def Nest.names(+pre: String, cs: List<&2, NComp>, +i: U32) -> List<&2, String>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case NComp{k, fs} <> t:
+      List.append(&2, String, Nest.fnames(pre ++ U32.show(i) ++ "_", fs, 0), Nest.names(pre, t, U32.inc(i)))
+
+def Nest.one(leaf: Bool, +k: String, +pre: String, fs: List<&2, Field>) -> Core.Expr:
+  match leaf:
+    case True{}:
+      Core.EVar{pre ++ "0"}
+    case False{}:
+      Core.ECtor{k, Unb.vars(Nest.fnames(pre, fs, 0))}
+
+# The components rebuilt from the leaves' variables.
+def Nest.out(+pre: String, cs: List<&2, NComp>, +i: U32) -> List<&2, Core.Expr>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case NComp{+k, fs} <> t:
+      Nest.one(String.is_empty(k), k, pre ++ U32.show(i) ++ "_", fs) <> Nest.out(pre, t, U32.inc(i))
+
+# f's pair from a call of f%n (the lets' names apart by n).
+def Nest.rebuild(+f: String, +cs: List<&2, NComp>, as: List<&2, Core.Expr>, +n: String) -> Core.Expr:
+  +pre = "_nc" ++ n ++ "_"
+  Core.ELet{Core.PCtor{"N%" ++ f, Unb.pvars(Nest.names(pre, cs, 0))}, Core.ECall{Core.EVar{f ++ "%n"}, as},
+    Core.ECtor{"Tuple", Nest.out(pre, cs, 0)}}
+
+def Nest.call.go(r: NRet, +bound: List<&2, String>, +f: String, +args: List<&2, Core.Expr>, +n: String) -> Core.Expr:
+  match r:
+    case NRet{+cs, k}:
+      Bool.pick(Unit -> Core.Expr, Bool.and(Bool.and(Nest.nested(cs), Bool.not(Str.has(bound, f))),
+        Nat.is_eq(k, List.length(&2, Core.Expr, args))), u => Nest.rebuild(f, cs, args, n), u => Core.ECall{Core.EVar{f}, args})(Unit{})
+
+def Nest.call(+cm: Map<&2, NRet>, +bound: List<&2, String>, +n: String, e: Core.Expr) -> Core.Expr:
+  match e:
+    case Core.ECall{Core.EVar{+f}, +args}:
+      Nest.call.go(Nest.get(cm, f), bound, f, args, n)
+    case other:
+      other
+
+def Nest.call.top(top: Bool, +cm: Map<&2, NRet>, +bound: List<&2, String>, +n: String, e: Core.Expr) -> Core.Expr:
+  match top:
+    case True{}:
+      Nest.call(cm, bound, n, e)
+    case False{}:
+      e
+
+# e with its full calls of such defs rewritten (but for a parallel let's
+# own calls; bound: the locals in scope).
+def Nest.calls(e: Core.Expr, +cm: Map<&2, NRet>, +bound: List<&2, String>, +n: String, top: Bool) -> Core.Expr:
+  match e:
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Nest.call.top(top, cm, bound, n, Core.ECall{Nest.calls(f, cm, bound, n ++ "a", True{}), Nil{}})
+        case a <> t:
+          Nest.call.top(top, cm, bound, n, Expr.push(Nest.calls(a, cm, bound, n ++ "a", True{}),
+            Nest.calls(Core.ECall{f, t}, cm, bound, n ++ "b", False{})))
+    case Core.ECtor{+k, args}:
+      match args:
+        case Nil{}:
+          Core.ECtor{k, Nil{}}
+        case a <> t:
+          Expr.push(Nest.calls(a, cm, bound, n ++ "a", Bool.not(Str.eq(k, "%par"))),
+            Nest.calls(Core.ECtor{k, t}, cm, bound, n ++ "b", False{}))
+    case Core.ELam{+pt, b}:
+      Core.ELam{pt, Nest.calls(b, cm, Pat.vars(pt, bound), n ++ "a", True{})}
+    case Core.ELet{+pt, v, b}:
+      Core.ELet{pt, Nest.calls(v, cm, bound, n ++ "a", True{}), Nest.calls(b, cm, Pat.vars(pt, bound), n ++ "b", True{})}
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.push(Nest.calls(a, cm, bound, n ++ "a", True{}), Nest.calls(Core.EMatch{t, cases}, cm, bound, n ++ "b", False{}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Nest.calls(c, cm, bound, n ++ "a", True{}), Nest.calls(Core.EMatch{Nil{}, t}, cm, bound, n ++ "b", False{}))
+    case Core.ECase{+ps, b}:
+      Core.ECase{ps, Nest.calls(b, cm, Pats.vars(ps, bound), n ++ "a", True{})}
+    case Core.ESucc{k, x}:
+      Core.ESucc{k, Nest.calls(x, cm, bound, n ++ "a", True{})}
+    case Core.EOp{op, a, b}:
+      Core.EOp{op, Nest.calls(a, cm, bound, n ++ "a", True{}), Nest.calls(b, cm, bound, n ++ "b", True{})}
+    case Core.EAnn{x, ty}:
+      Core.EAnn{Nest.calls(x, cm, bound, n ++ "a", True{}), ty}
+    case other:
+      other
+
+def Nest.leaf(leaf: Bool, e: Core.Expr, +k: String, fs: List<&2, Field>, +names: List<&2, String>, r: UArgs) -> UArgs:
+  match leaf:
+    case True{}:
+      UArgs{args, lets} = r
+      UArgs{e <> args, lets}
+    case False{}:
+      Unb.arg.flat(e, k, List.length(&2, Field, fs), names, r)
+
+# The leaves of components es, and the lets that open the ones not built
+# in place.
+def Nest.leaves(cs: List<&2, NComp>, es: List<&2, Core.Expr>, +pre: String, +i: U32) -> UArgs:
+  match cs es:
+    case NComp{+k, +fs} <> ct e <> et:
+      Nest.leaf(String.is_empty(k), e, k, fs, Nest.fnames(pre ++ U32.show(i) ++ "_", fs, 0),
+        Nest.leaves(ct, et, pre, U32.inc(i)))
+    case cl el:
+      UArgs{Nil{}, Nil{}}
+
+def Nest.build(r: UArgs, +me: String) -> Core.Expr:
+  UArgs{as, lets} = r
+  Unb.wrap(lets, Core.ECtor{me, as})
+
+def Nest.pnames(+pre: String, cs: List<&2, NComp>, +i: U32) -> List<&2, String>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case c <> t:
+      (pre ++ U32.show(i)) <> Nest.pnames(pre, t, U32.inc(i))
+
+# Any other result: its pair opened.
+def Nest.open(e: Core.Expr, +me: String, +cs: List<&2, NComp>, +n: U32) -> Core.Expr:
+  +ys = Nest.pnames("_nt" ++ U32.show(n) ++ "_", cs, 0)
+  Core.ELet{Core.PCtor{"Tuple", Unb.pvars(ys)}, e, Nest.build(Nest.leaves(cs, Unb.vars(ys), "_nq" ++ U32.show(n) ++ "_", 0), me)}
+
+def Nest.ctor(hit: Bool, +k: String, +es: List<&2, Core.Expr>, +me: String, +cs: List<&2, NComp>, +n: U32) -> Core.Expr:
+  match hit:
+    case True{}:
+      Nest.build(Nest.leaves(cs, es, "_nq" ++ U32.show(n) ++ "_", 0), me)
+    case False{}:
+      Nest.open(Core.ECtor{k, es}, me, cs, n)
+
+# Whether two components' lists have the same records.
+def Nest.same(as: List<&2, NComp>, bs: List<&2, NComp>) -> Bool:
+  match as bs:
+    case NComp{+k, fs} <> at NComp{+j, gs} <> bt:
+      Bool.and(Bool.and(Str.eq(k, j), Nat.is_eq(List.length(&2, Field, fs), List.length(&2, Field, gs))), Nest.same(at, bt))
+    case Nil{} Nil{}:
+      True{}
+    case al bl:
+      False{}
+
+def Nest.tcall.go(r: NRet, +g: String, +as: List<&2, Core.Expr>, +me: String, +cs: List<&2, NComp>, +n: U32) -> Core.Expr:
+  match r:
+    case NRet{+ds, k}:
+      Bool.pick(Unit -> Core.Expr, Bool.and(Bool.and(Nest.nested(ds), Nest.same(ds, cs)), Nat.is_eq(k, List.length(&2, Core.Expr, as))),
+        u => Core.ECall{Core.EVar{g ++ "%n"}, as}, u => Nest.open(Core.ECall{Core.EVar{g}, as}, me, cs, n))(Unit{})
+
+def Nest.tcall(f: Core.Expr, +as: List<&2, Core.Expr>, +cm: Map<&2, NRet>, +me: String, +cs: List<&2, NComp>, +n: U32) -> Core.Expr:
+  match f:
+    case Core.EVar{+g}:
+      Nest.tcall.go(Nest.get(cm, g), g, as, me, cs, n)
+    case other:
+      Nest.open(Core.ECall{other, as}, me, cs, n)
+
+# f%n's body: e's results as N%f (me) (n keeps the lets' names apart).
+def Nest.tail(e: Core.Expr, +cm: Map<&2, NRet>, +me: String, +cs: List<&2, NComp>, +n: U32) -> Core.Expr:
+  match e:
+    case Core.ELet{p, v, b}:
+      Core.ELet{p, v, Nest.tail(b, cm, me, cs, U32.inc(n))}
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.push(a, Nest.tail(Core.EMatch{t, cases}, cm, me, cs, n))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Nest.tail(c, cm, me, cs, U32.inc(n)), Nest.tail(Core.EMatch{Nil{}, t}, cm, me, cs, n))
+    case Core.ECase{ps, b}:
+      Core.ECase{ps, Nest.tail(b, cm, me, cs, U32.inc(n))}
+    case Core.EAnn{x, ty}:
+      Nest.tail(x, cm, me, cs, n)
+    case Core.ECtor{+k, +es}:
+      Nest.ctor(Bool.and(Str.eq(k, "Tuple"), Nat.is_eq(List.length(&2, Core.Expr, es), List.length(&2, NComp, cs))), k, es, me, cs, n)
+    case Core.ECall{f, +as}:
+      Nest.tcall(f, as, cm, me, cs, n)
+    case other:
+      Nest.open(other, me, cs, n)
+
+def Nest.args(ps: List<&2, Core.Param>) -> List<&2, Core.Expr>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Param{x, m, t} <> r:
+      Core.EVar{x} <> Nest.args(r)
+
+def Nest.decl.go(r: NRet, +cm: Map<&2, NRet>, +name: String, +ps: List<&2, Core.Param>, body: Core.Expr, +ret: Core.Expr) -> List<&2, Decl>:
+  match r:
+    case NRet{cs, n}:
+      match cs:
+        case Nil{}:
+          [DDef{name, ps, Nest.calls(body, cm, Nil{}, "", True{}), ret}]
+        case +c <> +t:
+          [DType{"N%" ++ name, Nil{}, [Ctor{"N%" ++ name, Nest.fields(c <> t)}]},
+            DDef{name ++ "%n", ps, Nest.calls(Nest.tail(body, cm, "N%" ++ name, c <> t, 0), cm, Nil{}, "", True{}),
+              Core.ETy{"N%" ++ name, Nil{}}},
+            DDef{name, ps, Nest.rebuild(name, c <> t, Nest.args(ps), ""), ret}]
+
+def Nest.decl(+cm: Map<&2, NRet>, d: Decl) -> List<&2, Decl>:
+  match d:
+    case DDef{+name, +ps, body, +ret}:
+      Nest.decl.go(Nest.get(cm, name), cm, name, ps, body, ret)
+    case other:
+      [other]
+
+def Nest.decls(+cm: Map<&2, NRet>, ds: List<&2, Decl>) -> List<&2, Decl>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> t:
+      List.append(&2, Decl, Nest.decl(cm, d), Nest.decls(cm, t))
+
+def Nest.program(on: Bool, +ds: List<&2, Decl>) -> List<&2, Decl>:
+  match on:
+    case True{}:
+      Nest.decls(Nest.cands(Nest.types(ds, MTip{}), G.laws(ds, MTip{}), ds, MTip{}), ds)
     case False{}:
       ds
 
@@ -19276,7 +20002,7 @@ def Gen.program.m(+g: G) -> Gen(String):
     Gen.entry(g, G.body(g, "main"))
 
 def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
-  +ds = Unb.program(unb, Par.auto(par, Lo.program(opt, Arrw.decls(Pick.decls(ds0)))))
+  +ds = Unb.program(unb, Unb.program(unb, Nest.program(unb, Par.auto(par, Lo.program(opt, Arrw.decls(Pick.decls(ds0)))))))
   +g = Unb.sret(unb, ds, Dps.build(G.new(ds), ds, free, rc))
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
