@@ -95,6 +95,7 @@ int gc_minor;       // this collection keeps the marks of old objects
 int gc_rooting;     // marking from roots (not from objects)
 int gc_all_major;   // BEND_GC_MAJOR: every collection is a major one
 size_t gc_count;
+size_t gc_epoch;    // collections so far, bumped while the other threads are stopped
 int gc_stats;
 Thr *gc_thrs[GC_MAXTHR];
 int gc_nthr;
@@ -716,6 +717,7 @@ __attribute__((noinline)) void gc_collect_locked(void) {
     }
   }
   while (atomic_load(&gc_acks) < n) sched_yield();
+  __atomic_store_n(&gc_epoch, gc_epoch + 1, __ATOMIC_RELAXED);
   jmp_buf jb;
   setjmp(jb);
   me->sp = (uintptr_t)&jb;
@@ -831,7 +833,7 @@ void thr_register(uintptr_t top) {
   pthread_mutex_unlock(&gc_lock);
 }
 #define RUF(u, w) do { if (u) rc_free_at(u, w); } while (0)
-#define RUG(tok, w) ((tok) ? (UNLIKELY(gc_hot.mt) ? bend_ru_young(tok, w) : (V *)(tok)) : halloc(w))
+#define RUG(tok, w) ((tok) ? (UNLIKELY(__atomic_load_n(&gc_epoch, __ATOMIC_RELAXED)) ? bend_ru_young(tok, w) : (V *)(tok)) : halloc(w))
 #define RUFG(u, w) do { if (u) bend_free_slot((u), (w), 0); } while (0)
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))

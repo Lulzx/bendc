@@ -265,6 +265,7 @@ static int gc_minor;       // this collection keeps the marks of old objects
 static int gc_rooting;     // marking from roots (not from objects)
 static int gc_all_major;   // BEND_GC_MAJOR: every collection is a major one
 static size_t gc_count;
+static size_t gc_epoch;    // collections so far, bumped while the other threads are stopped
 static int gc_stats;
 static Thr *gc_thrs[GC_MAXTHR];
 static int gc_nthr;
@@ -1480,6 +1481,7 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
     }
   }
   while (atomic_load(&gc_acks) < n) sched_yield();
+  __atomic_store_n(&gc_epoch, gc_epoch + 1, __ATOMIC_RELAXED);
   jmp_buf jb;
   setjmp(jb);
   me->sp = (uintptr_t)&jb;
@@ -1674,18 +1676,15 @@ static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
 
 // Reuse under the collector (matches free, not counted): bend_take_ru is
 // bend_take, but a node that was not shared keeps its slot, answered as the
-// token (0 when it was shared). A constructor built in a token (CG1 and the
-// like) makes the slot young first: its mark is cleared, as a slot handed
-// out again has it cleared (a collection between the match and the build
-// marked it, reached from the stack), so minor collections trace from it.
-// Only this thread holds the slot, so clearing its mark races with no one.
-// On one thread no collection runs between the match and its build but in
-// an allocation, and the token's header holds BEND_HOLE from the match on:
-// a collection that finds the token on the stack records it (gc_rem_wants),
-// so the next minor collection traces the node built in it, and the mark is
-// left alone. With threads running a collection may stop this one between
-// the match's read and that store, so the build clears the mark (gc_hot.mt
-// never goes back to 0).
+// token (0 when it was shared), where a constructor gets built (CG1 and the
+// like). The build makes the slot young first: its mark is cleared, as a
+// slot handed out again has it cleared (a collection marked the node, or
+// marked it between the match and the build, reached from the stack), so
+// minor collections trace from it. Only this thread holds the slot, so
+// clearing its mark races with no one. Before the first collection no mark
+// is set (gc_epoch is 0), and the build skips it. (A collection that stops
+// this thread between that check and the build's stores marks the values
+// stored too: they are in its registers.)
 // RUFG frees a token no constructor took.
 static inline V bend_take_ru(V v, unsigned w) {
   const GcHot *h = &gc_hot;
@@ -1699,7 +1698,6 @@ static inline V bend_take_ru(V v, unsigned w) {
   bend_take(v, w);
   return 0;
 #endif
-  ((V *)v)[0] = BEND_HOLE;
   return v;
 }
 static inline V *bend_ru_young(V u, unsigned w) {
@@ -1715,7 +1713,7 @@ static inline V *bend_ru_young(V u, unsigned w) {
   }
   return (V *)u;
 }
-#define RUG(tok, w) ((tok) ? (UNLIKELY(gc_hot.mt) ? bend_ru_young(tok, w) : (V *)(tok)) : halloc(w))
+#define RUG(tok, w) ((tok) ? (UNLIKELY(__atomic_load_n(&gc_epoch, __ATOMIC_RELAXED)) ? bend_ru_young(tok, w) : (V *)(tok)) : halloc(w))
 static inline V CG1(V u, V t, V a) { V *p = RUG(u, 2); p[0] = t; p[1] = a; return (V)p; }
 static inline V CG2(V u, V t, V a, V b) { V *p = RUG(u, 3); p[0] = t; p[1] = a; p[2] = b; return (V)p; }
 static inline V CG3(V u, V t, V a, V b, V c) {
