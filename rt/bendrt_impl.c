@@ -63,6 +63,7 @@ __attribute__((noreturn)) void bend_fail(const char *msg) {
 #define GC_MAXTHR 256
 #define GC_SIG SIGUSR2
 #define GC_RQCLS 15
+#define ARR_SPARES 8
 const uint16_t gc_cls_w[GC_NCLS] = {
   2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
   20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256,
@@ -520,13 +521,95 @@ void gc_drain(void) {
     for (size_t j = 0; j < it.n; j++) gc_mark(it.p[j]);
   }
 }
+#define GC_CHUNK 64
+#define GC_MKCAP ((size_t)1 << 16)
+GcMk gc_mks[GC_MAXTHR + 1];
+int gc_nmks;                   // helpers with a stack (slot 0: the collector)
+#ifdef __TINYC__
+pthread_mutex_t gc_pool_mx = PTHREAD_MUTEX_INITIALIZER;
+#else
+int gc_pool_lock;
+#endif
+size_t gc_active;              // helpers holding work (under gc_pool_lock)
+_Atomic int gc_marking;        // the pool is open to helpers
+_Atomic unsigned gc_mark_gen;  // bumped when it opens
+_Atomic int gc_helpers, gc_in_help;
+#ifdef __TINYC__
+#else
+#endif
+void gc_share(GcMk *m) {
+  size_t h = m->sp / 2;
+  gc_pool_acquire();
+  if (gc_sp + h > gc_cap) bend_fail("the collector's mark stack overflowed");
+  memcpy(gc_stk + gc_sp, m->stk + (m->sp - h), h * sizeof(GcItem));
+  gc_sp += h;
+  gc_pool_release();
+  m->sp -= h;
+}
+void gc_help(GcMk *m) {
+  for (int idle = 0;;) {
+    gc_pool_acquire();
+    if (gc_sp == 0) {
+      int done = gc_active == 0;
+      gc_pool_release();
+      if (done) return;
+      if (++idle > 16) sched_yield();
+      continue;
+    }
+    idle = 0;
+    size_t n = gc_sp < GC_CHUNK ? gc_sp : GC_CHUNK;
+    gc_sp -= n;
+    memcpy(m->stk, gc_stk + gc_sp, n * sizeof(GcItem));
+    m->sp = n;
+    gc_active++;
+    gc_pool_release();
+    while (m->sp > 0) {
+      GcItem it = m->stk[--m->sp];
+      // (a long object is marked a piece at a time: the rest can be shared)
+      if (it.n > 4 * GC_CHUNK) {
+        m->stk[m->sp++] = (GcItem){it.p + 2 * GC_CHUNK, it.n - 2 * GC_CHUNK};
+        it.n = 2 * GC_CHUNK;
+      }
+      for (size_t j = 0; j < it.n; j++) gc_mark_par(it.p[j], m);
+      if (m->sp > GC_CHUNK && __atomic_load_n(&gc_sp, __ATOMIC_RELAXED) == 0) gc_share(m);
+    }
+    gc_pool_acquire();
+    gc_active--;
+    gc_pool_release();
+  }
+}
+void gc_join(void) {
+  int k = atomic_fetch_add(&gc_helpers, 1) + 1;
+  if (k >= gc_nmks) return;
+  atomic_fetch_add(&gc_in_help, 1);
+  if (atomic_load(&gc_marking)) gc_help(&gc_mks[k]);
+  atomic_fetch_sub(&gc_in_help, 1);
+}
+void gc_drain_par(int n) {
+  if (n == 0) { gc_drain(); return; }
+  while (gc_nmks <= n) gc_mks[gc_nmks++].stk = malloc(GC_MKCAP * sizeof(GcItem));
+  atomic_store(&gc_helpers, 0);
+  gc_active = 0;
+  atomic_store(&gc_marking, 1);
+  atomic_fetch_add(&gc_mark_gen, 1);
+  gc_help(&gc_mks[0]);
+  atomic_store(&gc_marking, 0);
+  while (atomic_load(&gc_in_help) > 0) sched_yield();
+}
 __attribute__((noinline)) void gc_park(Thr *t) {
   jmp_buf jb;
   setjmp(jb);
   atomic_fetch_add(&gc_inside, 1);
   t->sp = (uintptr_t)&jb;
+  unsigned seen = atomic_load(&gc_mark_gen);
   atomic_fetch_add(&gc_acks, 1);
-  while (atomic_load(&gc_stopping)) sched_yield();
+  while (atomic_load(&gc_stopping)) {
+    if (atomic_load(&gc_mark_gen) != seen) {
+      seen = atomic_load(&gc_mark_gen);
+      gc_join();
+    }
+    sched_yield();
+  }
   atomic_fetch_sub(&gc_inside, 1);
 }
 void gc_handler(int sig) {
@@ -678,7 +761,10 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   for (int i = 0; i < gc_nhooks; i++) gc_hooks[i]();
   gc_rooting = 0;
   gc_rescan_dirty();
-  gc_drain();
+  struct timespec tm, ts;
+  if (gc_stats) clock_gettime(CLOCK_MONOTONIC, &tm);
+  gc_drain_par(n);
+  if (gc_stats) clock_gettime(CLOCK_MONOTONIC, &ts);
   gc_sweep();
   atomic_store(&gc_stopping, 0);
   while (atomic_load(&gc_inside) > 0) sched_yield();
@@ -703,10 +789,12 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   gc_since = 0;
   gc_count++;
   if (gc_stats) {
-    fprintf(stderr, "[gc %zu %s] live %zu MB, heap %zu MB, next at +%zu MB, %zu rescans next, %.1f ms\n",
+    fprintf(stderr, "[gc %zu %s] live %zu MB, heap %zu MB, next at +%zu MB, %zu rescans next, %.1f ms"
+      " (marking %.1f ms, %d threads)\n",
       gc_count, gc_minor ? "minor" : "major", gc_live_bytes >> 20, (size_t)(gc_top << GC_BLK_SHIFT) >> 20,
       gc_limit >> 20, gc_nrem,
-      (gc_t_end - t0) * 1e3);
+      (gc_t_end - t0) * 1e3,
+      (ts.tv_sec - tm.tv_sec) * 1e3 + (ts.tv_nsec - tm.tv_nsec) / 1e6, n + 1);
   }
 }
 void gc_collect(void) {
@@ -779,9 +867,25 @@ void rc_let_go_arr(V a) {
 }
 V arr_alloc(unsigned c) {
   if (c > 31) bend_fail("an array past the deepest block class 31");
+  Thr *t = thr_self;
+  if (t)
+    for (int i = 0; i < ARR_SPARES; i++) {
+      V a = t->spare[i];
+      if (a && arr_cls(a) == c) {
+        t->spare[i] = 0;
+        return a;
+      }
+    }
   V *p = halloc(1 + ((size_t)1 << c));
   p[0] = ARR_HDR(c);
   return (V)p;
+}
+void arr_dead(V a) {
+  Thr *t = thr_self;
+  if (t) t->spare[t->nspare++ % ARR_SPARES] = a;
+}
+void arr_hook(void) {
+  for (int i = 0; i < gc_nthr; i++) memset(gc_thrs[i]->spare, 0, sizeof gc_thrs[i]->spare);
 }
 V arr_copy(unsigned c, const V *src, int share, V ts) {
   size_t n = (size_t)1 << c;
@@ -806,7 +910,9 @@ V arr_new(V depth, V v) {
     else bend_share(v);
   }
   if (v >= ((V)1 << 32)) arr_dirty(a);
-  for (size_t i = 0; i < n; i++) d[i] = v;
+  // (four cells a step: a whole number of steps from 4 cells up)
+  if (n < 4) for (size_t i = 0; i < n; i++) d[i] = v;
+  else for (size_t i = 0; i < n; i += 4) { d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = v; }
   return a;
 }
 V arr_node(V l, V r) {
@@ -1802,6 +1908,7 @@ int bend_start(int argc, char **argv, V (*m)(void), int value) {
   fault_init();
   gc_hook(par_hook);
   gc_hook(io_hook);
+  gc_hook(arr_hook);
   pthread_attr_t attr;
   pthread_attr_init(&attr);
   thr_stack(&attr);

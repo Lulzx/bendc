@@ -35,10 +35,14 @@ typedef struct {
 
 static pthread_mutex_t gpu_lock = PTHREAD_MUTEX_INITIALIZER;
 static int gpu_mode = -1;
-static int gpu_log;
+static int gpu_log;         // BEND_GPU_LOG: 1 for a line a call, 2 for more
+static double gpu_tout;     // the last copy out's time (BEND_GPU_LOG)
+static double gpu_secs[2];  // the device's time in the two kernels (BEND_GPU_LOG)
 static KW *gpu_H;          // the arena
 static size_t gpu_Hn;      // its bytes
-static size_t gpu_Hmax;    // the most it grows to (BEND_GPU_MB)
+static size_t gpu_Hmax;    // the most it grows to (BEND_GPU_MB), all of it reserved
+static KW gpu_pin;          // the arena words below this hold results the CPU was given
+static KW gpu_pin_min;      // the arena bytes a result's call used, for it to stay there
 static KAU *gpu_A;         // the control words
 static size_t gpu_An;
 static KW gpu_qcap = (KW)1 << 16;
@@ -47,6 +51,12 @@ static KW gpu_qused;       // queue slots the last call used
 static int gpu_used;       // the arena holds a call's lane states
 static V *gpu_out;         // objects copied out so far (roots)
 static size_t gpu_nout, gpu_capout;
+
+static double gpu_now(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return ts.tv_sec + ts.tv_nsec * 1e-9;
+}
 
 static void gpu_note(const char *fmt, const char *s) {
   if (gpu_log) {
@@ -292,6 +302,7 @@ static int g_init(const GpuProg *prog) {
 // One dispatch of every lane; 0 when the GPU failed.
 static int g_dispatch(const KParams *P, GId pso) {
   void *pool = g_pool_push();
+  double w0 = gpu_log ? gpu_now() : 0;
   GId cb = g_msg(g_queue, "commandBuffer");
   GId enc = g_msg(cb, "computeCommandEncoder");
   G_SEND(void (*)(GId, GSel, GId))(enc, g_sel("setComputePipelineState:"), pso);
@@ -308,6 +319,12 @@ static int g_dispatch(const KParams *P, GId pso) {
   g_msg(cb, "commit");
   g_msg(cb, "waitUntilCompleted");
   unsigned long st = G_SEND(unsigned long (*)(GId, GSel))(cb, g_sel("status"));
+  if (gpu_log) {
+    double (*tm)(GId, GSel) = G_SEND(double (*)(GId, GSel));
+    double dt = tm(cb, g_sel("GPUEndTime")) - tm(cb, g_sel("GPUStartTime"));
+    gpu_secs[pso != g_pso] += dt;
+    if (gpu_log == 2) fprintf(stderr, "bend gpu: %s %.4fs (%.4fs)\n", pso != g_pso ? "kq" : "main", dt, gpu_now() - w0);
+  }
   if (st != 4) gpu_note("a dispatch failed: %s", g_err_text(g_msg(cb, "error")));
   g_pool_pop(pool);
   return st == 4;
@@ -330,7 +347,8 @@ static int g_heap(void) {
 
 static int gpu_setup(const GpuProg *prog) {
   const char *m = getenv("BEND_GPU");
-  gpu_log = getenv("BEND_GPU_LOG") != NULL;
+  const char *lv = getenv("BEND_GPU_LOG");
+  gpu_log = lv == NULL ? 0 : lv[0] == '2' ? 2 : 1;
   if (!bend_gpu || (m && strcmp(m, "off") == 0)) return GPU_OFF;
   int sim = m && strcmp(m, "sim") == 0;
 #if !BEND_METAL
@@ -340,14 +358,17 @@ static int gpu_setup(const GpuProg *prog) {
   if (!sim) return GPU_OFF;
 #endif
   // The arena starts small (a dispatch's first use of a buffer costs with its
-  // size: 30 ms for 1 GB) and grows when a call fills it (see gpu_call).
+  // size: 30-50 ms for 1 GB) and grows in place when a call fills it (see
+  // gpu_grow): its most is reserved (untouched pages cost no memory).
   gpu_Hmax = (size_t)gpu_env("BEND_GPU_MB", 4096) << 20;
-  gpu_Hn = gpu_Hmax < ((size_t)64 << 20) ? gpu_Hmax : (size_t)64 << 20;
+  size_t h0 = (size_t)gpu_env("BEND_GPU_MB0", 64) << 20;  // (smaller, to test the growth)
+  gpu_Hn = gpu_Hmax < h0 ? gpu_Hmax : h0;
   if (bend_gpu_mb > 64) gpu_Hn = ((size_t)bend_gpu_mb << 20) < gpu_Hmax ? (size_t)bend_gpu_mb << 20 : gpu_Hmax;
-  gpu_H = mmap(NULL, gpu_Hn, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
+  gpu_H = mmap(NULL, gpu_Hmax, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
   gpu_An = ((KA_SEQ + gpu_qcap) * sizeof(KAU) + 0xffff) & ~(size_t)0xffff;
   gpu_A = mmap(NULL, gpu_An, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
   if (gpu_H == MAP_FAILED || gpu_A == MAP_FAILED) return GPU_OFF;
+  gpu_pin_min = (KW)gpu_env("BEND_GPU_PIN_MB", 32) << 20;
   gpu_lanes = (KW)gpu_env("BEND_GPU_LANES", sim ? 64 : 8192);
   gpu_budget = (KW)gpu_env("BEND_GPU_STEPS", sim ? 37 : 16384);
   KW f = 0;
@@ -438,9 +459,40 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
 #undef GPU_OBJ
 }
 
+// A bigger arena (by f, a power of 2), for a call that filled this one: the
+// reserved pages past it join it, so what it holds stays where it is.
+static int gpu_grow(size_t f) {
+  if (gpu_Hn >= gpu_Hmax) return 0;
+  size_t n = gpu_Hn * f > gpu_Hmax ? gpu_Hmax : gpu_Hn * f;
+#if BEND_METAL
+  if (gpu_mode == GPU_METAL) {
+    GId b = g_nocopy(gpu_H, n);
+    if (!b) return 0;
+    g_msg(g_bufH, "release");
+    g_bufH = b;
+  }
+#endif
+  gpu_Hn = n;
+  if (gpu_log) fprintf(stderr, "bend gpu: arena grows to %llu MB\n", (unsigned long long)(n >> 20));
+  return 1;
+}
+
+// Whether the CPU can have a call's result in place, in the arena: it reads
+// it as its own (the objects are laid out alike), and the device too, when
+// it is another call's argument. It must reach no closure (the device's
+// hold labels, where the CPU has addresses) and no array (the CPU frees
+// and reuses them), which its type says (pin, see Gen.gpu.pin in
+// bendc.bend), and no object of the CPU's heap (its collector does not look
+// into the arena), which it can only when an argument is one.
+static int gpu_pinnable(int pin, V *args, int n) {
+  uintptr_t gl = (uintptr_t)gc_base, gn = (uintptr_t)GC_MAXBLK << GC_BLK_SHIFT;
+  for (int i = 0; i < n && pin; i++) pin = (uintptr_t)args[i] - gl >= gn;
+  return pin;
+}
+
 // Runs target entry on args; 0 when the caller must run it on the CPU, 2 when
 // the arena filled up (and may grow).
-static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
+static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
   KParams P;
   memset(&P, 0, sizeof P);
   KW *H = gpu_H;
@@ -455,6 +507,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
   P.fn0 = P.lane0 + K_LANE * gpu_lanes;
   P.nfn = nfn;
   KW rf = P.fn0 + 2 * nfn + 1;
+  if (rf <= gpu_pin) rf = gpu_pin + 1;
   KW fs = k_frame_size(entry);
 #ifdef KQ_SHARED
   P.q0 = (rf + fs + 63) / 64 * 64;
@@ -462,6 +515,8 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
 #else
   P.heap0 = (rf + fs + K_CHUNK) / K_CHUNK * K_CHUNK;
 #endif
+  // (the lanes' states, the root frame and the KQ_ stacks come first)
+  if (P.heap0 + 64 * K_CHUNK > gpu_Hn / 8) return gpu_Hn < gpu_Hmax ? 2 : 0;
   P.heapw = gpu_Hn / 8 - P.heap0;
   P.budget = gpu_budget;
   P.nlanes = gpu_lanes;
@@ -516,15 +571,41 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
     if (__atomic_load_n(&gpu_A[KA_DONE], __ATOMIC_SEQ_CST) != 0) break;
     for (KW l = 0; l < gpu_lanes; l++) waiting += H[P.lane0 + l] == PC_KQ;
     if (waiting > 0) {
-      if (gpu_mode == GPU_SIM) {
-        for (KW l = 0; l < gpu_lanes; l++) prog->sim_kq(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
-      }
+      // (again, after the arena grows, while a call runs out of it)
+      for (;;) {
+        gpu_A[KA_GROW] = 0;
+        if (gpu_mode == GPU_SIM) {
+          for (KW l = 0; l < gpu_lanes; l++) prog->sim_kq(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
+        }
 #if BEND_METAL
-      else if (!g_dispatch(&P, g_pso_kq)) {
-        return 0;
-      }
+        else if (!g_dispatch(&P, g_pso_kq)) {
+          return 0;
+        }
 #endif
+        if (gpu_A[KA_GROW] == 0 || gpu_A[KA_ERR] != 0) break;
+        // (by as much as the calls that ran out would take: they took the
+        // arena too, and as many calls again as the ones that did not)
+        KW left = 0;
+        for (KW l = 0; l < gpu_lanes; l++) left += H[P.lane0 + l] == PC_KQ;
+        size_t f = 4;
+        while (f < 16 && f * (waiting - left) < 2 * waiting) f *= 2;
+        if (!gpu_grow(f)) {
+          gpu_A[KA_ERR] = KE_HEAP;
+          break;
+        }
+        P.an = gpu_Hn;
+        P.heapw = gpu_Hn / 8 - P.heap0;
+      }
       if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) break;
+      if (gpu_log == 2) {
+        KW n = gpu_lanes, fb = 0, kq = 0;
+        for (KW l = 0; l < n; l++) {
+          KW *ls = H + P.lane0 + l;
+          if (ls[9 * n] != ls[8 * n] && ls[0] == ls[9 * n]) { fb++; kq = ls[7 * n]; }
+        }
+        fprintf(stderr, "bend gpu: kq ran %llu lanes, %llu gave up (kq %llu)\n", (unsigned long long)waiting,
+          (unsigned long long)fb, (unsigned long long)kq);
+      }
     } else if (active == 0 && gpu_A[KA_QHEAD] == gpu_A[KA_QTAIL]) {
       // Nothing runs, waits or is queued, and the root has not returned.
       gpu_note("%s", "the device stalled");
@@ -537,41 +618,38 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
     return 0;
   }
   if (gpu_log) {
-    fprintf(stderr, "bend gpu: done in %llu dispatches, %llu MB of arena\n", (unsigned long long)rounds,
-      (unsigned long long)((KW)gpu_A[KA_HEAP] * K_CHUNK * 8 >> 20));
+    fprintf(stderr, "bend gpu: done in %llu dispatches, %llu MB of arena, %.3fs + %.3fs on the device\n",
+      (unsigned long long)rounds, (unsigned long long)((KW)gpu_A[KA_HEAP] * K_CHUNK * 8 >> 20), gpu_secs[0],
+      gpu_secs[1]);
+  }
+  // A big result stays where it is (copying it out costs as much as the
+  // call, and the next call may take it back), below half the arena.
+  KW end = P.heap0 + (KW)gpu_A[KA_HEAP] * K_CHUNK;
+  if (end > P.heap0 + P.heapw) end = P.heap0 + P.heapw;
+  if ((end - P.heap0) * 8 >= gpu_pin_min && end * 8 <= gpu_Hmax / 2 && H[2] - P.ab < end * 8 &&
+      gpu_pinnable(pin, args, n)) {
+    gpu_tout = 0;
+    gpu_pin = end;
+    *out = H[2];
+    if (gpu_log == 2) fprintf(stderr, "bend gpu: the result stays in the arena (%llu MB)\n", (unsigned long long)(end * 8 >> 20));
+    return 1;
   }
   gpu_nout = 0;
+  double t0 = gpu_log ? gpu_now() : 0;
   int ok = gpu_copy_out(prog, &P, H[2], out);
+  if (gpu_log) gpu_tout = gpu_now() - t0;
   gpu_nout = 0;
   return ok;
 }
 
-// A 4x bigger arena, for a call that filled this one.
-static int gpu_grow(void) {
-  size_t n = gpu_Hn * 4 > gpu_Hmax ? gpu_Hmax : gpu_Hn * 4;
-  KW *h = mmap(NULL, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
-  if (h == MAP_FAILED) return 0;
-#if BEND_METAL
-  if (gpu_mode == GPU_METAL) {
-    GId b = g_nocopy(h, n);
-    if (!b) { munmap(h, n); return 0; }
-    g_msg(g_bufH, "release");
-    g_bufH = b;
-  }
-#endif
-  munmap(gpu_H, gpu_Hn);
-  gpu_used = 0;
-  gpu_H = h;
-  gpu_Hn = n;
-  if (gpu_log) fprintf(stderr, "bend gpu: arena grows to %llu MB\n", (unsigned long long)(n >> 20));
-  return 1;
-}
-
-static int gpu_call(const GpuProg *prog, KW entry, V *args, int n, V *out) {
+static int gpu_call(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
   pthread_mutex_lock(&gpu_lock);
+  double t0 = gpu_now();
   if (gpu_mode < 0) gpu_mode = gpu_setup(prog);
-  int r = gpu_mode != GPU_OFF ? gpu_run(prog, entry, args, n, out) : 0;
-  while (r == 2) r = gpu_grow() ? gpu_run(prog, entry, args, n, out) : 0;
+  double t1 = gpu_now();
+  int r = gpu_mode != GPU_OFF ? gpu_run(prog, entry, args, n, pin, out) : 0;
+  while (r == 2) r = gpu_grow(4) ? gpu_run(prog, entry, args, n, pin, out) : 0;
+  if (gpu_log == 2) fprintf(stderr, "bend gpu: call %.3fs (setup %.3fs, copy out %.3fs)\n", gpu_now() - t0, t1 - t0, gpu_tout);
   pthread_mutex_unlock(&gpu_lock);
   // (counted, the device's run consumed the arguments, as the CPU's would)
   if (r == 1 && gc_hot.rc)
