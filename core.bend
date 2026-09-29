@@ -1751,6 +1751,279 @@ def Defs.inline(+ins: Map<&2, Def>, +k: Nat, ds: List<&2, Def>) -> List<&2, Def>
     case d <> r:
       Def.inline(ins, k, d) <> Defs.inline(ins, k, r)
 
+# Substitution
+# ============
+
+# The simplifier's substitution rule (Opt's 's' pass in bendc.bend) as a
+# pass of its own: Tm.subst puts a let's value in the place of the lookups
+# of its variable in the let's body, when Sb.want says so (an atom, or a
+# value used once), when the lookup is under no binding made after the
+# let's (a lambda's, a case's or another let's), and when no binding of the
+# let's scope has its variable's name. The let stays (the dead-let pass
+# drops it when no lookup is left), and the value put in place runs where
+# the lookup ran, in the let's scope with the let's binding in front, which
+# is none of the value's lookups. The value put in place has the pass taken
+# without its own lookups replaced. Lets in a chain go in place one per
+# run of the pass. SUBSTPROOF.bend proves that a run that does not fail
+# gives a related result (SUBST.bend states the law).
+
+# What the pass knows of the bindings made in a term's scope, the nearest
+# first: a let's variable whose lookups take v2 (its value with the pass
+# taken), or a binding it leaves alone.
+type Sb is Data:
+  SbSub{x: String, v2: Tm}
+  SbOpq{x: String}
+
+# What a lookup of y becomes.
+def Sb.find(s: List<&2, Sb>, +y: String) -> Tm:
+  match s:
+    case Nil{}:
+      CVar{y}
+    case b <> r:
+      match b:
+        case SbSub{x, v2}:
+          Sub.sel(String.eq(x, y), v2, Sb.find(r, y))
+        case SbOpq{x}:
+          Sub.sel(String.eq(x, y), CVar{y}, Sb.find(r, y))
+
+# s with no value put in place: what the pass knows past a binding.
+def Sb.opq(s: List<&2, Sb>) -> List<&2, Sb>:
+  match s:
+    case Nil{}:
+      Nil{}
+    case b <> r:
+      match b:
+        case SbSub{x, v2}:
+          SbOpq{x} <> Sb.opq(r)
+        case SbOpq{x}:
+          SbOpq{x} <> Sb.opq(r)
+
+# s with bindings of xs in front, in the order a match makes them.
+def Sb.bind(xs: List<&2, String>, s: List<&2, Sb>) -> List<&2, Sb>:
+  match xs:
+    case Nil{}:
+      s
+    case x <> r:
+      Sb.bind(r, SbOpq{x} <> Sb.opq(s))
+
+# s with a def's parameters' bindings in front, in the order a call makes
+# them (Scope.bind).
+def Sb.pars(ps: List<&2, Par>, s: List<&2, Sb>) -> List<&2, Sb>:
+  match ps:
+    case Nil{}:
+      s
+    case q <> r:
+      match q:
+        case Par{x, rel, mode, ty}:
+          Sb.pars(r, SbOpq{x} <> Sb.opq(s))
+
+# Whether no binding s knows is of x.
+def Sb.fresh(s: List<&2, Sb>, +x: String) -> Bool:
+  match s:
+    case Nil{}:
+      True{}
+    case b <> r:
+      match b:
+        case SbSub{y, v2}:
+          Bool.and(Bool.not(String.eq(x, y)), Sb.fresh(r, x))
+        case SbOpq{y}:
+          Bool.and(Bool.not(String.eq(x, y)), Sb.fresh(r, x))
+
+# How many lookups of x t has (lam: those under a lambda too), whatever
+# binds them.
+def Sb.uses(t: Tm, +x: String, +lam: Bool) -> U32:
+  match t:
+    case CVar{y}:
+      Bool.pick(U32, String.eq(x, y), 1, 0)
+    case CCall{f, as}:
+      match as:
+        case Nil{}:
+          0
+        case a <> r:
+          match a:
+            case Arg{rel, e}:
+              U32.add(Sb.uses(e, x, lam), Sb.uses(CCall{f, r}, x, lam))
+    case CApp{f, as}:
+      match as:
+        case Nil{}:
+          Sb.uses(f, x, lam)
+        case a <> r:
+          U32.add(Sb.uses(a, x, lam), Sb.uses(CApp{f, r}, x, lam))
+    case CCtr{k, as}:
+      match as:
+        case Nil{}:
+          0
+        case a <> r:
+          U32.add(Sb.uses(a, x, lam), Sb.uses(CCtr{k, r}, x, lam))
+    case CLam{p, b}:
+      Bool.pick(U32, lam, Sb.uses(b, x, lam), 0)
+    case CLet{p, v, b}:
+      U32.add(Sb.uses(v, x, lam), Sb.uses(b, x, lam))
+    case CMat{scrs, cases}:
+      match scrs:
+        case a <> r:
+          U32.add(Sb.uses(a, x, lam), Sb.uses(CMat{r, cases}, x, lam))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              0
+            case c <> r:
+              U32.add(Sb.uses(c, x, lam), Sb.uses(CMat{Nil{}, r}, x, lam))
+    case CCse{ps, b}:
+      Sb.uses(b, x, lam)
+    case CSuc{k, e}:
+      Sb.uses(e, x, lam)
+    case COp{op, a, b}:
+      U32.add(Sb.uses(a, x, lam), Sb.uses(b, x, lam))
+    case CAnn{e, ty}:
+      Sb.uses(e, x, lam)
+    case other:
+      0
+
+# Whether copying t copies no work: a variable, a literal (a string is
+# built each time, but once), a box or a constructor with no fields.
+def Sb.atom(t: Tm) -> Bool:
+  match t:
+    case CVar{x}:
+      True{}
+    case CLit{l}:
+      True{}
+    case CBox{}:
+      True{}
+    case CCtr{k, as}:
+      match as:
+        case Nil{}:
+          True{}
+        case a <> r:
+          False{}
+    case other:
+      False{}
+
+# Whether t is a lambda or a constructor: moving it into a lambda moves no
+# work there (it only builds a value).
+def Sb.shape(t: Tm) -> Bool:
+  match t:
+    case CLam{p, b}:
+      True{}
+    case CCtr{k, as}:
+      True{}
+    case CAnn{e, ty}:
+      Sb.shape(e)
+    case other:
+      False{}
+
+# Whether a let of x to v puts v in place of x's lookups in b: an atom, or
+# a value used once, outside a lambda unless it is one or a constructor.
+def Sb.want(+x: String, +v: Tm, +b: Tm) -> Bool:
+  Bool.or(Sb.atom(v), Bool.and(U32.is_eq(Sb.uses(b, x, True{}), 1),
+    Bool.or(U32.is_eq(Sb.uses(b, x, False{}), 1), Sb.shape(v))))
+
+# The let of x to v2 with the body f makes of the scope's knowledge, which
+# knows x's value is v2's.
+def Sb.let.sub(+x: String, +v2: Tm, f: List<&2, Sb> -> Tm, +s: List<&2, Sb>) -> Tm:
+  CLet{PtVar{x}, v2, f(SbSub{x, v2} <> Sb.opq(s))}
+
+# The let of x to a value (g takes it with a scope's knowledge) and a body
+# (f takes it): u, whether the value goes in place of x's lookups (then
+# the value is taken with no lookup replaced).
+def Sb.let(u: Bool, +x: String, g: List<&2, Sb> -> Tm, f: List<&2, Sb> -> Tm, +s: List<&2, Sb>) -> Tm:
+  match u:
+    case True{}:
+      Sb.let.sub(x, g(Sb.opq(s)), f, s)
+    case False{}:
+      CLet{PtVar{x}, g(s), f(SbOpq{x} <> Sb.opq(s))}
+
+# t with the values s knows in the place of their lookups. A list field is
+# walked as its head and the node rebuilt with the rest.
+def Tm.subst(t: Tm, +s: List<&2, Sb>) -> Tm:
+  match t:
+    case CVar{+y}:
+      Sb.find(s, y)
+    case CCall{f, as}:
+      match as:
+        case Nil{}:
+          CCall{f, Nil{}}
+        case a <> r:
+          match a:
+            case Arg{rel, e}:
+              match rel:
+                case Run{}:
+                  Tm.push.call(Arg{Run{}, Tm.subst(e, s)}, Tm.subst(CCall{f, r}, s))
+                case Era{}:
+                  Tm.push.call(Arg{Era{}, e}, Tm.subst(CCall{f, r}, s))
+    case CApp{f, as}:
+      match as:
+        case Nil{}:
+          CApp{Tm.subst(f, s), Nil{}}
+        case a <> r:
+          Tm.push(Tm.subst(a, s), Tm.subst(CApp{f, r}, s))
+    case CCtr{k, as}:
+      match as:
+        case Nil{}:
+          CCtr{k, Nil{}}
+        case a <> r:
+          Tm.push(Tm.subst(a, s), Tm.subst(CCtr{k, r}, s))
+    case CLam{+p, b}:
+      CLam{p, Tm.subst(b, Sb.bind(Dead.names([p]), s))}
+    case CLet{p, +v, +b}:
+      match p:
+        case PtVar{+x}:
+          Sb.let(Bool.and(Sb.fresh(s, x), Sb.want(x, v, b)), x, s2 => Tm.subst(v, s2), s2 => Tm.subst(b, s2), s)
+        case +other:
+          CLet{other, Tm.subst(v, s), Tm.subst(b, Sb.bind(Dead.names([other]), s))}
+    case CMat{scrs, cases}:
+      match scrs:
+        case a <> r:
+          Tm.push(Tm.subst(a, s), Tm.subst(CMat{r, cases}, s))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              CMat{Nil{}, Nil{}}
+            case c <> r:
+              Tm.push.case(Tm.subst(c, s), Tm.subst(CMat{Nil{}, r}, s))
+    case CCse{+ps, b}:
+      CCse{ps, Tm.subst(b, Sb.bind(Dead.names(ps), s))}
+    case CSuc{k, e}:
+      CSuc{k, Tm.subst(e, s)}
+    case COp{op, a, b}:
+      COp{op, Tm.subst(a, s), Tm.subst(b, s)}
+    case CAnn{e, ty}:
+      CAnn{Tm.subst(e, s), ty}
+    case other:
+      other
+
+def Tms.subst(ts: List<&2, Tm>, +s: List<&2, Sb>) -> List<&2, Tm>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      Tm.subst(t, s) <> Tms.subst(r, s)
+
+def Args.subst(as: List<&2, Arg>, +s: List<&2, Sb>) -> List<&2, Arg>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case a <> r:
+      match a:
+        case Arg{rel, e}:
+          match rel:
+            case Run{}:
+              Arg{Run{}, Tm.subst(e, s)} <> Args.subst(r, s)
+            case Era{}:
+              Arg{Era{}, e} <> Args.subst(r, s)
+
+def Def.subst(d: Def) -> Def:
+  match d:
+    case Def{n, +ps, b, ret}:
+      Def{n, ps, Tm.subst(b, Sb.pars(ps, Nil{})), ret}
+
+def Defs.subst(ds: List<&2, Def>) -> List<&2, Def>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Def.subst(d) <> Defs.subst(r)
+
 # Lowering and raising
 # ====================
 

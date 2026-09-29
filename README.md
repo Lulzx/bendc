@@ -328,17 +328,36 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    Otherwise the source runs out too. While the source looks up the def, the other program waits
    at the body.
 
+   Substitution (part of the optimizer's `s`, below) is `Core.Def.subst`. For a `let` of a
+   variable whose value is an atom (a variable, a literal, a box, a constructor with no fields),
+   or which its body looks up once (once outside a lambda, unless the value is a lambda or a
+   constructor), it puts the value, with the pass taken, in the place of each lookup of the
+   variable that is under no other binding (a lambda's, a case's, or a nearer let's). The let
+   stays, and `Core.Def.dead` drops it once no lookup is left. It does so only when no binding of
+   the let's scope, a parameter's included, has the variable's name, so the value put in place
+   sees what it saw at the let. [`SUBSTPROOF.bend`](SUBSTPROOF.bend) proves the law in
+   [`SUBST.bend`](SUBST.bend), `subst_ok` (and `subst_prog`), stated as `lit_ok` is (a source that
+   fails is related to anything). The other program may need more fuel or less: the value runs
+   where its lookup was, not at the let, so the other program's fuel is found as the steps go
+   (the proof puts the fuel of a step's two runs together, and `L.mono` gives more). Scopes are
+   related entry by entry with what the pass knows of each binding; a substituted binding's
+   entry holds a run of the value, put in place, that gives a related value. A lookup walks the
+   scope and the pass's knowledge together. The value is also taken with the let's own binding in
+   front, which none of its lookups reach, since the scope has no other binding of the name.
+
    The proven functions are the ones bendc runs; the inliner no longer resolves matches itself.
    Not proven:
    - the expansion of monadic binds (`Inl`, which renames with a per-depth suffix), and which
      defs count as small;
-   - the simplifier `s` (let floating, case of case, the known-case rules, substitution of atoms
-     and of lets used once);
+   - the simplifier `s`: let floating, case of case, the known-case rules, a let sunk into a
+     match's cases, the rules for applications, the folding of comparisons, and the substitution
+     of atoms and of lets used once where a lookup is under a binding (a lambda's, a case's or a
+     let's body), which moves a value across that binding;
    - specialization `p` and fusion `f`, of which `OPT.bend` proves only instances;
    - code generation;
    - that lowering keeps a def's meaning (only the round trip and the scope laws above).
 
-   Both checkers verify the seven proofs in CI.
+   Both checkers verify the eight proofs in CI.
 
    Then the optimizer (`Opt` in `bendc.bend`) works on the whole program in the core IR. The
    inlining of monadic binds, `Core.Def.red`, `Core.Def.known`, `Core.Def.lit` and `Core.Def.dead`
@@ -352,7 +371,12 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
      branches, so only the taken one runs. The inlining is the proven `Core.Def.inline` (above);
      the choice of defs is not proven.
    - `s` simplifies each body bottom up. A dead let goes. A let of an atom, or one used once outside
-     a lambda, takes its variable's place. A small let over a match that reads it only in its cases
+     a lambda, takes its variable's place: the proven `Core.Def.subst` (above) where no lookup is
+     under a binding, and the walk's own rule otherwise. The walk runs three times, each followed
+     by `Core.Def.subst` and `Core.Def.dead`, and the next walk reduces where values landed; the
+     two run once more after `p` and `f`. The proven pass leaves a let alone when a binding of its
+     scope has the variable's name (inlined bodies reuse names), which the walk's own rule could
+     substitute; this costs a few lets in some tests, and none in the benchmarks. A small let over a match that reads it only in its cases
      goes into them. A match on a known constructor or literal takes the first case whose patterns
      match, and stops at one that may not. Lets float out of matches and applications. A match on
      a match whose cases all end in constructors goes into those cases (case of case), when the
@@ -973,6 +997,7 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`DEAD.bend`](DEAD.bend), [`DEADPROOF.bend`](DEADPROOF.bend) | the law that dropping dead lets (`Core.Def.dead`) gives related results (equal ones without closures), and its proof |
 | [`LIT.bend`](LIT.bend), [`LITPROOF.bend`](LITPROOF.bend) | the law that putting let-bound numbers in place of their lookups (`Core.Def.lit`) gives related results (equal ones without closures), and its proof |
 | [`INLINE.bend`](INLINE.bend), [`INLINEPROOF.bend`](INLINEPROOF.bend) | the law that inlining calls of global defs (`Core.Def.inline`) gives related results (equal ones without closures), and its proof |
+| [`SUBST.bend`](SUBST.bend), [`SUBSTPROOF.bend`](SUBSTPROOF.bend) | the law that substituting atoms and lets used once (`Core.Def.subst`) gives related results (equal ones without closures), and its proof |
 | [`LO.bend`](LO.bend), [`LOPROOF.bend`](LOPROOF.bend) | the laws of the lowering to the core IR (`Core.Lo`) and the raising back (`Core.Up`): the round trip, and that a lowered def never fails a variable lookup; and their proof |
 | [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, arrays, native `Nat`, `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
 | [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the kernel cache, the simulator, copying results back |
