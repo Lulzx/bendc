@@ -28,10 +28,30 @@ def client.sent(r: Socket & Result<&1, &1, U32 & String, Unit>) -> IO(Unit):
     u : Unit <- IO.pass(Unit, res)
     Socket.close(s)
 
+# The socket, else what comes next.
+def client.or(r: Result<&1, &1, U32 & String, Socket>, next: IO(Socket)) -> IO(Socket):
+  match r:
+    case Done{s}:
+      IO.pure(Socket, s)
+    case Fail{e}:
+      next
+
+# The server may not be listening yet (a loaded machine): try n more
+# times, 20 ms apart.
+def client.conn(+port: U32, n: Nat) -> IO(Socket):
+  match n:
+    case 0n:
+      IO.try(Socket, TCP.connect("127.0.0.1", port))
+    case 1n+p:
+      do IO<Socket>:
+        IO.sleep(20)
+        r : Result<&1, &1, U32 & String, Socket> <- TCP.connect("127.0.0.1", port)
+        client.or(r, client.conn(port, p))
+
 def client(port: U32) -> IO(Unit):
   do IO<Unit>:
     IO.sleep(50)
-    s : Socket <- IO.try(Socket, TCP.connect("127.0.0.1", port))
+    s : Socket <- client.conn(port, 250n)
     r : Socket & Result<&1, &1, U32 & String, Unit> <- TCP.send(s, "ping over tcp")
     client.sent(r)
 

@@ -6,6 +6,16 @@
 #define _GNU_SOURCE
 #endif
 #define _DARWIN_UNLIMITED_SELECT  // select past FD_SETSIZE (io_wait)
+#ifdef __TINYC__
+#undef __atomic_store_n
+#define __atomic_store_n(ptr, val, order) __atomic_store((ptr), &(__typeof__(*(ptr))){val}, (order))
+#ifdef __aarch64__
+#undef __atomic_compare_exchange_n
+#define __atomic_compare_exchange_n(ptr, expected, desired, weak, success, failure) ({ __typeof__(*(ptr)) bend_cas_v = (desired); __atomic_compare_exchange((ptr), (expected), &bend_cas_v, 1, (success), (failure)); })
+#undef atomic_compare_exchange_strong_explicit
+#define atomic_compare_exchange_strong_explicit(object, expected, desired, success, failure) ({ __typeof__(object) bend_cas_p = (object); __typeof__(*bend_cas_p) bend_cas_v = (desired); __atomic_compare_exchange(bend_cas_p, (expected), &bend_cas_v, 1, (success), (failure)); })
+#endif
+#endif
 #define IMM(t) ((((V)(t)) << 3) | 1)
 #define LI_HI 0xFFFF000000000000ull
 #define LI(t, x) (LI_HI | ((V)(uint32_t)(x) << 16) | ((V)(t) << 3) | 3)
@@ -101,6 +111,7 @@ size_t gc_limit_min = (size_t)8 << 20;
 double gc_minor_k = 2.0, gc_factor = 0.5;
 size_t gc_slack = (size_t)8 << 20;
 unsigned gc_grow = 1, gc_grow_max = 32, gc_kept_run;
+int gc_big;  // gc_grow went to gc_grow_max for what lives on
 double gc_t_end, gc_t_run, gc_t_stop;  // seconds (see gc_now)
 size_t gc_live_bytes;
 size_t gc_major_live;
@@ -751,7 +762,7 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   // A major collection forgets every mark; a minor one keeps the old
   // objects' (the heap is written only while an object is built, and the
   // exceptions are reached from roots).
-  gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack * gc_grow;
+  gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack * (gc_big ? gc_grow_max : 1);
   if (!gc_minor) {
     for (uintptr_t bi = 0; bi < gc_top; bi++) {
       if (gc_kind[bi] == 1 || gc_kind[bi] == 2) memset(gc_mbits + bi * 64, 0, 64 * sizeof(uint64_t));
@@ -791,7 +802,7 @@ __attribute__((noinline)) void gc_collect_locked(void) {
     if (gc_minor) {
       size_t kept = gc_live_bytes > live0 ? gc_live_bytes - live0 : 0;
       gc_kept_run = kept * 4 > gc_since * 3 ? gc_kept_run + 1 : 0;
-      if (gc_kept_run >= 2) gc_grow = gc_grow_max;
+      if (gc_kept_run >= 2) gc_grow = gc_grow_max, gc_big = 1;
     }
     double t1 = gc_now();
     if (gc_t_end > 0) gc_t_run += t0 - gc_t_end;

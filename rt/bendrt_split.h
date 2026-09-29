@@ -42,6 +42,27 @@
 #include <sched.h>
 #include <poll.h>
 #include <stdatomic.h>
+#ifdef __TINYC__
+// Two faults of tcc's atomics (0.9.28 mob), mended here:
+// - Its __atomic_store_n stores the value with a plain store first, then
+//   stores it again atomically: the plain store may be seen before the
+//   writes a release store must order before it (thr_register publishes
+//   gc_nthr so; a worker then read a slot of gc_thrs not yet written).
+// - On arm64 its compare-and-swap takes its barriers (ldaxr/stlxr) from the
+//   weak argument, not the memory order: a strong one had none, so a CAS
+//   that claims something (a block's owned flag, a deque's top) did not
+//   order what the claimer read after it. Its CAS loops on a failed store
+//   exclusive either way (never fails spuriously), so 1 is passed.
+// (One line each: tools/rtsplit.py copies a define as one line.)
+#undef __atomic_store_n
+#define __atomic_store_n(ptr, val, order) __atomic_store((ptr), &(__typeof__(*(ptr))){val}, (order))
+#ifdef __aarch64__
+#undef __atomic_compare_exchange_n
+#define __atomic_compare_exchange_n(ptr, expected, desired, weak, success, failure) ({ __typeof__(*(ptr)) bend_cas_v = (desired); __atomic_compare_exchange((ptr), (expected), &bend_cas_v, 1, (success), (failure)); })
+#undef atomic_compare_exchange_strong_explicit
+#define atomic_compare_exchange_strong_explicit(object, expected, desired, success, failure) ({ __typeof__(object) bend_cas_p = (object); __typeof__(*bend_cas_p) bend_cas_v = (desired); __atomic_compare_exchange(bend_cas_p, (expected), &bend_cas_v, 1, (success), (failure)); })
+#endif
+#endif
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -265,7 +286,7 @@ extern _Atomic size_t gc_since;
 // gc_factor times what lived at the last one if that is more. A minor
 // collection finds what died young; what dies old waits for a major one,
 // which comes when what lives grows past gc_minor_k times what lived after
-// the last major one, plus gc_slack times gc_grow.
+// the last major one, plus gc_slack (times gc_grow_max once gc_big is set).
 // gc_grow starts at 1: a program whose young objects mostly die collects
 // often, in a small heap, and its peak memory stays near what lives. It
 // becomes gc_grow_max for good when two minor collections in a row find
@@ -281,6 +302,7 @@ extern size_t gc_limit_min;
 extern double gc_minor_k;
 extern size_t gc_slack;
 extern unsigned gc_grow;
+extern int gc_big;
 extern double gc_t_end;
 extern double gc_t_run;
 extern double gc_t_stop;

@@ -39,6 +39,27 @@
 #include <sched.h>
 #include <poll.h>
 #include <stdatomic.h>
+#ifdef __TINYC__
+// Two faults of tcc's atomics (0.9.28 mob), mended here:
+// - Its __atomic_store_n stores the value with a plain store first, then
+//   stores it again atomically: the plain store may be seen before the
+//   writes a release store must order before it (thr_register publishes
+//   gc_nthr so; a worker then read a slot of gc_thrs not yet written).
+// - On arm64 its compare-and-swap takes its barriers (ldaxr/stlxr) from the
+//   weak argument, not the memory order: a strong one had none, so a CAS
+//   that claims something (a block's owned flag, a deque's top) did not
+//   order what the claimer read after it. Its CAS loops on a failed store
+//   exclusive either way (never fails spuriously), so 1 is passed.
+// (One line each: tools/rtsplit.py copies a define as one line.)
+#undef __atomic_store_n
+#define __atomic_store_n(ptr, val, order) __atomic_store((ptr), &(__typeof__(*(ptr))){val}, (order))
+#ifdef __aarch64__
+#undef __atomic_compare_exchange_n
+#define __atomic_compare_exchange_n(ptr, expected, desired, weak, success, failure) ({ __typeof__(*(ptr)) bend_cas_v = (desired); __atomic_compare_exchange((ptr), (expected), &bend_cas_v, 1, (success), (failure)); })
+#undef atomic_compare_exchange_strong_explicit
+#define atomic_compare_exchange_strong_explicit(object, expected, desired, success, failure) ({ __typeof__(object) bend_cas_p = (object); __typeof__(*bend_cas_p) bend_cas_v = (desired); __atomic_compare_exchange(bend_cas_p, (expected), &bend_cas_v, 1, (success), (failure)); })
+#endif
+#endif
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -281,7 +302,7 @@ static _Atomic size_t gc_since;         // bytes handed out since the last colle
 // gc_factor times what lived at the last one if that is more. A minor
 // collection finds what died young; what dies old waits for a major one,
 // which comes when what lives grows past gc_minor_k times what lived after
-// the last major one, plus gc_slack times gc_grow.
+// the last major one, plus gc_slack (times gc_grow_max once gc_big is set).
 // gc_grow starts at 1: a program whose young objects mostly die collects
 // often, in a small heap, and its peak memory stays near what lives. It
 // becomes gc_grow_max for good when two minor collections in a row find
@@ -297,6 +318,7 @@ static size_t gc_limit_min = (size_t)8 << 20;
 static double gc_minor_k = 2.0, gc_factor = 0.5;
 static size_t gc_slack = (size_t)8 << 20;
 static unsigned gc_grow = 1, gc_grow_max = 32, gc_kept_run;
+static int gc_big;  // gc_grow went to gc_grow_max for what lives on
 static double gc_t_end, gc_t_run, gc_t_stop;  // seconds (see gc_now)
 static size_t gc_live_bytes;
 static size_t gc_major_live;
@@ -1557,7 +1579,7 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
   // A major collection forgets every mark; a minor one keeps the old
   // objects' (the heap is written only while an object is built, and the
   // exceptions are reached from roots).
-  gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack * gc_grow;
+  gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack * (gc_big ? gc_grow_max : 1);
   if (!gc_minor) {
     for (uintptr_t bi = 0; bi < gc_top; bi++) {
       if (gc_kind[bi] == 1 || gc_kind[bi] == 2) memset(gc_mbits + bi * 64, 0, 64 * sizeof(uint64_t));
@@ -1597,7 +1619,7 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
     if (gc_minor) {
       size_t kept = gc_live_bytes > live0 ? gc_live_bytes - live0 : 0;
       gc_kept_run = kept * 4 > gc_since * 3 ? gc_kept_run + 1 : 0;
-      if (gc_kept_run >= 2) gc_grow = gc_grow_max;
+      if (gc_kept_run >= 2) gc_grow = gc_grow_max, gc_big = 1;
     }
     double t1 = gc_now();
     if (gc_t_end > 0) gc_t_run += t0 - gc_t_end;
