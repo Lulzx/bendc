@@ -206,6 +206,7 @@ struct PDeque;
 
 // Classes of up to 16 words (nodes) reuse the slots matches free.
 #define GC_RQCLS 15
+#define ARR_SPARES 8
 
 typedef struct Thr {
   GcCache cache[2][GC_NCLS];
@@ -220,9 +221,14 @@ typedef struct Thr {
   // Claiming a reuse block (gc_refill): a stop signal that comes meanwhile
   // is deferred (deferred is set) until the claim is over.
   volatile sig_atomic_t claiming, deferred;
+  // Arrays the program is done with (arr_dead), for the next Array.new of
+  // their class; a collection forgets them (arr_hook).
+  V spare[ARR_SPARES];
+  uint32_t nspare;
 } Thr;
 
 static void gc_park(Thr *t);
+static void gc_join(void);
 
 typedef struct { V *p; size_t n; } GcRange;
 typedef struct { uint32_t at, len; } GcRun;
@@ -1203,14 +1209,154 @@ static void gc_drain(void) {
   }
 }
 
+// Parallel marking: the threads a collection stopped help drain the mark
+// stack, which is then a shared pool (under gc_pool_lock). A helper takes a
+// chunk into its own stack, marks with an atomic or (two helpers may reach
+// one object), and gives half its stack back when the pool runs dry. The
+// marking is over when the pool is empty and no helper holds work, both read
+// under the lock. Only the collector's own lock: a helper runs in a signal
+// handler, and no thread the collector stopped can hold it.
+#define GC_CHUNK 64
+#define GC_MKCAP ((size_t)1 << 16)
+typedef struct { GcItem *stk; size_t sp; } GcMk;
+static GcMk gc_mks[GC_MAXTHR + 1];
+static int gc_nmks;                   // helpers with a stack (slot 0: the collector)
+#ifdef __TINYC__
+// (tcc's compare-and-swap is not atomic on arm64: two threads can both win.
+// The mutex is taken only by the collector and the threads it stopped.)
+static pthread_mutex_t gc_pool_mx = PTHREAD_MUTEX_INITIALIZER;
+#else
+static int gc_pool_lock;
+#endif
+static size_t gc_active;              // helpers holding work (under gc_pool_lock)
+static _Atomic int gc_marking;        // the pool is open to helpers
+static _Atomic unsigned gc_mark_gen;  // bumped when it opens
+static _Atomic int gc_helpers, gc_in_help;
+
+#ifdef __TINYC__
+static inline void gc_pool_acquire(void) { pthread_mutex_lock(&gc_pool_mx); }
+static inline void gc_pool_release(void) { pthread_mutex_unlock(&gc_pool_mx); }
+#else
+static inline void gc_pool_acquire(void) {
+  for (int k = 0;; k++) {
+    int z = 0;
+    if (__atomic_compare_exchange_n(&gc_pool_lock, &z, 1, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+    if (k > 64) sched_yield();
+  }
+}
+
+static inline void gc_pool_release(void) { __atomic_store_n(&gc_pool_lock, 0, __ATOMIC_RELEASE); }
+#endif
+
+// Half of a helper's stack back to the pool.
+static void gc_share(GcMk *m) {
+  size_t h = m->sp / 2;
+  gc_pool_acquire();
+  if (gc_sp + h > gc_cap) bend_fail("the collector's mark stack overflowed");
+  memcpy(gc_stk + gc_sp, m->stk + (m->sp - h), h * sizeof(GcItem));
+  gc_sp += h;
+  gc_pool_release();
+  m->sp -= h;
+}
+
+static inline void gc_mark_par(V w, GcMk *m) {
+  uintptr_t a = (uintptr_t)(w & 0x7fffffffffffffffull);
+  uintptr_t off = a - (uintptr_t)gc_base;
+  if (off >= (gc_top << GC_BLK_SHIFT)) return;
+  uintptr_t bi = off >> GC_BLK_SHIFT;
+  uint8_t kd = gc_kind[bi];
+  if (kd == 0) return;
+  if (kd == 3) bi -= gc_back[bi];
+  GcBlk *b = gc_blk(bi);
+  uintptr_t o = (uintptr_t)gc_objs(b);
+  if (a < o && !b->large) return;
+  size_t i = 0;
+  if (b->large) {
+    if (a >= o + (uintptr_t)b->words * sizeof(V)) return;
+  } else {
+    i = (a - o) / ((uintptr_t)b->words * sizeof(V));
+    if (i >= b->nobj) return;
+  }
+  uint64_t bit = 1ull << (i & 63);
+  if (!(GC_ALLOC(b)[i >> 6] & bit)) return;
+  uint64_t *mw = &GC_MARK(b)[i >> 6];
+  if (__atomic_load_n(mw, __ATOMIC_RELAXED) & bit) return;
+  if (__atomic_fetch_or(mw, bit, __ATOMIC_RELAXED) & bit) return;
+  if (b->atomic) return;
+  if (m->sp == GC_MKCAP) gc_share(m);
+  m->stk[m->sp++] = (GcItem){(V *)(o + i * (uintptr_t)b->words * sizeof(V)), b->words};
+}
+
+static void gc_help(GcMk *m) {
+  for (int idle = 0;;) {
+    gc_pool_acquire();
+    if (gc_sp == 0) {
+      int done = gc_active == 0;
+      gc_pool_release();
+      if (done) return;
+      if (++idle > 16) sched_yield();
+      continue;
+    }
+    idle = 0;
+    size_t n = gc_sp < GC_CHUNK ? gc_sp : GC_CHUNK;
+    gc_sp -= n;
+    memcpy(m->stk, gc_stk + gc_sp, n * sizeof(GcItem));
+    m->sp = n;
+    gc_active++;
+    gc_pool_release();
+    while (m->sp > 0) {
+      GcItem it = m->stk[--m->sp];
+      // (a long object is marked a piece at a time: the rest can be shared)
+      if (it.n > 4 * GC_CHUNK) {
+        m->stk[m->sp++] = (GcItem){it.p + 2 * GC_CHUNK, it.n - 2 * GC_CHUNK};
+        it.n = 2 * GC_CHUNK;
+      }
+      for (size_t j = 0; j < it.n; j++) gc_mark_par(it.p[j], m);
+      if (m->sp > GC_CHUNK && __atomic_load_n(&gc_sp, __ATOMIC_RELAXED) == 0) gc_share(m);
+    }
+    gc_pool_acquire();
+    gc_active--;
+    gc_pool_release();
+  }
+}
+
+// A stopped thread, when the pool opens.
+static void gc_join(void) {
+  int k = atomic_fetch_add(&gc_helpers, 1) + 1;
+  if (k >= gc_nmks) return;
+  atomic_fetch_add(&gc_in_help, 1);
+  if (atomic_load(&gc_marking)) gc_help(&gc_mks[k]);
+  atomic_fetch_sub(&gc_in_help, 1);
+}
+
+// Drains the mark stack, with the n stopped threads' help.
+static void gc_drain_par(int n) {
+  if (n == 0) { gc_drain(); return; }
+  while (gc_nmks <= n) gc_mks[gc_nmks++].stk = malloc(GC_MKCAP * sizeof(GcItem));
+  atomic_store(&gc_helpers, 0);
+  gc_active = 0;
+  atomic_store(&gc_marking, 1);
+  atomic_fetch_add(&gc_mark_gen, 1);
+  gc_help(&gc_mks[0]);
+  atomic_store(&gc_marking, 0);
+  while (atomic_load(&gc_in_help) > 0) sched_yield();
+}
+
 // A thread stopped for a collection: its registers on its stack, it waits.
 __attribute__((noinline)) static void gc_park(Thr *t) {
   jmp_buf jb;
   setjmp(jb);
   atomic_fetch_add(&gc_inside, 1);
   t->sp = (uintptr_t)&jb;
+  unsigned seen = atomic_load(&gc_mark_gen);
   atomic_fetch_add(&gc_acks, 1);
-  while (atomic_load(&gc_stopping)) sched_yield();
+  while (atomic_load(&gc_stopping)) {
+    if (atomic_load(&gc_mark_gen) != seen) {
+      seen = atomic_load(&gc_mark_gen);
+      gc_join();
+    }
+    sched_yield();
+  }
   atomic_fetch_sub(&gc_inside, 1);
 }
 
@@ -1369,7 +1515,10 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
   for (int i = 0; i < gc_nhooks; i++) gc_hooks[i]();
   gc_rooting = 0;
   gc_rescan_dirty();
-  gc_drain();
+  struct timespec tm, ts;
+  if (gc_stats) clock_gettime(CLOCK_MONOTONIC, &tm);
+  gc_drain_par(n);
+  if (gc_stats) clock_gettime(CLOCK_MONOTONIC, &ts);
   gc_sweep();
   atomic_store(&gc_stopping, 0);
   while (atomic_load(&gc_inside) > 0) sched_yield();
@@ -1382,10 +1531,12 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
   gc_count++;
   if (gc_stats) {
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    fprintf(stderr, "[gc %zu %s] live %zu MB, heap %zu MB, next at +%zu MB, %zu rescans next, %.1f ms\n",
+    fprintf(stderr, "[gc %zu %s] live %zu MB, heap %zu MB, next at +%zu MB, %zu rescans next, %.1f ms"
+      " (marking %.1f ms, %d threads)\n",
       gc_count, gc_minor ? "minor" : "major", gc_live_bytes >> 20, (size_t)(gc_top << GC_BLK_SHIFT) >> 20,
       gc_limit >> 20, gc_nrem,
-      (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6);
+      (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6,
+      (ts.tv_sec - tm.tv_sec) * 1e3 + (ts.tv_nsec - tm.tv_nsec) / 1e6, n + 1);
   }
 }
 
@@ -1533,7 +1684,7 @@ static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
 // one. A shared array's cells are shared as they are copied.
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))
-static inline unsigned arr_cls(V a) { return (unsigned)(((V *)a)[0] & 31); }
+static inline unsigned arr_cls(V a) { return (unsigned)(((const uint32_t *)a)[0] & 31); }
 static inline V *arr_cells(V a) { return (V *)a + 1; }
 static inline int arr_shared(V a) {
   V w0 = __atomic_load_n((V *)a, __ATOMIC_RELAXED);
@@ -1569,9 +1720,44 @@ static void rc_let_go_arr(V a) {
 
 static V arr_alloc(unsigned c) {
   if (c > 31) bend_fail("an array past the deepest block class 31");
+  Thr *t = thr_self;
+  if (t)
+    for (int i = 0; i < ARR_SPARES; i++) {
+      V a = t->spare[i];
+      if (a && arr_cls(a) == c) {
+        t->spare[i] = 0;
+        return a;
+      }
+    }
   V *p = halloc(1 + ((size_t)1 << c));
   p[0] = ARR_HDR(c);
   return (V)p;
+}
+
+// Traced, an unshared array no path of the program uses any more (see
+// bend_dead) is one of the thread's spares (the oldest goes when all
+// ARR_SPARES are taken), which arr_alloc hands out again (its header is
+// ARR_HDR(c): not shared). The spares are no roots: a
+// collection forgets them before it traces (a thread stopped between
+// taking one and clearing its slot holds it in a register, which the stack
+// scan sees).
+static void arr_dead(V a) {
+  Thr *t = thr_self;
+  if (t) t->spare[t->nspare++ % ARR_SPARES] = a;
+}
+
+static void arr_hook(void) {
+  for (int i = 0; i < gc_nthr; i++) memset(gc_thrs[i]->spare, 0, sizeof gc_thrs[i]->spare);
+}
+
+// The program is done with v (traced: a variable that no path of its scope
+// uses, or that a case does not use and another case of its match does). An
+// unshared array goes to arr_dead; anything else is the collector's.
+static inline void bend_dead(V v) {
+  if (LIKELY(v < ((V)1 << 32))) return;
+  if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
+  V w0 = gc_hot.mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  if ((w0 | 31) == (ARR_TAG | 31)) arr_dead(v);
 }
 
 // 2^c cells from src (a shared source's are shared) into a new array.
@@ -1600,7 +1786,9 @@ static V arr_new(V depth, V v) {
     else bend_share(v);
   }
   if (v >= ((V)1 << 32)) arr_dirty(a);
-  for (size_t i = 0; i < n; i++) d[i] = v;
+  // (four cells a step: a whole number of steps from 4 cells up)
+  if (n < 4) for (size_t i = 0; i < n; i++) d[i] = v;
+  else for (size_t i = 0; i < n; i += 4) { d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = v; }
   return a;
 }
 
@@ -3187,6 +3375,7 @@ static int bend_start(int argc, char **argv, V (*m)(void), int value) {
   fault_init();
   gc_hook(par_hook);
   gc_hook(io_hook);
+  gc_hook(arr_hook);
   pthread_attr_t attr;
   pthread_attr_init(&attr);
   thr_stack(&attr);
