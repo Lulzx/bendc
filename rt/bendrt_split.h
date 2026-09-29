@@ -1712,6 +1712,7 @@ V F_F32_dread(V s);
 #define P_QUEUED 1
 #define P_DONE 2
 #define P_HELD 3
+#define P_WAIT 4
 
 typedef struct PTask { V clo; V res; V state; V depth; } PTask;
 
@@ -1737,6 +1738,8 @@ extern int par_nthreads;
 extern _Atomic int par_started;
 extern pthread_mutex_t par_mu;
 extern pthread_cond_t par_cv;
+// Joiners that wait for a stolen task (P_WAIT) sleep on par_jcv.
+extern pthread_cond_t par_jcv;
 extern _Atomic int par_sleepers;
 
 PDeque *pdq_new(void);
@@ -1758,6 +1761,18 @@ static inline void cpu_relax(void) {
   __asm__ __volatile__("yield");
 #endif
 }
+
+// An idle worker searches (PAR_SPIN rounds of steals over every deque), then
+// sleeps. A fork wakes a sleeper only when no worker is searching, and a
+// searcher that finds a task wakes the next one: a program that forks small
+// tasks often, with the other threads mostly idle, no longer has every
+// fork wake a worker that spins and sleeps again, while a burst of forks
+// still brings them all in. A sleeper also wakes every 2 ms (a wake-up can
+// be missed: the fork reads par_sleepers without the lock), looks once and
+// sleeps again. A task nobody steals is not lost: its forker runs it at the
+// join.
+#define PAR_SPIN 128
+extern _Atomic int par_searching;
 
 void *par_worker(void *arg);
 

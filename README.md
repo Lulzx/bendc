@@ -470,6 +470,18 @@ A parallel let forks every value but the last onto a Chase-Lev work-stealing deq
 reverse; a fork nobody stole runs inline, so fine-grained recursion stays cheap (`pow2!(26n)` from the
 guide takes 0.70s on one thread, 0.15s on eight).
 
+An idle worker steals for a short while (128 rounds over every deque), then sleeps on a condition
+variable. A fork wakes a sleeper only when no worker is already looking for work, and a worker that
+finds a task wakes the next one. Before this, every fork woke a sleeper, which spun 512 rounds and
+went back to sleep. A joiner whose task was stolen spins a little, then sleeps until the thief
+finishes the task (it used to `sched_yield` and nap). This matters for programs that fork small
+tasks often while the other threads have little to do. One example is `bendc` built with `bendc -o`
+and without `BEND_NO_FREE`, so with frees and implicit parallelism. It makes 2.8M forks, and 1.7M
+of them are stolen while compiling `bendc.bend`. Its CPU time went from 18s to 10.6s (59G to 35G
+cycles, 3.2s to 2.7s wall). That build is still slower than one thread (1.9s, 6G cycles), because
+the tasks are too small. That is why `bendc` builds itself with `BEND_NO_FREE`, which turns the
+implicit forks off. The benchmarks keep every worker busy, and their times and CPU are unchanged.
+
 Parallel lets are also found. Bend is pure, so the operands of one node (an operator's, a call's
 arguments, a constructor's fields) may run in any order. Where two or more of them call back into
 the def, as in `fib(n - 1) + fib(n - 2)` or `merge(msort(a), msort(b))`, `bendc` turns them into a

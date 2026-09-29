@@ -1117,6 +1117,7 @@ V F_F32_dread(V s) {
 #define P_QUEUED 1
 #define P_DONE 2
 #define P_HELD 3
+#define P_WAIT 4
 #ifndef __TINYC__
 __thread int par_depth;
 #endif
@@ -1126,6 +1127,7 @@ int par_nthreads = 1;
 _Atomic int par_started;
 pthread_mutex_t par_mu = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t par_cv = PTHREAD_COND_INITIALIZER;
+pthread_cond_t par_jcv = PTHREAD_COND_INITIALIZER;
 _Atomic int par_sleepers;
 PDeque *pdq_new(void) {
   PDeque *d = calloc(1, sizeof(PDeque));
@@ -1177,7 +1179,14 @@ void par_exec(PTask *t) {
   V r = apply(t->clo, 0);
   par_depth = d;
   t->res = r;
-  __atomic_store_n(&t->state, P_DONE, __ATOMIC_RELEASE);
+  // (a compare-and-swap loop: tcc has no __atomic_exchange_n)
+  V s = __atomic_load_n(&t->state, __ATOMIC_RELAXED);
+  while (!__atomic_compare_exchange_n(&t->state, &s, P_DONE, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {}
+  if (s == P_WAIT) {
+    pthread_mutex_lock(&par_mu);
+    pthread_cond_broadcast(&par_jcv);
+    pthread_mutex_unlock(&par_mu);
+  }
 }
 PTask *par_steal(void) {
   Thr *me = thr_self;
@@ -1193,23 +1202,43 @@ PTask *par_steal(void) {
   }
   return NULL;
 }
+#define PAR_SPIN 128
+_Atomic int par_searching;
 void *par_worker(void *arg) {
   (void)arg;
   thr_register((uintptr_t)__builtin_frame_address(0) + 16);
+  int budget = PAR_SPIN, searching = 0;
   for (int spins = 0;;) {
     PTask *t = par_steal();
-    if (t) { par_exec(t); spins = 0; continue; }
-    if (++spins < 512) { cpu_relax(); continue; }
+    if (t) {
+      if (searching) {
+        searching = 0;
+        if (atomic_fetch_sub(&par_searching, 1) == 1 &&
+            atomic_load_explicit(&par_sleepers, memory_order_relaxed) > 0)
+          pthread_cond_signal(&par_cv);
+      }
+      par_exec(t);
+      spins = 0;
+      budget = PAR_SPIN;
+      continue;
+    }
+    if (++spins < budget) {
+      if (!searching) { searching = 1; atomic_fetch_add(&par_searching, 1); }
+      cpu_relax();
+      continue;
+    }
+    if (searching) { searching = 0; atomic_fetch_sub(&par_searching, 1); }
     pthread_mutex_lock(&par_mu);
     atomic_fetch_add(&par_sleepers, 1);
     struct timeval now;
     gettimeofday(&now, NULL);
     struct timespec until = {now.tv_sec, now.tv_usec * 1000 + 2000000};
     if (until.tv_nsec >= 1000000000) { until.tv_sec++; until.tv_nsec -= 1000000000; }
-    pthread_cond_timedwait(&par_cv, &par_mu, &until);
+    int r = pthread_cond_timedwait(&par_cv, &par_mu, &until);
     atomic_fetch_sub(&par_sleepers, 1);
     pthread_mutex_unlock(&par_mu);
     spins = 0;
+    budget = r == ETIMEDOUT ? 1 : PAR_SPIN;
   }
   return NULL;
 }
@@ -1276,7 +1305,9 @@ V par_fork(V clo) {
   __atomic_store_n(&d->buf[b & d->mask], t, __ATOMIC_RELAXED);
   atomic_thread_fence(memory_order_release);
   atomic_store_explicit(&d->bot, b + 1, memory_order_relaxed);
-  if (atomic_load_explicit(&par_sleepers, memory_order_relaxed) > 0) pthread_cond_signal(&par_cv);
+  if (atomic_load_explicit(&par_sleepers, memory_order_relaxed) > 0 &&
+      atomic_load_explicit(&par_searching, memory_order_relaxed) == 0)
+    pthread_cond_signal(&par_cv);
   return (V)t;
 }
 V par_join(V tv) {
@@ -1292,16 +1323,27 @@ V par_join(V tv) {
     return apply(clo, 0);
   }
   if (p) par_exec(p);
-  // With nothing to steal, a joiner spins a little, then yields its core,
-  // then naps (the task it waits for may be running on a thread that has no
-  // core of its own when there are more threads than cores).
+  // With nothing to steal, a joiner spins a little, then sleeps until the
+  // task's thief finishes it (P_WAIT tells the thief to wake it). It wakes
+  // every millisecond too, to steal what was forked meanwhile (and to serve
+  // a thief that wants a held task of its own deque).
   for (int spins = 0; __atomic_load_n(&t->state, __ATOMIC_ACQUIRE) != P_DONE;) {
     par_serve_if(d);
     PTask *o = par_steal();
     if (o) { par_exec(o); spins = 0; continue; }
-    if (++spins < 64) cpu_relax();
-    else if (spins < 256) sched_yield();
-    else { struct timespec ts = {0, 20000}; nanosleep(&ts, NULL); }
+    if (++spins < 256) { cpu_relax(); continue; }
+    spins = 0;
+    V s = P_QUEUED;
+    if (!__atomic_compare_exchange_n(&t->state, &s, P_WAIT, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE) && s != P_WAIT)
+      continue;
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    struct timespec until = {now.tv_sec, now.tv_usec * 1000 + 1000000};
+    if (until.tv_nsec >= 1000000000) { until.tv_sec++; until.tv_nsec -= 1000000000; }
+    pthread_mutex_lock(&par_mu);
+    if (__atomic_load_n(&t->state, __ATOMIC_ACQUIRE) == P_WAIT)
+      pthread_cond_timedwait(&par_jcv, &par_mu, &until);
+    pthread_mutex_unlock(&par_mu);
   }
   V r = t->res;
   if (gc_hot.rc) rc_free_at((V)t, 4);
