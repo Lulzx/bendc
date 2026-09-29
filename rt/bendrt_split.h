@@ -516,11 +516,14 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
 #define bend_take(v, w) bend_take_at(v, w, 0)
 #endif
 
+static inline void rc_take(V v, unsigned w);
 // A flat result (a def's U_ function): node t's k fields go out through o,
-// then t is taken when matches free (a shared node shares its fields).
+// then t is taken when matches free or counts (a shared node shares its
+// fields, or gives each a reference).
 static inline void bend_open(V t, V *o, unsigned k, int take) {
   for (unsigned i = 0; i < k; i++) o[i] = FLD(t, i);
-  if (take) bend_take(t, k + 1);
+  if (gc_hot.rc) rc_take(t, k + 1);
+  else if (take) bend_take(t, k + 1);
 }
 
 // Reference counting
@@ -607,6 +610,12 @@ static inline void rc_dup_leaf(V a) { rc_dup_in(((V *)a)[1], ((V *)a)[0] & RC_TS
 // mark says whether other threads reach it, as everything a marked object
 // reaches is marked (rc_publish).
 #define rc_bmark() 0
+// A temporary node (see RC.tmp in bendc.bend): a constructor built where
+// its callee only reads it, on the stack (RC_TMP), or for a loop's next
+// argument in the one of its two buffers b not the current one (RC_TB).
+// It is not in the heap, so references to it are not counted.
+#define RC_TMP(...) ((V)(V[]){__VA_ARGS__})
+#define RC_TB(b, i, ...) ((i) ^= 1, (V)memcpy((b)[i], (V[]){__VA_ARGS__}, sizeof((V[]){__VA_ARGS__})))
 #define rc_bdupFLD(p, i) rc_dup_in(FLD(p, i), rc_bmark())
 #define rc_bdup(x) rc_dup_in((x), rc_bmark())
 static inline void rc_dup(V v) { rc_dupn(v, 1); }
@@ -724,6 +733,34 @@ static inline V rc_take_ru(V v, unsigned w) {
     return v;
   }
   rc_take_shared(v, w);
+  return 0;
+}
+
+// As rc_take and rc_take_ru, for a case that uses only the fields in keep
+// (bit i for FLD i): the others are dropped with a node that had one
+// reference, and get none from a shared one (see RC.dead in bendc.bend).
+static inline int rc_kept(V keep, unsigned j) { return j > 64 || ((keep >> (j - 1)) & 1); }
+__attribute__((noinline)) void rc_take_shared_d(V v, unsigned w, V keep);
+static inline void rc_drop_unkept(V v, unsigned w, V keep) {
+  for (unsigned j = 1; j < w; j++)
+    if (!rc_kept(keep, j)) rc_drop(((V *)v)[j]);
+}
+static inline void rc_take_d(V v, unsigned w, V keep) {
+  if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) { rc_drop_unkept(v, w, keep); return; }
+  if (LIKELY(rc_unique(v))) { rc_drop_unkept(v, w, keep); rc_free_at(v, w); }
+  else rc_take_shared_d(v, w, keep);
+}
+static inline V rc_take_ru_d(V v, unsigned w, V keep) {
+  if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) { rc_drop_unkept(v, w, keep); return 0; }
+  if (LIKELY(rc_unique(v))) {
+    rc_drop_unkept(v, w, keep);
+#ifdef BEND_DEBUG_FREE
+    rc_free_at(v, w);
+    return 0;
+#endif
+    return v;
+  }
+  rc_take_shared_d(v, w, keep);
   return 0;
 }
 
@@ -1006,10 +1043,14 @@ static inline V F_Chk_dmemo_dset(V m, V v, V x) {
   bend_drop(m);
   return x;
 }
-BEND_UINL V F_Array_dget(V a, V i) {
-  V x = *arr_at(a, i);
+// x, read out of array a, is the array's and the reader's now.
+BEND_UINL void arr_got(V a, V x) {
   if (gc_hot.rc) rc_dup_in(x, ((V *)a)[0] & RC_TS);
   else bend_share(x);
+}
+BEND_UINL V F_Array_dget(V a, V i) {
+  V x = *arr_at(a, i);
+  arr_got(a, x);
   return C2(0, a, x);
 }
 BEND_UINL V F_Array_dswap(V a, V i, V v) {
@@ -1023,6 +1064,17 @@ BEND_UINL V F_Array_dset(V a, V i, V v) {
   bend_drop(*p);
   arr_put(a, p, v);
   return a;
+}
+// Array.get, Array.set and Array.swap on cells of a scalar type (U32, F32,
+// Bool, Char; see Arrw in bendc.bend): the cells are words, with no
+// reference to take or drop, in either build.
+BEND_UINL V F_Array_dget_x37w(V a, V i) { return C2(0, a, *arr_at(a, i)); }
+BEND_UINL V F_Array_dset_x37w(V a, V i, V v) { *arr_at(a, i) = v; return a; }
+BEND_UINL V F_Array_dswap_x37w(V a, V i, V v) {
+  V *p = arr_at(a, i);
+  V old = *p;
+  *p = v;
+  return C2(0, a, old);
 }
 static inline V F_Array_dnew(V d, V v) { return arr_new(d, v); }
 static inline V F_Array_dclone(V a) { return C2(0, a, arr_copy(arr_cls(a), arr_cells(a), 1, ((V *)a)[0] & RC_TS)); }

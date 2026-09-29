@@ -384,6 +384,8 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w) {
 #define RC_ADDR (RC_ONE - 1)
 #define RC_REFS(w0) (((w0) >> 48) & 0x7fff)
 #define rc_bmark() 0
+#define RC_TMP(...) ((V)(V[]){__VA_ARGS__})
+#define RC_TB(b, i, ...) ((i) ^= 1, (V)memcpy((b)[i], (V[]){__VA_ARGS__}, sizeof((V[]){__VA_ARGS__})))
 #define rc_bdupFLD(p, i) rc_dup_in(FLD(p, i), rc_bmark())
 #define rc_bdup(x) rc_dup_in((x), rc_bmark())
 __attribute__((noinline)) void rc_free_large(uintptr_t bi) {
@@ -440,6 +442,13 @@ __attribute__((noinline)) void rc_take_shared(V v, unsigned w) {
   V *p = (V *)v;
   V ts = __atomic_load_n(p, __ATOMIC_RELAXED) & RC_TS;
   for (unsigned j = 1; j < w; j++) rc_dup_in(p[j], ts);
+  if (rc_release(v)) rc_free_obj(v);
+}
+__attribute__((noinline)) void rc_take_shared_d(V v, unsigned w, V keep) {
+  V *p = (V *)v;
+  V ts = __atomic_load_n(p, __ATOMIC_RELAXED) & RC_TS;
+  for (unsigned j = 1; j < w; j++)
+    if (rc_kept(keep, j)) rc_dup_in(p[j], ts);
   if (rc_release(v)) rc_free_obj(v);
 }
 #define RU(tok, w) ((tok) ? (V *)(tok) : halloc(w))

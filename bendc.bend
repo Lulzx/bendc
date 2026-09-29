@@ -3797,6 +3797,7 @@ def Natives() -> List<&2, String>:
    "F32.trunc", "F32.bits", "F32.to_u32", "F32.show", "F32.read", "Map.bit",
    "Map.get", "Map.has", "String.cmp", "String.eq",
    "Array.size", "Array.get", "Array.swap", "Array.set", "Array.new", "Array.clone",
+   "Array.get%w", "Array.swap%w", "Array.set%w",
    "Array.atomic.add", "Array.atomic.min", "Array.atomic.max", "Array.atomic.and",
    "Array.atomic.or", "Array.atomic.xor", "Array.atomic.exch", "Array.atomic.cas",
    "Array.atomic.fadd"]
@@ -5157,9 +5158,317 @@ def Expr.is_var(e: Core.Expr, +x: String) -> Bool:
     case other:
       False{}
 
+# Temporary nodes
+# ---------------
+#
+# A constructor passed where the callee borrows, whose fields are
+# variables and numbers, is only read by the callee: when its variables are
+# borrowed too (a borrowed parameter, or what a match reads out of one), it
+# is built on the caller's stack (RC_TMP), without references, and a loop's
+# next argument in one of two buffers per parameter (RC_TB; its fields must
+# be read out of nodes, which never point into those buffers). This is the
+# walk that rebuilds the node it opens with one field less, Opt.sz(CCall{f,
+# t2}): the node it walks stays borrowed. RC.tmp.pass marks such arguments
+# (%tmp) where the value cannot outlive the call: not in a lambda or a
+# parallel let's values, and only in a full call. A marked argument whose
+# variables are not all borrowed is built on the heap, each borrowed
+# variable in it getting a reference there (RC.kept does not count them).
+
+def RC.tmp.imm(m: Maybe<&2, CInfo>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{CInfo{tag, ar, +kind, single}}:
+      Bool.not(U32.is_zero(kind))
+
+# A field of a temporary: a variable, a number or a nullary constructor.
+def RC.tmp.field(+g: G, e: Core.Expr) -> Bool:
+  match e:
+    case Core.ECtor{+n, as}:
+      match as:
+        case Nil{}:
+          RC.tmp.imm(G.ctor(g, n))
+        case a <> t:
+          False{}
+    case Core.EVar{x}:
+      True{}
+    case Core.ENum{n}:
+      True{}
+    case Core.ENat{n}:
+      True{}
+    case Core.EFlt{f}:
+      True{}
+    case other:
+      False{}
+
+def RC.tmp.fields(+g: G, as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case Nil{}:
+      True{}
+    case a <> t:
+      Bool.and(RC.tmp.field(g, a), RC.tmp.fields(g, t))
+
+def RC.tmp.node(m: Maybe<&2, CInfo>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{CInfo{tag, ar, +kind, single}}:
+      U32.is_zero(kind)
+
+def RC.tmp.size(+k: Nat) -> Bool:
+  Bool.and(Nat.is_ge(k, 1n), Nat.is_le(k, 8n))
+
+# A constructor that can be a temporary node.
+def RC.tmp.syn(+g: G, e: Core.Expr) -> Bool:
+  match e:
+    case Core.ECtor{+n, +as}:
+      Bool.and(Bool.and(RC.tmp.size(List.length(&2, Core.Expr, as)), RC.tmp.fields(g, as)), RC.tmp.node(G.ctor(g, n)))
+    case other:
+      False{}
+
+def RC.tmp.is(e: Core.Expr) -> Bool:
+  match e:
+    case Core.ECtor{+n, as}:
+      String.starts_with(n, "%tmp")
+    case other:
+      False{}
+
+# A field of a temporary, by its C name (tail: a loop's, read out of a node).
+def RC.tmp.c(tail: Bool, m: Maybe<&2, String>) -> Bool:
+  match m:
+    case Some{+c}:
+      Bool.or(Bool.or(Str.eq(c, "0"), Gen.scalar.c(c)),
+        Bool.and(RC.bor(c), Bool.or(Bool.not(tail), String.starts_with(c, "FLD("))))
+    case None{}:
+      False{}
+
+def RC.tmp.env(+env: Env(), +tail: Bool, as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case Nil{}:
+      True{}
+    case Core.EVar{+x} <> t:
+      Bool.and(RC.tmp.c(tail, Env.find(env, x)), RC.tmp.env(env, tail, t))
+    case a <> t:
+      RC.tmp.env(env, tail, t)
+
+# The inner constructor's fields are all borrowed (a marked argument).
+def RC.tmp.ok(+env: Env(), tail: Bool, as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case Core.ECtor{n, bs} <> Nil{}:
+      RC.tmp.env(env, tail, bs)
+    case other:
+      False{}
+
+# The references a marked argument built on the heap takes.
+def RC.tmp.dup(m: Maybe<&2, String>) -> String:
+  match m:
+    case Some{+c}:
+      Bool.pick(String, RC.bor(c), "rc_bdup(" ++ c ++ "); ", "")
+    case None{}:
+      ""
+
+def RC.tmp.dups(+env: Env(), as: List<&2, Core.Expr>) -> String:
+  match as:
+    case Nil{}:
+      ""
+    case Core.EVar{+x} <> t:
+      RC.tmp.dup(Env.find(env, x)) ++ RC.tmp.dups(env, t)
+    case a <> t:
+      RC.tmp.dups(env, t)
+
+def RC.tmp.mark1(hit: Bool, a: Core.Expr) -> Core.Expr:
+  match hit:
+    case True{}:
+      Core.ECtor{"%tmp", [a]}
+    case False{}:
+      a
+
+# A full call's arguments, marked where the def borrows (fl, by parameter).
+def RC.tmp.mark(+g: G, mask: List<&2, Bool>, +fl: List<&2, Bool>, args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match mask args:
+    case Nil{} xs:
+      xs
+    case m <> mt Nil{}:
+      Nil{}
+    case True{} <> mt +a <> at:
+      RC.tmp.mark1(Bool.and(Bor.head(fl), RC.tmp.syn(g, a)), a) <> RC.tmp.mark(g, mt, Bor.tail(fl), at)
+    case False{} <> mt a <> at:
+      a <> RC.tmp.mark(g, mt, Bor.tail(fl), at)
+
+def RC.tmp.args(e: Core.Expr) -> List<&2, Core.Expr>:
+  match e:
+    case Core.ECtor{n, as}:
+      as
+    case other:
+      Nil{}
+
+def RC.tmp.call.pick(hit: Bool, +g: G, +h: String, args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match hit:
+    case True{}:
+      RC.tmp.mark(g, DInfo.mask(G.def(g, h)), Bor.list(Bor.flags(g, h)), args)
+    case False{}:
+      args
+
+def RC.tmp.call(+g: G, +loc: List<&2, String>, f: Core.Expr, +args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match f:
+    case Core.EVar{+h}:
+      RC.tmp.call.pick(Bool.and(Bool.and(Bool.not(Str.has(loc, h)), Bor.any(Bor.list(Bor.flags(g, h)))),
+        Nat.is_eq(List.length(&2, Bool, DInfo.mask(G.def(g, h))), List.length(&2, Core.Expr, args))), g, h, args)
+    case other:
+      args
+
+def RC.tmp.par(p: Core.Pat) -> Bool:
+  match p:
+    case Core.PCtor{+n, as}:
+      Str.eq(n, "%par")
+    case other:
+      False{}
+
+# e with its temporaries marked (loc: the local names).
+def RC.tmp.pass(n: Nat, +g: G, +loc: List<&2, String>, e: Core.Expr) -> Core.Expr:
+  match n:
+    case 0n:
+      e
+    case 1n+ +m:
+      match e:
+        case Core.ECall{+f, args}:
+          Core.ECall{f, RC.tmp.args(RC.tmp.pass(m, g, loc, Core.ECtor{"", RC.tmp.call(g, loc, f, args)}))}
+        case Core.ECtor{+c, args}:
+          match args:
+            case Nil{}:
+              Core.ECtor{c, Nil{}}
+            case a <> t:
+              Core.ECtor{c, RC.tmp.pass(m, g, loc, a) <> RC.tmp.args(RC.tmp.pass(m, g, loc, Core.ECtor{c, t}))}
+        case Core.ELet{+p, +v, b}:
+          Core.ELet{p, Bool.pick(Core.Expr, RC.tmp.par(p), v, RC.tmp.pass(m, g, loc, v)),
+            RC.tmp.pass(m, g, Pat.vars(p, loc), b)}
+        case Core.EMatch{scrs, cases}:
+          Core.EMatch{RC.tmp.args(RC.tmp.pass(m, g, loc, Core.ECtor{"", scrs})),
+            RC.tmp.args(RC.tmp.pass(m, g, loc, Core.ECtor{"", cases}))}
+        case Core.ECase{+ps, b}:
+          Core.ECase{ps, RC.tmp.pass(m, g, Pats.vars(ps, loc), b)}
+        case Core.ESucc{k, x}:
+          Core.ESucc{k, RC.tmp.pass(m, g, loc, x)}
+        case Core.EOp{op, a, b}:
+          Core.EOp{op, RC.tmp.pass(m, g, loc, a), RC.tmp.pass(m, g, loc, b)}
+        case Core.EAnn{x, t}:
+          Core.EAnn{RC.tmp.pass(m, g, loc, x), t}
+        case other:
+          other
+
+# A def's body, its temporaries marked when it counts references.
+def RC.tmp.body(rc: Bool, +g: G, +loc: List<&2, String>, e: Core.Expr) -> Core.Expr:
+  match rc:
+    case True{}:
+      RC.tmp.pass(Fuel.max(), g, loc, e)
+    case False{}:
+      e
+
+# The buffers of a loop's temporaries, one pair for each parameter it
+# borrows (fl), and which of the two is the last one written.
+def RC.tmp.decl(fl: List<&2, Bool>, +used: List<&2, String>, +i: U32) -> String:
+  match fl:
+    case Nil{}:
+      ""
+    case b <> t:
+      Bool.pick(String, Bool.and(b, Str.has(used, U32.show(i))),
+        "V tb" ++ U32.show(i) ++ "[2][9]; unsigned tbi" ++ U32.show(i) ++ " = 0; ", "") ++
+        RC.tmp.decl(t, used, U32.inc(i))
+
+def RC.tmp.add(hit: Bool, +x: String, acc: List<&2, String>) -> List<&2, String>:
+  match hit:
+    case True{}:
+      x <> acc
+    case False{}:
+      acc
+
+# The (kept) positions of a call to the def itself that get a temporary.
+def RC.tmp.idx(mask: List<&2, Bool>, args: List<&2, Core.Expr>, +k: U32, acc: List<&2, String>) -> List<&2, String>:
+  match mask args:
+    case True{} <> mt a <> at:
+      RC.tmp.idx(mt, at, U32.inc(k), RC.tmp.add(RC.tmp.is(a), U32.show(k), acc))
+    case False{} <> mt a <> at:
+      RC.tmp.idx(mt, at, k, acc)
+    case ml al:
+      acc
+
+def RC.tmp.selfc.go(hit: Bool, +mask: List<&2, Bool>, +args: List<&2, Core.Expr>, acc: List<&2, String>) ->
+  List<&2, String>:
+  match hit:
+    case True{}:
+      RC.tmp.idx(mask, args, 0, acc)
+    case False{}:
+      acc
+
+def RC.tmp.selfc(+self: String, +mask: List<&2, Bool>, f: Core.Expr, +args: List<&2, Core.Expr>,
+  acc: List<&2, String>) -> List<&2, String>:
+  match f:
+    case Core.EVar{+h}:
+      RC.tmp.selfc.go(Str.eq(h, self), mask, args, acc)
+    case other:
+      acc
+
+# The positions whose loop buffers a def's body (its temporaries marked)
+# uses.
+def RC.tmp.used(n: Nat, +self: String, +mask: List<&2, Bool>, e: Core.Expr, acc: List<&2, String>) -> List<&2, String>:
+  match n:
+    case 0n:
+      acc
+    case 1n+ +m:
+      match e:
+        case Core.ECall{+f, +args}:
+          RC.tmp.used(m, self, mask, Core.ECtor{"", args}, RC.tmp.selfc(self, mask, f, args, acc))
+        case Core.ECtor{+c, args}:
+          match args:
+            case Nil{}:
+              acc
+            case a <> t:
+              RC.tmp.used(m, self, mask, Core.ECtor{c, t}, RC.tmp.used(m, self, mask, a, acc))
+        case Core.ELet{p, v, b}:
+          RC.tmp.used(m, self, mask, b, RC.tmp.used(m, self, mask, v, acc))
+        case Core.EMatch{scrs, cases}:
+          RC.tmp.used(m, self, mask, Core.ECtor{"", cases}, RC.tmp.used(m, self, mask, Core.ECtor{"", scrs}, acc))
+        case Core.ECase{ps, b}:
+          RC.tmp.used(m, self, mask, b, acc)
+        case Core.ESucc{k, x}:
+          RC.tmp.used(m, self, mask, x, acc)
+        case Core.EOp{op, a, b}:
+          RC.tmp.used(m, self, mask, b, RC.tmp.used(m, self, mask, a, acc))
+        case Core.EAnn{x, t}:
+          RC.tmp.used(m, self, mask, x, acc)
+        case other:
+          acc
+
+def RC.tmp.tag(m: Maybe<&2, CInfo>) -> U32:
+  match m:
+    case None{}:
+      0
+    case Some{CInfo{tag, ar, kind, single}}:
+      tag
+
+def RC.tmp.doc(+tb: String, +tag: U32, ds: List<&2, Doc>) -> Doc:
+  Doc.list([DStr{Bool.pick(String, String.is_empty(tb), "RC_TMP(", "RC_TB(tb" ++ tb ++ ", tbi" ++ tb ++ ", ") ++
+    U32.show(tag) ++ ", "}, Gen.commas(ds), DStr{")"}])
+
+def RC.tmp.tail1(a: Core.Expr, +i: U32) -> Core.Expr:
+  match a:
+    case Core.ECtor{+n, as}:
+      Core.ECtor{Bool.pick(String, Str.eq(n, "%tmp"), "%tmp" ++ U32.show(i), n), as}
+    case other:
+      other
+
+# A loop's next arguments, a marked one tagged with its parameter.
+def RC.tmp.tail(as: List<&2, Core.Expr>, +i: U32) -> List<&2, Core.Expr>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case a <> t:
+      RC.tmp.tail1(a, i) <> RC.tmp.tail(t, U32.inc(i))
+
 # The arguments of a call to a def that are evaluated: those its mask keeps
 # (and any past it), but for a borrowed x (b), itself where the def borrows
-# it (fl: the def's flags).
+# it (fl: the def's flags), and any temporary (whose variables are borrowed,
+# or get their reference where it is built).
 def RC.kept(mask: List<&2, Bool>, +fl: List<&2, Bool>, +x: String, args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
   match mask args:
     case Nil{} xs:
@@ -5167,7 +5476,7 @@ def RC.kept(mask: List<&2, Bool>, +fl: List<&2, Bool>, +x: String, args: List<&2
     case m <> mt Nil{}:
       Nil{}
     case True{} <> mt +a <> at:
-      RC.kept.one(Bool.and(Bor.head(fl), Expr.is_var(a, x)), a, RC.kept(mt, Bor.tail(fl), x, at))
+      RC.kept.one(Bool.and(Bor.head(fl), Bool.or(Expr.is_var(a, x), RC.tmp.is(a))), a, RC.kept(mt, Bor.tail(fl), x, at))
     case False{} <> mt a <> at:
       RC.kept(mt, Bor.tail(fl), x, at)
 
@@ -5209,6 +5518,8 @@ def RC.owned.arg(+env: Env(), e: Core.Expr) -> Bool:
       False{}
     case Core.ETy{n, a}:
       False{}
+    case Core.ECtor{+n, as}:
+      Bool.not(Bool.and(String.starts_with(n, "%tmp"), RC.tmp.ok(env, False{}, as)))
     case other:
       True{}
 
@@ -5232,11 +5543,19 @@ def RC.wrap.go(kept: List<&2, Core.Expr>, ks: List<&2, Doc>, +fl: List<&2, Bool>
     case al dl:
       r
 
-def RC.wrap(+k: U32, +name: String, xs: List<&2, Doc>, r: RcW) -> Doc:
-  RcW{args, pre, post, any} = r
-  +call = Gen.apply(xs, Doc.list([DStr{Gen.f(name) ++ "("}, Gen.commas(args), DStr{")"}]))
+def RC.wrap.call(+k: U32, +call: Doc, any: Bool, +pre: Doc, +post: Doc) -> Doc:
   Bool.pick(Doc, any, Doc.list([DStr{"({ "}, pre, DStr{"V r" ++ U32.show(k) ++ " = "}, call, DStr{"; "}, post,
     DStr{"r" ++ U32.show(k) ++ "; })"}]), call)
+
+def RC.wrap(+k: U32, +name: String, xs: List<&2, Doc>, r: RcW) -> Doc:
+  RcW{args, pre, post, any} = r
+  RC.wrap.call(k, Gen.apply(xs, Doc.list([DStr{Gen.f(name) ++ "("}, Gen.commas(args), DStr{")"}])), any, pre, post)
+
+# The call of a flat result's U_ function, its fields stored through o.
+def RC.wrap.u(+k: U32, +name: String, +o: String, r: RcW) -> Doc:
+  RcW{args, pre, post, any} = r
+  RC.wrap.call(k, Doc.list([DStr{"U_" ++ Gen.mangle(name) ++ "("}, Gen.commas(List.append(&2, Doc, args, [DStr{o}])),
+    DStr{")"}]), any, pre, post)
 
 def RC.call.args(+g: G, +loc: List<&2, String>, +b: Bool, +x: String, +h: String, +args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
   Bool.pick(List<&2, Core.Expr>, Str.has(loc, h), Core.EVar{h} <> args, RC.global(G.def(g, h), RC.fl(b, g, h), x, args))
@@ -5542,6 +5861,20 @@ def Gen.takes(binds: Env(), +kind: String, +fn: String) -> List<&2, String>:
       Gen.takes.if(Str.eq(Gen.take.kind(x), kind), fn ++ "(" ++ c ++ ", " ++ Gen.take.words(x) ++ ")",
         Gen.takes(t, kind, fn))
 
+def Gen.is_take(x: String) -> Bool:
+  match x:
+    case SCon{Chr{c}, t}:
+      U32.is_eq(c, 37)
+    case SNil{}:
+      False{}
+
+def Gen.vars.if(skip: Bool, b: Bind, rest: Env()) -> Env():
+  match skip:
+    case True{}:
+      rest
+    case False{}:
+      b <> rest
+
 # Reuse (counted programs): a node a case opens, when it had one reference,
 # is not freed but kept as a token, its slot (rc_take_ru), for a constructor
 # of its size built after it (CR2 and the like). The tokens in reach are the
@@ -5549,7 +5882,7 @@ def Gen.takes(binds: Env(), +kind: String, +fn: String) -> List<&2, String>:
 # code straight after its case: a nested match's cases each use or free
 # (RUF) the tokens they get, and closures and parallel lets get none.
 type RuT is Data:
-  RuT{tok: String, c: String, w: String}
+  RuT{tok: String, c: String, w: String, k: String}
 
 def RU.head(memo: List<&2, Bind>) -> String:
   match memo:
@@ -5654,21 +5987,101 @@ def RU.toks.if(keep: Bool, r: RuT, rest: List<&2, RuT>) -> List<&2, RuT>:
     case False{}:
       rest
 
-# The tokens of the nodes a pattern opens (kind "%top" or "%sub").
-def RU.toks(binds: Env(), +kind: String) -> List<&2, RuT>:
-  match binds:
+# Unused fields (counted): a case that leaves fields of a node it opens
+# unused takes the node with them (rc_take_d: dropped with it when it had one
+# reference, not given one when it was shared) instead of dropping each
+# after it gave them one. dead: the paths (FLD(node, i)) of the pattern's
+# variables the body does not use.
+def RC.fld(+q: String, +i: U32) -> String:
+  "FLD(" ++ q ++ ", " ++ U32.show(i) ++ ")"
+
+def RC.dead.one(hit: Bool, +path: String, rest: List<&2, String>) -> List<&2, String>:
+  match hit:
+    case True{}:
+      path <> rest
+    case False{}:
+      rest
+
+def RC.dead(+g: G, +loc: List<&2, String>, +body: Core.Expr, pre: Env(), post: Env()) -> List<&2, String>:
+  match pre post:
+    case Bind{+x, +path} <> pt Bind{y, +c} <> qt:
+      RC.dead.one(Bool.and(Bool.and(Bool.not(Gen.is_take(x)), String.starts_with(path, "FLD(")),
+        Bool.and(Bool.not(RC.bor(c)), U32.is_zero(RC.uses(g, loc, False{}, x, body)))), path,
+        RC.dead(g, loc, body, pt, qt))
+    case pl ql:
+      Nil{}
+
+def RC.dead.if(rc: Bool, +g: G, +loc: List<&2, String>, +body: Core.Expr, +pre: Env(), +post: Env()) -> List<&2, String>:
+  match rc:
+    case True{}:
+      RC.dead(g, loc, body, pre, post)
+    case False{}:
+      Nil{}
+
+# The unused fields of node q among its first n: "|1u<<i" each.
+def RC.dbits(+q: String, +dead: List<&2, String>, n: Nat, +i: U32) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+m:
+      Bool.pick(String, Str.has(dead, RC.fld(q, i)), "|1ull<<" ++ U32.show(i), "") ++ RC.dbits(q, dead, m, U32.inc(i))
+
+# The unused fields of the nodes a pattern opens (which their takes drop).
+def RC.hand.node(+q: String, +dead: List<&2, String>, n: Nat, +i: U32, acc: List<&2, String>) -> List<&2, String>:
+  match n:
+    case 0n:
+      acc
+    case 1n+m:
+      RC.hand.node(q, dead, m, U32.inc(i), RC.dead.one(Str.has(dead, RC.fld(q, i)), RC.fld(q, i), acc))
+
+def RC.hand.one(hit: Bool, +q: String, +dead: List<&2, String>, acc: List<&2, String>) -> List<&2, String>:
+  match hit:
+    case True{}:
+      RC.hand.node(q, dead, 32n, 0, acc)
+    case False{}:
+      acc
+
+def RC.hand.all(pre: Env(), +dead: List<&2, String>) -> List<&2, String>:
+  match pre:
     case Nil{}:
       Nil{}
-    case Bind{+x, +c} <> t:
-      RU.toks.if(Str.eq(Gen.take.kind(x), kind), RuT{"u" ++ Gen.take.words(x) ++ "_" ++ c, c, Gen.take.words(x)},
-        RU.toks(t, kind))
+    case Bind{+x, +path} <> t:
+      RC.hand.one(Gen.is_take(x), path, dead, RC.hand.all(t, dead))
+
+def RC.hand(+pre: Env(), +dead: List<&2, String>) -> List<&2, String>:
+  Bool.pick(Unit -> List<&2, String>, List.is_empty(&2, String, dead), u => Nil{}, u => RC.hand.all(pre, dead))(Unit{})
+
+# The pattern's variables but the fields the takes drop (for Gen.own).
+def RC.alive(pre: Env(), post: Env(), +hand: List<&2, String>) -> Env():
+  match pre post:
+    case Bind{+x, +path} <> pt Bind{+y, +c} <> qt:
+      Gen.vars.if(Bool.or(Gen.is_take(x), Str.has(hand, path)), Bind{y, c}, RC.alive(pt, qt, hand))
+    case pl ql:
+      Nil{}
+
+# The tokens of the nodes a pattern opens (kind "%top" or "%sub"; pre: the
+# paths the bindings were loaded from).
+def RU.toks(pre: Env(), binds: Env(), +kind: String, +dead: List<&2, String>) -> List<&2, RuT>:
+  match pre binds:
+    case Bind{px, +path} <> pt Bind{+x, +c} <> t:
+      RU.toks.if(Str.eq(Gen.take.kind(x), kind), RuT{"u" ++ Gen.take.words(x) ++ "_" ++ c, c, Gen.take.words(x),
+        Bool.pick(Unit -> String, List.is_empty(&2, String, dead), u => "", u => RC.dbits(path, dead, 32n, 0))(Unit{})},
+        RU.toks(pt, t, kind, dead))
+    case pl bl:
+      Nil{}
 
 def RU.names(ts: List<&2, RuT>) -> List<&2, String>:
   match ts:
     case Nil{}:
       Nil{}
-    case RuT{tok, c, w} <> t:
+    case RuT{tok, c, w, k} <> t:
       tok <> RU.names(t)
+
+def RU.take(+tok: String, +c: String, +w: String, +k: String, keep: Bool) -> String:
+  +d = Bool.pick(String, String.is_empty(k), "", "_d")
+  +m = Bool.pick(String, String.is_empty(k), "", ", ~(0" ++ k ++ ")")
+  Bool.pick(String, keep, "rc_take" ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n",
+    "V " ++ tok ++ " = rc_take_ru" ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n")
 
 # The takes of a case's nodes: a token used after them is kept (left: the
 # tokens not used).
@@ -5676,9 +6089,8 @@ def RU.takes(ts: List<&2, RuT>, +left: List<&2, String>) -> Doc:
   match ts:
     case Nil{}:
       DNil{}
-    case RuT{+tok, +c, +w} <> t:
-      Doc.list([DStr{Bool.pick(String, Str.has(left, tok), "rc_take(" ++ c ++ ", " ++ w ++ ");\n",
-        "V " ++ tok ++ " = rc_take_ru(" ++ c ++ ", " ++ w ++ ");\n")}, RU.takes(t, left)])
+    case RuT{+tok, +c, +w, +k} <> t:
+      Doc.list([DStr{RU.take(tok, c, w, k, Str.has(left, tok))}, RU.takes(t, left)])
 
 def RU.takes.pick(rc: Bool, ts: List<&2, RuT>, +left: List<&2, String>, old: String) -> Doc:
   match rc:
@@ -5693,20 +6105,6 @@ def RU.frees(ts: List<&2, String>) -> Doc:
       DNil{}
     case +h <> t:
       Doc.list([DStr{"RUF(" ++ h ++ ");\n"}, RU.frees(t)])
-
-def Gen.is_take(x: String) -> Bool:
-  match x:
-    case SCon{Chr{c}, t}:
-      U32.is_eq(c, 37)
-    case SNil{}:
-      False{}
-
-def Gen.vars.if(skip: Bool, b: Bind, rest: Env()) -> Env():
-  match skip:
-    case True{}:
-      rest
-    case False{}:
-      b <> rest
 
 # Whether a pattern opens a node.
 def Gen.opens(binds: Env()) -> Bool:
@@ -6354,7 +6752,8 @@ def Gen.out.arr(+env: Env(), t: Tgt, +name: String) -> Nat:
   match t:
     case TOut{k, free}:
       Bool.pick(Nat, Bool.or(Bool.not(U32.is_eq(k, 2)), Env.has(env, name)), 0n,
-        Bool.pick(Nat, Str.eq(name, "Array.get"), 1n, Bool.pick(Nat, Str.eq(name, "Array.swap"), 2n, 0n)))
+        Bool.pick(Nat, Str.has(["Array.get", "Array.get%w"], name), 1n,
+          Bool.pick(Nat, Str.has(["Array.swap", "Array.swap%w"], name), 2n, 0n)))
     case other:
       0n
 
@@ -6408,6 +6807,9 @@ type GSel is Data:
   GSBitsArgs{g: G, env: Env(), w: Nat, args: List<&2, Core.Expr>}
   GSCtorInfo{g: G, env: Env(), name: String, info: Maybe<&2, CInfo>, args: List<&2, Core.Expr>}
   GSCtor{g: G, env: Env(), name: String, args: List<&2, Core.Expr>}
+  GSTmp{g: G, env: Env(), tb: String, args: List<&2, Core.Expr>}
+  GSTmpNode{g: G, env: Env(), tb: String, name: String, args: List<&2, Core.Expr>}
+  GSTmpHeap{g: G, env: Env(), name: String, args: List<&2, Core.Expr>}
   GSScrs{g: G, env: Env(), xs: List<&2, Core.Expr>}
   GSTail{g: G, env: Env(), cps: List<&2, String>, s: Split}
   GSTailSelf{g: G, env: Env(), self: Self, args: List<&2, Core.Expr>}
@@ -6433,7 +6835,7 @@ type GSel is Data:
   GSMatchGo{g: G, env: Env(), self: Self, tgt: Tgt, cases: List<&2, Core.Expr>, r: Scrs}
   GSMatch{g: G, env: Env(), self: Self, tgt: Tgt, scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>}
   GSStmt{g: G, env: Env(), self: Self, tgt: Tgt, e: Core.Expr}
-  GSCaseBodyMat{g: G, env: Env(), self: Self, tgt: Tgt, body: Core.Expr, r: Loads}
+  GSCaseBodyMat{g: G, env: Env(), self: Self, tgt: Tgt, body: Core.Expr, pre: Env(), r: Loads}
   GSCaseBodyGo{opens: Bool, g: G, env: Env(), self: Self, tgt: Tgt, binds: Env(), body: Core.Expr}
   GSCaseBody{g: G, env: Env(), self: Self, tgt: Tgt, binds: Env(), body: Core.Expr}
   GSLam{g: G, env: Env(), p: Core.Pat, body: Core.Expr}
@@ -6537,6 +6939,12 @@ def GSel.none(k: GSel) -> GSel.ty(k):
       DNil{}
     case GSCtor{g, env, name, args}:
       DNil{}
+    case GSTmp{g, env, tb, args}:
+      DNil{}
+    case GSTmpNode{g, env, tb, name, args}:
+      DNil{}
+    case GSTmpHeap{g, env, name, args}:
+      DNil{}
     case GSScrs{g, env, xs}:
       (Nil{}, DNil{})
     case GSTail{g, env, cps, s}:
@@ -6577,7 +6985,7 @@ def GSel.none(k: GSel) -> GSel.ty(k):
       DNil{}
     case GSStmt{g, env, self, tgt, e}:
       DNil{}
-    case GSCaseBodyMat{g, env, self, tgt, body, r}:
+    case GSCaseBodyMat{g, env, self, tgt, body, pre, r}:
       DNil{}
     case GSCaseBodyGo{opens, g, env, self, tgt, binds, body}:
       DNil{}
@@ -6833,6 +7241,23 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 return Gen.ctor.kind.ru(tok, tag, U32.to_nat(kind), ds)
         case GSCtor{+g, +env, +name, args}:
           Gen.rec(fu, GSCtorInfo{g, env, name, G.ctor(g, name), args})
+        # A marked argument (see RC.tmp.pass): a temporary node (tb: the
+        # loop parameter's buffers, or none), or a node on the heap.
+        case GSTmp{+g, +env, +tb, args}:
+          match args:
+            case Core.ECtor{+n, +as} <> Nil{}:
+              Bool.pick(Unit -> Gen(Doc), RC.tmp.env(env, Bool.not(String.is_empty(tb)), as),
+                u => Gen.rec(fu, GSTmpNode{g, env, tb, n, as}), u => Gen.rec(fu, GSTmpHeap{g, env, n, as}))(Unit{})
+            case other:
+              Gen.pure(Doc, DStr{"bend_fail(\"temporary\")"})
+        case GSTmpNode{+g, +env, +tb, +name, args}:
+          do Gen<Doc>:
+            ds : List<&2, Doc> <- Gen.rec(fu, GSBitsArgs{g, env, P.which(name, ["U32", "F32"]), args})
+            return RC.tmp.doc(tb, RC.tmp.tag(G.ctor(g, name)), ds)
+        case GSTmpHeap{+g, +env, +name, +args}:
+          do Gen<Doc>:
+            d : Doc <- Gen.rec(fu, GSCtor{g, env, name, args})
+            return Doc.list([DStr{"({ " ++ RC.tmp.dups(env, args)}, d, DStr{"; })"}])
         # Scrutinees are bound to fresh C variables.
         case GSScrs{+g, +env, xs}:
           match xs:
@@ -6853,7 +7278,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 +outer : String <- Gen.ru.get(Gen.rc(g))
                 Gen.ru.set(Gen.rc(g), "")
-                ds : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, kept})
+                ds : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, RC.tmp.tail(kept, 0)})
                 Gen.ru.set(Gen.rc(g), outer)
                 return Doc.list([DStr{"{ "}, Gen.tail.temps(ds, 0), Gen.tail.assign(cps, 0),
                   DStr{"goto top; }\n"}])
@@ -6948,8 +7373,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case Core.ECall{f, args}:
               Gen.rec(fu, GSCall{g, env, f, args})
             case Core.ECtor{+name, +args}:
-              Bool.pick(Unit -> Gen(Doc), Gen.konst.is(g, name, args), u => Gen.konst(g, name, args),
-                u => Gen.rec(fu, GSCtor{g, env, name, args}))(Unit{})
+              Bool.pick(Unit -> Gen(Doc), String.starts_with(name, "%tmp"),
+                u => Gen.rec(fu, GSTmp{g, env, String.drop(name, 4n), args}),
+                u => Bool.pick(Unit -> Gen(Doc), Gen.konst.is(g, name, args), u2 => Gen.konst(g, name, args),
+                  u2 => Gen.rec(fu, GSCtor{g, env, name, args}))(Unit{}))(Unit{})
             case Core.ELam{p, body}:
               Gen.rec(fu, GSLam{g, env, p, body})
             case Core.ELet{p, v, body}:
@@ -7027,11 +7454,12 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         # The fields and the opened nodes are read, then the nodes taken, each
         # before the nodes inside it: a shared one shares its fields, so the
         # nodes inside it are shared when they are taken, and share theirs.
-        case GSCaseBodyMat{+g, +env, +self, +tgt, +body, r}:
+        case GSCaseBodyMat{+g, +env, +self, +tgt, +body, +pre, r}:
           match r:
             case Loads{+mb, loads}:
               +vars = Gen.vars(mb)
-              +ts = List.append(&2, RuT, RU.toks(mb, "%top"), List.reverse(&2, RuT, RU.toks(mb, "%sub")))
+              +dead = RC.dead.if(Gen.rc(g), g, Env.names(List.append(&2, Bind, vars, env)), body, pre, mb)
+              +ts = List.append(&2, RuT, RU.toks(pre, mb, "%top", dead), List.reverse(&2, RuT, RU.toks(pre, mb, "%sub", dead)))
               do Gen<Doc>:
                 outer : String <- Gen.ru.get(Gen.rc(g))
                 Gen.ru.set(Gen.rc(g), String.join(List.append(&2, String, RU.names(ts), RU.list(outer)), " "))
@@ -7041,7 +7469,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 Gen.ru.set(Gen.rc(g), String.join(RU.minus(left, RU.names(ts)), " "))
                 return Doc.list([loads, RC.arrs(Gen.rc(g), mb), RU.takes.pick(Gen.rc(g), ts, left,
                   Gen.takes.stmts(Gen.takes(mb, "%top", "bend_take")) ++
-                  Gen.takes.stmts(List.reverse(&2, String, Gen.takes(mb, "%sub", "bend_take")))), Gen.own(g, List.append(&2, Bind, vars, env), vars, body), b])
+                  Gen.takes.stmts(List.reverse(&2, String, Gen.takes(mb, "%sub", "bend_take")))),
+                  Gen.own(g, List.append(&2, Bind, vars, env), RC.alive(pre, mb, RC.hand(pre, dead)), body), b])
         case GSCaseBodyGo{opens, +g, +env, +self, +tgt, +binds, +body}:
           match opens:
             case False{}:
@@ -7051,7 +7480,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case True{}:
               do Gen<Doc>:
                 r : Env() & Doc <- Gen.mat(binds)
-                Gen.rec(fu, GSCaseBodyMat{g, env, self, tgt, body, Loads.of(r)})
+                Gen.rec(fu, GSCaseBodyMat{g, env, self, tgt, body, binds, Loads.of(r)})
         # A body after a pattern's bindings: the nodes the pattern opens are
         # freed (see above).
         case GSCaseBody{+g, +env, +self, +tgt, binds0, +body}:
@@ -7172,10 +7601,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         case GSLetCall{+g, +env, +self, +tgt, +name, ps, +f, args, +body}:
           match ps args:
             case Core.PVar{+a} <> Core.PVar{+x} <> Nil{} t <> arr <> idx <> Nil{}:
-              Gen.rec(fu, GSLetGet{Bool.and(Bool.and(Str.eq(f, "Array.get"), Str.eq(name, "Tuple")),
+              Gen.rec(fu, GSLetGet{Bool.and(Bool.and(Str.has(["Array.get", "Array.get%w"], f), Str.eq(name, "Tuple")),
                 Bool.not(Env.has(env, f))), g, env, self, tgt, name, f, a, x, t, arr, idx, body})
             case Core.PVar{+a} <> Core.PVar{+x} <> Nil{} t <> arr <> idx <> v <> Nil{}:
-              Gen.rec(fu, GSLetSwap{Bool.and(Bool.and(Str.eq(f, "Array.swap"), Str.eq(name, "Tuple")),
+              Gen.rec(fu, GSLetSwap{Bool.and(Bool.and(Str.has(["Array.swap", "Array.swap%w"], f), Str.eq(name, "Tuple")),
                 Bool.not(Env.has(env, f))), g, env, self, tgt, name, f, a, x, t, arr, idx, v, body})
             case +qs +as:
               Gen.rec(fu, GSLetOut{Gen.out.let(g, env, f, qs, as), g, env, self, tgt, name, qs, f, as, body})
@@ -7186,11 +7615,14 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 +k : U32 <- Gen.fresh()
                 +ca : String <- Gen.pure(String, "ga" ++ U32.show(k))
                 +cx : String <- Gen.pure(String, "gx" ++ U32.show(k))
+                +sc : Bool <- Gen.pure(Bool, Str.eq(f, "Array.get%w"))
+                +bx : String <- Gen.pure(String, Gen.scalar.wrap(sc, cx))
                 da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
                 di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
-                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, cx} <> env, self, tgt, body})
+                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, bx} <> env, self, tgt, body})
                 return Doc.list([DStr{"V " ++ ca ++ " = "}, da, DStr{";\nV " ++ cx ++ " = *arr_at(" ++ ca ++ ", "}, di,
-                  DStr{"); bend_share(" ++ cx ++ ");\n"}, Gen.shares.g(g, [Bind{a, ca}, Bind{x, cx}], body), b])
+                  DStr{Bool.pick(String, sc, ");\n", "); arr_got(" ++ ca ++ ", " ++ cx ++ ");\n")},
+                  Gen.own(g, Bind{a, ca} <> Bind{x, bx} <> env, [Bind{a, ca}, Bind{x, bx}], body), b])
             case False{}:
               +qs = {[Core.PVar{a}, Core.PVar{x}] : List<&2, Core.Pat>}
               +as = {[t, arr, idx] : List<&2, Core.Expr>}
@@ -7204,9 +7636,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 +k : U32 <- Gen.fresh()
                 +ca : String <- Gen.pure(String, "ga" ++ U32.show(k))
                 +cx : String <- Gen.pure(String, "gx" ++ U32.show(k))
+                +bx : String <- Gen.pure(String, Gen.scalar.wrap(Str.eq(f, "Array.swap%w"), cx))
                 sw : Doc <- Gen.rec(fu, GSSwap{g, env, k, arr, idx, v})
-                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, cx} <> env, self, tgt, body})
-                return Doc.list([sw, Gen.shares.g(g, [Bind{a, ca}, Bind{x, cx}], body), b])
+                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, bx} <> env, self, tgt, body})
+                return Doc.list([sw, Gen.own(g, Bind{a, ca} <> Bind{x, bx} <> env, [Bind{a, ca}, Bind{x, bx}], body), b])
             case False{}:
               +qs = {[Core.PVar{a}, Core.PVar{x}] : List<&2, Core.Pat>}
               +as = {[t, arr, idx, v] : List<&2, Core.Expr>}
@@ -7232,7 +7665,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
                 di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
                 return Doc.list([DStr{"{\nV ga" ++ ks ++ " = "}, da, DStr{";\nV gx" ++ ks ++ " = *arr_at(ga" ++ ks ++ ", "}, di,
-                  DStr{"); bend_share(gx" ++ ks ++ ");\no[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
+                  DStr{Bool.pick(String, Str.eq(name, "Array.get%w"), ");", "); arr_got(ga" ++ ks ++ ", gx" ++ ks ++ ");") ++
+                  "\no[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
             case 2n t <> arr <> idx <> v <> Nil{}:
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
@@ -7254,17 +7688,18 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 +binds : Env() <- Gen.pure(Env(), Gen.out.binds(Gen.pnames(ps), o, 0))
                 b : Doc <- Gen.rec(fu, GSStmt{g, List.append(&2, Bind, binds, env), self, tgt, body})
                 return Doc.list([DStr{"V " ++ o ++ "[" ++ U32.show(Gen.sret(g, f)) ++ "]; "}, c, DStr{";\n"},
-                  Gen.shares.g(g, binds, body), b])
+                  Gen.own(g, List.append(&2, Bind, binds, env), binds, body), b])
             case False{}:
               Gen.rec(fu, GSLetPat{g, env, self, tgt, Core.PCtor{name, ps}, Core.ECall{Core.EVar{f}, args}, body})
         case GSCallU{+g, +env, +name, s, +o}:
           match s:
-            case Split{kept, all, extra, full}:
+            case Split{+kept, all, extra, full}:
               do Gen<Doc>:
                 Gen.ref(name)
                 ks : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, kept})
-                return Doc.list([DStr{"U_" ++ Gen.mangle(name) ++ "("}, Gen.commas(List.append(&2, Doc, ks, [DStr{o}])),
-                  DStr{")"}])
+                +k : U32 <- Gen.fresh()
+                return RC.wrap.u(k, name, o, RC.wrap.go(kept, ks, Bor.kept(DInfo.mask(G.def(g, name)),
+                  RC.fl(Gen.rc(g), g, name)), env, k, 0, RcW{Nil{}, DNil{}, DNil{}, False{}}))
         # A flat result's constructor stores its fields; a call of a def with
         # a flat result of the same arity passes o on.
         case GSRetCtor{out, +g, +env, +tgt, +name, +args}:
@@ -7546,8 +7981,10 @@ def Gen.def.boxed(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n"})
-    b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
-    Gen.code(Doc.list([DStr{head ++ " {\n" ++ Gen.u32.open(us) ++ "top:;\n"}, Gen.own(g, env, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
+    +e : Core.Expr = RC.tmp.body(Gen.rc(g), g, Env.names(env), R.ops(body, "Nat"))
+    b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, e)
+    Gen.code(Doc.list([DStr{head ++ " {\n" ++ Gen.u32.open(us) ++ RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))),
+      RC.tmp.used(Fuel.max(), name, mask, e, Nil{}), 0) ++ "top:;\n"}, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
     Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
 
@@ -7563,12 +8000,14 @@ def Gen.def.unb(+k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Cor
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n" ++ uhead ++ ";\n"})
-    b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TOut{k, Gen.free(g)}, R.ops(body, "Nat"))
-    Gen.code(Doc.list([DStr{"BEND_UINL" ++ String.drop(uhead, 6n) ++ " {\n" ++ Gen.u32.open(us) ++ "top:;\n"},
-      Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
+    +e : Core.Expr = RC.tmp.body(Gen.rc(g), g, Env.names(env), R.ops(body, "Nat"))
+    b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TOut{k, Gen.free(g)}, e)
+    Gen.code(Doc.list([DStr{"BEND_UINL" ++ String.drop(uhead, 6n) ++ " {\n" ++ Gen.u32.open(us) ++
+      RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))), RC.tmp.used(Fuel.max(), name, mask, e, Nil{}), 0) ++
+      "top:;\n"}, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
     Gen.code(DStr{head ++ " { V o[" ++ U32.show(k) ++ "]; " ++ u ++ "(" ++ String.join(List.append(&2, String, params,
       ["o"]), ", ") ++ "); return CN(0, " ++ U32.show(k) ++ ", o); }\n"})
-    Gen.wrapper(name, wargs)
+    Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
 
 def Gen.def.plain.pick(boxed: Bool, +k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
   +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
@@ -8113,6 +8552,99 @@ def Pick.decls(ds: List<&2, Decl>) -> List<&2, Decl>:
       Nil{}
     case d <> t:
       Pick.decl(d) <> Pick.decls(t)
+
+# Scalar cells (C back end). Array.get, Array.set and Array.swap on an
+# array of U32, F32, Bool or Char become Array.get%w, Array.set%w and
+# Array.swap%w: natives of the same type whose cells are words, so a read
+# takes no reference and a write drops none (reference counted), and the
+# cell a read or a swap gives is a scalar (see GSLetGet). The type argument
+# says which; the core IR erases it, so this runs before (Lo.program).
+def Arrw.scalar(t: Core.Expr) -> Bool:
+  match t:
+    case Core.ETy{+n, a}:
+      Bool.and(List.is_empty(&2, Core.Expr, a), Str.has(["U32", "F32", "Bool", "Char"], n))
+    case Core.EVar{+n}:
+      Str.has(["U32", "F32", "Bool", "Char"], n)
+    case other:
+      False{}
+
+def Arrw.hit(+n: String, as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case t <> r:
+      Bool.and(Str.has(["Array.get", "Array.set", "Array.swap"], n), Arrw.scalar(t))
+    case Nil{}:
+      False{}
+
+def Arrw.name(f: Core.Expr, +as: List<&2, Core.Expr>) -> Core.Expr:
+  match f:
+    case Core.EVar{+n}:
+      Core.EVar{Bool.pick(String, Arrw.hit(n, as), n ++ "%w", n)}
+    case other:
+      other
+
+# (a call renamed at the top of its node, as Pick.top)
+def Arrw.top(top: Bool, r: Core.Expr) -> Core.Expr:
+  match top:
+    case True{}:
+      match r:
+        case Core.ECall{f, +xs}:
+          Core.ECall{Arrw.name(f, xs), xs}
+        case other:
+          other
+    case False{}:
+      r
+
+def Arrw.go(e: Core.Expr, top: Bool) -> Core.Expr:
+  match e:
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Arrw.top(top, Core.ECall{Arrw.go(f, True{}), Nil{}})
+        case a <> t:
+          Arrw.top(top, Expr.push(Arrw.go(a, True{}), Arrw.go(Core.ECall{f, t}, False{})))
+    case Core.ECtor{k, args}:
+      match args:
+        case Nil{}:
+          Core.ECtor{k, Nil{}}
+        case a <> t:
+          Expr.push(Arrw.go(a, True{}), Arrw.go(Core.ECtor{k, t}, True{}))
+    case Core.EOp{op, a, b}:
+      Core.EOp{op, Arrw.go(a, True{}), Arrw.go(b, True{})}
+    case Core.ELam{p, b}:
+      Core.ELam{p, Arrw.go(b, True{})}
+    case Core.ELet{p, v, b}:
+      Core.ELet{p, Arrw.go(v, True{}), Arrw.go(b, True{})}
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.push(Arrw.go(a, True{}), Arrw.go(Core.EMatch{t, cases}, True{}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Arrw.go(c, True{}), Arrw.go(Core.EMatch{Nil{}, t}, True{}))
+    case Core.ECase{ps, b}:
+      Core.ECase{ps, Arrw.go(b, True{})}
+    case Core.ESucc{k, x}:
+      Core.ESucc{k, Arrw.go(x, True{})}
+    case Core.EAnn{x, ty}:
+      Core.EAnn{Arrw.go(x, True{}), ty}
+    case other:
+      other
+
+# Each def's body rewritten; Array.get, Array.set and Array.swap each get
+# their %w copy.
+def Arrw.decls(ds: List<&2, Decl>) -> List<&2, Decl>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case DDef{+name, +ps, +body, +ret} <> t:
+      List.append(&2, Decl, Bool.pick(List<&2, Decl>, Str.has(["Array.get", "Array.set", "Array.swap"], name),
+        [DDef{name, ps, body, ret}, DDef{name ++ "%w", ps, body, ret}], [DDef{name, ps, Arrw.go(body, True{}), ret}]),
+        Arrw.decls(t))
+    case d <> t:
+      d <> Arrw.decls(t)
 
 # Implicit parallelism (see Main.auto_par). Bend is pure, so the operands of
 # one node (an operator's, a call's arguments, a constructor's fields) may
@@ -9629,14 +10161,19 @@ def Dps.edges(+g: G, ds: List<&2, Decl>, m: Map<&2, List<&2, DEdge>>) -> Map<&2,
 # parameter i (or a name for all of it), f<i> for a value read out of it,
 # and "" for any other.
 type BorC is Data:
-  BorC{g: G, bm: Map<&2, DGrp>, self: String, n: Nat}
+  BorC{g: G, bm: Map<&2, DGrp>, self: String, n: Nat, tmp: Bool}
 
 type BorA is Data:
   BorA{ev: List<&2, String>, xs: List<&2, Core.Expr>}
 
 def BorC.g(c: BorC) -> G:
-  BorC{g, bm, self, n} = c
+  BorC{g, bm, self, n, tmp} = c
   g
+
+# Outside of a parallel let's values, where temporaries are made.
+def BorC.par(c: BorC, +p: Core.Pat) -> BorC:
+  BorC{g, bm, self, n, tmp} = c
+  BorC{g, bm, self, n, Bool.and(tmp, Bool.not(RC.tmp.par(p)))}
 
 def BorA.ev(r: BorA) -> List<&2, String>:
   BorA{ev, xs} = r
@@ -9797,27 +10334,116 @@ def Bor.arg.tag(t: String, st: Bool, +j: U32, r: BorA) -> BorA:
       BorA{ev, ys} = r
       BorA{Bor.t(st, i, ev), ys}
 
+# The variables of a temporary (see RC.tmp) are all read out of a
+# parameter (tag f<i>).
+def Bor.tmp.f(+tags: Env(), as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case Nil{}:
+      True{}
+    case Core.EVar{+x} <> t:
+      Bool.and(String.starts_with(Bor.tag(tags, x), "f"), Bor.tmp.f(tags, t))
+    case a <> t:
+      Bor.tmp.f(tags, t)
+
+# Each variable of a loop's next temporary is lent on (t).
+def Bor.tmp.t(+tags: Env(), as: List<&2, Core.Expr>, +j: U32, r: BorA) -> BorA:
+  match as:
+    case Nil{}:
+      r
+    case Core.EVar{+x} <> t:
+      Bor.tmp.t(tags, t, j, Bor.arg.tag(Bor.tag(tags, x), True{}, j, r))
+    case a <> t:
+      Bor.tmp.t(tags, t, j, r)
+
+# An argument that is not a variable: a temporary (RC.tmp.syn) is only read
+# by the callee, as its variables are: outside of a loop's next arguments
+# it lends nothing on, and in them, it is kept in a buffer of the loop's
+# (RC_TB), which only holds what is read out of its parameters.
+def Bor.arg.x(a: Core.Expr, st: Bool, +j: U32, r: BorA) -> BorA:
+  BorA{ev, ys} = r
+  BorA{Bor.x(st, j, ev), List.append(&2, Core.Expr, ys, [a])}
+
+def Bor.arg.st(ok: Bool, +a: Core.Expr, +tags: Env(), +j: U32, r: BorA) -> BorA:
+  match ok:
+    case True{}:
+      Bor.tmp.t(tags, RC.tmp.args(a), j, r)
+    case False{}:
+      Bor.arg.x(a, True{}, j, r)
+
+def Bor.arg.o(tmp: Bool, +a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
+  match tmp:
+    case True{}:
+      match st:
+        case True{}:
+          Bor.arg.st(Bor.tmp.f(tags, RC.tmp.args(a)), a, tags, j, r)
+        case False{}:
+          r
+    case False{}:
+      Bor.arg.x(a, st, j, r)
+
 # An argument where the callee borrows (st: in a tail call to the def
 # itself): a tagged variable is lent on.
-def Bor.arg.b(a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
+def Bor.arg.b(+g: G, +rc: Bool, +a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
   match a:
     case Core.EVar{+x}:
       Bor.arg.tag(Bor.tag(tags, x), st, j, r)
     case other:
-      BorA{ev, ys} = r
-      BorA{Bor.x(st, j, ev), List.append(&2, Core.Expr, ys, [other])}
+      Bor.arg.o(Bool.and(rc, RC.tmp.syn(g, other)), other, tags, st, j, r)
 
-def Bor.arg(b: Bool, a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
-  match b:
+# A value read out of a parameter (x, tag f<i>) and passed to a scalar
+# parameter (sc) or an operator: a number, which holds no reference (so it
+# does not make the def own its parameter).
+def Bor.scalar(sc: Bool, +tags: Env(), a: Core.Expr) -> Bool:
+  match sc:
     case True{}:
-      Bor.arg.b(a, tags, st, j, r)
+      match a:
+        case Core.EVar{+x}:
+          String.starts_with(Bor.tag(tags, x), "f")
+        case other:
+          False{}
+    case False{}:
+      False{}
+
+# A let's value, but for a variable naming one read out of a parameter
+# (which gets its reference there, RC.bdup, as an inlined Char.is_eq's
+# do): its uses are the new name's, which is not tagged.
+def Bor.letv(+tags: Env(), +p: Core.Pat, +v: Core.Expr) -> Core.Expr:
+  match p:
+    case Core.PVar{x}:
+      Bool.pick(Core.Expr, Bor.scalar(True{}, tags, v), Core.ENum{0}, v)
+    case other:
+      v
+
+# An operator's operands but the numbers read out of a parameter.
+def Bor.ops(+tags: Env(), xs: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case +a <> t:
+      Bor.keep(Bool.not(Bor.scalar(True{}, tags, a)), a, Bor.ops(tags, t))
+
+# An argument the callee owns (sc: a scalar parameter's).
+def Bor.arg.own.go(hit: Bool, a: Core.Expr, r: BorA) -> BorA:
+  match hit:
+    case True{}:
+      r
     case False{}:
       BorA{ev, ys} = r
       BorA{ev, List.append(&2, Core.Expr, ys, [a])}
 
+def Bor.arg.own(sc: Bool, +tags: Env(), +a: Core.Expr, r: BorA) -> BorA:
+  Bor.arg.own.go(Bor.scalar(sc, tags, a), a, r)
+
+def Bor.arg(+g: G, +rc: Bool, sc: Bool, b: Bool, a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
+  match b:
+    case True{}:
+      Bor.arg.b(g, rc, a, tags, st, j, r)
+    case False{}:
+      Bor.arg.own(sc, tags, a, r)
+
 # A call's events, and the arguments it owns.
-def Bor.args(mask: List<&2, Bool>, args: List<&2, Core.Expr>, +fl: List<&2, Bool>, +tags: Env(), +st: Bool,
-  +j: U32, r: BorA) -> BorA:
+def Bor.args(+g: G, +rc: Bool, mask: List<&2, Bool>, args: List<&2, Core.Expr>, +fl: List<&2, Bool>,
+  +sc: List<&2, Bool>, +tags: Env(), +st: Bool, +j: U32, r: BorA) -> BorA:
   match mask args:
     case Nil{} xs:
       BorA{ev, ys} = r
@@ -9825,9 +10451,10 @@ def Bor.args(mask: List<&2, Bool>, args: List<&2, Core.Expr>, +fl: List<&2, Bool
     case m <> mt Nil{}:
       r
     case True{} <> mt a <> at:
-      Bor.args(mt, at, Bor.tail(fl), tags, st, U32.inc(j), Bor.arg(Bor.head(fl), a, tags, st, j, r))
+      Bor.args(g, rc, mt, at, Bor.tail(fl), Bor.tail(sc), tags, st, U32.inc(j),
+        Bor.arg(g, rc, Bor.head(sc), Bor.head(fl), a, tags, st, j, r))
     case False{} <> mt a <> at:
-      Bor.args(mt, at, Bor.tail(fl), tags, st, U32.inc(j), r)
+      Bor.args(g, rc, mt, at, Bor.tail(fl), Bor.tail(sc), tags, st, U32.inc(j), r)
 
 def Bor.call.name(local: Bool, +cx: BorC, +tags: Env(), +h: String, tail: Bool, +args: List<&2, Core.Expr>,
   acc: List<&2, String>) -> BorA:
@@ -9835,8 +10462,10 @@ def Bor.call.name(local: Bool, +cx: BorC, +tags: Env(), +h: String, tail: Bool, 
     case True{}:
       BorA{acc, Core.EVar{h} <> args}
     case False{}:
-      BorC{+g, +bm, +self, +n} = cx
-      Bor.args(DInfo.mask(G.def(g, h)), args, Bor.list(Bor.get(bm, h)), tags,
+      BorC{+g, +bm, +self, +n, +tmp} = cx
+      +full : Bool = Bool.and(tmp, Nat.is_eq(List.length(&2, Bool, DInfo.mask(G.def(g, h))), List.length(&2, Core.Expr, args)))
+      Bor.args(g, full, DInfo.mask(G.def(g, h)), args, Bor.list(Bor.get(bm, h)),
+        Bor.list(DGrp.id(G.get(DGrp, DGrp{"", 0}, bm, "%s" ++ h))), tags,
         Bool.and(tail, Bool.and(Str.eq(self, h), Nat.is_eq(n, List.length(&2, Core.Expr, args)))), 0, BorA{acc, Nil{}})
 
 def Bor.call(+cx: BorC, +tags: Env(), +loc: List<&2, String>, tail: Bool, f: Core.Expr, +args: List<&2, Core.Expr>,
@@ -9871,7 +10500,7 @@ def Bor.ev(n: Nat, +cx: BorC, +tags: Env(), +loc: List<&2, String>, +st: List<&2
           Bor.uses(FV.expr(b, Pat.vars(p, Nil{}), Nil{}), tags, acc)
         case Core.ELet{+p, v, b}:
           Bor.ev(m, cx, Bor.binds(Pat.vars(p, Nil{}), "", tags), Pat.vars(p, loc), st, tail, b,
-            Bor.ev(m, cx, tags, loc, st, False{}, v, acc))
+            Bor.ev(m, BorC.par(cx, p), tags, loc, st, False{}, Bor.letv(tags, p, v), acc))
         case Core.EMatch{scrs, cases}:
           match scrs:
             case Nil{}:
@@ -9888,7 +10517,7 @@ def Bor.ev(n: Nat, +cx: BorC, +tags: Env(), +loc: List<&2, String>, +st: List<&2
         case Core.ESucc{k, x}:
           Bor.ev(m, cx, tags, loc, st, False{}, x, acc)
         case Core.EOp{op, a, b}:
-          Bor.ev(m, cx, tags, loc, st, False{}, Core.ECtor{"", [a, b]}, acc)
+          Bor.ev(m, cx, tags, loc, st, False{}, Core.ECtor{"", Bor.ops(tags, [a, b])}, acc)
         case Core.EAnn{x, t}:
           Bor.ev(m, cx, tags, loc, st, False{}, x, acc)
         case other:
@@ -9967,6 +10596,15 @@ def Bor.cand(ps: List<&2, Core.Param>, mask: List<&2, Bool>) -> String:
     case pl ml:
       ""
 
+# A def's scalar parameters ("1"), kept for every def under "%s" and its
+# name: a variable passed to one is used, but holds no reference.
+def Bor.scal(ps: List<&2, Core.Param>) -> String:
+  match ps:
+    case Nil{}:
+      ""
+    case Core.Param{x, m, +t} <> pt:
+      Bool.pick(String, Gen.scalar.ty(t), "1", "0") ++ Bor.scal(pt)
+
 def Bor.ok(+g: G, +name: String, +gpus: List<&2, String>, +body: Core.Expr) -> Bool:
   Bool.and(Bool.and(U32.is_eq(DInfo.kind(G.def(g, name)), 0), String.is_empty(DGrp.id(G.dps(g, name)))),
     Bool.and(Bool.not(Str.eq(name, "main")), Bool.and(Bool.not(Str.has(gpus, name)), Bool.not(Expr.has_par(body)))))
@@ -9983,8 +10621,9 @@ def Bor.init(ds: List<&2, Decl>, +g: G, +gpus: List<&2, String>, m: Map<&2, DGrp
   match ds:
     case Nil{}:
       m
-    case DDef{+name, ps, +body, ret} <> t:
-      Bor.init(t, g, gpus, Bor.init.one(Bor.ok(g, name, gpus, body), name, ps, DInfo.mask(G.def(g, name)), m))
+    case DDef{+name, +ps, +body, ret} <> t:
+      Bor.init(t, g, gpus, Bor.init.one(Bor.ok(g, name, gpus, body), name, ps, DInfo.mask(G.def(g, name)),
+        Map.set(&2, DGrp, m, "%s" ++ name, DGrp{Bor.scal(ps), 0})))
     case d <> t:
       Bor.init(t, g, gpus, m)
 
@@ -10021,7 +10660,7 @@ def Bor.next(fl: List<&2, Bool>, +ev: List<&2, String>, +i: U32) -> String:
 # A def's flags, given everyone's (bm) and its own (fl).
 def Bor.def(+g: G, +bm: Map<&2, DGrp>, +name: String, +ps: List<&2, Core.Param>, +body: Core.Expr, +fl: List<&2, Bool>) ->
   String:
-  Bor.next(fl, Bor.ev(Fuel.max(), BorC{g, bm, name, List.length(&2, Bool, DInfo.mask(G.def(g, name)))},
+  Bor.next(fl, Bor.ev(Fuel.max(), BorC{g, bm, name, List.length(&2, Bool, DInfo.mask(G.def(g, name))), True{}},
     Bor.tags(ps, fl, 0, Nil{}), Bor.names(ps), Nil{}, True{}, R.ops(body, "Nat"), Nil{}), 0)
 
 type BorP is Data:
@@ -16187,10 +16826,119 @@ def Opt.before(xs: List<&2, String>, +rank: Map<&2, U32>, +i: U32) -> Bool:
     case +x <> t:
       Bool.and(Opt.before.one(x, rank, i), Opt.before(t, rank, i))
 
+# A result built of variables, literals and constructors only.
+def Opt.shape.atom(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CVar{x}:
+      True{}
+    case Core.CLit{l}:
+      True{}
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          True{}
+        case a <> r:
+          Bool.and(Opt.shape.atom(a), Opt.shape.atom(Core.CCtr{k, r}))
+    case Core.CAnn{e, ty}:
+      Opt.shape.atom(e)
+    case other:
+      False{}
+
+# Constructor patterns (a number's would not go to the device, see Gpu).
+def Opt.shape.pat(p: Core.Pt) -> Bool:
+  match p:
+    case Core.PtVar{x}:
+      True{}
+    case Core.PtCtr{k, ps}:
+      match ps:
+        case Nil{}:
+          True{}
+        case q <> r:
+          Bool.and(Opt.shape.pat(q), Opt.shape.pat(Core.PtCtr{k, r}))
+    case other:
+      False{}
+
+def Opt.shape.pats(ps: List<&2, Core.Pt>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case q <> r:
+      Bool.and(Opt.shape.pat(q), Opt.shape.pats(r))
+
+# Whether constructor fields hold a variable (a node, not a constant).
+def Opt.shape.holds(as: List<&2, Core.Tm>) -> Bool:
+  match as:
+    case Nil{}:
+      False{}
+    case a <> r:
+      match a:
+        case Core.CVar{x}:
+          True{}
+        case Core.CCtr{k, bs}:
+          Bool.or(Opt.shape.holds(bs), Opt.shape.holds(r))
+        case other:
+          Opt.shape.holds(r)
+
+# Whether a result builds a node (a constructor with fields).
+def Opt.shape.builds(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case x <> t2:
+          Opt.shape.builds(Core.CMat{t2, cases})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case c <> r:
+              Bool.or(Opt.shape.builds(c), Opt.shape.builds(Core.CMat{Nil{}, r}))
+    case Core.CCse{ps, b}:
+      Opt.shape.builds(b)
+    case Core.CAnn{e, ty}:
+      Opt.shape.builds(e)
+    case Core.CLet{p, v, b}:
+      Opt.shape.builds(b)
+    case Core.CCtr{k, as}:
+      Opt.shape.holds(as)
+    case other:
+      False{}
+
+# A def that only matches and builds: every case's result is an atom, or
+# a match of the same kind.
+def Opt.shape(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case x <> t2:
+          Opt.shape(Core.CMat{t2, cases})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              True{}
+            case c <> r:
+              Bool.and(Opt.shape(c), Opt.shape(Core.CMat{Nil{}, r}))
+    case Core.CCse{ps, b}:
+      Bool.and(Opt.shape.pats(ps), Opt.shape(b))
+    case Core.CAnn{e, ty}:
+      Opt.shape(e)
+    case Core.CLet{p, v, b}:
+      Bool.and(Opt.shape.atom(v), Opt.shape(b))
+    case other:
+      Opt.shape.atom(other)
+
+# A def small enough to inline: its size is in the budget, or in three
+# times it for a def that only matches its arguments and builds its result
+# of what the match reads (inlined, the nodes its caller opens and those it
+# opens are there for the result to be built in, see RU, and a match on a
+# constructor the caller built is gone).
+def Opt.fits(+flags: String, +b: Core.Tm) -> Bool:
+  Bool.or(Opt.size.le(b, Opt.budget(flags)),
+    Bool.and(Bool.and(Opt.shape(b), Opt.shape.builds(b)), Opt.size.le(b, U32.mul(3, Opt.budget(flags)))))
+
 def Opt.small(+flags: String, +rank: Map<&2, U32>, +d: Core.Def) -> Bool:
   match d:
     case Core.Def{+name, ps, +b, ret}:
-      Bool.and(Bool.and(Opt.size.le(b, Opt.budget(flags)), Bool.not(G.is_native(name))),
+      Bool.and(Bool.and(Opt.fits(flags, b), Bool.not(G.is_native(name))),
         Bool.and(Bool.not(String.starts_with(name, "IO.")),
           Opt.before(Inl.names(b, 3, Nil{}), rank, Pair.snd(Map<&2, U32>, U32, Map.get(U32, 0, rank, name)))))
 
@@ -18239,10 +18987,8 @@ def Gen.program.m(+g: G) -> Gen(String):
     Gen.all(g, ["main"], Set.new())
     Gen.entry(g, G.body(g, "main"))
 
-# (Reference counting does not unbox: flat values carry no counts.)
-def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb0: Bool, +rc: Bool) -> COut:
-  +unb = Bool.and(unb0, Bool.not(rc))
-  +ds = Unb.program(unb, Par.auto(par, Lo.program(opt, Pick.decls(ds0))))
+def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
+  +ds = Unb.program(unb, Par.auto(par, Lo.program(opt, Arrw.decls(Pick.decls(ds0)))))
   +g = Unb.sret(unb, ds, Dps.build(G.new(ds), ds, free, rc))
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
