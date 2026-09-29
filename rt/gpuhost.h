@@ -27,6 +27,7 @@ typedef struct {
   void (*sim)(KW *, KAU *, const KParams *, KW *, uint32_t);
   void (*sim_kq)(KW *, KAU *, const KParams *, KW *, uint32_t);
   const GpuFn *fns;
+  const GpuFn *kqh;      // the KQ_ calls the host may run on the CPU (see gpu_kq_host)
 } GpuProg;
 
 #define GPU_OFF 0
@@ -34,6 +35,7 @@ typedef struct {
 #define GPU_SIM 2
 
 static pthread_mutex_t gpu_lock = PTHREAD_MUTEX_INITIALIZER;
+static KW gpu_kq_cpu;       // (see gpu_kq_host)
 static int gpu_mode = -1;
 static int gpu_log;         // BEND_GPU_LOG: 1 for a line a call, 2 for more
 static double gpu_tout;     // the last copy out's time (BEND_GPU_LOG)
@@ -337,6 +339,8 @@ static int gpu_setup(const GpuProg *prog) {
   if (gpu_H == MAP_FAILED || gpu_A == MAP_FAILED) return GPU_OFF;
   gpu_pin_min = (KW)gpu_env("BEND_GPU_PIN_MB", 32) << 20;
   gpu_lanes = (KW)gpu_env("BEND_GPU_LANES", sim ? 64 : 8192);
+  // (the simulator runs every call on the device: it tests that code)
+  gpu_kq_cpu = (KW)gpu_env("BEND_GPU_KQCPU", sim ? 0 : 4);
   gpu_budget = (KW)gpu_env("BEND_GPU_STEPS", sim ? 37 : 16384);
   KW f = 0;
   while (((KW)1 << f) < gpu_lanes) f++;
@@ -474,6 +478,44 @@ static int gpu_pinnable(int pin, V *args, int n) {
 
 // Runs target entry on args; 0 when the caller must run it on the CPU, 2 when
 // the arena filled up (and may grow).
+// Set while the host runs device calls on the CPU (gpu_kq_host): a !-call
+// they make runs on the CPU too.
+static int gpu_nest;
+
+// When at most gpu_kq_cpu lanes wait for a KQ_ call (a serial tail: symreg's
+// climb is 32 rounds of one chain, 0.17s on one lane) and each is one bendc
+// lists in prog->kqh (scalar arguments and result), the host runs them on
+// the CPU, where a serial chain runs far faster, and hands each lane its
+// result as bend_kq would. 1 when it did.
+static int gpu_kq_host(const GpuProg *prog, KW *H, const KParams *P, KW waiting) {
+  if (waiting > gpu_kq_cpu || prog->kqh == NULL) return 0;
+  KW n = P->nlanes;
+  Fn fs[64];
+  KW ls[64], k = 0;
+  for (KW l = 0; l < gpu_lanes; l++) {
+    if (H[P->lane0 + l] != PC_KQ) continue;
+    KW kq = H[P->lane0 + 7 * n + l];
+    Fn f = NULL;
+    for (const GpuFn *e = prog->kqh; e->f; e++) {
+      if (e->l == kq) f = e->f;
+    }
+    if (f == NULL || k == 64) return 0;
+    fs[k] = f;
+    ls[k++] = l;
+  }
+  gpu_nest = 1;
+  for (KW i = 0; i < k; i++) {
+    KW l = ls[i];
+    V a[KQ_ARGS];
+    for (int j = 0; j < KQ_ARGS; j++) a[j] = H[P->lane0 + (10 + j) * n + l];
+    H[P->lane0 + 2 * n + l] = fs[i](a);
+    H[P->lane0 + l] = H[P->lane0 + 8 * n + l];
+  }
+  gpu_nest = 0;
+  if (gpu_log == 2) fprintf(stderr, "bend gpu: kq ran %llu calls on the CPU\n", (unsigned long long)k);
+  return 1;
+}
+
 static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
   KParams P;
   memset(&P, 0, sizeof P);
@@ -552,6 +594,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) break;
     if (__atomic_load_n(&gpu_A[KA_DONE], __ATOMIC_SEQ_CST) != 0) break;
     for (KW l = 0; l < gpu_lanes; l++) waiting += H[P.lane0 + l] == PC_KQ;
+    if (waiting > 0 && gpu_kq_host(prog, H, &P, waiting)) waiting = 0;
     if (waiting > 0) {
       // (again, after the arena grows, while a call runs out of it)
       for (;;) {
@@ -628,6 +671,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
 }
 
 static int gpu_call(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
+  if (gpu_nest) return 0;
   pthread_mutex_lock(&gpu_lock);
   double t0 = gpu_now();
   if (gpu_mode < 0) gpu_mode = gpu_setup(prog);
