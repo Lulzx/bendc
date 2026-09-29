@@ -451,15 +451,30 @@ ELF on Linux (`Cc.elf` asks the host which). The system linker then links it wit
   the runtime's value representation (see [How it works](#how-it-works)) and AAPCS64, so it calls
   the runtime's functions (`apply`, `str_cache`, the allocator, the effect loop) as C does.
 - **Code shape.** Every value lives in a frame slot and an expression leaves its value in `x0`.
-  The first 10 slots are the callee-saved registers `x19`..`x28`, handed out in order, so a def's
-  parameters and its longest-lived values stay in registers across calls; the collector scans
-  registers as it scans the stack. A def with at most 8 kept parameters takes them in `x0`..`x7`;
+  The first 10 slots are the callee-saved registers `x19`..`x28`, so a def's parameters and its
+  longest-lived values stay in registers across calls; the collector scans registers as it scans
+  the stack. A def with at most 8 kept parameters takes them in `x0`..`x7`;
   a wider one takes the address of a row of arguments. A self tail call moves the new arguments
   over the parameters and branches back, and a tail call to another narrow def pops the frame and
   branches. Integer, `U32` and `F32` natives are inlined (`add`, compares, shifts, `fadd`, `fmul`,
   `fcmp`, `ucvtf`, ...; by a constant, one instruction); the others call their `N_` name in
   `rt/native.c`. A peephole pass turns a reload right after a store to the same slot into a
   register move. String literals are cached in data slots, and float literals are constants.
+- **Registers.** After code generation, a pass (`N.ra`) computes which of `x19`..`x28` are live
+  at each instruction of a function, and gives each register a new one: `x11`..`x15` for a value
+  never live across a call, else the first of `x19`.. that does not interfere. The prologue saves
+  only the pairs used. A second pass (`N.pp`) drops moves and writes nobody reads, and forwards a
+  move into the instruction after it. A function whose body does not use `sp` gets a smaller frame.
+- **Shrink-wrapping.** A path from a function's entry to a return or a tail call that calls
+  nothing and stores nothing (as `forks`'s `case 0n`) is copied before the prologue, with its
+  callee-saved registers renamed to free scratch ones; any branch off the path goes to the full
+  function.
+- **Allocation.** A node of 2 to 6 words is allocated inline: the code finds the thread's
+  allocation caches from `sp` (the runtime maps each Bend thread's stack at a multiple of 4 GiB
+  and keeps the thread's record in the first word), and takes the slot at the cache's bump
+  pointer, or the lowest free bit of its bitmap word, as the C backend's inlined `gc_alloc_x`
+  does. It calls `bn_alloc2`.. only when the cache is empty. The layout this relies on is written
+  down in `rt/native.c` and checked there with `_Static_assert`.
 - **As the C backend does.** Matches free the nodes they open (`bend_take`, `bend_share`;
   `BEND_NO_FREE=1` turns it off). Parallel lets fork on the runtime's pool (`par_fork`,
   `par_join`), with a sequential clone for a def that stops forking below a depth. A def like
@@ -480,10 +495,7 @@ ELF on Linux (`Cc.elf` asks the host which). The system linker then links it wit
 What it does not do, against the C backend:
 
 - `!`-calls run on the CPU.
-- No inlining of defs into one another, and no shrink-wrapping: a function saves every callee-saved
-  register it uses on entry, even on a path that uses few, which is most of the gap on `forks`.
-- An allocation is a call (`bn_alloc2` and the like, in `rt/native.c`), where C inlines the
-  allocator's fast path.
+- No inlining of defs into one another.
 - AArch64 only. The target is picked by the host, so there is no cross-compiling.
 
 With tcc (`tools/tcc.sh`), the chain has no clang or GCC in it: tcc builds the runtime and
