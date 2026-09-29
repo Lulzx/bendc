@@ -3797,6 +3797,7 @@ def Natives() -> List<&2, String>:
    "F32.trunc", "F32.bits", "F32.to_u32", "F32.show", "F32.read", "Map.bit",
    "Map.get", "Map.has", "String.cmp", "String.eq",
    "Array.size", "Array.get", "Array.swap", "Array.set", "Array.new", "Array.clone",
+   "Array.get%w", "Array.swap%w", "Array.set%w",
    "Array.atomic.add", "Array.atomic.min", "Array.atomic.max", "Array.atomic.and",
    "Array.atomic.or", "Array.atomic.xor", "Array.atomic.exch", "Array.atomic.cas",
    "Array.atomic.fadd"]
@@ -6751,7 +6752,8 @@ def Gen.out.arr(+env: Env(), t: Tgt, +name: String) -> Nat:
   match t:
     case TOut{k, free}:
       Bool.pick(Nat, Bool.or(Bool.not(U32.is_eq(k, 2)), Env.has(env, name)), 0n,
-        Bool.pick(Nat, Str.eq(name, "Array.get"), 1n, Bool.pick(Nat, Str.eq(name, "Array.swap"), 2n, 0n)))
+        Bool.pick(Nat, Str.has(["Array.get", "Array.get%w"], name), 1n,
+          Bool.pick(Nat, Str.has(["Array.swap", "Array.swap%w"], name), 2n, 0n)))
     case other:
       0n
 
@@ -7599,10 +7601,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         case GSLetCall{+g, +env, +self, +tgt, +name, ps, +f, args, +body}:
           match ps args:
             case Core.PVar{+a} <> Core.PVar{+x} <> Nil{} t <> arr <> idx <> Nil{}:
-              Gen.rec(fu, GSLetGet{Bool.and(Bool.and(Str.eq(f, "Array.get"), Str.eq(name, "Tuple")),
+              Gen.rec(fu, GSLetGet{Bool.and(Bool.and(Str.has(["Array.get", "Array.get%w"], f), Str.eq(name, "Tuple")),
                 Bool.not(Env.has(env, f))), g, env, self, tgt, name, f, a, x, t, arr, idx, body})
             case Core.PVar{+a} <> Core.PVar{+x} <> Nil{} t <> arr <> idx <> v <> Nil{}:
-              Gen.rec(fu, GSLetSwap{Bool.and(Bool.and(Str.eq(f, "Array.swap"), Str.eq(name, "Tuple")),
+              Gen.rec(fu, GSLetSwap{Bool.and(Bool.and(Str.has(["Array.swap", "Array.swap%w"], f), Str.eq(name, "Tuple")),
                 Bool.not(Env.has(env, f))), g, env, self, tgt, name, f, a, x, t, arr, idx, v, body})
             case +qs +as:
               Gen.rec(fu, GSLetOut{Gen.out.let(g, env, f, qs, as), g, env, self, tgt, name, qs, f, as, body})
@@ -7613,12 +7615,14 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 +k : U32 <- Gen.fresh()
                 +ca : String <- Gen.pure(String, "ga" ++ U32.show(k))
                 +cx : String <- Gen.pure(String, "gx" ++ U32.show(k))
+                +sc : Bool <- Gen.pure(Bool, Str.eq(f, "Array.get%w"))
+                +bx : String <- Gen.pure(String, Gen.scalar.wrap(sc, cx))
                 da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
                 di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
-                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, cx} <> env, self, tgt, body})
+                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, bx} <> env, self, tgt, body})
                 return Doc.list([DStr{"V " ++ ca ++ " = "}, da, DStr{";\nV " ++ cx ++ " = *arr_at(" ++ ca ++ ", "}, di,
-                  DStr{"); arr_got(" ++ ca ++ ", " ++ cx ++ ");\n"}, Gen.own(g, Bind{a, ca} <> Bind{x, cx} <> env,
-                  [Bind{a, ca}, Bind{x, cx}], body), b])
+                  DStr{Bool.pick(String, sc, ");\n", "); arr_got(" ++ ca ++ ", " ++ cx ++ ");\n")},
+                  Gen.own(g, Bind{a, ca} <> Bind{x, bx} <> env, [Bind{a, ca}, Bind{x, bx}], body), b])
             case False{}:
               +qs = {[Core.PVar{a}, Core.PVar{x}] : List<&2, Core.Pat>}
               +as = {[t, arr, idx] : List<&2, Core.Expr>}
@@ -7632,9 +7636,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 +k : U32 <- Gen.fresh()
                 +ca : String <- Gen.pure(String, "ga" ++ U32.show(k))
                 +cx : String <- Gen.pure(String, "gx" ++ U32.show(k))
+                +bx : String <- Gen.pure(String, Gen.scalar.wrap(Str.eq(f, "Array.swap%w"), cx))
                 sw : Doc <- Gen.rec(fu, GSSwap{g, env, k, arr, idx, v})
-                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, cx} <> env, self, tgt, body})
-                return Doc.list([sw, Gen.own(g, Bind{a, ca} <> Bind{x, cx} <> env, [Bind{a, ca}, Bind{x, cx}], body), b])
+                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, bx} <> env, self, tgt, body})
+                return Doc.list([sw, Gen.own(g, Bind{a, ca} <> Bind{x, bx} <> env, [Bind{a, ca}, Bind{x, bx}], body), b])
             case False{}:
               +qs = {[Core.PVar{a}, Core.PVar{x}] : List<&2, Core.Pat>}
               +as = {[t, arr, idx, v] : List<&2, Core.Expr>}
@@ -7660,7 +7665,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
                 di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
                 return Doc.list([DStr{"{\nV ga" ++ ks ++ " = "}, da, DStr{";\nV gx" ++ ks ++ " = *arr_at(ga" ++ ks ++ ", "}, di,
-                  DStr{"); arr_got(ga" ++ ks ++ ", gx" ++ ks ++ ");\no[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
+                  DStr{Bool.pick(String, Str.eq(name, "Array.get%w"), ");", "); arr_got(ga" ++ ks ++ ", gx" ++ ks ++ ");") ++
+                  "\no[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
             case 2n t <> arr <> idx <> v <> Nil{}:
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
@@ -8546,6 +8552,99 @@ def Pick.decls(ds: List<&2, Decl>) -> List<&2, Decl>:
       Nil{}
     case d <> t:
       Pick.decl(d) <> Pick.decls(t)
+
+# Scalar cells (C back end). Array.get, Array.set and Array.swap on an
+# array of U32, F32, Bool or Char become Array.get%w, Array.set%w and
+# Array.swap%w: natives of the same type whose cells are words, so a read
+# takes no reference and a write drops none (reference counted), and the
+# cell a read or a swap gives is a scalar (see GSLetGet). The type argument
+# says which; the core IR erases it, so this runs before (Lo.program).
+def Arrw.scalar(t: Core.Expr) -> Bool:
+  match t:
+    case Core.ETy{+n, a}:
+      Bool.and(List.is_empty(&2, Core.Expr, a), Str.has(["U32", "F32", "Bool", "Char"], n))
+    case Core.EVar{+n}:
+      Str.has(["U32", "F32", "Bool", "Char"], n)
+    case other:
+      False{}
+
+def Arrw.hit(+n: String, as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case t <> r:
+      Bool.and(Str.has(["Array.get", "Array.set", "Array.swap"], n), Arrw.scalar(t))
+    case Nil{}:
+      False{}
+
+def Arrw.name(f: Core.Expr, +as: List<&2, Core.Expr>) -> Core.Expr:
+  match f:
+    case Core.EVar{+n}:
+      Core.EVar{Bool.pick(String, Arrw.hit(n, as), n ++ "%w", n)}
+    case other:
+      other
+
+# (a call renamed at the top of its node, as Pick.top)
+def Arrw.top(top: Bool, r: Core.Expr) -> Core.Expr:
+  match top:
+    case True{}:
+      match r:
+        case Core.ECall{f, +xs}:
+          Core.ECall{Arrw.name(f, xs), xs}
+        case other:
+          other
+    case False{}:
+      r
+
+def Arrw.go(e: Core.Expr, top: Bool) -> Core.Expr:
+  match e:
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Arrw.top(top, Core.ECall{Arrw.go(f, True{}), Nil{}})
+        case a <> t:
+          Arrw.top(top, Expr.push(Arrw.go(a, True{}), Arrw.go(Core.ECall{f, t}, False{})))
+    case Core.ECtor{k, args}:
+      match args:
+        case Nil{}:
+          Core.ECtor{k, Nil{}}
+        case a <> t:
+          Expr.push(Arrw.go(a, True{}), Arrw.go(Core.ECtor{k, t}, True{}))
+    case Core.EOp{op, a, b}:
+      Core.EOp{op, Arrw.go(a, True{}), Arrw.go(b, True{})}
+    case Core.ELam{p, b}:
+      Core.ELam{p, Arrw.go(b, True{})}
+    case Core.ELet{p, v, b}:
+      Core.ELet{p, Arrw.go(v, True{}), Arrw.go(b, True{})}
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.push(Arrw.go(a, True{}), Arrw.go(Core.EMatch{t, cases}, True{}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Arrw.go(c, True{}), Arrw.go(Core.EMatch{Nil{}, t}, True{}))
+    case Core.ECase{ps, b}:
+      Core.ECase{ps, Arrw.go(b, True{})}
+    case Core.ESucc{k, x}:
+      Core.ESucc{k, Arrw.go(x, True{})}
+    case Core.EAnn{x, ty}:
+      Core.EAnn{Arrw.go(x, True{}), ty}
+    case other:
+      other
+
+# Each def's body rewritten; Array.get, Array.set and Array.swap each get
+# their %w copy.
+def Arrw.decls(ds: List<&2, Decl>) -> List<&2, Decl>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case DDef{+name, +ps, +body, +ret} <> t:
+      List.append(&2, Decl, Bool.pick(List<&2, Decl>, Str.has(["Array.get", "Array.set", "Array.swap"], name),
+        [DDef{name, ps, body, ret}, DDef{name ++ "%w", ps, body, ret}], [DDef{name, ps, Arrw.go(body, True{}), ret}]),
+        Arrw.decls(t))
+    case d <> t:
+      d <> Arrw.decls(t)
 
 # Implicit parallelism (see Main.auto_par). Bend is pure, so the operands of
 # one node (an operator's, a call's arguments, a constructor's fields) may
@@ -18811,7 +18910,7 @@ def Gen.program.m(+g: G) -> Gen(String):
     Gen.entry(g, G.body(g, "main"))
 
 def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
-  +ds = Unb.program(unb, Par.auto(par, Lo.program(opt, Pick.decls(ds0))))
+  +ds = Unb.program(unb, Par.auto(par, Lo.program(opt, Arrw.decls(Pick.decls(ds0)))))
   +g = Unb.sret(unb, ds, Dps.build(G.new(ds), ds, free, rc))
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))

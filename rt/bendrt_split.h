@@ -1065,6 +1065,17 @@ BEND_UINL V F_Array_dset(V a, V i, V v) {
   arr_put(a, p, v);
   return a;
 }
+// Array.get, Array.set and Array.swap on cells of a scalar type (U32, F32,
+// Bool, Char; see Arrw in bendc.bend): the cells are words, with no
+// reference to take or drop, in either build.
+BEND_UINL V F_Array_dget_x37w(V a, V i) { return C2(0, a, *arr_at(a, i)); }
+BEND_UINL V F_Array_dset_x37w(V a, V i, V v) { *arr_at(a, i) = v; return a; }
+BEND_UINL V F_Array_dswap_x37w(V a, V i, V v) {
+  V *p = arr_at(a, i);
+  V old = *p;
+  *p = v;
+  return C2(0, a, old);
+}
 static inline V F_Array_dnew(V d, V v) { return arr_new(d, v); }
 static inline V F_Array_dclone(V a) { return C2(0, a, arr_copy(arr_cls(a), arr_cells(a), 1, ((V *)a)[0] & RC_TS)); }
 
