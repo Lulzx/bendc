@@ -678,7 +678,9 @@ __attribute__((noinline)) static void bend_share_slow(V v) {
 // above (gc_init); a node already shared says so in its tag word (reading any
 // heap address is safe; writing needs the checks above).
 static inline void bend_share(V v) {
-  if (v < ((V)1 << 32) || (uintptr_t)v - gc_hot.base >= gc_hot.span) return;
+  // A word first, on its own branch (the heap bounds are then not loaded).
+  if (LIKELY(v < ((V)1 << 32))) return;
+  if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
   V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
   if ((w0 & BEND_SH) && w0 < ((V)1 << 22)) return;
   bend_share_slow(v);
