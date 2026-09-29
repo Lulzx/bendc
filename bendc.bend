@@ -6499,9 +6499,21 @@ type AnfSel is Type:
   ANStMatch{g: G, bound: List<&2, String>, r: Anfs, cases: List<&2, Core.Expr>}
   ANCases{g: G, bound: List<&2, String>, cs: List<&2, Core.Expr>, n: U32}
   ANCasesCons{g: G, bound: List<&2, String>, ps: List<&2, Core.Pat>, t: List<&2, Core.Expr>, r: Anf}
+  ANExLets{g: G, bound: List<&2, String>, ps: List<&2, Core.Pat>, vs: List<&2, Core.Expr>, b: Core.Expr, top: Bool, n: U32,
+      ls: List<&2, AnfL>}
+  ANExPar{par: Bool, g: G, bound: List<&2, String>, k: String, ps: List<&2, Core.Pat>, v: Core.Expr, b: Core.Expr, top: Bool,
+      n: U32, ls: List<&2, AnfL>}
+  ANExLetsGo{g: G, bound: List<&2, String>, x: String, ps: List<&2, Core.Pat>, vs: List<&2, Core.Expr>, b: Core.Expr, top: Bool,
+      r: Anf}
 
 def AnfSel.ty(k: AnfSel) -> Type:
   match k:
+    case ANExLets{g, bound, ps, vs, b, top, n, ls}:
+      Anf
+    case ANExPar{par, g, bound, k, ps, v, b, top, n, ls}:
+      Anf
+    case ANExLetsGo{g, bound, x, ps, vs, b, top, r}:
+      Anf
     case ANEx{g, bound, e, top, n, ls}:
       Anf
     case ANCall{lift, f, r}:
@@ -6547,8 +6559,35 @@ def Anf.go(fuel: Nat, k: AnfSel) -> AnfSel.ty(k):
           Anfs{n, Nil{}, cs}
         case ANCasesCons{g, bound, ps, t, r}:
           Anf.case.stop(ps, t, r)
+        case ANExLets{g, bound, ps, vs, b, top, n, ls}:
+          Anf{n, ls, Anf.par.lets(ps, vs, b)}
+        case ANExPar{par, g, bound, k, ps, v, b, top, n, ls}:
+          Anf{n, ls, Core.ELet{Core.PCtor{k, ps}, v, b}}
+        case ANExLetsGo{g, bound, x, ps, vs, b, top, r}:
+          Anf{n, ls, e} = r
+          Anf{n, ls, Core.ELet{Core.PVar{x}, e, Anf.par.lets(ps, vs, b)}}
     case Succ{+fu}:
       match k:
+        # A parallel let inside an expression (implicit parallelism puts one
+        # around an operator's calls): its values become lets before the
+        # statement, one after the other; its names are fresh (Par.name).
+        case ANExLets{+g, +bound, ps, vs, b, +top, n, ls}:
+          match ps vs:
+            case Core.PVar{+x} <> pt v <> vt:
+              Anf.go(fu, ANExLetsGo{g, bound, x, pt, vt, b, top, Anf.go(fu, ANEx{g, bound, v, True{}, n, ls})})
+            case Nil{} Nil{}:
+              Anf.go(fu, ANEx{g, bound, b, top, n, ls})
+            case pr vr:
+              Anf{n, ls, Anf.par.lets(pr, vr, b)}
+        case ANExPar{par, +g, +bound, k, ps, v, b, +top, n, ls}:
+          match par:
+            case True{}:
+              Anf.go(fu, ANExLets{g, bound, ps, Anf.par.vals(v), b, top, n, ls})
+            case False{}:
+              Anf{n, ls, Core.ELet{Core.PCtor{k, ps}, v, b}}
+        case ANExLetsGo{+g, +bound, +x, ps, vs, b, +top, r}:
+          Anf{n, ls, e} = r
+          Anf.go(fu, ANExLets{g, x <> bound, ps, vs, b, top, n, AnfL{x, e} <> ls})
         case ANEx{+g, +bound, e, top, n, ls}:
           match e:
             case Core.ECall{Core.EVar{+f}, args}:
@@ -6557,6 +6596,8 @@ def Anf.go(fuel: Nat, k: AnfSel) -> AnfSel.ty(k):
               Anf.ctor(name, Anf.go(fu, ANExs{g, bound, args, False{}, n, ls}))
             case Core.ESucc{j, x}:
               Anf.succ(j, Anf.go(fu, ANEx{g, bound, x, False{}, n, ls}))
+            case Core.ELet{Core.PCtor{+k, ps}, v, b}:
+              Anf.go(fu, ANExPar{Str.eq(k, "%par"), g, bound, k, ps, v, b, top, n, ls})
             case other:
               Anf{n, ls, other}
         case ANCall{lift, +f, r}:
