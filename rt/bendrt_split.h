@@ -516,20 +516,18 @@ __attribute__((noinline)) void bend_share_slow(V v);
 // above (gc_init); a node already shared says so in its tag word (reading any
 // heap address is safe; writing needs the checks above).
 // A node in the device's arena (a result the CPU reads in place, see
-// gpu_pinnable) is shared: marked so when first reached, from its root
-// (gpu_run) or from a shared node (here), as matches do not test the heap
-// bounds (bend_take_at). Nothing else outside the heap is a node (or is even
-// and above 2^32).
+// gpu_pinnable) is shared, as matches do not test the heap bounds
+// (bend_take_at): marked so when first reached, from its root (gpu_run) or
+// from a shared node (bend_deep; bend_share, on every value used twice, is
+// not slowed by a test). Nothing else outside the heap is a node (or is
+// even and above 2^32).
 extern uintptr_t bend_arena_lo;
 extern uintptr_t bend_arena_n;
 __attribute__((noinline)) void bend_share_arena(V v);
 static inline void bend_share(V v) {
   // A word first, on its own branch (the heap bounds are then not loaded).
   if (LIKELY(v < ((V)1 << 32))) return;
-  if ((uintptr_t)v - gc_hot.base >= gc_hot.span) {
-    if (UNLIKELY((uintptr_t)v - bend_arena_lo < bend_arena_n)) bend_share_arena(v);
-    return;
-  }
+  if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
   V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
   if ((w0 & BEND_SH) && w0 < ((V)1 << 22)) return;
   bend_share_slow(v);

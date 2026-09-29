@@ -402,12 +402,16 @@ __attribute__((noinline)) void bend_share_slow(V v) {
 }
 uintptr_t bend_arena_lo, bend_arena_n;
 __attribute__((noinline)) void bend_share_arena(V v) {
+  if ((v & 7) || (uintptr_t)v - bend_arena_lo >= bend_arena_n) return;
   V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
-  if (!(v & 7) && !(w0 & BEND_SH) && w0 < ((V)1 << 22)) __atomic_fetch_or((V *)v, BEND_SH, __ATOMIC_RELAXED);
+  if (!(w0 & BEND_SH) && w0 < ((V)1 << 22)) __atomic_fetch_or((V *)v, BEND_SH, __ATOMIC_RELAXED);
 }
 __attribute__((noinline)) void bend_deep(V v, unsigned w) {
   V *p = (V *)v;
-  for (unsigned j = 1; j < w; j++) bend_share(p[j]);
+  for (unsigned j = 1; j < w; j++) {
+    if (UNLIKELY((uintptr_t)p[j] - bend_arena_lo < bend_arena_n)) bend_share_arena(p[j]);
+    else bend_share(p[j]);
+  }
   __atomic_fetch_or(&p[0], BEND_SH | BEND_DEEP, __ATOMIC_RELEASE);
 }
 #if defined(BEND_DEBUG_POISON) || defined(BEND_DEBUG_FREE)
