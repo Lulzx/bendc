@@ -892,6 +892,7 @@ V arr_half(V a, unsigned hi) {
   if (c == 0) bend_fail("runtime fail-stop");
   return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), gc_hot.rc || arr_shared(a), ((V *)a)[0] & RC_TS);
 }
+#define F_Array_dnew_x37w F_Array_dnew
 #define ARR_ATOMIC(name, op) static inline V F_Array_datomic_d##name(V a, V i, V v) { return C2(0, a, (V)__atomic_##op(arr_word(a, i), (uint32_t)v, __ATOMIC_SEQ_CST)); }
 #ifdef __TINYC__
 #else

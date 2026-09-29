@@ -365,7 +365,9 @@ static void gpu_keep(V v) {
 
 // Copies the arena objects reachable from v into the CPU heap, children
 // first (a parent is never older than its children), and answers the copy
-// of v. 0 when an object has no CPU form (a closure of a lambda).
+// of v. 0 when an object has no CPU form (a closure of a lambda). A narrow
+// array (K_ARR_NW in rt/gpu.h: 32-bit scalar cells) becomes a CPU one.
+#define GPU_NARROW(w) (((w) | 0x3f) == (ARR_TAG | 0x3f) && ((w) & K_ARR_NW))
 static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
   KW lo = P->ab + ((P->heap0 + 1) << 3), hi = P->ab + ((P->heap0 + P->heapw) << 3);
 #define GPU_OBJ(w) ((w) >= lo && (w) < hi && ((w) & 7) == 0)
@@ -384,6 +386,7 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
     if (!(h & GPU_SEEN)) {
       // First visit: push the children.
       gpu_H[i - 1] = h | GPU_SEEN;
+      if (GPU_NARROW(gpu_H[i])) continue;
       for (KW k = 0; k < h; k++) {
         KW w = gpu_H[i + k];
         if (GPU_OBJ(w) && !(gpu_H[KIX_H(P, w) - 1] & (GPU_FWD | GPU_SEEN))) {
@@ -395,6 +398,17 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
     }
     // Second visit: the children are copied.
     KW n = h & ~GPU_SEEN;
+    if (GPU_NARROW(gpu_H[i])) {
+      unsigned d = (unsigned)(gpu_H[i] & 31);
+      V *p = halloc(1 + ((size_t)1 << d));
+      p[0] = ARR_HDR(d);
+      const uint32_t *q = (const uint32_t *)&gpu_H[i + 1];
+      for (size_t k = 0; k < (size_t)1 << d; k++) p[1 + k] = q[k];
+      gpu_keep((V)p);
+      gpu_H[i - 1] = GPU_FWD | (KW)p;
+      sp--;
+      continue;
+    }
     V *p = halloc(n);
     for (KW k = 0; k < n; k++) {
       KW w = gpu_H[i + k];
@@ -424,6 +438,7 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
   if (ok) *out = (V)(gpu_H[KIX_H(P, v) - 1] & ~GPU_FWD);
   return ok;
 #undef GPU_OBJ
+#undef GPU_NARROW
 }
 
 // A bigger arena (by f, a power of 2), for a call that filled this one: the
@@ -541,6 +556,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
       // (again, after the arena grows, while a call runs out of it)
       for (;;) {
         gpu_A[KA_GROW] = 0;
+        KAU used = gpu_A[KA_HEAP];
         if (gpu_mode == GPU_SIM) {
           for (KW l = 0; l < gpu_lanes; l++) prog->sim_kq(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
         }
@@ -551,9 +567,11 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
 #endif
         if (gpu_A[KA_GROW] == 0 || gpu_A[KA_ERR] != 0) break;
         // (by as much as the calls that ran out would take: they took the
-        // arena too, and as many calls again as the ones that did not)
+        // arena too, and as many calls again as the ones that did not; when
+        // every call ran out, what they took is free again)
         KW left = 0;
         for (KW l = 0; l < gpu_lanes; l++) left += H[P.lane0 + l] == PC_KQ;
+        if (left == waiting) gpu_A[KA_HEAP] = used;
         size_t f = 4;
         while (f < 16 && f * (waiting - left) < 2 * waiting) f *= 2;
         if (!gpu_grow(f)) {

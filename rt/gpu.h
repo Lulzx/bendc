@@ -128,8 +128,9 @@ typedef struct {
   KDEV KAU *A;
   KW ab, an, gb, lane;
   KW pc, fp, rv, dep, hp, he, ax;
-  KU ko[8];            // a flat call's result fields (see KBOX)
+  KW ko[8];            // a flat call's result fields (see KBOX)
   KW hs;               // where the lane's current heap chunk starts (or its hp at load)
+  KW ca; KU cm;        // the narrow array the lane last used, and its mask (see k_aget)
   KU err;
   KW kq, kqret, kqfb;  // a KQ_ call: its def, where its value goes, the way through frames
   KW kqa[KQ_ARGS];     // and its arguments
@@ -211,6 +212,22 @@ KINLINE KW k_alloc(KTHR KCtx *c, KW n) {
   return KPTR(c, i + 1);
 }
 
+// A looping flat call (KX_) runs only while no lane's heap ran out: once
+// one did, the arena grows and the dispatch reruns, so the call's work would
+// be lost; stopping it (as a heap failure) gets the host to the bigger
+// arena early (terrain's first KQ pass at 64MB: 0.18s -> a few ms).
+KINLINE bool k_short(KTHR KCtx *c) {
+  if (c->err != 0) return true;
+  if ((KW)K_LOAD(&c->A[KA_HEAP]) * K_CHUNK <= c->P->heapw) return false;
+  k_fail(c, KE_HEAP);
+  return true;
+}
+
+KINLINE void k_anone(KTHR KCtx *c) {
+  c->ca = KPTR(c, c->P->heap0 + 1);
+  c->cm = 0;
+}
+
 // A flat call (KX_ or KQ_) neither forks nor writes into older objects, and
 // an object only points to older ones: what the call allocated is garbage
 // unless its result reaches it. k_region takes it back: all of it when the
@@ -232,12 +249,13 @@ KINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
   }
   for (KW i = 0; i <= m; i++) c->H[lo + i] = c->H[p - 1 + i];
   c->hp = lo + m + 1;
+  k_anone(c);  // (an array there may be one now: see k_aget)
   return KPTR(c, lo + 1);
 }
 #define KREG(e) ({ KW kh0_ = c->hp, ke0_ = c->he; KW kr_ = (e); k_region(c, kh0_, ke0_, kr_); })
 // The same for a call whose result is a scalar (a U32, F32 or Bool): it reaches
 // nothing the call allocated.
-#define KSCAL(e) ({ KW kh0_ = c->hp, ke0_ = c->he; KU kr_ = (e); if (c->he == ke0_) c->hp = kh0_; kr_; })
+#define KSCAL(e) ({ KW kh0_ = c->hp, ke0_ = c->he; KU kr_ = (e); c->hp = c->he == ke0_ ? kh0_ : c->hs; kr_; })
 
 // A flat def keeps a Nat parameter in a KU: a Nat past 2^32 - 1 fails the call
 // over to the CPU (a counted loop never gets there). KSET assigns a parameter
@@ -428,19 +446,113 @@ KINLINE KW KF_String_deq(KTHR KCtx *c, KW a, KW b) { k_fail(c, KE_FX); return 0;
 KINLINE KW KF_Map_dbit(KTHR KCtx *c, KW a, KW b) { k_fail(c, KE_FX); return 0; }
 KINLINE KW KF_Map_dget(KTHR KCtx *c, KW a, KW b, KW d) { k_fail(c, KE_FX); return 0; }
 KINLINE KW KF_Map_dhas(KTHR KCtx *c, KW a, KW b) { k_fail(c, KE_FX); return 0; }
-// An Array is a host block (see "Arrays" in bendrt.h): the device runs no
-// Array operation, and a call that meets one runs on the CPU.
+// An Array is a node {ARR_HDR(c), 2^c cells}, as on the CPU (see "Arrays"
+// in bendrt.h). The device builds them in the arena and reads any; it
+// writes only its own (a call that writes one of the CPU's runs on the
+// CPU), and runs no match on one (ANode, ALeaf) and no atomic. A flat
+// def's let of an Array.get or Array.swap pair makes no pair (KXSLetArr in
+// bendc.bend): k_aget and k_aswap answer the cell.
+//
+// An array of scalars (Array.new%w: U32, F32, Bool or Char cells, see
+// Arrw in bendc.bend) the device builds is narrow: header K_ARR_NW | c and
+// 2^c 32-bit cells, half the memory traffic of words (terrain's tiles 1.35x
+// faster). No such array reaches the CPU: the host widens it as it copies
+// the result out (gpu_copy_out), and a call's result that holds one stays
+// out of the arena for the CPU (Gen.gpu.pin: no arrays).
+#define K_ARR_HDR(n) ((KW)0xFFF00 | (KW)(n))
+#define K_ARR_NW ((KW)0x20)
 KINLINE bool k_arr(KTHR KCtx *c) { k_fail(c, KE_FX); return false; }
 #define KF_ARR(c) (k_fail(c, KE_FX), (KW)0)
-#define KF_Array_dsize(c, ...) KF_ARR(c)
-#define KF_Array_dget(c, ...) KF_ARR(c)
-#define KF_Array_dswap(c, ...) KF_ARR(c)
-#define KF_Array_dset(c, ...) KF_ARR(c)
-#define KF_Array_dget_x37w(c, ...) KF_ARR(c)
-#define KF_Array_dswap_x37w(c, ...) KF_ARR(c)
-#define KF_Array_dset_x37w(c, ...) KF_ARR(c)
-#define KF_Array_dnew(c, ...) KF_ARR(c)
-#define KF_Array_dclone(c, ...) KF_ARR(c)
+KINLINE KW k_amask(KTHR KCtx *c, KW a) { return ((KW)1 << (k_word(c, a, 0) & 31)) - 1; }
+#define K_NCELLS(c, w) ((KCOH KU *)((c)->H + (w) + 1))
+// The lane keeps the narrow array it last used (ca) and its mask (cm): a
+// loop over one reads its header once, not at each access (a dependent load
+// that misses the cache the cells stream through: terrain 1.2x faster). An
+// array made at an address (k_anew, k_region) updates it. With none, ca is
+// the 1-cell array a failed allocation makes (see k_alloc), so a value that
+// is no array (after a failure, a call runs on to its return) reads there.
+KINLINE KW k_aslow(KTHR KCtx *c, KW a, KW i, KW v, bool sw) {
+  if (!k_in(c, a)) {
+    if (sw) k_fail(c, KE_FX);
+    return sw ? 0 : c->G[((a - c->gb) >> 3) + 1 + ((KW)(KU)i & k_amask(c, a))];
+  }
+  KW w = KIX(c, a), h = c->H[w];
+  KU j = (KU)i & (((KU)1 << (h & 31)) - 1);
+  if (h & K_ARR_NW) {
+    c->ca = a;
+    c->cm = ((KU)1 << (h & 31)) - 1;
+    KCOH KU *q = K_NCELLS(c, w) + j;
+    KW o = *q;
+    if (sw) *q = (KU)v;
+    return o;
+  }
+  KW o = c->H[w + 1 + j];
+  if (sw) c->H[w + 1 + j] = v;
+  return o;
+}
+KINLINE KW k_aget(KTHR KCtx *c, KW a, KW i) {
+  if (a == c->ca) return K_NCELLS(c, KIX(c, a))[(KU)i & c->cm];
+  return k_aslow(c, a, i, 0, false);
+}
+// (a CPU array: the call fails over, and the write goes to the scratch
+// chunk's first word)
+KINLINE KW k_aswap(KTHR KCtx *c, KW a, KW i, KW v) {
+  if (a == c->ca) {
+    KCOH KU *q = K_NCELLS(c, KIX(c, a)) + ((KU)i & c->cm);
+    KW o = *q;
+    *q = (KU)v;
+    return o;
+  }
+  return k_aslow(c, a, i, v, true);
+}
+KINLINE KW k_apair(KTHR KCtx *c, KW a, KW x) {
+  KW p = k_node(c, 0, 2);
+  c->H[KIX(c, p) + 1] = a;
+  c->H[KIX(c, p) + 2] = x;
+  return p;
+}
+// (out of arena, p is in the scratch chunk: a 1-cell array there)
+KINLINE KW k_anew(KTHR KCtx *c, KW d, KW v, bool nw) {
+  if (d > 24) {
+    k_fail(c, KE_FX);
+    return 0;
+  }
+  KW n = (KW)1 << d;
+  KW p = k_alloc(c, nw ? (n + 1) / 2 + 1 : n + 1);
+  KW w = KIX(c, p);
+  if (c->err != 0) n = 1, d = 0;
+  if (nw) {
+    c->ca = p;
+    c->cm = ((KU)1 << d) - 1;
+  } else k_anone(c);
+  if (nw) {
+    c->H[w] = K_ARR_HDR(d) | K_ARR_NW;
+    for (KW i = 0; i < n; i++) K_NCELLS(c, w)[i] = (KU)v;
+  } else {
+    c->H[w] = K_ARR_HDR(d);
+    for (KW i = 0; i < n; i++) c->H[w + 1 + i] = v;
+  }
+  return p;
+}
+KINLINE KW KF_Array_dnew(KTHR KCtx *c, KW d, KW v) { return k_anew(c, d, v, false); }
+KINLINE KW KF_Array_dnew_x37w(KTHR KCtx *c, KW d, KW v) { return k_anew(c, d, v, true); }
+KINLINE KW KF_Array_dclone(KTHR KCtx *c, KW a) {
+  KW m = k_amask(c, a);
+  KW h = k_word(c, a, 0);
+  KW p = k_anew(c, h & 31, 0, k_in(c, a) && (h & K_ARR_NW) != 0);
+  for (KW i = 0; i <= m; i++) k_aswap(c, p, i, k_aget(c, a, i));
+  return k_apair(c, a, p);
+}
+KINLINE KW KF_Array_dsize(KTHR KCtx *c, KW a) { return k_apair(c, a, k_amask(c, a) + 1); }
+KINLINE KW KF_Array_dget(KTHR KCtx *c, KW a, KW i) { return k_apair(c, a, k_aget(c, a, i)); }
+KINLINE KW KF_Array_dswap(KTHR KCtx *c, KW a, KW i, KW v) { return k_apair(c, a, k_aswap(c, a, i, v)); }
+KINLINE KW KF_Array_dset(KTHR KCtx *c, KW a, KW i, KW v) {
+  k_aswap(c, a, i, v);
+  return a;
+}
+#define KF_Array_dget_x37w KF_Array_dget
+#define KF_Array_dswap_x37w KF_Array_dswap
+#define KF_Array_dset_x37w KF_Array_dset
 #define KF_Array_datomic_dadd(c, ...) KF_ARR(c)
 #define KF_Array_datomic_dmin(c, ...) KF_ARR(c)
 #define KF_Array_datomic_dmax(c, ...) KF_ARR(c)
@@ -615,6 +727,7 @@ KINLINE void k_load(KTHR KCtx *c, KCOH KW *H, KDEV KAU *A, KCP KParams *P, KDEV 
   c->an = P->an;
   c->gb = P->gb;
   c->err = 0;
+  k_anone(c);
   // Word k of every lane side by side: the host reads the pcs of all lanes
   // after a dispatch, and so touches only their pages.
   KCOH KW *ls = H + P->lane0 + lane;
