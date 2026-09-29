@@ -223,13 +223,20 @@ _Static_assert(sizeof(GcBlk) <= GC_HDR, "GC_HDR holds a block header");
 // A thread's allocation cache for one size class: a fresh block is handed out
 // by bumping; a partly free one by the free bits of its bitmap, a word at a
 // time (the slots are not touched until they are handed out).
-// The first seven fields are read and written by native code too (its
+// The cache holds up to 64 slots at a time, a word of the allocation bitmap:
+// the slots from bump to end, or the free bits of word j. Their allocation
+// bits are set when the cache takes them (gc_window), so handing one out is
+// a bump or a bit taken (no bitmap write). A collection can then mark one it
+// has not handed out yet (from a stale pointer), which would make the object
+// later built there old; so every block a cache holds is dirty for the next
+// collection (gc_dirty_caches), which rescans its old objects.
+// bump, end, j, bits and objs are read and written by native code too (its
 // allocation fast path; see rt/native.c): their offsets and the struct's
 // size are fixed there.
 typedef struct GcCache {
   V *bump; V *end;
   uint64_t *abits;  // GC_ALLOC(blk)
-  uint32_t idx;     // the slot bump points at
+  uint32_t idx;     // bumping: the next word of the block to bump through (0: none)
   uint32_t j;
   uint64_t bits;    // free slots of word j
   V *objs;
@@ -413,14 +420,6 @@ void gc_collect_locked(void);
 
 GcBlk *gc_new_small(int atomic, unsigned c);
 
-// Sets a slot's allocation bit. Under reference counting other threads free
-// slots of the block as it is handed out, so with threads running the bit
-// is set in one instruction (a plain one could lose their frees).
-static inline void gc_setbit(uint64_t *w, uint64_t bit) {
-  if (UNLIKELY(gc_hot.rcmt)) __atomic_fetch_or(w, bit, __ATOMIC_RELAXED);
-  else *w |= bit;
-}
-
 // The next word of free bits in the cache's block; 0 when none is left.
 // The free slots' marks go here too: a slot handed out is young (bend_take_at
 // leaves a freed slot's mark when other threads run), or a minor collection
@@ -442,7 +441,22 @@ static inline uint64_t gc_next_bits(GcCache *k) {
   return 0;
 }
 
-// Slow path: the rest of the block's free words, or another block.
+// The slots of word jw of the cache's block, bits f, go to the cache: their
+// allocation bits are set now (see GcCache). When other threads run, they
+// may clear other bits of the word (frees): the bits are set in one
+// instruction then.
+static inline void gc_window(GcCache *k, uint32_t jw, uint64_t f) {
+  if (UNLIKELY(gc_hot.mt)) __atomic_fetch_or(&k->abits[jw], f, __ATOMIC_RELAXED);
+  else k->abits[jw] |= f;
+  BEND_BARRIER();
+}
+
+// Bumping through a fresh block: the slots of its word jw go to the cache,
+// and the first is handed out.
+V *gc_bump_word(GcCache *k, uint32_t jw, size_t sw);
+
+// Slow path: the next word of a block being bumped through, the rest of the
+// block's free words, or another block.
 __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c);
 
 __attribute__((noinline)) V *gc_alloc_large(size_t w, int atomic);
@@ -456,19 +470,17 @@ static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
   unsigned c = w >= 2 && w <= 16 ? (unsigned)w - 2 : gc_cls_of[w];
   GcCache *k = &thr_self->cache[atomic][c];
   V *p;
+  // (The slot's allocation bit is set: see GcCache.)
   if (k->bump < k->end) {
     p = k->bump;
     k->bump += gc_cls_w[c];
-    uint32_t i = k->idx++;
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
-    gc_setbit(&k->abits[i >> 6], 1ull << (i & 63));
   } else if (k->bits) {
     int t = __builtin_ctzll(k->bits);
     k->bits &= k->bits - 1;
     uint32_t i = k->j * 64 + (uint32_t)t;
     p = k->objs + (size_t)i * gc_cls_w[c];
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
-    gc_setbit(&k->abits[i >> 6], 1ull << (i & 63));
   } else {
     p = gc_refill(k, atomic, c);
   }
@@ -594,19 +606,18 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   (void)line;
   BEND_POISON_AT(v, w);
   uint64_t *cw = &h->cand[(size_t)(w - 2) * GC_CANDW + (bi >> 6)];
-  // A freed slot is young when it is handed out again. On one thread its
-  // mark goes here; when other threads run, the thread that hands the slot
-  // out clears it (gc_next_bits): cleared here, after the allocation bit, it
-  // could be the mark of the object another thread made in the slot since
-  // and a collection marked old, which the next minor collection would then
-  // not trace from (tests/par_reuse.bend).
+  // A freed slot is young when it is handed out again: the thread that
+  // hands it out clears its mark (gc_next_bits). Cleared here, after the
+  // allocation bit, it could be the mark of the object another thread made
+  // in the slot since and a collection marked old, which the next minor
+  // collection would then not trace from (tests/par_reuse.bend); and on one
+  // thread it would be a second write for nothing.
   // With threads the bit is cleared with release: the match's reads of the
   // node's fields, just before, must be done before another thread can take
   // the slot and write it. Relaxed, a weakly ordered CPU (arm64) could
   // finish those reads late and get the fields of that thread's new node:
   // this thread then owned nodes the other one still used, and freed or
   // rebuilt them under it (tests/par_free.bend).
-  uint64_t *mw = &gc_mbits[bi * 64 + (i >> 6)];
   if (UNLIKELY(h->mt)) {
     __atomic_fetch_and(aw, ~bit, __ATOMIC_RELEASE);
     // (a sample of the frees keeps the shared candidate words cool)
@@ -614,7 +625,6 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
       __atomic_fetch_or(cw, 1ull << (bi & 63), __ATOMIC_RELAXED);
   } else {
     *aw &= ~bit;
-    *mw &= ~bit;
     *cw |= 1ull << (bi & 63);
   }
 }
@@ -1055,6 +1065,13 @@ void gc_drain_par(int n);
 __attribute__((noinline)) void gc_park(Thr *t);
 
 void gc_handler(int sig);
+
+// Every block a thread's cache holds is dirty for the next collection: the
+// slots the cache has not handed out yet have their allocation bits, and one
+// a stale pointer marked would be old when an object is built there (see
+// GcCache). (A thread stopped in gc_refill has taken none of a new block's
+// slots before it records the block.)
+void gc_dirty_caches(void);
 
 void gc_sweep(void);
 

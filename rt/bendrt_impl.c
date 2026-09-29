@@ -236,16 +236,28 @@ GcBlk *gc_new_small(int atomic, unsigned c) {
   __atomic_store_n(&gc_kind[at], 1, __ATOMIC_RELEASE);
   return b;
 }
+V *gc_bump_word(GcCache *k, uint32_t jw, size_t sw) {
+  uint32_t lo = jw * 64, n = k->blk->nobj - lo < 64 ? k->blk->nobj - lo : 64;
+  k->idx = lo + n < k->blk->nobj ? jw + 1 : 0;
+  gc_window(k, jw, n == 64 ? ~0ull : (1ull << n) - 1);
+  V *p = k->objs + (size_t)lo * sw;
+  p[0] = BEND_HOLE;
+  BEND_BARRIER();
+  k->end = p + n * sw;
+  k->bump = p + sw;
+  return p;
+}
 __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   size_t sw = gc_cls_w[c];
+  if (k->blk && k->idx) return gc_bump_word(k, k->idx, sw);
   if (k->blk && (k->bits = gc_next_bits(k))) {
+    gc_window(k, k->j, k->bits);
     int t = __builtin_ctzll(k->bits);
     k->bits &= k->bits - 1;
     uint32_t i = k->j * 64 + (uint32_t)t;
     V *p = k->objs + (size_t)i * sw;
     p[0] = BEND_HOLE;
     BEND_BARRIER();
-    gc_setbit(&k->abits[i >> 6], 1ull << (i & 63));
     if (!k->reuse)
       atomic_fetch_add_explicit(&gc_since, ((size_t)__builtin_popcountll(k->bits) + 1) * sw * sizeof(V),
         memory_order_relaxed);
@@ -261,6 +273,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
     if (q->nobj - used >= q->nobj / 5) {
       k->bump = k->end = NULL;
       k->j = (uint32_t)-1;
+      k->idx = 0;
       k->bits = 0;
       return gc_refill(k, atomic, c);
     }
@@ -325,26 +338,22 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   }
   k->blk = b;
   k->abits = GC_ALLOC(b);
-  // A slot's allocation bit is set when the slot is handed out, never
-  // before: a stale pointer must not mark a slot that is still free.
+  // (A slot's allocation bit is set when the slot goes to the cache: see
+  // GcCache for a stale pointer that marks it before it is handed out.)
   V *objs = gc_objs(b);
   k->objs = objs;
   k->nj = (b->nobj + 63) >> 6;
   if (fresh) {
-    // A fresh block is handed out by bumping a pointer.
+    // A fresh block is handed out by bumping a pointer, a word of its
+    // bitmap at a time.
     atomic_fetch_add_explicit(&gc_since, (size_t)b->nobj * sw * sizeof(V), memory_order_relaxed);
     k->bits = 0;
     k->j = k->nj;
-    k->bump = objs + sw;
-    k->end = objs + (size_t)b->nobj * sw;
-    k->idx = 1;
-    objs[0] = BEND_HOLE;
-    BEND_BARRIER();
-    GC_ALLOC(b)[0] |= 1;
-    return objs;
+    return gc_bump_word(k, 0, sw);
   }
   k->bump = k->end = NULL;
   k->j = (uint32_t)-1;
+  k->idx = 0;
   k->bits = 0;
   return gc_refill(k, atomic, c);
 }
@@ -530,6 +539,14 @@ size_t rc_live(void) {
   for (uintptr_t bi = 0; bi < gc_top; bi++)
     if (gc_kind[bi] == 1 || gc_kind[bi] == 2)
       for (int j = 0; j < 64; j++) n += (size_t)__builtin_popcountll(gc_abits[bi * 64 + j]);
+  // (less the slots the caches hold, not handed out: see GcCache)
+  for (int i = 0; i < gc_nthr; i++)
+    for (int a = 0; a < 2; a++)
+      for (int c = 0; c < GC_NCLS; c++) {
+        GcCache *k = &gc_thrs[i]->cache[a][c];
+        if (k->bump < k->end) n -= (size_t)(k->end - k->bump) / gc_cls_w[c];
+        n -= (size_t)__builtin_popcountll(k->bits);
+      }
   return n;
 }
 void gc_root_add_locked(V *p, size_t n) {
@@ -686,6 +703,14 @@ void gc_handler(int sig) {
   }
   errno = saved;
 }
+void gc_dirty_caches(void) {
+  for (int i = 0; i < gc_nthr; i++)
+    for (int a = 0; a < 2; a++)
+      for (int c = 0; c < GC_NCLS; c++) {
+        GcBlk *b = gc_thrs[i]->cache[a][c].blk;
+        if (b) gc_dirty[gc_bi(b)] = 1;
+      }
+}
 void gc_sweep(void) {
   memset(gc_partial, 0, sizeof gc_partial);
   size_t live = 0;
@@ -841,6 +866,7 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   gc_drain_par(n);
   if (gc_stats) clock_gettime(CLOCK_MONOTONIC, &ts);
   gc_sweep();
+  gc_dirty_caches();
   atomic_store(&gc_stopping, 0);
   while (atomic_load(&gc_inside) > 0) sched_yield();
   if (!gc_minor) gc_major_live = gc_live_bytes ? gc_live_bytes : 1;
