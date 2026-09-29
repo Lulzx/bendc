@@ -1620,19 +1620,19 @@ static inline V F_Chk_dmemo_dset(V m, V v, V x) {
   bend_drop(m);
   return x;
 }
-static inline V F_Array_dget(V a, V i) {
+BEND_UINL V F_Array_dget(V a, V i) {
   V x = *arr_at(a, i);
   if (gc_hot.rc) rc_dup_in(x, ((V *)a)[0] & RC_TS);
   else bend_share(x);
   return C2(0, a, x);
 }
-static inline V F_Array_dswap(V a, V i, V v) {
+BEND_UINL V F_Array_dswap(V a, V i, V v) {
   V *p = arr_at(a, i);
   V old = *p;
   arr_put(a, p, v);
   return C2(0, a, old);
 }
-static inline V F_Array_dset(V a, V i, V v) {
+BEND_UINL V F_Array_dset(V a, V i, V v) {
   V *p = arr_at(a, i);
   bend_drop(*p);
   arr_put(a, p, v);

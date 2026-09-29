@@ -577,6 +577,97 @@ generation, assembly, link) in 3.5s, where `bendc -o` takes 20s, most of it clan
 
 ## Benchmarks
 
+### The official runtime benchmarks
+
+`bench/official.sh` runs the 16 programs of the official repository's `bench/runtime` the way
+upstream's `gates/perf.ts` runs them. The official build is `bend main.bend -o main.c`, compiled
+with `cc -std=c11 -O3` (and Metal for the GPU). bendc's build is `bendc -o`. Each binary runs in
+three modes: SEQ is `--threads 1 --gpu off`, PAR is `--threads 8 --gpu off` (8 is the largest
+power of two under the 12 cores), and GPU is `--gpu SIZE`. The outputs of all builds must agree.
+`--rc` adds bendc's reference-counting build (`BEND_RC=1`) as the `rc` columns.
+
+The machine was an Apple M4 Pro (12 cores, 24 GB, macOS 27), with official bend 2.0.32. It was
+shared with other jobs, and the load average stayed between 9 and 12 during the run. The runs of
+the three builds were interleaved, and each figure is the best of 3 runs, with its peak memory.
+The fastest build in each mode is in bold.
+
+Rows marked `*` were measured again after the change to the array functions described below.
+The load was between 8 and 11 for this second run, which did not include the `rc` build. The `rc`
+columns of these rows come from the first run.
+
+| program | SEQ bendc | SEQ `rc` | SEQ official | PAR bendc | PAR `rc` | PAR official | GPU bendc | GPU `rc` | GPU official |
+|---|---|---|---|---|---|---|---|---|---|
+| bfs * | 7.930s 305M | 29.466s 6.2M | **3.944s 2.3M** | 1.408s 326M | 7.358s 8.3M | **0.549s 2.6M** | 1.330s 347M | 6.650s 16.8M | **0.404s 13.8M** |
+| editdist * | 3.393s 278M | 82.770s 6.2M | **2.233s 2.3M** | 0.514s 281M | 17.327s 8.6M | **0.337s 2.8M** | 0.555s 290M | 14.862s 17.1M | **0.328s 13.6M** |
+| gameoflife | 8.361s 6.0M | **8.121s 6.0M** | 8.919s 2.4M | **1.167s 8.5M** | 1.211s 7.2M | 1.252s 2.6M | 0.124s 13.3M | 0.125s 13.2M | **0.069s 13.8M** |
+| hashmap * | **1.687s 267M** | 2.714s 6.5M | 2.979s 2.7M | **0.277s 277M** | 0.580s 11.3M | 0.424s 5.8M | **0.298s 288M** | 0.529s 21.3M | 0.632s 13.7M |
+| kmeans * | 3.697s 6.1M | 3.731s 6.2M | **2.173s 21.1M** | 0.572s 13.5M | 0.728s 9.1M | **0.366s 21.0M** | 1.141s 26.9M | 1.323s 18.5M | **0.271s 14.2M** |
+| lexer * | 3.527s 6.0M | 8.407s 6.1M | **2.348s 2.2M** | 0.593s 127M | 1.975s 7.7M | **0.354s 2.7M** | **0.810s 176M** | 2.266s 16.2M | 2.174s 13.8M |
+| mandelbrot | 5.468s 6.0M | 5.433s 6.0M | **5.108s 2.5M** | 0.677s 15.4M | 0.707s 7.4M | **0.639s 2.8M** | 0.081s 13.4M | 0.080s 13.3M | **0.054s 13.8M** |
+| merkle | 5.684s 229M | 5.725s 201M | **4.839s 130M** | 0.923s 270M | 0.864s 202M | **0.708s 131M** | 0.482s 806M | 0.545s 806M | **0.070s 13.9M** |
+| nbody | **5.799s 6.1M** | 6.010s 6.1M | 6.706s 2.4M | **0.720s 8.0M** | 0.862s 7.8M | 0.933s 2.6M | 0.072s 13.3M | 0.072s 13.2M | **0.060s 13.7M** |
+| queens | 8.864s 6.0M | 8.238s 6.0M | **5.969s 2.3M** | 1.521s 270M | 1.336s 7.2M | **0.907s 2.5M** | 1.716s 282M | **1.504s 15.4M** | 1.659s 13.7M |
+| raytrace | 8.027s 6.0M | 9.081s 6.0M | **5.074s 2.3M** | 1.323s 6.7M | 1.622s 7.1M | **0.839s 2.6M** | 6.209s 15.0M | 6.406s 15.5M | **0.319s 13.8M** |
+| symreg | 4.467s 260M | 8.435s 6.1M | **3.359s 2.3M** | 0.687s 270M | 1.463s 9.1M | **0.547s 2.7M** | 7.691s 13.9M | 7.946s 14.0M | **0.437s 13.8M** |
+| terrain * | 3.085s 213M | 75.964s 6.1M | **2.260s 2.4M** | 0.489s 227M | 14.861s 8.2M | **0.310s 3.0M** | 0.503s 241M | 12.649s 16.4M | **0.183s 13.8M** |
+| tree-bitonic | 46.838s 408M | 35.602s 405M | **7.054s 147M** | 11.717s 427M | 7.621s 407M | **1.605s 153M** | 11.455s 432M | 8.066s 416M | **0.766s 13.9M** |
+| tree-matmul | 10.673s 268M | 13.004s 8.4M | **2.322s 3.0M** | 2.584s 287M | 2.620s 25.7M | **0.557s 8.8M** | 2.463s 306M | 2.449s 46.2M | **0.380s 14.3M** |
+| tree-radix | 4.702s 510M | **4.153s 569M** | 5.008s 652M | 2.560s 883M | 2.133s 898M | **0.733s 646M** | 4.576s 1005M | 3.144s 1065M | **0.632s 14.1M** |
+
+bendc is fastest in 10 of the 48 program and mode pairs:
+
+- SEQ: gameoflife (`rc`), hashmap, nbody and tree-radix (`rc`).
+- PAR: gameoflife, hashmap and nbody.
+- GPU: hashmap, lexer and queens (`rc`).
+
+In the other 38 pairs, the official build is fastest. None of bendc's wins come from parallelism
+the program does not write. The automatic parallelism pass (see
+[How it works](#how-it-works)) changes the generated C for only one of the 16 programs, symreg,
+and symreg is slower than the official build in every mode.
+
+Where bendc loses, and why:
+
+- **bfs.** bendc executes about 86G instructions, where the official build executes 26G. The
+  loop's result is a pair of a state record and a `Bool`. bendc allocates that pair on every pop,
+  while the official build flattens it into six outputs. The official build also stores `U32`
+  array cells as 32-bit words. Doing the same in bendc means extending its unboxing to nested
+  records, which is not done.
+- **editdist.** Every array access loads the array's header to find the mask, and every value
+  used twice is checked before it is shared. Two runtime changes helped:
+  - `bend_share` now tests for a plain word before it loads the heap bounds. This cut editdist
+    from 121G instructions to 91G. The official build executes 48G.
+  - `Array.get`, `Array.set` and `Array.swap` are now always inlined under clang. `bendc -o`
+    links the runtime as a separate object, and in that build clang had stopped inlining
+    `Array.set` into editdist's loop. A binary from `bendc -o` took 4.3s, where the same C
+    compiled as one unit took 2.9s. With the change, both take 2.9s.
+- **kmeans.** The inner loop is vectorized. Most of the remaining time goes to the zip of the
+  chunk lists (`S_szip`, a fifth of the samples) and to boxed intermediate values.
+- **lexer.** The program allocates a mode node (`InId{h}`) and a string cell for every character.
+  The official build appears to store a constructor with a single field without allocating a
+  node. Either that representation or in-place reuse would remove the allocations.
+- **tree-bitonic and tree-matmul.** Most of the time goes to allocating and freeing each tree
+  node. The reference-counting work (in-place reuse) addresses this cost.
+- **GPU.** raytrace and symreg run their GPU mode 15 to 20 times slower than the official build.
+  merkle, terrain and tree-radix run it 3 to 7 times slower. bendc hands a `!`-called def to the
+  GPU only when the def fits the device kernel (see [The GPU backend](#the-gpu-backend)). The
+  rest runs on the CPU.
+- **`rc` mode.** On editdist and terrain, the `rc` build is about 25 times slower than the
+  default in SEQ. On bfs it is 4 times slower. All three programs read cells out of large arrays in a
+  loop, and in `rc` mode each read takes a reference. In exchange, `rc` uses far less memory
+  than the default on every program except merkle and the tree programs.
+
+Before this round, the same script gave these bendc times, with the load between 10 and 16:
+
+| program | SEQ | PAR | GPU |
+|---|---|---|---|
+| bfs | 8.78s | 3.72s | 4.18s |
+| editdist | 3.66s | 1.03s | 0.99s |
+| kmeans | 8.20s | 1.77s | 2.88s |
+| tree-bitonic | 47.0s | 16.9s | 15.6s |
+| tree-radix | 4.52s | 3.44s | 4.28s |
+
+### Programs in `bench/`
+
 `bench/run.sh` builds each program in [`bench/`](bench) with bendc (`bendc -o`) and with the official
 `bend` (2.0.25, `bend -o`), checks that both print the same thing, and reports the best of three runs
 with its peak memory. Sizes come from the command line, so neither compiler can compute the answer at
