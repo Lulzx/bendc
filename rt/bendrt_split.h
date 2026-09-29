@@ -466,6 +466,7 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w);
 // its block a reuse candidate for its class (gc_refill takes it when a 5th of
 // it is free). Nodes of up to 16 words are in small blocks whose slots are
 // exactly their size; larger ones are never freed.
+static inline void bend_free_slot(V v, unsigned w, unsigned line);
 static inline int bend_take_at(V v, unsigned w, unsigned line) {
   const GcHot *h = &gc_hot;
   V w0 = h->mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
@@ -473,8 +474,15 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
     if (!(w0 & BEND_DEEP)) bend_deep(v, w);
     return 1;
   }
+  if (UNLIKELY((uintptr_t)v - h->base >= h->span || w > 16)) { bend_deep(v, w); return 1; }
+  bend_free_slot(v, w, line);
+  return 0;
+}
+
+// Frees the slot of an unshared node v of w (2 to 16) words in the heap.
+static inline void bend_free_slot(V v, unsigned w, unsigned line) {
+  const GcHot *h = &gc_hot;
   uintptr_t off = (uintptr_t)v - h->base;
-  if (UNLIKELY(off >= h->span || w > 16)) { bend_deep(v, w); return 1; }
   uintptr_t bi = off >> GC_BLK_SHIFT;
   uint32_t i = (uint32_t)(((off & (GC_BLK - 1)) - GC_HDR) / (w * sizeof(V)));
   uint64_t bit = 1ull << (i & 63);
@@ -493,7 +501,7 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
     for (unsigned j = 0; j < w; j++) ((V *)v)[j] = ((V)0xDEAD << 48) | (who << 40) | ((nfreed & 0xfffff) << 20) | line;
     (void)bit; (void)aw;
   }
-  return 0;
+  return;
 #endif
   (void)line;
   uint64_t *cw = &h->cand[(size_t)(w - 2) * GC_CANDW + (bi >> 6)];
@@ -514,7 +522,6 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
     *mw &= ~bit;
     *cw |= 1ull << (bi & 63);
   }
-  return 0;
 }
 
 // With BEND_DEBUG_FREE, a freed node records the generated C line that
@@ -1039,6 +1046,13 @@ static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
 // out again has it cleared (a collection between the match and the build
 // marked it, reached from the stack), so minor collections trace from it.
 // Only this thread holds the slot, so clearing its mark races with no one.
+// On one thread no collection runs between the match and its build but in
+// an allocation, and the token's header holds BEND_HOLE from the match on:
+// a collection that finds the token on the stack records it (gc_rem_wants),
+// so the next minor collection traces the node built in it, and the mark is
+// left alone. With threads running a collection may stop this one between
+// the match's read and that store, so the build clears the mark (gc_hot.mt
+// never goes back to 0).
 // RUFG frees a token no constructor took.
 static inline V bend_take_ru(V v, unsigned w) {
   const GcHot *h = &gc_hot;
@@ -1052,6 +1066,7 @@ static inline V bend_take_ru(V v, unsigned w) {
   bend_take(v, w);
   return 0;
 #endif
+  ((V *)v)[0] = BEND_HOLE;
   return v;
 }
 static inline V *bend_ru_young(V u, unsigned w) {
@@ -1067,7 +1082,7 @@ static inline V *bend_ru_young(V u, unsigned w) {
   }
   return (V *)u;
 }
-#define RUG(tok, w) ((tok) ? bend_ru_young(tok, w) : halloc(w))
+#define RUG(tok, w) ((tok) ? (UNLIKELY(gc_hot.mt) ? bend_ru_young(tok, w) : (V *)(tok)) : halloc(w))
 static inline V CG1(V u, V t, V a) { V *p = RUG(u, 2); p[0] = t; p[1] = a; return (V)p; }
 static inline V CG2(V u, V t, V a, V b) { V *p = RUG(u, 3); p[0] = t; p[1] = a; p[2] = b; return (V)p; }
 static inline V CG3(V u, V t, V a, V b, V c) {
@@ -1081,7 +1096,7 @@ static inline V CGN(V u, V t, int n, const V *xs) {
   for (int i = 0; i < n; i++) p[i + 1] = xs[i];
   return (V)p;
 }
-#define RUFG(u, w) do { if (u) bend_take((u), (w)); } while (0)
+#define RUFG(u, w) do { if (u) bend_free_slot((u), (w), 0); } while (0)
 
 // Arrays
 // ------

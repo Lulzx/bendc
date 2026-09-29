@@ -831,8 +831,8 @@ void thr_register(uintptr_t top) {
   pthread_mutex_unlock(&gc_lock);
 }
 #define RUF(u, w) do { if (u) rc_free_at(u, w); } while (0)
-#define RUG(tok, w) ((tok) ? bend_ru_young(tok, w) : halloc(w))
-#define RUFG(u, w) do { if (u) bend_take((u), (w)); } while (0)
+#define RUG(tok, w) ((tok) ? (UNLIKELY(gc_hot.mt) ? bend_ru_young(tok, w) : (V *)(tok)) : halloc(w))
+#define RUFG(u, w) do { if (u) bend_free_slot((u), (w), 0); } while (0)
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))
 void rc_let_go_arr(V a) {
