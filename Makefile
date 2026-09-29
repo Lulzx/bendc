@@ -5,6 +5,7 @@
 #   make selfcheck  compile bendc.bend with build/bendc and check it reproduces the seed
 #   make ddc        diverse double-compiling: the seed from two toolchains without clang
 #   make tcc        tcc builds bendc, which reproduces the seed, and the tests pass (TCC=...)
+#   make boot       boot/bendi, a Bend interpreter in C, runs bendc.bend to the seed (BOOTCC=...)
 #   make bootstrap  full bootstrap from the official `bend` (stage0 -> stage1 -> stage2)
 #   make seed       regenerate seed/bendc.c from bendc.bend
 #
@@ -49,6 +50,10 @@ ddc:
 tcc:
 	./tools/tcc.sh $(TCC)
 
+# The bootstrap from source: bendi runs bendc.bend on itself (tools/boot.sh)
+boot:
+	./tools/boot.sh $(BOOTCC)
+
 bootstrap:
 	./bootstrap.sh
 
@@ -58,4 +63,4 @@ seed: build/bendc
 clean:
 	rm -rf build
 
-.PHONY: all test selfcheck ddc tcc bootstrap seed clean
+.PHONY: all test selfcheck ddc tcc boot bootstrap seed clean

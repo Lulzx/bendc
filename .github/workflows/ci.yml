@@ -78,6 +78,11 @@ jobs:
           BEND_NO_TELEMETRY=1 bend LITPROOF.bend --check-only
           ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" LITPROOF.bend
 
+      - name: Lowering and raising round-trip, and lowered defs never fail a lookup (LOPROOF.bend, both checkers)
+        run: |
+          BEND_NO_TELEMETRY=1 bend LOPROOF.bend --check-only
+          ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" LOPROOF.bend
+
       - name: The optimizer's rewrites as proven laws (OPT.bend, both checkers)
         run: |
           BEND_NO_TELEMETRY=1 bend OPT.bend --check-only
@@ -136,3 +141,32 @@ jobs:
 
       - name: tcc builds bendc, and the tests pass
         run: make tcc
+
+  # The bootstrap from source: boot/bendi, a Bend interpreter written by
+  # hand in C99, runs bendc.bend on its own source, and the C it writes is
+  # the seed byte for byte (tools/boot.sh). Built by GCC, and by tcc.
+  boot:
+    name: boot from source
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install the official Bend (for base.bend)
+        run: |
+          case "${{ github.event_name }}" in
+            schedule|workflow_dispatch) BEND_NO_TELEMETRY=1 tools/install-bend.sh latest;;
+            *) tools/install-bend.sh;;
+          esac
+
+      - name: Build tinycc
+        run: |
+          git clone https://repo.or.cz/tinycc.git /tmp/tinycc
+          cd /tmp/tinycc && git checkout 9db1105c32afd3dcf0c28b8186f08e63c761b2b5
+          ./configure --prefix="$HOME/tcc" && make -j4 && make install
+          echo "$HOME/tcc/bin" >> "$GITHUB_PATH"
+
+      - name: bendi, built by GCC, compiles bendc.bend to the seed
+        run: make boot BOOTCC=gcc
+
+      - name: bendi, built by tcc, compiles bendc.bend to the seed
+        run: make boot BOOTCC=tcc

@@ -188,10 +188,27 @@ flowchart LR
   0.9.27 has no `stdatomic.h`. Under tcc the runtime keeps per-thread state in a pthread key (tcc
   has no thread-local storage in Mach-O), `main` runs the constructors itself (tcc ignores
   `__attribute__((constructor))`), and `!`-calls have the simulator and the CPU but not Metal.
+- **`make boot`** starts from source instead of a binary or a seed. `boot/` is `bendi`, a Bend
+  interpreter written by hand in C99: about 3,800 lines in five files (`parse.c` the lexer, layout,
+  parser and module loader; `eval.c` the evaluator; `heap.c` the allocator and a conservative
+  mark-sweep collector; `prims.c` the natives, the effects and `main`; `bendi.h`). It reads
+  `bendc.bend`, `check.bend`, `core.bend`, `asm.bend`, `rt/*.bend` and `base.bend` as text and runs
+  bendc's `main` on them, with types, proofs and erased arguments dropped. `tools/boot.sh` has
+  bendi run `bendc --no-check base.bend bendc.bend`, and the C it writes must be `seed/bendc.c`
+  byte for byte. So the seed is what `bendc.bend` means as a program, not only what an earlier
+  bendc made of it. That takes about 18 s and 1 GB built by clang or GCC, and about 45 s built by
+  tcc 0.9.28 on Linux arm64 (`BOOTCC=...` picks the C compiler). bendi trusts only the C compiler
+  and libc that build and run it, and `base.bend`. It uses no seed, no official Bend and no
+  generated code. Its front end is a port of bendc's own: `bendi --tokens` and `bendi --ast` print
+  what `bendc --tokens` and `bendc --ast` print for every source above. Its evaluator follows what
+  bendc's code generator relies on: strict evaluation, the natives of bendc's `Natives` list with
+  `rt/bendrt.h`'s semantics, the lambda-match and dead-let rules of `LM`, and operators resolved as
+  `R.ops` does. It runs the test suite's IO programs too, except those using channels or the clock,
+  which it does not implement.
 
 CI runs the whole chain on Linux (arm64) and macOS: seed build, tests, selfcheck, full bootstrap,
-`make ddc` (on macOS, with Homebrew's GCC), and `make tcc` (on Linux, with tinycc built from a
-pinned commit). It
+`make ddc` (on macOS, with Homebrew's GCC), and `make tcc` and `make boot` (on Linux, with tinycc
+built from a pinned commit; `make boot` also with GCC). It
 pins the official Bend it tests against (`tools/install-bend.sh`, Bend 2.0.32),
 and a weekly run tries the latest release, so a new Bend shows up there before it breaks a push.
 
@@ -237,7 +254,16 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    fills a `law` take their modes from the law.
 5. **Core IR.** Each def (but a type-level one, whose body the printers unfold) is lowered to
    [`core.bend`](core.bend)'s IR, where every argument of a call of a global def is marked relevant
-   or erased by the callee's mask. `Core.Def.erase` replaces the erased arguments, and the types left
+   or erased by the callee's mask. The lowering (`Core.Lo.def`) and the raising back to bendc's
+   syntax tree (`Core.Up.go`), which the inliner and the optimizer use, are in `core.bend` too, and
+   [`LOPROOF.bend`](LOPROOF.bend) proves the laws in [`LO.bend`](LO.bend). Raising a lowered term
+   gives the term back (`up_lo`), and a lowered def never fails a variable lookup: each variable
+   the lowering emits is bound where it runs (`lo_scoped`), a run of a state whose terms and values
+   are scoped that way never gives the failure of a lookup (`scope_ok`), and so neither does a
+   run of `main` in a program of lowered defs (`lo_prog`), given natives that give no such failure.
+   There is no semantics for the syntax tree (`Expr`), so nothing says that lowering keeps a def's
+   meaning; the laws say only that it loses nothing and that its variables are bound.
+   `Core.Def.erase` replaces the erased arguments, and the types left
    in runtime positions, with a box. [`PROOF.bend`](PROOF.bend) proves that this preserves the IR's
    semantics, which `core.bend` gives in Bend as a fuelled machine (`Core.run`): the law
    ([`LAWS.bend`](LAWS.bend)) says running a program and erasing the result gives what running the
@@ -284,8 +310,8 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    let is taken as a relation step rather than by running the source ahead. The proven functions
    are the ones bendc runs; the inliner no longer resolves matches itself. The inliner's own rules
    (the substitution of arguments, a `let` of a known constructor, applications of more than one
-   argument) are not proven, nor are lowering, raising back to an `Expr`, or code generation. Both
-   checkers verify the five proofs in CI.
+   argument) are not proven, nor is code generation, nor that lowering keeps a def's meaning (only
+   the round trip and the scope laws above). Both checkers verify the six proofs in CI.
 
    Then the optimizer (`Opt` in `bendc.bend`) works on the whole program in the core IR. The
    inlining of monadic binds, `Core.Def.red`, `Core.Def.known`, `Core.Def.lit` and `Core.Def.dead`
@@ -714,12 +740,13 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`asm.bend`](asm.bend) | the native backend's AArch64 assembler, peephole pass, and Mach-O and ELF object writers |
 | [`rt/native.c`](rt/native.c) | external names for the runtime's inline natives, which native code calls |
 | [`bendc.bend`](bendc.bend) | the compiler, organized by section: lexer, layout, parser monad, expressions, patterns, statements, declarations, operator resolution, free variables, global tables, code generation, value printers, modules, driver |
-| [`core.bend`](core.bend) | the core IR between the front end and code generation: terms with relevance-marked arguments, erasure, and a semantics |
+| [`core.bend`](core.bend) | the core IR between the front end and code generation: terms with relevance-marked arguments, erasure, a semantics, the proven passes, and the lowering from bendc's syntax tree and the raising back |
 | [`LAWS.bend`](LAWS.bend), [`PROOF.bend`](PROOF.bend) | the law that erasure preserves the core IR's semantics, and its proof (induction on the fuel, one case per step) |
 | [`RED.bend`](RED.bend), [`REDPROOF.bend`](REDPROOF.bend) | the law that reducing applied lambdas to lets (`Core.Def.red`) preserves the core IR's semantics, and its proof |
 | [`KNOWN.bend`](KNOWN.bend), [`KNOWNPROOF.bend`](KNOWNPROOF.bend) | the law that resolving matches on known constructors (`Core.Def.known`) preserves the core IR's semantics, and its proof |
 | [`DEAD.bend`](DEAD.bend), [`DEADPROOF.bend`](DEADPROOF.bend) | the law that dropping dead lets (`Core.Def.dead`) gives related results (equal ones without closures), and its proof |
 | [`LIT.bend`](LIT.bend), [`LITPROOF.bend`](LITPROOF.bend) | the law that putting let-bound numbers in place of their lookups (`Core.Def.lit`) gives related results (equal ones without closures), and its proof |
+| [`LO.bend`](LO.bend), [`LOPROOF.bend`](LOPROOF.bend) | the laws of the lowering to the core IR (`Core.Lo`) and the raising back (`Core.Up`): the round trip, and that a lowered def never fails a variable lookup; and their proof |
 | [`rt/bendrt.h`](rt/bendrt.h) | C runtime: garbage collector, closures, strings, arrays, native `Nat`, `U32`/`F32`, fork-join pool, event loop and effect ABI, entry points |
 | [`rt/gpu.h`](rt/gpu.h), [`rt/gpuhost.h`](rt/gpuhost.h) | the GPU kernel's runtime (one text for Metal and C) and its host: arena, Metal through the Objective-C runtime, the kernel cache, the simulator, copying results back |
 | [`rt/hub.c`](rt/hub.c) | bendc's own effect for fetching hub packages (curl and SHA-256) |
@@ -730,6 +757,7 @@ python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's erro
 | [`bootstrap.sh`](bootstrap.sh), [`run_tests.sh`](run_tests.sh), [`Makefile`](Makefile) | bootstrap and fixpoint check, test runner, build entry points |
 | [`tools/ddc.sh`](tools/ddc.sh) | diverse double-compiling: the seed, reproduced by two toolchains that share no C compiler, and by bendc's native build |
 | [`tools/tcc.sh`](tools/tcc.sh) | the seed built by tcc reproduces itself, and the tests pass with tcc |
+| [`boot/`](boot), [`tools/boot.sh`](tools/boot.sh) | `bendi`, a Bend interpreter in C99, and the check that it runs `bendc.bend` on itself to the seed |
 | [`tools/unsafe_min.py`](tools/unsafe_min.py) | dev tool: drops the `@unsafe` markers the checker does not need |
 | [`tools/order.py`](tools/order.py) | dev tool: section-aware dependency sort, with automatic `law` forward declarations for cycles |
 | [`tools/upstream.py`](tools/upstream.py) | dev tool: runs the official repository's tests through a `bendc` (see [Testing](#testing)) |
