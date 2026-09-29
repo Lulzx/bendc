@@ -21689,7 +21689,7 @@ def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
   COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#define BEND_NATIVE_STR 1\n#define BEND_NATIVE_MAP 1\n#ifdef BEND_RT_SPLIT\n#include \"bendrt_split.h\"\n#else\n#include \"bendrt.h\"\n#endif\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
-    Doc.flat(Doc.list([protos, DStr{"\n"}, code, DStr{Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
+    Doc.flat(Doc.list([DStr{"BEND_NSP_BEGIN\n"}, protos, DStr{"\n"}, code, DStr{"BEND_NSP_END\n" ++ Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
     Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
     DStr{"\n" ++ entry}])), errs}
 

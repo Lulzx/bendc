@@ -743,11 +743,21 @@ Where bendc loses, and why:
   constructors, only `U32` fields, and a constructor of two to seven fields. Such a type becomes
   a record of its widest constructor's fields and a tag. The unboxing then passes and returns it
   as those fields. The change took queens from 131G to 105G instructions (the official build:
-  90G) and PAR from 1.85s to 1.46s (official: 1.20s). Most of the remaining SEQ time is the
-  non-tail call. It passes 13 to 16 arguments and a result pointer, so six to nine words go on
-  the stack, and it saves and restores the callee-saved registers. The
-  official build runs `solve` as a machine that keeps its values in registers and pushes nine
-  words for a non-tail call.
+  90G) and PAR from 1.85s to 1.46s (official: 1.20s).
+
+  The flat result then lived in a local array (`V uo[3]`) of the recursive `solve`, so clang's
+  stack protector loaded and checked its guard on every call: 8G instructions and a tenth of the
+  samples. A program's own functions now go without a stack protector (`BEND_NSP_BEGIN` in
+  `rt/bendrt.h`, clang only; the runtime keeps it). queens: 96G instructions, 22.4G cycles
+  against the official build's 22.2G; PAR 1.15s against 1.13s. No other benchmark changed.
+
+  Two changes to the call itself were measured on the generated C and not kept:
+  - Returning the flat result as a struct (in x0/x1, or through x8 above 16 bytes) frees an
+    argument register: queens 1% fewer cycles, bfs and editdist unchanged.
+  - Taking `solve`'s one invariant argument (`full`) out of the call, through a global: 4% fewer
+    cycles. A general form must survive threads, forks in the middle of the recursion and
+    re-entry through another def. Passing invariants in a struct by pointer only pays when two
+    or more of them are invariant, and here one is.
 - **tree-bitonic and tree-matmul.** Most of the time goes to allocating and freeing each tree
   node. The reference-counting work (in-place reuse) addresses this cost.
 - **GPU.** raytrace and symreg run their GPU mode 15 to 20 times slower than the official build.
