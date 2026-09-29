@@ -5050,8 +5050,13 @@ def Gen.scalar.cty(+k: U32) -> String:
 # node reads its fields into locals and hands the node to bend_take, which
 # frees it unless it is shared, in which case the fields are shared too. See
 # "Freeing on match" in bendrt.h.
-# The uses of x on the path through e that uses it most. A list field
-# counts as its head and the node rebuilt with the rest.
+# The uses of x in b, unless the names xs bind in front of it hide x.
+def Use.under(xs: List<&2, String>, +x: String, n: Unit -> U32) -> U32:
+  Bool.pick(Unit -> U32, Str.has(xs, x), u => 0, n)(Unit{})
+
+# The uses of x on the path through e that uses it most (a use a binder of
+# x hides is not one). A list field counts as its head and the node rebuilt
+# with the rest.
 def Use.n(+x: String, e: Core.Expr) -> U32:
   match e:
     case Core.EVar{+n}:
@@ -5069,9 +5074,9 @@ def Use.n(+x: String, e: Core.Expr) -> U32:
         case a <> t:
           (Use.n(x, a) + Use.n(x, Core.ECtor{n, t}) : U32)
     case Core.ELam{p, b}:
-      Bool.pick(U32, Str.has(Pat.vars(p, Nil{}), x), 0, Use.n(x, b))
+      Use.under(Pat.vars(p, Nil{}), x, u => Use.n(x, b))
     case Core.ELet{p, v, b}:
-      (Use.n(x, v) + Bool.pick(U32, Str.has(Pat.vars(p, Nil{}), x), 0, Use.n(x, b)) : U32)
+      (Use.n(x, v) + Use.under(Pat.vars(p, Nil{}), x, u => Use.n(x, b)) : U32)
     case Core.EMatch{scrs, cases}:
       match scrs:
         case a <> t:
@@ -5083,7 +5088,7 @@ def Use.n(+x: String, e: Core.Expr) -> U32:
             case c <> t:
               U32.max(Use.n(x, c), Use.n(x, Core.EMatch{Nil{}, t}))
     case Core.ECase{ps, b}:
-      Bool.pick(U32, Str.has(Pats.vars(ps, Nil{}), x), 0, Use.n(x, b))
+      Use.under(Pats.vars(ps, Nil{}), x, u => Use.n(x, b))
     case Core.ESucc{k, y}:
       Use.n(x, y)
     case Core.EOp{op, a, b}:
@@ -16189,34 +16194,70 @@ def Opt.small(+flags: String, +rank: Map<&2, U32>, +d: Core.Def) -> Bool:
         Bool.and(Bool.not(String.starts_with(name, "IO.")),
           Opt.before(Inl.names(b, 3, Nil{}), rank, Pair.snd(Map<&2, U32>, U32, Map.get(U32, 0, rank, name)))))
 
-def Opt.ctx(+flags: String, +names: Set(), +rank: Map<&2, U32>, ds: List<&2, OD>, +m: Map<&2, Core.Def>) -> Map<&2, Core.Def>:
+# The defs a def's calls of which are inlined: those of a monad (mon, for
+# Inl), or the small ones (for Core.Tm.inline, when i is on).
+def Opt.ctx(+flags: String, +mon: Bool, +names: Set(), +rank: Map<&2, U32>, ds: List<&2, OD>, +m: Map<&2, Core.Def>) -> Map<&2, Core.Def>:
   match ds:
     case Nil{}:
       m
     case d <> t:
       match d:
         case OCore{+cd}:
-          Opt.ctx(flags, names, rank, t, Bool.pick(Unit -> Map<&2, Core.Def>, Inl.pick(names, Opt.dname(cd)),
-            u => Inl.add(Opt.dname(cd), cd, m),
-            u => Bool.pick(Unit -> Map<&2, Core.Def>, Opt.on(flags, 105),
+          Opt.ctx(flags, mon, names, rank, t, Bool.pick(Unit -> Map<&2, Core.Def>, Inl.pick(names, Opt.dname(cd)),
+            u => Bool.pick(Map<&2, Core.Def>, mon, Inl.add(Opt.dname(cd), cd, m), m),
+            u => Bool.pick(Unit -> Map<&2, Core.Def>, Bool.and(Bool.not(mon), Opt.on(flags, 105)),
               u2 => Bool.pick(Map<&2, Core.Def>, Opt.small(flags, rank, cd), Map.set(&2, Core.Def, m, Opt.dname(cd), cd), m),
               u2 => m)(Unit{}))(Unit{}))
         case OKeep{k}:
-          Opt.ctx(flags, names, rank, t, m)
+          Opt.ctx(flags, mon, names, rank, t, m)
 
-def Opt.inl(+c: Map<&2, Core.Def>, d: OD) -> OD:
-  match d:
-    case OCore{cd}:
-      OCore{Core.Def.dead(Core.Def.lit(Core.Def.known(Core.Def.red(Inl.def(c, cd)))))}
-    case OKeep{k}:
-      OKeep{k}
+# How deep Core.Tm.inline inlines the bodies it inlines.
+def Opt.depth() -> Nat:
+  16n
 
-def Opt.inls(+c: Map<&2, Core.Def>, ds: List<&2, OD>) -> List<&2, OD>:
+# Monad calls are expanded by Inl (the defs of cm), then calls of the small
+# defs inlined by the proven pass (Core.Tm.inline, INLINEPROOF.bend), their
+# bodies with monad calls expanded.
+def Opt.mon(+cm: Map<&2, Core.Def>, ds: List<&2, OD>) -> List<&2, OD>:
   match ds:
     case Nil{}:
       Nil{}
     case d <> r:
-      Opt.inl(c, d) <> Opt.inls(c, r)
+      match d:
+        case OCore{cd}:
+          OCore{Inl.def(cm, cd)} <> Opt.mon(cm, r)
+        case OKeep{k}:
+          OKeep{k} <> Opt.mon(cm, r)
+
+# The defs of ds that cs holds, in its place.
+def Opt.ctx.of(ds: List<&2, OD>, +cs: Map<&2, Core.Def>) -> Map<&2, Core.Def>:
+  match ds:
+    case Nil{}:
+      cs
+    case d <> r:
+      match d:
+        case OCore{+cd}:
+          Opt.ctx.of(r, Bool.pick(Map<&2, Core.Def>, Pair.snd(Map<&2, Core.Def>, Bool, Map.has(&2, Core.Def, cs, Opt.dname(cd))),
+            Map.set(&2, Core.Def, cs, Opt.dname(cd), cd), cs))
+        case OKeep{k}:
+          Opt.ctx.of(r, cs)
+
+def Opt.inl(+cs: Map<&2, Core.Def>, d: OD) -> OD:
+  match d:
+    case OCore{cd}:
+      OCore{Core.Def.dead(Core.Def.lit(Core.Def.known(Core.Def.red(Core.Def.inline(cs, Opt.depth(), cd)))))}
+    case OKeep{k}:
+      OKeep{k}
+
+def Opt.inls.go(+cs: Map<&2, Core.Def>, ds: List<&2, OD>) -> List<&2, OD>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Opt.inl(cs, d) <> Opt.inls.go(cs, r)
+
+def Opt.inls(+cs: Map<&2, Core.Def>, +ds: List<&2, OD>) -> List<&2, OD>:
+  Opt.inls.go(Opt.ctx.of(ds, cs), ds)
 
 # Simplification
 # --------------
@@ -16226,10 +16267,13 @@ def Opt.inls(+c: Map<&2, Core.Def>, ds: List<&2, OD>) -> List<&2, OD>:
 # - A let whose variable is unused is dropped: its value is pure.
 # - A let of an atom (a variable, a literal, a box, a nullary constructor,
 #   a def's name) puts it in its variable's place; so does a let whose
-#   variable is used once, outside a lambda, when that captures nothing.
-#   The value then runs only if its place is reached (a match's case).
+#   variable is used once, outside a lambda (or anywhere, when the value is
+#   a lambda or a constructor), when that captures nothing. The value then
+#   runs only if its place is reached (a match's case).
 # - A match on known constructors or literals takes the first case whose
-#   patterns match, as lets; one whose patterns may not match stops it.
+#   patterns match, as lets (a variable bound to itself is dropped; when a
+#   term would see a bound variable, the terms are bound to fresh names
+#   first); one whose patterns may not match stops it.
 # - A let or a match on a let floats the let out; a match on a match whose
 #   cases all end in constructors the outer one knows moves the outer match
 #   into them (case of case), when the copies are small.
@@ -16396,14 +16440,88 @@ def Opt.lets(ps: List<&2, Core.Pt>, ts: List<&2, Core.Tm>, b: Core.Tm) -> Core.T
 def Opt.pvars(ps: List<&2, Core.Pt>) -> List<&2, String>:
   Inl.ppvars(ps, Nil{})
 
-# The bindings of a matched case: when no bound variable is read by a term
-# bound (a let would capture it), its lets, else nothing.
-def Opt.bound(r: OPm, +b: Core.Tm) -> OR:
+# Whether a binding binds x to x (and all, the variables bound, binds x
+# once): it changes nothing.
+def Opt.same(+all: List<&2, String>, p: Core.Pt, t: Core.Tm) -> Bool:
+  match p t:
+    case Core.PtVar{+x} Core.CVar{+y}:
+      Bool.and(String.eq(x, y), U32.is_eq(Inl.count(all, x, 0), 1))
+    case p0 t0:
+      False{}
+
+def Opt.trim.one(drop: Bool, p: Core.Pt, t: Core.Tm, r: OPm) -> OPm:
+  match drop:
+    case True{}:
+      r
+    case False{}:
+      Opt.pm.bind(p, t, r)
+
+# The bindings less those that change nothing.
+def Opt.trim(+all: List<&2, String>, ps: List<&2, Core.Pt>, ts: List<&2, Core.Tm>) -> OPm:
+  match ps:
+    case Nil{}:
+      PmYes{Nil{}, Nil{}}
+    case +p <> pr:
+      match ts:
+        case Nil{}:
+          PmYes{Nil{}, Nil{}}
+        case +t <> tr:
+          Opt.trim.one(Opt.same(all, p, t), p, t, Opt.trim(all, pr, tr))
+
+# A name x@tI no name of avoid is (fuel: avoid's length, so one is found).
+def Opt.fresh(+avoid: List<&2, String>, +x: String, fu: Nat, +i: U32) -> String:
+  match fu:
+    case 0n:
+      x ++ "@t" ++ U32.show(i)
+    case 1n+p:
+      +y = x ++ "@t" ++ U32.show(i)
+      Bool.pick(Unit -> String, Str.has(avoid, y), u => Opt.fresh(avoid, x, p, U32.inc(i)), u => y)(Unit{})
+
+def Opt.pt.name(p: Core.Pt) -> String:
+  match p:
+    case Core.PtVar{x}:
+      x
+    case other:
+      "_"
+
+# The patterns (variables) with fresh names.
+def Opt.freshen(+avoid: List<&2, String>, ps: List<&2, Core.Pt>) -> List<&2, Core.Pt>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> r:
+      Core.PtVar{Opt.fresh(avoid, Opt.pt.name(p), List.length(&2, String, avoid), 0)} <> Opt.freshen(avoid, r)
+
+def Opt.pt.vars(ps: List<&2, Core.Pt>) -> List<&2, Core.Tm>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> r:
+      Core.CVar{Opt.pt.name(p)} <> Opt.pt.vars(r)
+
+# Lets that bind the terms to fresh variables qs, then the patterns to
+# those: no term sees a pattern's variable.
+def Opt.bound.fresh(+qs: List<&2, Core.Pt>, +ps: List<&2, Core.Pt>, ts: List<&2, Core.Tm>, +b: Core.Tm) -> OR:
+  RLets{Nat.add(Inl.pts.len(ps), Inl.pts.len(ps)), Opt.lets(qs, ts, Opt.lets(ps, Opt.pt.vars(qs), b))}
+
+def Opt.bound.go(r: OPm, +b: Core.Tm) -> OR:
   match r:
     case PmYes{+ps, +ts}:
-      Bool.pick(Unit -> OR, Inl.apart(Opt.pvars(ps), Inl.names(Core.CCtr{"", ts}, 0, Nil{})),
+      +avoid = Inl.names(Core.CCtr{"", ts}, 0, Nil{})
+      Bool.pick(Unit -> OR, Inl.apart(Opt.pvars(ps), avoid),
         u => RLets{Inl.pts.len(ps), Opt.lets(ps, ts, b)},
-        u => RKeep{Core.CErr{"%miss"}})(Unit{})
+        u => Opt.bound.fresh(Opt.freshen(Inl.names(b, 0, Inl.names(b, 1, Inl.names(Core.CCtr{"", ts}, 1,
+          List.append(&2, String, Opt.pvars(ps), avoid)))), ps), ps, ts, b))(Unit{})
+    case other:
+      RKeep{Core.CErr{"%miss"}}
+
+# The bindings of a matched case, less those of a variable to itself: when
+# no bound variable is read by a term bound (a let would capture it), its
+# lets, else nothing.
+def Opt.bound(r: OPm, +b: Core.Tm) -> OR:
+  match r:
+    case PmYes{+ps, ts}:
+      Opt.bound.go(Opt.trim(Opt.pvars(ps), ps, ts), b)
     case other:
       RKeep{Core.CErr{"%miss"}}
 
@@ -16558,7 +16676,7 @@ def Opt.let.sink(+x: String, +v: Core.Tm, b: Core.Tm) -> OR:
 def Opt.let.var(+x: String, +v: Core.Tm, +b: Core.Tm) -> OR:
   +n = Inl.uses(b, 0, x)
   Bool.pick(Unit -> OR, U32.is_zero(n), u => RTo{b},
-    u => Bool.pick(Unit -> OR, Bool.and(Bool.and(Bool.or(Opt.atom(v), Bool.and(U32.is_eq(n, 1), U32.is_eq(Inl.uses(b, 2, x), 1))),
+    u => Bool.pick(Unit -> OR, Bool.and(Bool.and(Bool.or(Opt.atom(v), Bool.and(U32.is_eq(n, 1), Bool.or(U32.is_eq(Inl.uses(b, 2, x), 1), Inl.shape(v)))),
         Inl.apart(Inl.names(v, 0, Nil{}), Inl.names(b, 1, Nil{}))), True{}),
       u2 => RSub{x, v, b},
       u2 => Opt.let.sink(x, v, b))(Unit{}))(Unit{})
@@ -17951,7 +18069,7 @@ def Lo.program(+flags: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
   +g = G.new(ds)
   +ods = Opt.lowers(g, Lo.masks(g, ds, Map.new(&2, List<&2, Bool>)), ds)
   +rank = Opt.rank(ods, 0, Map.new(&2, U32))
-  Opt.raises(Opt.finish(Opt.fuse(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods))))))
+  Opt.raises(Opt.finish(Opt.fuse(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, False{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), Opt.mon(Opt.ctx(flags, True{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods)))))))
 
 # Flat results (see Gen.def.unb): "%r:name" in the dps table holds a def's
 # result arity. A def's result is flat when its type has one constructor

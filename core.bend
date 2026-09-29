@@ -190,7 +190,7 @@ def Defs.erase(ds: List<&2, Def>) -> List<&2, Def>:
 # Semantics
 # =========
 
-# A value: an erased argument is bound unevaluated (VTrm: nothing reads it).
+# A value: an erased argument runs as a box (VTrm: nothing reads it).
 # A scope is a list of bindings, VBnd.
 type Val is Data:
   VLit{l: Lit}
@@ -358,17 +358,23 @@ def Sel.erase(s: Sel) -> Sel:
     case SPatC{hit, env, ps, vs}:
       SPatC{hit, Vals.erase(env), ps, Vals.erase(vs)}
 
-# The parameters bound to the first values (an erased one too: to its term).
-def Scope.bind(ps: List<&2, Par>, vs: List<&2, Val>) -> List<&2, Val>:
+# The parameters bound to the first values in front of acc, each in front of
+# the ones before it: the order a match binds its patterns in (Pat.step), so
+# a call and the match an inlined call becomes make the same scope.
+def Scope.push(ps: List<&2, Par>, vs: List<&2, Val>, acc: List<&2, Val>) -> List<&2, Val>:
   match ps:
     case Nil{}:
-      Nil{}
+      acc
     case Par{x, rel, mode, ty} <> pr:
       match vs:
         case Nil{}:
-          Nil{}
+          acc
         case v <> vr:
-          VBnd{x, v} <> Scope.bind(pr, vr)
+          Scope.push(pr, vr, VBnd{x, v} <> acc)
+
+# The parameters bound to the first values (an erased one too: to a box).
+def Scope.bind(ps: List<&2, Par>, vs: List<&2, Val>) -> List<&2, Val>:
+  Scope.push(ps, vs, Nil{})
 
 def Vals.drop(n: Nat, vs: List<&2, Val>) -> List<&2, Val>:
   match n:
@@ -552,7 +558,7 @@ def run(~prim: String -> List<&2, Val> -> Res, +n: Nat, +ds: List<&2, Def>, s: S
                     case Run{}:
                       run(~prim, p, ds, SThen{run(~prim, p, ds, SEval{env, e}), KATail{env, r}})
                     case Era{}:
-                      run(~prim, p, ds, SThen{run(~prim, p, ds, SArgs{env, r}), KCons{VTrm{e}}})
+                      run(~prim, p, ds, SThen{run(~prim, p, ds, SEval{env, CBox{}}), KATail{env, r}})
         case SThen{r, k}:
           match r:
             case RFail{m}:
@@ -1584,6 +1590,167 @@ def Defs.lit(ds: List<&2, Def>) -> List<&2, Def>:
     case d <> r:
       Def.lit(d) <> Defs.lit(r)
 
+# Inlining
+# ========
+
+# The general inliner's rule (Opt's 'i' pass in bendc.bend) as a pass of its
+# own: Tm.inline puts in the place of a call of a def `ins` holds, with an
+# argument for each parameter, the def's body in a match on the arguments
+# with one case, a variable for each parameter (bendc compiles it as lets).
+# The arguments run in the caller's scope, in the order a call runs them,
+# and the body with the parameters bound in front of that scope, as a call
+# binds them (Scope.push): no argument sees a parameter, and nothing is
+# renamed. The inlined bodies are inlined in turn, k deep. INLINEPROOF.bend
+# proves that a run that does not fail gives a related result (INLINE.bend
+# states the law).
+
+# Whether `ins` holds a def for f, and the def (a def named "" when none).
+def Inline.has(+ins: Map<&2, Def>, +f: String) -> Bool:
+  Pair.snd(Map<&2, Def>, Bool, Map.has(&2, Def, ins, f))
+
+def Inline.look(+ins: Map<&2, Def>, +f: String) -> Def:
+  Pair.snd(Map<&2, Def>, Def, Map.get(Def, Def{"", Nil{}, CBox{}, CBox{}}, ins, f))
+
+def Inline.body(d: Def) -> Tm:
+  match d:
+    case Def{n, ps, b, ret}:
+      b
+
+def Args.len(as: List<&2, Arg>) -> Nat:
+  match as:
+    case Nil{}:
+      0n
+    case a <> r:
+      1n+Args.len(r)
+
+# A call's arguments as a match's scrutinees: an erased one runs as a box.
+def Args.scrs(as: List<&2, Arg>) -> List<&2, Tm>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case a <> r:
+      match a:
+        case Arg{rel, e}:
+          match rel:
+            case Run{}:
+              e <> Args.scrs(r)
+            case Era{}:
+              CBox{} <> Args.scrs(r)
+
+# A variable for each parameter.
+def Pars.vars(ps: List<&2, Par>) -> List<&2, Pt>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> r:
+      match p:
+        case Par{x, rel, mode, ty}:
+          PtVar{x} <> Pars.vars(r)
+
+# The call t (a call of f) with d's body b in its place, when d is f's def
+# (h: `ins` holds one) and t has an argument for each of its parameters.
+def Inline.at(h: Bool, d: Def, +f: String, t: Tm, b: Tm) -> Tm:
+  match d:
+    case Def{+name, +ps, db, ret}:
+      match t:
+        case CCall{g, +as}:
+          Bool.pick(Tm, Bool.and(h, Bool.and(String.eq(name, f), Nat.is_eq(Args.len(as), Pars.len(ps)))),
+            CMat{Args.scrs(as), [CCse{Pars.vars(ps), b}]}, CCall{g, as})
+        case other:
+          other
+
+# t with its calls of the defs `ins` holds inlined, k deep (top: t is a call
+# itself, not the rest of one's arguments; a list field is walked as its
+# head and the node rebuilt with the rest).
+def Tm.inline(+ins: Map<&2, Def>, +k: Nat, t: Tm, top: Bool) -> Tm:
+  match k:
+    case 0n:
+      t
+    case 1n+j:
+      match t:
+        case CCall{+f, as}:
+          match as:
+            case Nil{}:
+              match top:
+                case True{}:
+                  Inline.at(Inline.has(ins, f), Inline.look(ins, f), f, CCall{f, Nil{}}, Tm.inline(ins, j, Inline.body(Inline.look(ins, f)), True{}))
+                case False{}:
+                  CCall{f, Nil{}}
+            case a <> r:
+              match a:
+                case Arg{rel, e}:
+                  match top:
+                    case True{}:
+                      Inline.at(Inline.has(ins, f), Inline.look(ins, f), f,
+                        Tm.push.call(Arg{rel, Tm.inline(ins, 1n+j, e, True{})}, Tm.inline(ins, 1n+j, CCall{f, r}, False{})),
+                        Tm.inline(ins, j, Inline.body(Inline.look(ins, f)), True{}))
+                    case False{}:
+                      Tm.push.call(Arg{rel, Tm.inline(ins, 1n+j, e, True{})}, Tm.inline(ins, 1n+j, CCall{f, r}, False{}))
+        case CApp{f, as}:
+          match as:
+            case Nil{}:
+              CApp{Tm.inline(ins, 1n+j, f, True{}), Nil{}}
+            case a <> r:
+              Tm.push(Tm.inline(ins, 1n+j, a, True{}), Tm.inline(ins, 1n+j, CApp{f, r}, False{}))
+        case CCtr{c, as}:
+          match as:
+            case Nil{}:
+              CCtr{c, Nil{}}
+            case a <> r:
+              Tm.push(Tm.inline(ins, 1n+j, a, True{}), Tm.inline(ins, 1n+j, CCtr{c, r}, False{}))
+        case CLam{p, b}:
+          CLam{p, Tm.inline(ins, 1n+j, b, True{})}
+        case CLet{p, v, b}:
+          CLet{p, Tm.inline(ins, 1n+j, v, True{}), Tm.inline(ins, 1n+j, b, True{})}
+        case CMat{scrs, cases}:
+          match scrs:
+            case a <> r:
+              Tm.push(Tm.inline(ins, 1n+j, a, True{}), Tm.inline(ins, 1n+j, CMat{r, cases}, False{}))
+            case Nil{}:
+              match cases:
+                case Nil{}:
+                  CMat{Nil{}, Nil{}}
+                case c <> r:
+                  Tm.push.case(Tm.inline(ins, 1n+j, c, True{}), Tm.inline(ins, 1n+j, CMat{Nil{}, r}, False{}))
+        case CCse{ps, b}:
+          CCse{ps, Tm.inline(ins, 1n+j, b, True{})}
+        case CSuc{n, e}:
+          CSuc{n, Tm.inline(ins, 1n+j, e, True{})}
+        case COp{op, a, b}:
+          COp{op, Tm.inline(ins, 1n+j, a, True{}), Tm.inline(ins, 1n+j, b, True{})}
+        case CAnn{e, ty}:
+          CAnn{Tm.inline(ins, 1n+j, e, True{}), ty}
+        case other:
+          other
+
+def Tms.inline(+ins: Map<&2, Def>, +k: Nat, ts: List<&2, Tm>) -> List<&2, Tm>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      Tm.inline(ins, k, t, True{}) <> Tms.inline(ins, k, r)
+
+def Args.inline(+ins: Map<&2, Def>, +k: Nat, as: List<&2, Arg>) -> List<&2, Arg>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case a <> r:
+      match a:
+        case Arg{rel, e}:
+          Arg{rel, Tm.inline(ins, k, e, True{})} <> Args.inline(ins, k, r)
+
+def Def.inline(+ins: Map<&2, Def>, k: Nat, d: Def) -> Def:
+  match d:
+    case Def{n, ps, b, ret}:
+      Def{n, ps, Tm.inline(ins, k, b, True{}), ret}
+
+def Defs.inline(+ins: Map<&2, Def>, +k: Nat, ds: List<&2, Def>) -> List<&2, Def>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      Def.inline(ins, k, d) <> Defs.inline(ins, k, r)
+
 # Lowering and raising
 # ====================
 
@@ -1781,7 +1948,7 @@ def Lo.params(ps: List<&2, Param>, +mask: List<&2, Bool>) -> List<&2, Par>:
       Par{x, Lo.rel(mask), m, t} <> Lo.params(r, Lo.tail(mask))
 
 def Lo.def(+ms: Map<&2, List<&2, Bool>>, +name: String, +ps: List<&2, Param>, body: Expr, ret: Expr) -> Def:
-  +bound = Lo.names(ps)
+  +bound = Lo.bind(Lo.names(ps), Nil{})
   Def{name, Lo.params(ps, Pair.snd(Map<&2, List<&2, Bool>>, List<&2, Bool>, Map.get(List<&2, Bool>, Nil{}, ms, name))), Lo.go(body, ms, bound, True{}, Nil{}),
     Lo.go(ret, ms, bound, True{}, Nil{})}
 
