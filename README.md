@@ -718,8 +718,14 @@ Where bendc loses, and why:
     `Array.set` into editdist's loop. A binary from `bendc -o` took 4.3s, where the same C
     compiled as one unit took 2.9s. With the change, both take 2.9s.
 - **kmeans.** The inner loop is vectorized, in 32-bit lanes as in the official build (see
-  [How it works](#how-it-works), code generation). Most of the remaining time goes to the zip of
-  the chunk lists (`S_szip`, a quarter of the samples).
+  [How it works](#how-it-works), code generation). It takes about 33G instructions against the
+  official build's 32G. The rest of the gap is per chunk. With the points loop removed, bendc
+  executes 21.6G instructions and the official build 11.6G, about 2060 against 1100 per chunk.
+  About two thirds of that is `szip`, which does the same work as the official build: it reuses
+  one node and frees the other. The difference is in the cost of each node:
+  - a header word (the official build tags the pointer instead);
+  - `bend_take`, about 30 instructions of bitmap updates, against a short free;
+  - the allocation path for the 15 nodes each chunk builds.
 - **terrain.** `bendc -o` links the runtime as a separate object, and there `arr_new` was a call,
   so clang did not know a new array's size and masked every index with a mask loaded from the
   array. `arr_new` is now inline: 57G instructions, now 51G (the official build: 45G). The traced
@@ -728,9 +734,20 @@ Where bendc loses, and why:
   variable, so each loop step called `bend_dead` on it. A parameter's type now keeps the heads of
   its arguments (`&<Array,U32>`), and a field whose type is a parameter of its type gets a scalar
   argument's type. The half is then a `uint32_t` and needs no `bend_dead`: 53G.
-- **lexer.** The program allocates a mode node (`InId{h}`) and a string cell for every character.
-  The official build appears to store a constructor with a single field without allocating a
-  node. Either that representation or in-place reuse would remove the allocations.
+- **lexer.** The mode (`InId{h}`) is now a word leaf and stays in a register. The string still
+  costs a cell per character: `gen` allocates it, and `lex` frees it with `bend_take`. That free
+  is about a third of the lexing loop's samples.
+- **queens.** `solve` returns a `Stats` (`Stat0{} | Stats{sols, nodes}`), and the caller passed
+  it on to the next call, which matched it and freed it. The official build keeps such a value as
+  a tag and its fields. bendc now does the same for any type with no parameters, two or more
+  constructors, only `U32` fields, and a constructor of two to seven fields. Such a type becomes
+  a record of its widest constructor's fields and a tag. The unboxing then passes and returns it
+  as those fields. The change took queens from 131G to 105G instructions (the official build:
+  90G) and PAR from 1.85s to 1.46s (official: 1.20s). Most of the remaining SEQ time is the
+  non-tail call. It passes 13 to 16 arguments and a result pointer, so six to nine words go on
+  the stack, and it saves and restores the callee-saved registers. The
+  official build runs `solve` as a machine that keeps its values in registers and pushes nine
+  words for a non-tail call.
 - **tree-bitonic and tree-matmul.** Most of the time goes to allocating and freeing each tree
   node. The reference-counting work (in-place reuse) addresses this cost.
 - **GPU.** raytrace and symreg run their GPU mode 15 to 20 times slower than the official build.
