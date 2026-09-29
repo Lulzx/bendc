@@ -1409,3 +1409,222 @@ def Look(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def
                               %ey : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SLook{Core.VBnd{x1, w1} <> r1, x}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SLook{Core.VBnd{_, w2} <> r2, x}))
                               ih(q, le, Core.SLook2{String.eq(x1, x), w1, r1, x}, Core.SLook2{String.eq(x1, x), w2, r2, x}, (w2, r2, {==}, vw, hr))
 
+# An inlined call
+# ===============
+
+def Nat.sym(-a: Nat, -b: Nat, e: {a == b : Nat}) -> {b == a : Nat}:
+  %e : {_ == a : Nat}
+  {==}
+
+def Len.val(vs: List<&2, Core.Val>, +n: Nat, h: Red.Len(vs, n)) -> {n == Core.Vals.len(vs) : Nat}:
+  match vs:
+    case Nil{}:
+      match n:
+        case 0n:
+          {==}
+        case 1n+c:
+          match h:
+    case v <> r:
+      match n:
+        case 0n:
+          match h:
+        case 1n+c:
+          %Len.val(r, c, h) : {1n+c == 1n+_ : Nat}
+          {==}
+
+def Fits.conv(-x: Core.Res, -a: Nat, -b: Nat, e: {a == b : Nat}, h: Red.Fits(x, Red.WLen{a})) -> Red.Fits(x, Red.WLen{b}):
+  %e : Red.Fits(x, Red.WLen{_})
+  h
+
+def Room4.conv(-a: Nat, -b: Nat, -q: Nat, e: {a == b : Nat}, h: Law.Room4(a, q)) -> Law.Room4(b, q):
+  %e : Law.Room4(_, q)
+  h
+
+# The arguments' results, as the inlined call's steps want them.
+def CallR.mk(-ins: Map<&2, Core.Def>, r1: Core.Res, x: Core.Res, -L: Nat, -q: Nat, rr: Law.RRel(ins, r1, x),
+    fx: Red.Fits(x, Red.WLen{L}), hroom: IsOk(x) -> Law.Room4(L, q)) -> Law.CallR(ins, r1, x, L, q):
+  match r1:
+    case Core.ROk{vs1}:
+      match x:
+        case Core.ROk{vs2}:
+          (rr, fx, hroom(Unit{}))
+        case Core.REnv{e}:
+          match rr:
+        case Core.RNo{}:
+          match rr:
+        case Core.RFail{m}:
+          match rr:
+    case Core.REnv{e}:
+      Unit{}
+    case Core.RNo{}:
+      Unit{}
+    case Core.RFail{m}:
+      Unit{}
+
+def Le.absurd(-T: Data, -a: Nat, h: Red.Le(1n+a, 0n)) -> T:
+  match h:
+
+# The call has an argument for each parameter.
+def Enter.short(-ins: Map<&2, Core.Def>, +ps: List<&2, Core.Par>, +vs1: List<&2, Core.Val>, +vs2: List<&2, Core.Val>,
+    vr: Law.VRels(ins, vs1, vs2), hl: Red.Len(vs2, Core.Pars.len(ps))) -> Dead.Fls(Nat.is_lt(Core.Vals.len(vs1), Core.Pars.len(ps))):
+  %Nat.sym(Core.Pars.len(ps), Core.Vals.len(vs1), Len.val(vs1, Core.Pars.len(ps), Len.rel(ins, vs1, vs2, Core.Pars.len(ps), vr, hl)))
+    : Dead.Fls(Nat.is_lt(Core.Vals.len(vs1), _))
+  Nat.lt.self(Core.Vals.len(vs1))
+
+# The source's call runs out of fuel before it finds f's def.
+def Find.one(~prim: String -> List<&2, Core.Val> -> Core.Res, -prog: List<&2, Core.Def>, dz: List<&2, Core.Def>, +f: String, -vs: List<&2, Core.Val>,
+    -ps: List<&2, Core.Par>, -b: Core.Tm, fd: Law.Found(dz, f, ps, b))
+    -> {Core.RFail{"out of fuel"} == Core.run(~prim, 1n, prog, Core.SFind{dz, f, vs}) : Core.Res}:
+  match dz:
+    case Nil{}:
+      match fd:
+    case d <> r:
+      match d:
+        case Core.Def{name, ps2, b2, ret}:
+          {==}
+
+def Call.small(~prim: String -> List<&2, Core.Val> -> Core.Res, -ins: Map<&2, Core.Def>, ds: List<&2, Core.Def>, +p: Nat, +q: Nat,
+    le: Red.Le(p, q), lr: Red.Le(q, 1n), +f: String, -vs1: List<&2, Core.Val>, -ps: List<&2, Core.Par>, -b: Core.Tm,
+    fd: Law.Found(ds, f, ps, b), -y: Core.Res)
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SCallDef{f, vs1}), y):
+  match p:
+    case 0n:
+      Unit{}
+    case 1n+p1:
+      match p1:
+        case 0n:
+          %Find.one(~prim, ds, ds, f, vs1, ps, b, fd) : Law.RRel(ins, _, y)
+          Unit{}
+        case 1n+p2:
+          Le.absurd(Law.RRel(ins, Core.run(~prim, 1n+1n+1n+p2, ds, Core.SCallDef{f, vs1}), y), p2,
+            Le.trans(1n+1n+p2, q, 1n, le, lr))
+
+# The source's call and the other program's match: the match binds the
+# parameters, and the other program waits at the body.
+def Call.def.go(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), +f: String, vs1: List<&2, Core.Val>, +ps: List<&2, Core.Par>, +b: Core.Tm,
+    +j: Nat, +e2: List<&2, Core.Val>, +vs2: List<&2, Core.Val>, fd: Law.Found(ds, f, ps, b), vr: Law.VRels(ins, vs1, vs2),
+    +hl: Red.Len(vs2, Core.Pars.len(ps)), room: Law.Room2(Core.Pars.len(ps), 1n+q), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SCallDef{f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SMatch{e2, vs2, Law.Cases(ins, ps, j, b)})):
+  match room:
+    case Inl{lr}:
+      %Pat.vars(~prim, ps, vs2, q, Core.Defs.inline(ins, k, ds), e2, hl, lr) : Law.RRel(ins, Core.run(~prim, p, ds, Core.SFind{ds, f, vs1}),
+        Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SThen{_, Core.KCase{e2, vs2, Core.Tm.inline(ins, j, b, True{}), Nil{}}}))
+      ih(q, le, Core.SFind{ds, f, vs1}, Core.SThen{Core.REnv{Core.Scope.push(ps, vs2, e2)}, Core.KCase{e2, vs2, Core.Tm.inline(ins, j, b, True{}), Nil{}}},
+        Inr{(ps, b, fd, j, e2, vs2, {==}, vr, hl)})
+    case Inr{lr}:
+      Call.small(~prim, ins, ds, p, q, le, lr, f, vs1, ps, b, fd, Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SMatch{e2, vs2, Law.Cases(ins, ps, j, b)}))
+
+def Call.def.step(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), +f: String, vs1: List<&2, Core.Val>, s2: Core.Sel,
+    h: Law.Call.def(ins, ds, 1n+q, f, vs1, s2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SCallDef{f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2)):
+  match h:
+    case (+ps, +b, +j, +e2, +vs2, eq, fd, vr, hl, room):
+      %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SCallDef{f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+      Call.def.go(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, f, vs1, ps, b, j, e2, vs2, fd, vr, hl, room, ih)
+
+# The arguments' values: the call due, and the match.
+def Call.ok.step(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), +f: String, vs1: List<&2, Core.Val>, s2: Core.Sel,
+    h: Law.Call.ok(ins, ds, 1n+q, Core.KCall{f}, vs1, s2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SOk{Core.KCall{f}, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2)):
+  match h:
+    case (+ps, +b, +j, +e2, +vs2, eq, fd, vr, hl, room):
+      %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SOk{Core.KCall{f}, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+      ih(q, le, Core.SCallDef{f, vs1}, Core.SMatch{e2, vs2, Law.Cases(ins, ps, j, b)}, Inr{(ps, b, j, e2, vs2, {==}, fd, vr, hl, room)})
+
+# The arguments' run done.
+def Call.then.go(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), +vs1: List<&2, Core.Val>, +f: String, +ps: List<&2, Core.Par>, +b: Core.Tm,
+    +j: Nat, +e2: List<&2, Core.Val>, r2: Core.Res, s2: Core.Sel,
+    eq: {Core.SThen{r2, Core.KMat{e2, Law.Cases(ins, ps, j, b)}} == s2 : Core.Sel}, fd: Law.Found(ds, f, ps, b),
+    cr: Law.CallR(ins, Core.ROk{vs1}, r2, Core.Pars.len(ps), 1n+q), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SThen{Core.ROk{vs1}, Core.KCall{f}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2)):
+  match r2:
+    case Core.ROk{+vs2}:
+      match cr:
+        case (vr, hl, room):
+          %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SThen{Core.ROk{vs1}, Core.KCall{f}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+          ih(q, le, Core.SOk{Core.KCall{f}, vs1}, Core.SOk{Core.KMat{e2, Law.Cases(ins, ps, j, b)}, vs2}, Inr{(ps, b, j, e2, vs2, {==}, fd, vr, hl, room)})
+    case Core.REnv{e9}:
+      match cr:
+    case Core.RNo{}:
+      match cr:
+    case Core.RFail{m9}:
+      match cr:
+
+def Call.then.step(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), r1: Core.Res, +f: String, s2: Core.Sel,
+    h: Law.Call.then(ins, ds, 1n+q, r1, Core.KCall{f}, s2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SThen{r1, Core.KCall{f}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2)):
+  match r1:
+    case Core.ROk{+vs1}:
+      match h:
+        case (+ps, +b, +j, +e2, r2, eq, fd, cr):
+          Call.then.go(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, vs1, f, ps, b, j, e2, r2, s2, eq, fd, cr, ih)
+    case Core.REnv{e9}:
+      Unit{}
+    case Core.RNo{}:
+      Unit{}
+    case Core.RFail{m9}:
+      Unit{}
+
+# The source looks for f's def.
+def Call.find.step(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), dz: List<&2, Core.Def>, +f: String, +vs1: List<&2, Core.Val>, s2: Core.Sel,
+    h: Law.Call.find(ins, dz, f, vs1, s2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SFind{dz, f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2)):
+  match dz:
+    case Nil{}:
+      match h:
+        case (ps, b, fd, at):
+          match fd:
+    case d <> +r:
+      match d:
+        case Core.Def{+name, +ps2, +b2, ret}:
+          match h:
+            case (ps, b, fd, at):
+              ih(1n+q, RP.Le.succ(p, q, le), Core.SFound{String.eq(name, f), ps2, b2, r, f, vs1}, s2, Inr{(ps, b, fd, at)})
+
+def Call.found.step(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), hb: Bool, +ps2: List<&2, Core.Par>, +b2: Core.Tm, +r: List<&2, Core.Def>,
+    +f: String, +vs1: List<&2, Core.Val>, s2: Core.Sel, h: Law.Call.found(ins, hb, ps2, b2, r, f, vs1, s2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SFound{hb, ps2, b2, r, f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2)):
+  match h:
+    case (+ps, +b, fa, at):
+      match fa:
+        case Inl{c}:
+          match c:
+            case (eh, eps, eb):
+              match at:
+                case (+j, +e2, +vs2, eq, +vr, +hl):
+                  %eh : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SFound{_, ps2, b2, r, f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2))
+                  %eps : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SFound{True{}, _, b2, r, f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2))
+                  %eb : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SFound{True{}, ps, _, r, f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2))
+                  ih(1n+q, RP.Le.succ(p, q, le), Core.SEnter{Nat.is_lt(Core.Vals.len(vs1), Core.Pars.len(ps)), f, ps, b, vs1}, s2,
+                    Inr{(Enter.short(ins, ps, vs1, vs2, vr, hl), j, e2, vs2, eq, vr, hl)})
+        case Inr{c}:
+          match c:
+            case (eh, fd):
+              %eh : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SFound{_, ps2, b2, r, f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2))
+              ih(1n+q, RP.Le.succ(p, q, le), Core.SFind{r, f, vs1}, s2, Inr{(ps, b, fd, at)})
+
+# The body runs in the parameters' scope, the other program's in front of
+# its own; the value, applied to no more arguments, is the call's.
+def Call.enter.step(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), sh: Bool, +f: String, +ps: List<&2, Core.Par>, +b: Core.Tm,
+    +vs1: List<&2, Core.Val>, s2: Core.Sel, h: Law.Call.enter(ins, sh, ps, b, vs1, s2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEnter{sh, f, ps, b, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2)):
+  match sh:
+    case True{}:
+      match h:
+        case (fl, at):
+          match fl:
+    case False{}:
+      match h:
+        case (fl, at):
+          match at:
+            case (+j, +e2, +vs2, eq, +vr, hl):
+              %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEnter{False{}, f, ps, b, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+              %Drop.all(vs1, Core.Pars.len(ps), Len.rel(ins, vs1, vs2, Core.Pars.len(ps), vr, hl)) : Law.RRel(ins,
+                Core.run(~prim, p, ds, Core.SThen{Core.run(~prim, p, ds, Core.SEval{Core.Scope.bind(ps, vs1), b}), Core.KApply{_}}),
+                Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{Core.Scope.push(ps, vs2, e2), Core.Tm.inline(ins, j, b, True{})}))
+              Apply1(~prim, ins, p, ds, Core.run(~prim, p, ds, Core.SEval{Core.Scope.bind(ps, vs1), b}),
+                Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{Core.Scope.push(ps, vs2, e2), Core.Tm.inline(ins, j, b, True{})}),
+                ih(q, le, Core.SEval{Core.Scope.bind(ps, vs1), b}, Core.SEval{Core.Scope.push(ps, vs2, e2), Core.Tm.inline(ins, j, b, True{})},
+                  (Core.Scope.push(ps, vs2, e2), j, {==}, Bind.push(ins, ps, vs1, vs2, vr, Nil{}, e2, Unit{}))),
+                RP.S.one(~prim, ~one, p, ds, Core.SEval{Core.Scope.bind(ps, vs1), b}))
+
