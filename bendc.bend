@@ -3797,7 +3797,7 @@ def Natives() -> List<&2, String>:
    "F32.trunc", "F32.bits", "F32.to_u32", "F32.show", "F32.read", "Map.bit",
    "Map.get", "Map.has", "String.cmp", "String.eq",
    "Array.size", "Array.get", "Array.swap", "Array.set", "Array.new", "Array.clone",
-   "Array.get%w", "Array.swap%w", "Array.set%w",
+   "Array.get%w", "Array.swap%w", "Array.set%w", "Array.new%w",
    "Array.atomic.add", "Array.atomic.min", "Array.atomic.max", "Array.atomic.and",
    "Array.atomic.or", "Array.atomic.xor", "Array.atomic.exch", "Array.atomic.cas",
    "Array.atomic.fadd"]
@@ -8664,11 +8664,13 @@ def Gen.gpu.pin.head(+t: Core.Expr) -> String:
   Bool.pick(String, Str.eq(P.head(t), "&"), "Sigma", P.head(t))
 
 # The declaration of t's type: none to look into (an empty one) for a type
-# met or a scalar.
+# met or a scalar, and no type for an Array (the device's may be narrow: see
+# K_ARR_NW in rt/gpu.h).
 def Gen.gpu.pin.d(+g: G, +seen: List<&2, String>, +t: Core.Expr) -> Decl:
   +h = Gen.gpu.pin.head(t)
-  Bool.pick(Decl, Bool.or(Str.has(seen, h), Str.has(["U32", "F32", "I32", "Bool", "Nat", "Char", "Unit"], h)),
-    DType{h, Nil{}, Nil{}}, G.body(g, "%" ++ h))
+  Bool.pick(Decl, Str.eq(h, "Array"), DImport{"", ""},
+    Bool.pick(Decl, Bool.or(Str.has(seen, h), Str.has(["U32", "F32", "I32", "Bool", "Nat", "Char", "Unit"], h)),
+      DType{h, Nil{}, Nil{}}, G.body(g, "%" ++ h)))
 
 def Gen.gpu.pin.ok(d: Decl) -> Bool:
   match d:
@@ -9097,6 +9099,9 @@ def Pick.decls(ds: List<&2, Decl>) -> List<&2, Decl>:
 # takes no reference and a write drops none (reference counted), and the
 # cell a read or a swap gives is a scalar (see GSLetGet). The type argument
 # says which; the core IR erases it, so this runs before (Lo.program).
+# Array.new of scalars (its type argument, or for a literal [v : T*n] the
+# annotation on v) becomes Array.new%w: the CPU's Array.new, and on the
+# device an array of 32-bit cells (see K_ARR_NW in rt/gpu.h).
 def Arrw.scalar(t: Core.Expr) -> Bool:
   match t:
     case Core.ETy{+n, a}:
@@ -9109,7 +9114,24 @@ def Arrw.scalar(t: Core.Expr) -> Bool:
 def Arrw.hit(+n: String, as: List<&2, Core.Expr>) -> Bool:
   match as:
     case t <> r:
-      Bool.and(Str.has(["Array.get", "Array.set", "Array.swap"], n), Arrw.scalar(t))
+      Bool.pick(Bool, Str.eq(n, "Array.new"), Bool.or(Arrw.scalar(t), Arrw.lit(r)),
+        Bool.and(Str.has(["Array.get", "Array.set", "Array.swap"], n), Arrw.scalar(t)))
+    case Nil{}:
+      False{}
+
+# (the value of Array.new's d, v: annotated with a scalar type)
+def Arrw.lit(as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case d <> r:
+      match r:
+        case v <> u:
+          match v:
+            case Core.EAnn{x, +ty}:
+              Str.has(["U32", "F32", "Bool", "Char"], ty)
+            case other:
+              False{}
+        case Nil{}:
+          False{}
     case Nil{}:
       False{}
 
@@ -9171,14 +9193,15 @@ def Arrw.go(e: Core.Expr, top: Bool) -> Core.Expr:
     case other:
       other
 
-# Each def's body rewritten; Array.get, Array.set and Array.swap each get
-# their %w copy.
+# Each def's body rewritten; Array.get, Array.set, Array.swap and Array.new
+# each get their %w copy.
 def Arrw.decls(ds: List<&2, Decl>) -> List<&2, Decl>:
   match ds:
     case Nil{}:
       Nil{}
     case DDef{+name, +ps, +body, +ret} <> t:
-      List.append(&2, Decl, Bool.pick(List<&2, Decl>, Str.has(["Array.get", "Array.set", "Array.swap"], name),
+      List.append(&2, Decl, Bool.pick(List<&2, Decl>,
+        Str.has(["Array.get", "Array.set", "Array.swap", "Array.new"], name),
         [DDef{name, ps, body, ret}, DDef{name ++ "%w", ps, body, ret}], [DDef{name, ps, Arrw.go(body, True{}), ret}]),
         Arrw.decls(t))
     case d <> t:
@@ -14594,10 +14617,13 @@ def KX.arr.call(sw: Bool, +k: U32, ds: List<&2, Doc>) -> Doc:
       DStr{"k_fail(c, KE_FX);\n"}
 
 # A flat def's function: a def that loops is not inlined (the kernel's code
-# grows past the GPU's instruction cache, raytrace 1.5x slower).
-def KX.head(lp: Bool, +name: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, r: Core.Expr) -> String:
+# grows past the GPU's instruction cache, raytrace 1.5x slower), and does
+# not start once the arena ran out (k_short in rt/gpu.h). The loops
+# themselves read no error (see KXSTail).
+def KX.head(+lp: Bool, +name: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, r: Core.Expr) -> String:
   Bool.pick(String, lp, "KNOINLINE ", "KINLINE ") ++ KX.cty(P.head(r)) ++ " KX_" ++ Gen.mangle(name) ++ "(KTHR KCtx *c" ++
-    KX.cparams(ps, mask, 0) ++ ") {\n" ++ KX.nats(ps, mask, 0)
+    KX.cparams(ps, mask, 0) ++ ") {\n" ++ KX.nats(ps, mask, 0) ++
+    Bool.pick(String, lp, "if (k_short(c)) return 0;\n", "")
 
 # A call of flat def name from a flat def: one that loops, with a scalar
 # result, gives back the words it allocated (see KSCAL in rt/gpu.h); the

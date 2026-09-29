@@ -1885,6 +1885,8 @@ BEND_UINL V F_Array_dswap_x37w(V a, V i, V v) {
   return C2(0, a, old);
 }
 static inline V F_Array_dnew(V d, V v) { return arr_new(d, v); }
+// (an array of scalars, see Arrw in bendc.bend: narrow on the device only)
+#define F_Array_dnew_x37w F_Array_dnew
 static inline V F_Array_dclone(V a) { return C2(0, a, arr_copy(arr_cls(a), arr_cells(a), 1, ((V *)a)[0] & RC_TS)); }
 
 // The atomics, on a cell's U32 (its low half: the cell is a U32 below 2^32).
