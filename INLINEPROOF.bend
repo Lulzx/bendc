@@ -1628,3 +1628,106 @@ def Call.enter.step(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&
                   (Core.Scope.push(ps, vs2, e2), j, {==}, Bind.push(ins, ps, vs1, vs2, vr, Nil{}, e2, Unit{}))),
                 RP.S.one(~prim, ~one, p, ds, Core.SEval{Core.Scope.bind(ps, vs1), b}))
 
+# A call's term
+# =============
+
+def Eq.args0(+e2: List<&2, Core.Val>, as: List<&2, Core.Arg>, +ins: Map<&2, Core.Def>)
+    -> {Law.ArgsT(True{}, e2, Core.Args.inline(ins, 0n, as)) == Core.SArgs{e2, as} : Core.Sel}:
+  %Args.zero(as, ins) : {Core.SArgs{e2, _} == Core.SArgs{e2, as} : Core.Sel}
+  {==}
+
+# The scrutinees, one for each parameter.
+def Eq.len(+as2: List<&2, Core.Arg>, +ps: List<&2, Core.Par>, hq: Dead.Tru(Nat.is_eq(Core.Args.len(as2), Core.Pars.len(ps))))
+    -> {Red.Tms.len(Core.Args.scrs(as2)) == Core.Pars.len(ps) : Nat}:
+  %Scrs.len(as2) : {_ == Core.Pars.len(ps) : Nat}
+  Nat.eq.of(Core.Args.len(as2), Core.Pars.len(ps), hq)
+
+# What the pass inlines: f's def, an argument for each parameter.
+def Yes(ds: List<&2, Core.Def>, f: String, ps: List<&2, Core.Par>, b: Core.Tm, as2: List<&2, Core.Arg>) -> Data:
+  Sigma<&2, &2, Law.Found(ds, f, ps, b), _ => Dead.Tru(Nat.is_eq(Core.Args.len(as2), Core.Pars.len(ps)))>
+
+def Yes.mk(ds: List<&2, Core.Def>, +hb: Bool, +name: String, +f: String, +ps: List<&2, Core.Par>, b: Core.Tm, +as2: List<&2, Core.Arg>,
+    ag: Dead.Tru(hb) -> Dead.Tru(String.eq(name, f)) -> Law.Found(ds, f, ps, b),
+    +hc: Dead.Tru(Bool.and(hb, Bool.and(String.eq(name, f), Nat.is_eq(Core.Args.len(as2), Core.Pars.len(ps)))))) -> Yes(ds, f, ps, b, as2):
+  (ag(And.l(hb, Bool.and(String.eq(name, f), Nat.is_eq(Core.Args.len(as2), Core.Pars.len(ps))), hc),
+     And.l(String.eq(name, f), Nat.is_eq(Core.Args.len(as2), Core.Pars.len(ps)),
+       And.r(hb, Bool.and(String.eq(name, f), Nat.is_eq(Core.Args.len(as2), Core.Pars.len(ps))), hc))),
+   And.r(String.eq(name, f), Nat.is_eq(Core.Args.len(as2), Core.Pars.len(ps)),
+     And.r(hb, Bool.and(String.eq(name, f), Nat.is_eq(Core.Args.len(as2), Core.Pars.len(ps))), hc)))
+
+# The call inlined: the arguments run as the match's scrutinees.
+def L.call.in(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), +e1: List<&2, Core.Val>, +f: String, +as: List<&2, Core.Arg>, +e2: List<&2, Core.Val>,
+    +j: Nat, +ps: List<&2, Core.Par>, +b: Core.Tm, y: Yes(ds, f, ps, b, Core.Args.inline(ins, 1n+j, as)),
+    h: Law.ERel(ins, e1, e2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)), ih2: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CCall{f, as}}),
+         Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2,
+           Core.CMat{Core.Args.scrs(Core.Args.inline(ins, 1n+j, as)), [Core.CCse{Core.Pars.vars(ps), Core.Tm.inline(ins, j, b, True{})}]}})):
+  match y:
+    case (fd, +hq):
+      ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SArgs{e1, as}), Core.KCall{f}},
+        Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Args.scrs(Core.Args.inline(ins, 1n+j, as))}), Core.KMat{e2, Law.Cases(ins, ps, j, b)}},
+        Inr{(ps, b, j, e2, Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Args.scrs(Core.Args.inline(ins, 1n+j, as))}), {==}, fd,
+          CallR.mk(ins, Core.run(~prim, p, ds, Core.SArgs{e1, as}), Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Args.scrs(Core.Args.inline(ins, 1n+j, as))}),
+            Core.Pars.len(ps), q,
+            ih(q, le, Core.SArgs{e1, as}, Core.SEvals{e2, Core.Args.scrs(Core.Args.inline(ins, 1n+j, as))}, (e2, 1n+j, False{}, {==}, h)),
+            Fits.conv(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Args.scrs(Core.Args.inline(ins, 1n+j, as))}),
+              Red.Tms.len(Core.Args.scrs(Core.Args.inline(ins, 1n+j, as))), Core.Pars.len(ps),
+              Eq.len(Core.Args.inline(ins, 1n+j, as), ps, hq),
+              RP.S.one(~prim, ~one, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Args.scrs(Core.Args.inline(ins, 1n+j, as))})),
+            ok => Room4.conv(Red.Tms.len(Core.Args.scrs(Core.Args.inline(ins, 1n+j, as))), Core.Pars.len(ps), q,
+              Eq.len(Core.Args.inline(ins, 1n+j, as), ps, hq),
+              Room.of(Core.Args.scrs(Core.Args.inline(ins, 1n+j, as)), q,
+                Fuel.evals(~prim, Core.Args.scrs(Core.Args.inline(ins, 1n+j, as)), q, Core.Defs.inline(ins, k, ds), e2, ok)))))})
+
+# The call, inlined (c) or not.
+def L.call.pick(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), +e1: List<&2, Core.Val>, +f: String, +as: List<&2, Core.Arg>, +e2: List<&2, Core.Val>,
+    +j: Nat, +ps: List<&2, Core.Par>, +b: Core.Tm, c: Bool, yes: Dead.Tru(c) -> Yes(ds, f, ps, b, Core.Args.inline(ins, 1n+j, as)),
+    h: Law.ERel(ins, e1, e2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)), ih2: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CCall{f, as}}),
+         Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Bool.pick(Core.Tm, c,
+           Core.CMat{Core.Args.scrs(Core.Args.inline(ins, 1n+j, as)), [Core.CCse{Core.Pars.vars(ps), Core.Tm.inline(ins, j, b, True{})}]},
+           Core.CCall{f, Core.Args.inline(ins, 1n+j, as)})})):
+  match c:
+    case True{}:
+      L.call.in(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, e1, f, as, e2, j, ps, b, yes(Unit{}), h, ih, ih2)
+    case False{}:
+      ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SArgs{e1, as}), Core.KCall{f}},
+        Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SArgs{e2, Core.Args.inline(ins, 1n+j, as)}), Core.KCall{f}},
+        Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SArgs{e2, Core.Args.inline(ins, 1n+j, as)}), Core.KCall{f}, {==}, {==},
+          ih(q, le, Core.SArgs{e1, as}, Core.SArgs{e2, Core.Args.inline(ins, 1n+j, as)}, (e2, 1n+j, True{}, {==}, h)))})
+
+# The call against the pass's term for it, at d (f's def when hb).
+def L.call.at(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), +e1: List<&2, Core.Val>, +f: String, +as: List<&2, Core.Arg>, +e2: List<&2, Core.Val>,
+    +j: Nat, +hb: Bool, d: Core.Def,
+    ag: Dead.Tru(hb) -> Dead.Tru(String.eq(Law.Def.name(d), f)) -> Law.Found(ds, f, Law.Def.pars(d), Core.Inline.body(d)),
+    h: Law.ERel(ins, e1, e2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)), ih2: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CCall{f, as}}),
+         Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Inline.at(hb, d, f, Core.CCall{f, Core.Args.inline(ins, 1n+j, as)},
+           Core.Tm.inline(ins, j, Core.Inline.body(d), True{}))})):
+  match d:
+    case Core.Def{+name, +ps, +db, ret}:
+      L.call.pick(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, e1, f, as, e2, j, ps, db,
+        Bool.and(hb, Bool.and(String.eq(name, f), Nat.is_eq(Core.Args.len(Core.Args.inline(ins, 1n+j, as)), Core.Pars.len(ps)))),
+        hc => Yes.mk(ds, hb, name, f, ps, db, Core.Args.inline(ins, 1n+j, as), ag, hc),
+        h, ih, ih2)
+
+# A call's step: the pass's term for it inlined or not.
+def L.call(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +m: Nat, +le: Red.Le(1n+p, m), +e1: List<&2, Core.Val>, +f: String, +as: List<&2, Core.Arg>, +e2: List<&2, Core.Val>,
+    +j: Nat, h: Law.ERel(ins, e1, e2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)), ih2: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CCall{f, as}}),
+         Core.run(~prim, m, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, Core.CCall{f, as}, True{})})):
+  match m:
+    case 0n:
+      match le:
+    case 1n+q:
+      match j:
+        case 0n:
+          ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SArgs{e1, as}), Core.KCall{f}},
+            Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SArgs{e2, as}), Core.KCall{f}},
+            Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SArgs{e2, as}), Core.KCall{f}, {==}, {==},
+              ih(q, le, Core.SArgs{e1, as}, Core.SArgs{e2, as}, (e2, 0n, True{}, Eq.args0(e2, as, ins), h)))})
+        case 1n+i:
+          %Sh.callT(as, ins, i, f) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CCall{f, as}}),
+            Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+          L.call.at(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, e1, f, as, e2, i, Core.Inline.has(ins, f), Core.Inline.look(ins, f), agree(f), h, ih, ih2)
+
