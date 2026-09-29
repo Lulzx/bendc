@@ -8778,7 +8778,7 @@ def Gen.gpu.emit.errs(+g: G, +ts: List<&2, String>, errs: List<&2, String>, +cod
       "\n// The device code of the !-calls: rt/gpu.h, then this program's part\n#include \"gpu.h\"\n\n" ++ code ++
         "\n#include \"gpuhost.h\"\n\nstatic const char K_SRC[] =\n" ++ K.lit(code) ++
         ";\n\nstatic const GpuFn K_FNS[] = {" ++ Gen.gpu.fns(wraps) ++
-        "{0, 0}};\nstatic GpuProg K_PROG = {K_SRC, bend_kernel, bend_kq, K_FNS};\n\n" ++ Gen.gpu.stubs(g, ts, True{})
+        "{0, 0}};\nstatic const GpuFn K_KQH[] = {K_KQH_LIST {0, 0}};\nstatic GpuProg K_PROG = {K_SRC, bend_kernel, bend_kq, K_FNS, K_KQH};\n\n" ++ Gen.gpu.stubs(g, ts, True{})
     case e <> t:
       "\n// The !-calls run on the CPU:\n" ++ Gen.gpu.errs(e <> t) ++ Gen.gpu.stubs(g, ts, False{})
 
@@ -14778,6 +14778,51 @@ def K.loops.go(n: Nat, k: KLoopSel) -> KLoopSel.ty(k):
 # calls can take long, so the kernel runs them with the SIMD group (PC_KQ).
 def K.loops(g: G, name: String) -> KM(Bool):
   K.loops.go(Fuel.max(), KLLoops{g, name})
+# A KQ_ call the host may run on the CPU instead (gpu_kq_host in
+# rt/gpuhost.h: a few lanes left waiting, symreg's climb, run one serial
+# chain far slower than a CPU core): its kept parameters are scalars (a Nat
+# too) and so is its result (not a Nat, which may be a CPU object). KH_name
+# calls the CPU's F_name; K_KQH_LIST lists them with the call's label.
+def KQ.host.ps(ps: List<&2, Core.Param>, mask: List<&2, Bool>) -> Bool:
+  match ps mask:
+    case Core.Param{x, m, +t} <> pt True{} <> mt:
+      Bool.and(Str.has(["U32", "F32", "I32", "Bool", "Char", "Nat"], t), KQ.host.ps(pt, mt))
+    case Core.Param{x, m, t} <> pt False{} <> mt:
+      KQ.host.ps(pt, mt)
+    case pl ml:
+      True{}
+
+def KQ.host.ret(d: Decl) -> Bool:
+  match d:
+    case DDef{n, ps, body, ret}:
+      Str.has(["U32", "F32", "I32", "Bool", "Char"], P.head(ret))
+    case other:
+      False{}
+
+def KQ.host.args(+n: Nat, +i: U32) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+m:
+      Bool.pick(String, U32.is_zero(i), "", ", ") ++ "a[" ++ U32.show(i) ++ "]" ++ KQ.host.args(m, U32.inc(i))
+
+def KQ.host.add(ok: Bool, +name: String, +e: U32, +n: Nat) -> KM(Unit):
+  match ok:
+    case True{}:
+      do KM<Unit>:
+        K.flat.add(DStr{"#ifndef __METAL_VERSION__\nstatic V KH_" ++ Gen.mangle(name) ++ "(V *a) { (void)a; return F_" ++
+          Gen.mangle(name) ++ "(" ++ KQ.host.args(n, 0) ++ "); }\n#endif\n"})
+        K.memo.put("%kqhost", "{KH_" ++ Gen.mangle(name) ++ ", " ++ U32.show(e) ++ "}, ")
+    case False{}:
+      KM.pure(Unit, Unit{})
+
+def KQ.hosts.of(memo: List<&2, Bind>) -> String:
+  match memo:
+    case Nil{}:
+      ""
+    case Bind{+k, v} <> t:
+      Bool.pick(String, Str.eq(k, "%kqhost"), v, "") ++ KQ.hosts.of(t)
+
 def KQ.case.args(+n: Nat, +i: U32) -> String:
   match n:
     case 0n:
@@ -16586,6 +16631,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                   DStr{"default:\n*ok = false;\nreturn 0;\n}\n}\n}\n"}]))
                 K.memo.put("%kqcase", "case " ++ U32.show(e) ++ ": return KQ_" ++ Gen.mangle(name) ++ "(c" ++ KQ.case.args(n, 0) ++
                   ", ok);\n")
+                KQ.host.add(Bool.and(KQ.host.ps(ps, mask), KQ.host.ret(G.body(g, name))), name, e, n)
             case False{}:
               KM.pure(Unit, Unit{})
         # A call that gives back what it allocated (KQ.reg) keeps the lane's hp
@@ -18062,11 +18108,12 @@ def J.printer(j: JG, ty0: Core.Expr) -> Gen(String):
 
 def K.fin(r: Unit & KSt) -> KOut:
   (u, st) = r
-  KSt{+n, sl, +curl, cur, out, +fns, todo, +frames, errs, flat, memo} = st
+  KSt{+n, sl, +curl, cur, out, +fns, todo, +frames, errs, flat, +memo} = st
   KOut{Doc.flat(Doc.list([DStr{"#define K_NLABELS " ++ U32.show(n) ++ "\n" ++ K.defines(fns) ++ "KCONST KW K_FRAME[] = {" ++
     K.frame_table(frames, 0, n) ++ "0};\n\nKINLINE KW k_frame_size(KW l) {\n  return l < K_NLABELS ? K_FRAME[l] : 0;\n}\n\n"},
     flat, DStr{"\nKINLINE KW k_kq(KTHR KCtx *c, KTHR bool *ok) {\nswitch (c->kq) {\n" ++ KQ.cases.of(memo) ++
-    "default:\n*ok = false;\nreturn 0;\n}\n}\n"}, DStr{"\nKINLINE void k_cases(KTHR KCtx *c) {\nswitch (c->pc) {\n"}, out, K.block_doc(curl, cur),
+    "default:\n*ok = false;\nreturn 0;\n}\n}\n#ifndef __METAL_VERSION__\n#define K_KQH_LIST " ++ KQ.hosts.of(memo) ++
+    "\n#endif\n"}, DStr{"\nKINLINE void k_cases(KTHR KCtx *c) {\nswitch (c->pc) {\n"}, out, K.block_doc(curl, cur),
     DStr{"default: {\nk_fail(c, KE_PC);\nbreak;\n}\n}\n}\n"}])), K.wraps(fns), errs}
 
 def K.program.m(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> KM(Unit):
