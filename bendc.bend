@@ -16269,7 +16269,11 @@ def Opt.inls(+cs: Map<&2, Core.Def>, +ds: List<&2, OD>) -> List<&2, OD>:
 #   a def's name) puts it in its variable's place; so does a let whose
 #   variable is used once, outside a lambda (or anywhere, when the value is
 #   a lambda or a constructor), when that captures nothing. The value then
-#   runs only if its place is reached (a match's case).
+#   runs only if its place is reached (a match's case). The walk does this
+#   only when some lookup is under a binding (Opt.flat); lookups under none
+#   are left to the proven Core.Def.subst (SUBSTPROOF.bend), which runs
+#   after each of Opt.rounds' walks, the next walk reducing where it put
+#   values.
 # - A match on known constructors or literals takes the first case whose
 #   patterns match, as lets (a variable bound to itself is dropped; when a
 #   term would see a bound variable, the terms are bound to fresh names
@@ -16673,12 +16677,53 @@ def Opt.let.sink(+x: String, +v: Core.Tm, b: Core.Tm) -> OR:
     case other:
       RKeep{Core.CLet{Core.PtVar{x}, v, other}}
 
+# How many lookups of x t has under no binding (a lambda's, a let's in
+# its body, a case's): those the proven substitution reaches.
+def Opt.flat(t: Core.Tm, +x: String) -> U32:
+  match t:
+    case Core.CVar{y}:
+      Bool.pick(U32, String.eq(x, y), 1, 0)
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          0
+        case Core.Arg{r, e} <> t2:
+          U32.add(Opt.flat(e, x), Opt.flat(Core.CCall{f, t2}, x))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Opt.flat(f, x)
+        case a <> t2:
+          U32.add(Opt.flat(a, x), Opt.flat(Core.CApp{f, t2}, x))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          0
+        case a <> t2:
+          U32.add(Opt.flat(a, x), Opt.flat(Core.CCtr{k, t2}, x))
+    case Core.CLet{p, v, b}:
+      Opt.flat(v, x)
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case Nil{}:
+          0
+        case a <> t2:
+          U32.add(Opt.flat(a, x), Opt.flat(Core.CMat{t2, cases}, x))
+    case Core.CSuc{k, e}:
+      Opt.flat(e, x)
+    case Core.COp{op, a, b}:
+      U32.add(Opt.flat(a, x), Opt.flat(b, x))
+    case Core.CAnn{e, ty}:
+      Opt.flat(e, x)
+    case other:
+      0
+
 def Opt.let.var(+x: String, +v: Core.Tm, +b: Core.Tm) -> OR:
   +n = Inl.uses(b, 0, x)
   Bool.pick(Unit -> OR, U32.is_zero(n), u => RTo{b},
     u => Bool.pick(Unit -> OR, Bool.and(Bool.and(Bool.or(Opt.atom(v), Bool.and(U32.is_eq(n, 1), Bool.or(U32.is_eq(Inl.uses(b, 2, x), 1), Inl.shape(v)))),
         Inl.apart(Inl.names(v, 0, Nil{}), Inl.names(b, 1, Nil{}))), True{}),
-      u2 => RSub{x, v, b},
+      u2 => Bool.pick(Unit -> OR, U32.is_lt(Opt.flat(b, x), n), u3 => RSub{x, v, b}, u3 => Opt.let.sink(x, v, b))(Unit{}),
       u2 => Opt.let.sink(x, v, b))(Unit{}))(Unit{})
 
 def Opt.let.ctr(+k: String, +qs: List<&2, Core.Pt>, v: Core.Tm, +b: Core.Tm) -> OR:
@@ -17011,10 +17056,30 @@ def Opt.go(+n: Nat, mode: OW, +t: Core.Tm) -> Core.Tm:
             case other:
               other
 
+# Opt's walk on a def's body.
+def Opt.walk(d: Core.Def) -> Core.Def:
+  match d:
+    case Core.Def{name, ps, body, ret}:
+      Core.Def{name, ps, Opt.go(Fuel.max(), OAll{}, body), ret}
+
+# The proven substitution (Core.Def.subst, SUBSTPROOF.bend), then the
+# proven dead-let pass, which drops the lets it emptied.
+def Opt.sub(d: Core.Def) -> Core.Def:
+  Core.Def.dead(Core.Def.subst(d))
+
+# n rounds of the walk, each followed by the proven substitution (which
+# does not reduce where it lands; the next round does).
+def Opt.rounds(n: Nat, d: Core.Def) -> Core.Def:
+  match n:
+    case 0n:
+      d
+    case 1n+k:
+      Opt.rounds(k, Opt.sub(Opt.walk(d)))
+
 def Opt.simp(+flags: String, d: OD) -> OD:
   match d:
-    case OCore{Core.Def{name, ps, +body, ret}}:
-      OCore{Core.Def{name, ps, Bool.pick(Unit -> Core.Tm, Opt.on(flags, 115), u => Opt.go(Fuel.max(), OAll{}, body), u => body)(Unit{}), ret}}
+    case OCore{+cd}:
+      OCore{Bool.pick(Unit -> Core.Def, Opt.on(flags, 115), u => Opt.rounds(3n, Opt.sub(cd)), u => cd)(Unit{})}
     case OKeep{k}:
       OKeep{k}
 
@@ -17024,6 +17089,19 @@ def Opt.simps(+flags: String, ds: List<&2, OD>) -> List<&2, OD>:
       Nil{}
     case d <> r:
       Opt.simp(flags, d) <> Opt.simps(flags, r)
+
+# The proven substitution once more, after specialization and fusion,
+# whose walks leave to it the lookups under no binding.
+def Opt.resub(+flags: String, ds: List<&2, OD>) -> List<&2, OD>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      match d:
+        case OCore{+cd}:
+          OCore{Bool.pick(Unit -> Core.Def, Opt.on(flags, 115), u => Opt.sub(cd), u => cd)(Unit{})} <> Opt.resub(flags, r)
+        case OKeep{k}:
+          OKeep{k} <> Opt.resub(flags, r)
 
 # A def's name applied to arguments (which inlining and substitution make
 # of a function parameter given a def) becomes a call of it, the erased
@@ -18069,7 +18147,7 @@ def Lo.program(+flags: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
   +g = G.new(ds)
   +ods = Opt.lowers(g, Lo.masks(g, ds, Map.new(&2, List<&2, Bool>)), ds)
   +rank = Opt.rank(ods, 0, Map.new(&2, U32))
-  Opt.raises(Opt.finish(Opt.fuse(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, False{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), Opt.mon(Opt.ctx(flags, True{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods)))))))
+  Opt.raises(Opt.finish(Opt.resub(flags, Opt.fuse(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, False{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), Opt.mon(Opt.ctx(flags, True{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods))))))))
 
 # Flat results (see Gen.def.unb): "%r:name" in the dps table holds a def's
 # result arity. A def's result is flat when its type has one constructor
