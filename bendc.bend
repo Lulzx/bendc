@@ -8988,15 +8988,16 @@ def Par.expr(+g: G, +d: String, +n: U32, e: Core.Expr) -> Core.Expr:
 
 # Independent calls in a block. A block is a def's body, a case's or a
 # lambda's: a chain of lets and the expression they end in. A call is
-# heavy when it calls a def (not a native) that recurses (Par.rec) or
-# forks (fs: a def with a parallel let). The heavy calls of a block that no let of it feeds may
+# heavy when it calls a def (not a native or an effect) that recurses
+# (Par.rec) or forks (fs: a def with a parallel let). The heavy calls of a block that no let of it feeds may
 # run at once: two or more become a parallel let, at the place of the
 # block where the most of them can move (the top, or after the last let
 # they read). A call under a lambda or a match's cases stays, as do a
 # parallel let's values and a call that ends the block (a loop's tail
 # call). As any parallel let, it forks only above the frontier.
 def Par.heavy(+g: G, +d: String, +fs: List<&2, String>, +f: String) -> Bool:
-  Bool.and(U32.is_zero(DInfo.kind(G.def(g, f))), Bool.or(Par.rec(g, d, f), Str.has(fs, f)))
+  +k = DInfo.kind(G.def(g, f))
+  Bool.and(Bool.not(Bool.or(U32.is_eq(k, 1), U32.is_eq(k, 2))), Bool.or(Par.rec(g, d, f), Str.has(fs, f)))
 
 # Whether e reads one of the names s.
 def Par.dep(s: List<&2, String>, +e: Core.Expr) -> Bool:
@@ -9275,13 +9276,22 @@ def Par.decls(+g: G, +fs: List<&2, String>, ds: List<&2, Decl>) -> List<&2, Decl
     case d <> t:
       Par.decl(g, fs, d) <> Par.decls(g, fs, t)
 
-# Two rounds: the first finds the defs that fork (fs), and the second
-# also moves calls of those.
+# Rounds until the defs that fork (fs) stop growing (at most k): a round
+# that moves calls of defs that fork may make more defs fork.
+def Par.rounds(k: Nat, +g: G, +fs: List<&2, String>, +ds: List<&2, Decl>) -> List<&2, Decl>:
+  match k:
+    case 0n:
+      Par.decls(g, fs, ds)
+    case 1n+r:
+      +out = Par.decls(g, fs, ds)
+      +fs2 = Par.forks(out)
+      Bool.pick(Unit -> List<&2, Decl>, Nat.is_gt(List.length(&2, String, fs2), List.length(&2, String, fs)),
+        u => Par.rounds(r, g, fs2, ds), u => out)(Unit{})
+
 def Par.auto(on: Bool, +ds: List<&2, Decl>) -> List<&2, Decl>:
   match on:
     case True{}:
-      +g = G.new(ds)
-      Par.decls(g, Par.forks(Par.decls(g, Nil{}, ds)), ds)
+      Par.rounds(6n, G.new(ds), Nil{}, ds)
     case False{}:
       ds
 
