@@ -1297,6 +1297,70 @@ def P.phead(ty: Core.Expr) -> String:
     case other:
       P.head(other)
 
+# A parameter's type: its head, and for a pair or a named type with
+# arguments, the heads of the arguments as well ("&<Array,U32>"). Unb gives
+# them to the fields of a parameter it unboxes; P.thead is the head alone.
+def P.pty.args(ts: List<&2, Core.Expr>) -> List<&2, String>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      P.phead(t) <> P.pty.args(r)
+
+def P.pty.named(h: String) -> Bool:
+  match h:
+    case SCon{+c, SNil{}}:
+      Bool.or(Char.is_upper(c), U32.is_eq(Char.to_u32(c), 38))
+    case SCon{c, t}:
+      Char.is_upper(c)
+    case SNil{}:
+      False{}
+
+def P.pty.with(+h: String, ts: List<&2, Core.Expr>) -> String:
+  match ts:
+    case Nil{}:
+      h
+    case a <> r:
+      Bool.pick(String, P.pty.named(h), h ++ "<" ++ String.join(P.pty.args(a <> r), ",") ++ ">", h)
+
+def P.pty(ty: Core.Expr) -> String:
+  match ty:
+    case Core.ETy{+h, +ts}:
+      Bool.pick(String, String.is_empty(h), P.phead(Core.ETy{h, ts}), P.pty.with(h, ts))
+    case other:
+      P.phead(other)
+
+def P.thead.go(s: String) -> String:
+  match s:
+    case SNil{}:
+      ""
+    case SCon{+c, t}:
+      Bool.pick(String, U32.is_eq(Char.to_u32(c), 60), "", SCon{c, P.thead.go(t)})
+
+def P.thead(s: String) -> String:
+  P.thead.go(s)
+
+# The argument heads of a parameter's type (see P.pty).
+def P.targs.init(s: String) -> String:
+  match s:
+    case SNil{}:
+      ""
+    case SCon{+c, SNil{}}:
+      ""
+    case SCon{c, t}:
+      SCon{c, P.targs.init(t)}
+
+def P.targs.go(s: String) -> String:
+  match s:
+    case SNil{}:
+      ""
+    case SCon{c, +t}:
+      Bool.pick(String, U32.is_eq(Char.to_u32(c), 60), P.targs.init(t), P.targs.go(t))
+
+def P.targs(s: String) -> List<&2, String>:
+  +a = P.targs.go(s)
+  Bool.pick(List<&2, String>, String.is_empty(a), Nil{}, String.split(a, Chr{44}))
+
 def P.mk_bin(+op: String, a: Core.Expr, b: Core.Expr) -> Core.Expr:
   P.mk_bin.go(op, a, b, P.which(op, ["->", "|", "&", "<&>", "||", "&&", "<>",
     "++"]))
@@ -2734,7 +2798,7 @@ def P.param.ty(name: String, +mode: U32, has: Bool) -> Parser(Core.Param):
       do Parser<Core.Param>:
         P.skip()
         ty : Core.Expr <- P.expr()
-        return Core.Param{name, mode, P.phead(ty)}
+        return Core.Param{name, mode, P.pty(ty)}
     case False{}:
       Parser.pure(Core.Param, Core.Param{name, Bool.pick(U32, U32.is_zero(mode), 4, mode), ""})
 
@@ -3806,7 +3870,7 @@ def G.is_native(+name: String) -> Bool:
   Str.has(Natives(), name)
 
 def G.erased_ty(+t: String) -> Bool:
-  Str.has(["Type", "Data", "Quant", "Kind"], t)
+  Str.has(["Type", "Data", "Quant", "Kind"], P.thead(t))
 
 def G.keep(p: Core.Param) -> Bool:
   Core.Param{n, +m, +t} = p
@@ -9917,12 +9981,49 @@ def Unb.ctor.of(u: Unb) -> String:
   Unb{k, ts} = u
   k
 
-def Unb.tys(fs: List<&2, Field>) -> List<&2, String>:
+# A field's type; one that is a parameter of its type is "%i:A", i its
+# place among the arguments a parameter's type gives (see P.pty): a pair's
+# fields by their place, another type's by its parameters. Unb.tys.sub
+# puts a scalar argument in its place, so the unused U32 half of an
+# `Array<U32> & U32` is a U32 in the worker (never shared).
+def Unb.ty.mk(+i: U32, +h: String) -> String:
+  Bool.pick(String, U32.is_lt(i, 10), "%" ++ SCon{Chr{U32.add(48, i)}, SNil{}} ++ ":" ++ h, h)
+
+def Unb.ty.ix(ps: List<&2, String>, +h: String, +j: U32) -> String:
+  match ps:
+    case Nil{}:
+      h
+    case +p <> r:
+      Bool.pick(String, Str.eq(p, h), Unb.ty.mk(j, h), Unb.ty.ix(r, h, U32.inc(j)))
+
+def Unb.tys(+sig: Bool, +ps: List<&2, String>, fs: List<&2, Field>, +i: U32) -> List<&2, String>:
   match fs:
     case Nil{}:
       Nil{}
     case Field{n, t} <> r:
-      P.phead(t) <> Unb.tys(r)
+      +h = P.phead(t)
+      Bool.pick(String, sig, Unb.ty.mk(i, h), Unb.ty.ix(ps, h, 0)) <> Unb.tys(sig, ps, r, U32.inc(i))
+
+def Unb.ty.arg(args: List<&2, String>, +i: U32, +h: String) -> String:
+  match args:
+    case Nil{}:
+      h
+    case +a <> r:
+      Bool.pick(String, U32.is_zero(i), Bool.pick(String, Gen.scalar.ty(a), a, h), Unb.ty.arg(r, U32.sub(i, 1), h))
+
+def Unb.ty.sub(+args: List<&2, String>, t: String) -> String:
+  match t:
+    case SCon{Chr{37}, SCon{d, SCon{Chr{58}, h}}}:
+      Unb.ty.arg(args, U32.sub(Char.to_u32(d), 48), h)
+    case other:
+      other
+
+def Unb.tys.sub(+args: List<&2, String>, ts: List<&2, String>) -> List<&2, String>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      Unb.ty.sub(args, t) <> Unb.tys.sub(args, r)
 
 def Unb.fits(+fs: List<&2, Field>) -> Bool:
   +n = List.length(&2, Field, fs)
@@ -9937,11 +10038,11 @@ def Unb.type.put(ok: Bool, +key: String, u: Unb, m: Map<&2, Unb>) -> Map<&2, Unb
 
 # The flat types, by type name ("&" for a pair) or, with ctor, by
 # constructor name.
-def Unb.type(+ctor: Bool, +name: String, cs: List<&2, Ctor>, m: Map<&2, Unb>) -> Map<&2, Unb>:
+def Unb.type(+ctor: Bool, +name: String, +ps: List<&2, String>, cs: List<&2, Ctor>, m: Map<&2, Unb>) -> Map<&2, Unb>:
   match cs:
     case Ctor{+k, +fs} <> Nil{}:
       Unb.type.put(Unb.fits(fs), Bool.pick(String, ctor, k, Bool.pick(String, Str.eq(name, "Sigma"), "&", name)),
-        Unb{k, Unb.tys(fs)}, m)
+        Unb{k, Unb.tys(Str.eq(name, "Sigma"), ps, fs, 0)}, m)
     case other:
       m
 
@@ -9950,12 +10051,12 @@ def Unb.types(+ctor: Bool, ds: List<&2, Decl>, m: Map<&2, Unb>) -> Map<&2, Unb>:
     case Nil{}:
       m
     case DType{name, ps, cs} <> t:
-      Unb.types(ctor, t, Unb.type(ctor, name, cs, m))
+      Unb.types(ctor, t, Unb.type(ctor, name, ps, cs, m))
     case d <> t:
       Unb.types(ctor, t, m)
 
 def Unb.find(+m: Map<&2, Unb>, +t: String) -> Unb:
-  G.get(Unb, Unb.none(), m, t)
+  G.get(Unb, Unb.none(), m, P.thead(t))
 
 # A parameter whose type is no flat one by name (a pair's component, as a
 # worker takes it, say) is of the type of a flat constructor that a let in
@@ -10777,7 +10878,7 @@ def Unb.param(hit: Bool, p: Core.Param, +u: Unb) -> List<&2, Core.Param>:
   match hit:
     case True{}:
       Core.Param{+x, m, t} = p
-      Unb.params.of(Unb.fields(x, u), m, Unb.tys.of(u))
+      Unb.params.of(Unb.fields(x, u), m, Unb.tys.sub(P.targs(t), Unb.tys.of(u)))
     case False{}:
       [p]
 
