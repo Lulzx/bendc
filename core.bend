@@ -1604,7 +1604,10 @@ def Defs.lit(ds: List<&2, Def>) -> List<&2, Def>:
 # proves that a run that does not fail gives a related result (INLINE.bend
 # states the law).
 
-# The def `ins` holds for f (a def named "" when it holds none).
+# Whether `ins` holds a def for f, and the def (a def named "" when none).
+def Inline.has(+ins: Map<&2, Def>, +f: String) -> Bool:
+  Pair.snd(Map<&2, Def>, Bool, Map.has(&2, Def, ins, f))
+
 def Inline.look(+ins: Map<&2, Def>, +f: String) -> Def:
   Pair.snd(Map<&2, Def>, Def, Map.get(Def, Def{"", Nil{}, CBox{}, CBox{}}, ins, f))
 
@@ -1645,13 +1648,13 @@ def Pars.vars(ps: List<&2, Par>) -> List<&2, Pt>:
           PtVar{x} <> Pars.vars(r)
 
 # The call t (a call of f) with d's body b in its place, when d is f's def
-# and t has an argument for each of its parameters.
-def Inline.at(d: Def, +f: String, t: Tm, b: Tm) -> Tm:
+# (h: `ins` holds one) and t has an argument for each of its parameters.
+def Inline.at(h: Bool, d: Def, +f: String, t: Tm, b: Tm) -> Tm:
   match d:
     case Def{+name, +ps, db, ret}:
       match t:
         case CCall{g, +as}:
-          Bool.pick(Tm, Bool.and(String.eq(name, f), Nat.is_eq(Args.len(as), Pars.len(ps))),
+          Bool.pick(Tm, Bool.and(h, Bool.and(String.eq(name, f), Nat.is_eq(Args.len(as), Pars.len(ps)))),
             CMat{Args.scrs(as), [CCse{Pars.vars(ps), b}]}, CCall{g, as})
         case other:
           other
@@ -1670,7 +1673,7 @@ def Tm.inline(+ins: Map<&2, Def>, +k: Nat, t: Tm, top: Bool) -> Tm:
             case Nil{}:
               match top:
                 case True{}:
-                  Inline.at(Inline.look(ins, f), f, CCall{f, Nil{}}, Tm.inline(ins, j, Inline.body(Inline.look(ins, f)), True{}))
+                  Inline.at(Inline.has(ins, f), Inline.look(ins, f), f, CCall{f, Nil{}}, Tm.inline(ins, j, Inline.body(Inline.look(ins, f)), True{}))
                 case False{}:
                   CCall{f, Nil{}}
             case a <> r:
@@ -1678,7 +1681,7 @@ def Tm.inline(+ins: Map<&2, Def>, +k: Nat, t: Tm, top: Bool) -> Tm:
                 case Arg{rel, e}:
                   match top:
                     case True{}:
-                      Inline.at(Inline.look(ins, f), f,
+                      Inline.at(Inline.has(ins, f), Inline.look(ins, f), f,
                         Tm.push.call(Arg{rel, Tm.inline(ins, 1n+j, e, True{})}, Tm.inline(ins, 1n+j, CCall{f, r}, False{})),
                         Tm.inline(ins, j, Inline.body(Inline.look(ins, f)), True{}))
                     case False{}:
