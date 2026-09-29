@@ -3,6 +3,7 @@ import ./RED.bend as Red
 import ./core.bend as Core
 import ./REDPROOF.bend as RP
 import ./DEAD.bend as Dead
+import ./DEADPROOF.bend as DP
 import ./INLINE.bend as Law
 
 # Proof of INLINE.bend's laws. L.inl (inline_ok): induction on the source's
@@ -2327,3 +2328,423 @@ def Step.patc(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Cor
     case False{}:
       Unit{}
 
+# The induction
+# =============
+
+# The inlined call's steps, by what the source does with the values.
+def Step.then.inr(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), r1: Core.Res, k1: Core.Kont, s2: Core.Sel, c: Law.Call.then(ins, ds, 1n+q, r1, k1, s2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SThen{r1, k1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2)):
+  match k1:
+    case Core.KCall{+fa}:
+      Call.then.step(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, r1, fa, s2, c, ih)
+    case Core.KApp{}:
+      match c:
+    case Core.KCtr{+ka}:
+      match c:
+    case Core.KLet{+enva, +pa, +ba}:
+      match c:
+    case Core.KBind{+ba}:
+      match c:
+    case Core.KMat{+enva, +casesa}:
+      match c:
+    case Core.KCase{+enva, +vsa, +ba, +resta}:
+      match c:
+    case Core.KSuc{+ka}:
+      match c:
+    case Core.KOp{+opa}:
+      match c:
+    case Core.KTail{+enva, +esa}:
+      match c:
+    case Core.KATail{+enva, +asa}:
+      match c:
+    case Core.KCons{+va}:
+      match c:
+    case Core.KApply{+vsa}:
+      match c:
+    case Core.KBody{+ba, +resta}:
+      match c:
+
+def Step.ok.inr(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), k1: Core.Kont, vs1: List<&2, Core.Val>, s2: Core.Sel, c: Law.Call.ok(ins, ds, 1n+q, k1, vs1, s2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SOk{k1, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2)):
+  match k1:
+    case Core.KCall{+fa}:
+      Call.ok.step(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, fa, vs1, s2, c, ih)
+    case Core.KApp{}:
+      match c:
+    case Core.KCtr{+ka}:
+      match c:
+    case Core.KLet{+enva, +pa, +ba}:
+      match c:
+    case Core.KBind{+ba}:
+      match c:
+    case Core.KMat{+enva, +casesa}:
+      match c:
+    case Core.KCase{+enva, +vsa, +ba, +resta}:
+      match c:
+    case Core.KSuc{+ka}:
+      match c:
+    case Core.KOp{+opa}:
+      match c:
+    case Core.KTail{+enva, +esa}:
+      match c:
+    case Core.KATail{+enva, +asa}:
+      match c:
+    case Core.KCons{+va}:
+      match c:
+    case Core.KApply{+vsa}:
+      match c:
+    case Core.KBody{+ba, +resta}:
+      match c:
+
+# One step of the source from related states, the induction hypothesis
+# for the fuel one less.
+def Step(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), s1: Core.Sel, s2: Core.Sel, rel: Law.SRel(ins, ds, 1n+q, s1, s2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)), ih2: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, s1), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), s2)):
+  match s1:
+    case Core.SEval{+e1, +t}:
+      match rel:
+        case (+e2, +j, eq, +h):
+          %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, t}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+          Step.eval(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, e1, t, e2, j, h, ih, ih2)
+    case Core.SEvals{+e1, +es}:
+      match rel:
+        case (+e2, +j, eq, +h):
+          %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEvals{e1, es}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+          Step.evals(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, e1, es, e2, j, h, ih, ih2)
+    case Core.SArgs{+e1, +as}:
+      match rel:
+        case (+e2, +j, +bb, eq, +h):
+          %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SArgs{e1, as}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+          Step.args(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, e1, e2, j, bb, as, h, ih, ih2)
+    case Core.SThen{+r1, +k1}:
+      match rel:
+        case Inl{c}:
+          match c:
+            case (+r2, +k2, eq, +kr, +rr):
+              %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SThen{r1, k1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+              Step.then(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, r1, r2, rr, k1, k2, kr, ih, ih2)
+        case Inr{c}:
+          Step.then.inr(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, r1, k1, s2, c, ih)
+    case Core.SOk{+k1, +vs1}:
+      match rel:
+        case Inl{c}:
+          match c:
+            case (+k2, +vs2, eq, +kr, +vr):
+              %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SOk{k1, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+              Step.ok(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, k1, vs1, vs2, vr, k2, kr, ih, ih2)
+        case Inr{c}:
+          Step.ok.inr(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, k1, vs1, s2, c, ih)
+    case Core.SLook{+e1, +x}:
+      match rel:
+        case (+e2, eq, +h):
+          %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SLook{e1, x}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+          Look(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, 1n+q, le, e1, x, e2, h, ih)
+    case Core.SLook2{+hit, +v, +e1, +x}:
+      match rel:
+        case (+v2, +e2, eq, +vv, +h):
+          %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SLook2{hit, v, e1, x}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+          Step.look2(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, hit, v, e1, x, v2, e2, vv, h, ih)
+    case Core.SCallDef{+f, +vs1}:
+      match rel:
+        case Inl{c}:
+          match c:
+            case (+vs2, eq, +vr):
+              %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SCallDef{f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+              ih(q, le, Core.SFind{ds, f, vs1}, Core.SFind{Core.Defs.inline(ins, k, ds), f, vs2}, Inl{(vs2, k, {==}, vr)})
+        case Inr{c}:
+          Call.def.step(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, f, vs1, s2, c, ih)
+    case Core.SFind{+ds1, +f, +vs1}:
+      match rel:
+        case Inl{c}:
+          match c:
+            case (+vs2, +j, eq, +vr):
+              %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SFind{ds1, f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+              Step.find(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, ds1, f, vs1, vs2, j, vr, ih)
+        case Inr{c}:
+          Call.find.step(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, ds1, f, vs1, s2, c, ih)
+    case Core.SFound{+hit, +ps, +b, +ds1, +f, +vs1}:
+      match rel:
+        case Inl{c}:
+          match c:
+            case (+vs2, +j, eq, +vr):
+              %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SFound{hit, ps, b, ds1, f, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+              Step.found(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, hit, ps, b, ds1, f, vs1, vs2, j, vr, ih)
+        case Inr{c}:
+          Call.found.step(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, hit, ps, b, ds1, f, vs1, s2, c, ih)
+    case Core.SEnter{+sh, +f, +ps, +b, +vs1}:
+      match rel:
+        case Inl{c}:
+          match c:
+            case (+vs2, +j, eq, +vr):
+              %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEnter{sh, f, ps, b, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+              Step.enter(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, sh, f, ps, b, vs1, vs2, j, vr, ih, ih2)
+        case Inr{c}:
+          Call.enter.step(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, sh, f, ps, b, vs1, s2, c, ih)
+    case Core.SApply{+vs1, +fv1}:
+      match rel:
+        case (+vs2, +fv2, eq, +vr, +fr):
+          %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SApply{vs1, fv1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+          Step.apply(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, vs1, vs2, vr, fv1, fv2, fr, ih, ih2)
+    case Core.SMatch{+e1, +vs1, +cs}:
+      match rel:
+        case (+e2, +vs2, +j, eq, +vr, +h):
+          %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SMatch{e1, vs1, cs}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+          Step.match(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, e1, vs1, cs, e2, vs2, j, vr, h, ih, ih2)
+    case Core.SPat{+e1, +pts, +vs1}:
+      match rel:
+        case (+e2, +vs2, eq, +vr, +h):
+          %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SPat{e1, pts, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+          Step.pat(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, e1, e2, h, pts, vs1, vs2, vr, ih)
+    case Core.SPatC{+hit, +e1, +pts, +vs1}:
+      match rel:
+        case (+e2, +vs2, eq, +vr, +h):
+          %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SPatC{hit, e1, pts, vs1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), _))
+          Step.patc(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, hit, e1, pts, vs1, e2, vs2, vr, h, ih)
+
+# From related states, with as much fuel or more: related results.
+def L.inl(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +n: Nat, +m: Nat, +le: Red.Le(n, m), s1: Core.Sel, s2: Core.Sel, rel: Law.SRel(ins, ds, m, s1, s2))
+    -> Law.RRel(ins, Core.run(~prim, n, ds, s1), Core.run(~prim, m, Core.Defs.inline(ins, k, ds), s2)):
+  match n:
+    case 0n:
+      Unit{}
+    case 1n+p:
+      match m:
+        case 0n:
+          match le:
+        case 1n+q:
+          Step(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, s1, s2, rel,
+            m2 => le2 => t1 => t2 => r2 => L.inl(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, m2, le2, t1, t2, r2),
+            m2 => le2 => t1 => t2 => r2 => L.inl(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, m2, le2, t1, t2, r2))
+
+# Equality
+# ========
+
+def Val.sym(-x: Core.Val, -y: Core.Val, e: {x == y : Core.Val}) -> {y == x : Core.Val}:
+  %e : {_ == x : Core.Val}
+  {==}
+
+# Related values without closures are the same.
+def Eq.val(-ins: Map<&2, Core.Def>, v1: Core.Val, v2: Core.Val, vr: Law.VRel(ins, v1, v2), c: Dead.NoClo(v1)) -> {v1 == v2 : Core.Val}:
+  match v1:
+    case Core.VLit{l}:
+      match v2:
+        case Core.VLit{l2}:
+          %vr : {Core.VLit{l} == Core.VLit{_} : Core.Val}
+          {==}
+        case Core.VCtr{k8, fs8}:
+          match vr:
+        case Core.VClo{env8, p8, b8}:
+          match vr:
+        case Core.VFun{f8, as8}:
+          match vr:
+        case Core.VTrm{t8}:
+          match vr:
+        case Core.VBnd{x8, w8}:
+          match vr:
+    case Core.VCtr{+k, fs}:
+      match fs:
+        case Nil{}:
+          match v2:
+            case Core.VLit{l8}:
+              match vr:
+            case Core.VCtr{k2, fs2}:
+              match fs2:
+                case Nil{}:
+                  match vr:
+                    case (ek, vrs):
+                      %ek : {Core.VCtr{k, Nil{}} == Core.VCtr{_, Nil{}} : Core.Val}
+                      {==}
+                case w <> s:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+            case Core.VClo{env8, p8, b8}:
+              match vr:
+            case Core.VFun{f8, as8}:
+              match vr:
+            case Core.VTrm{t8}:
+              match vr:
+            case Core.VBnd{x8, w8}:
+              match vr:
+        case +f <> +r:
+          match v2:
+            case Core.VLit{l8}:
+              match vr:
+            case Core.VCtr{+k2, fs2}:
+              match fs2:
+                case Nil{}:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+                case +f2 <> +r2:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+                        case (vf, vrr):
+                          match c:
+                            case (cf, cr):
+                              %Val.sym(Core.VCtr{k, r}, Core.VCtr{k2, r2}, Eq.val(ins, Core.VCtr{k, r}, Core.VCtr{k2, r2}, (ek, vrr), cr)) : {Core.Val.push(f, _) == Core.VCtr{k2, f2 <> r2} : Core.Val}
+                              %Val.sym(f, f2, Eq.val(ins, f, f2, vf, cf)) : {Core.VCtr{k2, _ <> r2} == Core.VCtr{k2, f2 <> r2} : Core.Val}
+                              {==}
+            case Core.VClo{env8, p8, b8}:
+              match vr:
+            case Core.VFun{f8, as8}:
+              match vr:
+            case Core.VTrm{t8}:
+              match vr:
+            case Core.VBnd{x8, w8}:
+              match vr:
+    case Core.VClo{ce, cp, cb}:
+      match c:
+    case Core.VFun{+g, fs}:
+      match fs:
+        case Nil{}:
+          match v2:
+            case Core.VLit{l8}:
+              match vr:
+            case Core.VCtr{k8, fs8}:
+              match vr:
+            case Core.VClo{env8, p8, b8}:
+              match vr:
+            case Core.VFun{g2, fs2}:
+              match fs2:
+                case Nil{}:
+                  match vr:
+                    case (ek, vrs):
+                      %ek : {Core.VFun{g, Nil{}} == Core.VFun{_, Nil{}} : Core.Val}
+                      {==}
+                case w <> s:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+            case Core.VTrm{t8}:
+              match vr:
+            case Core.VBnd{x8, w8}:
+              match vr:
+        case +f <> +r:
+          match v2:
+            case Core.VLit{l8}:
+              match vr:
+            case Core.VCtr{k8, fs8}:
+              match vr:
+            case Core.VClo{env8, p8, b8}:
+              match vr:
+            case Core.VFun{+g2, fs2}:
+              match fs2:
+                case Nil{}:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+                case +f2 <> +r2:
+                  match vr:
+                    case (ek, vrs):
+                      match vrs:
+                        case (vf, vrr):
+                          match c:
+                            case (cf, cr):
+                              %Val.sym(Core.VFun{g, r}, Core.VFun{g2, r2}, Eq.val(ins, Core.VFun{g, r}, Core.VFun{g2, r2}, (ek, vrr), cr)) : {Core.Val.push(f, _) == Core.VFun{g2, f2 <> r2} : Core.Val}
+                              %Val.sym(f, f2, Eq.val(ins, f, f2, vf, cf)) : {Core.VFun{g2, _ <> r2} == Core.VFun{g2, f2 <> r2} : Core.Val}
+                              {==}
+            case Core.VTrm{t8}:
+              match vr:
+            case Core.VBnd{x8, w8}:
+              match vr:
+    case Core.VTrm{t}:
+      match v2:
+        case Core.VLit{l8}:
+          match vr:
+        case Core.VCtr{k8, fs8}:
+          match vr:
+        case Core.VClo{env8, p8, b8}:
+          match vr:
+        case Core.VFun{f8, as8}:
+          match vr:
+        case Core.VTrm{t2}:
+          %vr : {Core.VTrm{t} == Core.VTrm{_} : Core.Val}
+          {==}
+        case Core.VBnd{x8, w8}:
+          match vr:
+    case Core.VBnd{+x, +w}:
+      match v2:
+        case Core.VLit{l8}:
+          match vr:
+        case Core.VCtr{k8, fs8}:
+          match vr:
+        case Core.VClo{env8, p8, b8}:
+          match vr:
+        case Core.VFun{f8, as8}:
+          match vr:
+        case Core.VTrm{t8}:
+          match vr:
+        case Core.VBnd{x2, +w2}:
+          match vr:
+            case (ex, vw):
+              %ex : {Core.VBnd{x, w} == Core.VBnd{_, w2} : Core.Val}
+              %Val.sym(w, w2, Eq.val(ins, w, w2, vw, c)) : {Core.VBnd{x, _} == Core.VBnd{x, w2} : Core.Val}
+              {==}
+
+def Eq.vals(-ins: Map<&2, Core.Def>, vs1: List<&2, Core.Val>, vs2: List<&2, Core.Val>, vr: Law.VRels(ins, vs1, vs2), c: Dead.NoClos(vs1))
+    -> {vs1 == vs2 : List<&2, Core.Val>}:
+  match vs1:
+    case Nil{}:
+      match vs2:
+        case Nil{}:
+          {==}
+        case w <> s:
+          match vr:
+    case +v <> +r:
+      match vs2:
+        case Nil{}:
+          match vr:
+        case +w <> +s:
+          match vr:
+            case (vv, vrr):
+              match c:
+                case (cv, cr):
+                  %Eq.val(ins, v, w, vv, cv) : {v <> r == _ <> s : List<&2, Core.Val>}
+                  %Eq.vals(ins, r, s, vrr, cr) : {v <> r == v <> _ : List<&2, Core.Val>}
+                  {==}
+
+# Related results, the first clean: the same.
+def Eq.res(-ins: Map<&2, Core.Def>, r1: Core.Res, r2: Core.Res, rr: Law.RRel(ins, r1, r2), c: Dead.Clean(r1))
+    -> {r1 == r2 : Core.Res}:
+  match r1:
+    case Core.ROk{+vs1}:
+      match r2:
+        case Core.ROk{+vs2}:
+          %Eq.vals(ins, vs1, vs2, rr, c) : {Core.ROk{vs1} == Core.ROk{_} : Core.Res}
+          {==}
+        case Core.REnv{e9}:
+          match rr:
+        case Core.RNo{}:
+          match rr:
+        case Core.RFail{m9}:
+          match rr:
+    case Core.REnv{e1}:
+      match c:
+    case Core.RNo{}:
+      match r2:
+        case Core.ROk{vs9}:
+          match rr:
+        case Core.REnv{e9}:
+          match rr:
+        case Core.RNo{}:
+          {==}
+        case Core.RFail{m9}:
+          match rr:
+    case Core.RFail{m}:
+      match c:
+
+# The laws
+# ========
+
+def Eq.top(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +n: Nat, +m: Nat, +le: Red.Le(n, m), nf: Dead.Clean(Core.Prog.run(~prim, n, ds)))
+    -> {Core.Prog.run(~prim, n, ds) == Core.Prog.run(~prim, m, Core.Defs.inline(ins, k, ds)) : Core.Res}:
+  Eq.res(ins, Core.Prog.run(~prim, n, ds), Core.Prog.run(~prim, m, Core.Defs.inline(ins, k, ds)),
+    L.inl(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, n, m, le, Core.SCallDef{"main", Nil{}}, Core.SCallDef{"main", Nil{}}, Inl{(Nil{}, {==}, Unit{})}), nf)
+
+def Law.inline_ok(prim, ins, ok, one, k, ds, agree, n, m, le, s1, s2, rel):
+  L.inl(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, n, m, le, s1, s2, rel)
+
+def Law.inline_prog(prim, ins, ok, one, k, ds, agree, n, m, le, nf):
+  Eq.top(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, n, m, le, nf)
