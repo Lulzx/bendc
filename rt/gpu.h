@@ -148,6 +148,10 @@ typedef struct {
 
 #define KIMM(t) ((((KW)(t)) << 3) | 1)
 #define KBOOL(b) ((b) ? KIMM(1) : KIMM(0))
+// A word leaf (LI in bendrt.h).
+#define KLI(t, x) ((KW)0xFFFF000000000000ul | ((KW)(KU)(x) << 16) | ((KW)(t) << 3) | 3)
+#define KIS_LI(v, t) (((v) & (KW)0xFFFF00000000FFFFul) == ((KW)0xFFFF000000000000ul | ((KW)(t) << 3) | 3))
+#define KLI_V(v) ((KW)(KU)((v) >> 16))
 #define KIX(c, v) (((v) - (c)->ab) >> 3)
 #define KPTR(c, i) ((c)->ab + ((KW)(i) << 3))
 // The generated blocks reach frames only through these, so a def's blocks
