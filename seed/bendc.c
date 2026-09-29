@@ -3472,6 +3472,19 @@ static int cc_exe_dir(char *out, size_t n) {
   return 0;
 }
 
+// $CC, or cc. On arm64 Macs cc is clang, whose machine outliner (on at -O2
+// there) moves the matches' repeated tails into shared functions, a call and
+// a return each on the hottest paths: without it tree-matmul runs 12% fewer
+// cycles (and bitonic and radix the same).
+static const char *cc_cmd(void) {
+  if (getenv("CC") && *getenv("CC")) return getenv("CC");
+#if defined(__APPLE__) && defined(__aarch64__)
+  return "cc -mno-outline";
+#else
+  return "cc";
+#endif
+}
+
 static long cc_mtime(const char *p) {
   struct stat st;
   return stat(p, &st) == 0 ? (long)st.st_mtime : -1;
@@ -3513,7 +3526,7 @@ Term cc_end_run(Env e, Term *f, IoWork *w) {
   snprintf(obj, sizeof obj, "%s/bendrt.o", dir);
   snprintf(impl, sizeof impl, "%s/bendrt_impl.c", rt);
   snprintf(hdr, sizeof hdr, "%s/bendrt_split.h", rt);
-  const char *cc = getenv("CC") && *getenv("CC") ? getenv("CC") : "cc";
+  const char *cc = cc_cmd();
   size_t cl = strlen(cc) + 3 * PATH_MAX + strlen(out) + 256;
   char *cmd = malloc(cl);
   if (cc_mtime(obj) < 0 || cc_mtime(obj) < cc_mtime(impl) || cc_mtime(obj) < cc_mtime(hdr)) {
@@ -3557,7 +3570,7 @@ Term cc_link_run(Env e, Term *f, IoWork *w) {
   snprintf(impl, sizeof impl, "%s/bendrt_impl.c", rt);
   snprintf(nsrc, sizeof nsrc, "%s/native.c", rt);
   snprintf(hdr, sizeof hdr, "%s/bendrt_split.h", rt);
-  const char *cc = getenv("CC") && *getenv("CC") ? getenv("CC") : "cc";
+  const char *cc = cc_cmd();
   size_t cl = strlen(cc) + 6 * PATH_MAX + 3 * strlen(out) + 256;
   char *cmd = malloc(cl);
   const char *srcs[2] = {impl, nsrc};
