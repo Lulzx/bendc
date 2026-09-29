@@ -241,6 +241,36 @@ def str(+rt: U32, +rn: U32, +k: U32) -> U32:
 def ldrw(+rt: U32, +rn: U32, +k: U32) -> U32:
   (3107979264 .|. (((k >> 2n : U32) << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32)
 
+# str wt, [rn, #k] (B9000000), k a multiple of 4.
+def strw(+rt: U32, +rn: U32, +k: U32) -> U32:
+  (3103784960 .|. (((k >> 2n : U32) << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32)
+
+# ldr rt, [rn, rm, lsl #3] and str rt, [rn, rm, lsl #3] (F8607800, F8207800).
+def ldrx(+rt: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(4167071744, rt, rn, rm)
+
+def strx(+rt: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(4162877440, rt, rn, rm)
+
+# and rd, rn, #0xffffffff00000000 (92607C00).
+def andhi(+rd: U32, +rn: U32) -> U32:
+  reg3(2455796736, rd, rn, 0)
+
+# rbit rd, rn (DAC00000); clz rd, rn (DAC01000).
+def rbit(+rd: U32, +rn: U32) -> U32:
+  reg3(3670016000, rd, rn, 0)
+
+def clz(+rd: U32, +rn: U32) -> U32:
+  reg3(3670020096, rd, rn, 0)
+
+# add rd, rn, rm, lsl #6 (8B001800).
+def add6(+rd: U32, +rn: U32, +rm: U32) -> U32:
+  reg3(2332039168, rd, rn, rm)
+
+# madd rd, rn, rm, ra: rd = ra + rn * rm (9B000000).
+def madd(+rd: U32, +rn: U32, +rm: U32, +ra: U32) -> U32:
+  (reg3(2600468480, rd, rn, rm) .|. (ra << 10n : U32) : U32)
+
 # ldar rt, [rn] (C8DFFC00)
 def ldar(+rt: U32, +rn: U32) -> U32:
   (3370122240 .|. ((rn << 5n : U32) .|. rt : U32) : U32)
@@ -251,6 +281,14 @@ def push_fp() -> U32:
 
 def pop_fp() -> U32:
   2831252477
+
+# stp x29, x30, [sp, #-f]! (A9807BFD) and ldp x29, x30, [sp], #f
+# (A8C07BFD): f a multiple of 16 up to 496.
+def push_fpk(+f: U32) -> U32:
+  (2843769853 .|. ((((0 - f : U32) >> 3n : U32) .&. 127 : U32) << 15n : U32) : U32)
+
+def pop_fpk(+f: U32) -> U32:
+  (2831186941 .|. (((f >> 3n : U32) .&. 127 : U32) << 15n : U32) : U32)
 
 # stp rt, rt2, [rn, #off] and ldp rt, rt2, [rn, #off]: a signed offset, a
 # multiple of 8 in -512..504 (A9000000, A9400000).
@@ -408,6 +446,229 @@ def mov64(+rd: U32, +lo: U32, +hi: U32) -> List<&2, U32>:
 
 def mov32(+rd: U32, +k: U32) -> List<&2, U32>:
   mov64(rd, k, 0)
+
+# Registers read and written
+# ==========================
+#
+# For the native backend's register allocator (N.ra in bendc.bend): which
+# fields of an encoded instruction name general registers, and whether it
+# writes or reads them. A field is a bit: 1 rd or rt (bits 0-4), 2 rn (5-9),
+# 4 ra or rt2 (10-14), 8 rm or rs (16-20). du gives the fields written, the
+# fields read shifted by 4, and flags: 256 an encoding it does not know, 512
+# a call, 1024 a conditional branch by offset, 2048 a branch by offset, 4096
+# a return or a branch to a register. In a field, 31 is sp or the zero
+# register, no register of the allocator's.
+
+def du.is(+w: U32, +m: U32, +v: U32) -> Bool:
+  U32.is_eq((w .&. m : U32), v)
+
+def du.bit(+w: U32, +n: U32) -> Bool:
+  U32.is_ne((w .&. n : U32), 0)
+
+def du.mk(+d: U32, +u: U32) -> U32:
+  (d .|. (u << 4n : U32) : U32)
+
+def du.if(c: Bool, +x: U32) -> U32:
+  Bool.pick(U32, c, x, 0)
+
+# Loads and stores of one register (V, bit 26: rt is an FP register; bits
+# 22-23: a load; bit 24: an unsigned offset, else unscaled, indexed with
+# writeback of rn, or rm the offset).
+def du.ls(+w: U32) -> U32:
+  +fp = du.bit(w, 67108864)
+  +ld = du.bit(w, 12582912)
+  +imm = du.bit(w, 16777216)
+  +k = ((w >> 10n : U32) .&. 3 : U32)
+  +x = du.bit(w, 2097152)
+  +t = du.if(Bool.not(fp), 1)
+  +reg = Bool.and(Bool.not(imm), Bool.and(x, U32.is_eq(k, 2)))
+  +wb = Bool.and(Bool.not(imm), Bool.and(Bool.not(x), U32.is_eq((k .&. 1 : U32), 1)))
+  +bad = Bool.and(Bool.not(imm), Bool.and(x, U32.is_ne(k, 2)))
+  (du.mk((du.if(ld, t) .|. du.if(wb, 2) : U32), (du.if(Bool.not(ld), t) .|. (2 .|. du.if(reg, 8) : U32) : U32)) .|.
+    du.if(bad, 256) : U32)
+
+# Pairs (L, bit 22: a load; bit 23: writeback).
+def du.pair(+w: U32) -> U32:
+  +ld = du.bit(w, 4194304)
+  +t = du.if(Bool.not(du.bit(w, 67108864)), 5)
+  du.mk((du.if(ld, t) .|. du.if(du.bit(w, 8388608), 2) : U32), (du.if(Bool.not(ld), t) .|. 2 : U32))
+
+# Exclusive and ordered ones (ldar; a store-exclusive writes its status to
+# rs).
+def du.ex(+w: U32) -> U32:
+  +ld = du.bit(w, 4194304)
+  +st = Bool.and(Bool.not(ld), Bool.not(du.bit(w, 8388608)))
+  (du.mk((du.if(ld, 1) .|. du.if(st, 8) : U32), (du.if(Bool.not(ld), 1) .|. 2 : U32)) .|.
+    du.if(du.bit(w, 2097152), 256) : U32)
+
+# Branches, system instructions and exceptions.
+def du.br(+w: U32) -> U32:
+  Bool.pick(U32, du.is(w, 4227858432, 335544320), 2048,
+  Bool.pick(U32, du.is(w, 4227858432, 2483027968), 512,
+  Bool.pick(U32, du.is(w, 4278190096, 1409286144), 1024,
+  Bool.pick(U32, du.is(w, 2113929216, 872415232), (1024 .|. du.mk(0, 1) : U32),
+  Bool.pick(U32, du.is(w, 2113929216, 905969664), (1024 .|. du.mk(0, 1) : U32),
+  Bool.pick(U32, du.is(w, 4294966303, 3594452992), (512 .|. du.mk(0, 2) : U32),
+  Bool.pick(U32, du.is(w, 4261412864, 3590324224), (4096 .|. du.mk(0, 2) : U32),
+  Bool.pick(U32, du.is(w, 4293918720, 3576692736), du.mk(1, 0),
+  Bool.pick(U32, du.is(w, 4293918720, 3574595584), du.mk(0, 1),
+  Bool.pick(U32, du.is(w, 4278190080, 3573547520), 0,
+  Bool.pick(U32, du.is(w, 4278190080, 3556769792), 0, 256)))))))))))
+
+# FP and SIMD: only a conversion between an FP and a general register (or
+# fmov between them) names one: rn when it reads one (scvtf, ucvtf, fmov
+# from w), rd when it writes one.
+def du.fp(+w: U32) -> U32:
+  +op = ((w >> 16n : U32) .&. 7 : U32)
+  du.if(du.is(w, 1595997184, 505413632),
+    Bool.pick(U32, Bool.or(U32.is_eq(op, 7), U32.is_eq((op .&. 6 : U32), 2)), du.mk(0, 2), du.mk(1, 0)))
+
+def du(+w: U32) -> U32:
+  Bool.pick(U32, du.is(w, 528482304, 310378496), du.mk(1, du.if(du.is(w, 1610612736, 1610612736), 1)),
+  Bool.pick(U32, du.is(w, 520093696, 285212672), du.mk(1, 2),
+  Bool.pick(U32, du.is(w, 528482304, 301989888), du.mk(1, 2),
+  Bool.pick(U32, du.is(w, 528482304, 318767104), du.mk(1, Bool.pick(U32, du.is(w, 1610612736, 536870912), 3, 2)),
+  Bool.pick(U32, du.is(w, 528482304, 327155712), du.mk(1, 10),
+  Bool.pick(U32, du.is(w, 520093696, 167772160), du.mk(1, 10),
+  Bool.pick(U32, du.is(w, 520093696, 184549376), du.mk(1, 10),
+  Bool.pick(U32, du.is(w, 520093696, 452984832), du.mk(1, 14),
+  Bool.pick(U32, du.is(w, 535822336, 448790528), du.mk(1, 10),
+  Bool.pick(U32, du.is(w, 535822336, 444596224), du.mk(1, 10),
+  Bool.pick(U32, du.is(w, 535822336, 436207616), du.mk(1, 10),
+  Bool.pick(U32, du.is(w, 520093696, 268435456), du.mk(1, 0),
+  Bool.pick(U32, du.is(w, 973078528, 939524096), du.ls(w),
+  Bool.pick(U32, du.is(w, 973078528, 671088640), du.pair(w),
+  Bool.pick(U32, du.is(w, 1056964608, 134217728), du.ex(w),
+  Bool.pick(U32, du.is(w, 469762048, 335544320), du.br(w),
+  Bool.pick(U32, du.is(w, 234881024, 234881024), du.fp(w), 256)))))))))))))))))
+
+# A branch's offset in words (two's complement): b's 26 bits, b.cond's and
+# cbz's 19, tbz's 14.
+def du.sext(+x: U32, +bits: Nat) -> U32:
+  +top = U32.shln(1, Nat.sub(bits, 1n))
+  Bool.pick(U32, U32.is_eq((x .&. top : U32), 0), x, (x - U32.shln(top, 1n) : U32))
+
+def du.off(+w: U32) -> U32:
+  Bool.pick(U32, du.is(w, 2080374784, 335544320), du.sext((w .&. 67108863 : U32), 26n),
+    Bool.pick(U32, du.is(w, 2113929216, 905969664), du.sext(((w >> 5n : U32) .&. 16383 : U32), 14n),
+      du.sext(((w >> 5n : U32) .&. 524287 : U32), 19n)))
+
+# Whether w stores to memory; whether it reads or writes sp (a load or
+# store based on it, or an add or sub of it).
+def mem.ls(+w: U32) -> Bool:
+  Bool.or(du.is(w, 973078528, 939524096), Bool.or(du.is(w, 973078528, 671088640), du.is(w, 1056964608, 134217728)))
+
+def mem.st(+w: U32) -> Bool:
+  Bool.or(Bool.and(du.is(w, 973078528, 939524096), Bool.not(du.bit(w, 12582912))),
+    Bool.or(Bool.and(du.is(w, 973078528, 671088640), Bool.not(du.bit(w, 4194304))),
+      Bool.and(du.is(w, 1056964608, 134217728), Bool.not(du.bit(w, 4194304)))))
+
+def mem.sp(+w: U32) -> Bool:
+  +n31 = U32.is_eq(((w >> 5n : U32) .&. 31 : U32), 31)
+  Bool.or(Bool.and(Bool.or(mem.ls(w), du.is(w, 522190848, 186646528)), n31),
+    Bool.and(du.is(w, 520093696, 285212672),
+      Bool.or(n31, Bool.and(U32.is_eq((w .&. 31 : U32), 31), Bool.not(du.bit(w, 536870912))))))
+
+# Register r as a bit (x0 is 1; 31 is none).
+def reg.bit(+r: U32) -> U32:
+  du.if(U32.is_lt(r, 31), U32.shln(1, U32.to_nat(r)))
+
+# The registers in fields f of w.
+def reg.fields(+w: U32, +f: U32) -> U32:
+  (du.if(du.bit(f, 1), reg.bit((w .&. 31 : U32))) .|. (du.if(du.bit(f, 2), reg.bit(((w >> 5n : U32) .&. 31 : U32))) .|.
+    (du.if(du.bit(f, 4), reg.bit(((w >> 10n : U32) .&. 31 : U32))) .|.
+      du.if(du.bit(f, 8), reg.bit(((w >> 16n : U32) .&. 31 : U32))) : U32) : U32) : U32)
+
+# An instruction as the allocator sees it: the registers it writes (d) and
+# reads (u), and its kind: 0 other, 1 a call, 2 a conditional branch to
+# label l, 3 a branch to l, 4 a return or a branch out, 5 a conditional
+# branch off words forward, 6 a branch off words forward, 7 one it cannot
+# follow, 8 the label l; n: its words.
+type Use is Data:
+  Use{d: U32, u: U32, kind: U32, l: String, off: U32, n: U32}
+
+# A branch by offset is followed 1 to 8 words forward.
+def use.near(+off: U32, +k: U32) -> U32:
+  Bool.pick(U32, Bool.and(U32.is_ge(off, 1), U32.is_le(off, 8)), k, 7)
+
+# An encoding du does not know is followed when no field of it could be a
+# register of watch.
+def use.kind(+w: U32, +x: U32, +watch: U32, +off: U32) -> U32:
+  Bool.pick(U32, du.bit(x, 256), du.if(du.bit(reg.fields(w, 15), watch), 7),
+  Bool.pick(U32, du.bit(x, 512), 1,
+  Bool.pick(U32, du.bit(x, 4096), 4,
+  Bool.pick(U32, du.bit(x, 2048), use.near(off, 6),
+  Bool.pick(U32, du.bit(x, 1024), use.near(off, 5), 0)))))
+
+# ret: a placeholder word that returns.
+def use.word(+w: U32, +watch: U32, +ret: U32) -> Use:
+  +x = du(w)
+  +off = du.off(w)
+  Bool.pick(Use, U32.is_eq(w, ret), Use{0, 0, 4, "", 0, 1},
+    Use{reg.fields(w, (x .&. 15 : U32)), reg.fields(w, ((x >> 4n : U32) .&. 15 : U32)), use.kind(w, x, watch, off), "",
+      off, 1})
+
+def use(i: Ins, +watch: U32, +ret: U32) -> Use:
+  match i:
+    case IW{+w}:
+      use.word(w, watch, ret)
+    case ILab{l}:
+      Use{0, 0, 8, l, 0, 0}
+    case ISym{l, e}:
+      Use{0, 0, 0, "", 0, 0}
+    case IB{+w, l}:
+      Bool.pick(Use, U32.is_eq(w, bl()), Use{0, 0, 1, "", 0, 1}, Use{0, 0, 3, l, 0, 1})
+    case IBc{+w, l}:
+      Use{0, du.if(du.is(w, 2113929216, 872415232), reg.bit((w .&. 31 : U32))), 2, l, 0, 1}
+    case IBt{+w, l}:
+      Use{0, reg.bit((w .&. 31 : U32)), 2, l, 0, 1}
+    case IAdr{+rd, l}:
+      Use{reg.bit(rd), 0, 0, "", 0, 2}
+    case ICall{+w, s}:
+      Use{0, 0, Bool.pick(U32, U32.is_eq(w, bl()), 1, 4), "", 0, 1}
+    case IAdrS{+rd, s}:
+      Use{reg.bit(rd), 0, 0, "", 0, 2}
+
+# Renaming: register lo + i becomes the i-th of cs (the others stay).
+def ren.reg(+r: U32, +lo: U32, cs: List<&2, U32>) -> U32:
+  Bool.pick(U32, U32.is_ge(r, lo),
+    Maybe.default(&2, U32, List.get(&2, U32, cs, U32.to_nat(((r - lo : U32) .&. 31 : U32))), r), r)
+
+def ren.field(+w: U32, +sh: Nat, +lo: U32, cs: List<&2, U32>) -> U32:
+  +r = (U32.shrn(w, sh) .&. 31 : U32)
+  ((w .&. (U32.shln(31, sh) .^. 4294967295 : U32) : U32) .|. U32.shln(ren.reg(r, lo, cs), sh) : U32)
+
+def ren.if(c: Bool, +w: U32, +sh: Nat, +lo: U32, cs: List<&2, U32>) -> U32:
+  Bool.pick(U32, c, ren.field(w, sh, lo, cs), w)
+
+def ren.fields(+w: U32, +f: U32, +lo: U32, +cs: List<&2, U32>) -> U32:
+  ren.if(du.bit(f, 8), ren.if(du.bit(f, 4), ren.if(du.bit(f, 2), ren.if(du.bit(f, 1), w, 0n, lo, cs), 5n, lo, cs),
+    10n, lo, cs), 16n, lo, cs)
+
+def ren.word(+w: U32, +lo: U32, +cs: List<&2, U32>) -> U32:
+  +x = du(w)
+  Bool.pick(U32, du.bit(x, 256), w, ren.fields(w, ((x .|. (x >> 4n : U32)) .&. 15 : U32), lo, cs))
+
+def ren(i: Ins, +lo: U32, +cs: List<&2, U32>) -> Ins:
+  match i:
+    case IW{+w}:
+      IW{ren.word(w, lo, cs)}
+    case ILab{l}:
+      ILab{l}
+    case ISym{l, e}:
+      ISym{l, e}
+    case IB{w, l}:
+      IB{w, l}
+    case IBc{+w, l}:
+      IBc{Bool.pick(U32, du.is(w, 2113929216, 872415232), ren.field(w, 0n, lo, cs), w), l}
+    case IBt{+w, l}:
+      IBt{ren.field(w, 0n, lo, cs), l}
+    case IAdr{+rd, l}:
+      IAdr{ren.reg(rd, lo, cs), l}
+    case ICall{w, s}:
+      ICall{w, s}
+    case IAdrS{+rd, s}:
+      IAdrS{ren.reg(rd, lo, cs), s}
 
 # Layout
 # ======

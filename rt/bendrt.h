@@ -187,11 +187,19 @@ _Static_assert(sizeof(GcBlk) <= GC_HDR, "GC_HDR holds a block header");
 // A thread's allocation cache for one size class: a fresh block is handed out
 // by bumping; a partly free one by the free bits of its bitmap, a word at a
 // time (the slots are not touched until they are handed out).
+// The first seven fields are read and written by native code too (its
+// allocation fast path; see rt/native.c): their offsets and the struct's
+// size are fixed there.
 typedef struct GcCache {
-  V *bump; V *end; GcBlk *blk; V *objs;
-  uint8_t reuse;    // the block came from the reuse queue: its slots are not new memory
+  V *bump; V *end;
+  uint64_t *abits;  // GC_ALLOC(blk)
+  uint32_t idx;     // the slot bump points at
+  uint32_t j;
   uint64_t bits;    // free slots of word j
-  uint32_t idx, j, nj;
+  V *objs;
+  uint32_t nj;
+  uint8_t reuse;    // the block came from the reuse queue: its slots are not new memory
+  GcBlk *blk;
 } GcCache;
 
 struct PDeque;
@@ -446,7 +454,7 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
     V *p = k->objs + (size_t)i * sw;
     p[0] = BEND_HOLE;
     BEND_BARRIER();
-    gc_setbit(&GC_ALLOC(k->blk)[i >> 6], 1ull << (i & 63));
+    gc_setbit(&k->abits[i >> 6], 1ull << (i & 63));
     if (!k->reuse)
       atomic_fetch_add_explicit(&gc_since, ((size_t)__builtin_popcountll(k->bits) + 1) * sw * sizeof(V),
         memory_order_relaxed);
@@ -525,6 +533,7 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
     pthread_mutex_unlock(&gc_lock);
   }
   k->blk = b;
+  k->abits = GC_ALLOC(b);
   // A slot's allocation bit is set when the slot is handed out, never
   // before: a stale pointer must not mark a slot that is still free.
   V *objs = gc_objs(b);
@@ -589,14 +598,14 @@ static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
     k->bump += gc_cls_w[c];
     uint32_t i = k->idx++;
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
-    gc_setbit(&GC_ALLOC(k->blk)[i >> 6], 1ull << (i & 63));
+    gc_setbit(&k->abits[i >> 6], 1ull << (i & 63));
   } else if (k->bits) {
     int t = __builtin_ctzll(k->bits);
     k->bits &= k->bits - 1;
     uint32_t i = k->j * 64 + (uint32_t)t;
     p = k->objs + (size_t)i * gc_cls_w[c];
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
-    gc_setbit(&GC_ALLOC(k->blk)[i >> 6], 1ull << (i & 63));
+    gc_setbit(&k->abits[i >> 6], 1ull << (i & 63));
   } else {
     p = gc_refill(k, atomic, c);
   }
@@ -1374,9 +1383,27 @@ static void fault_init(void) {
   sigaction(SIGBUS, &sa, NULL);
 }
 
+// A thread that runs Bend code has a stack the runtime maps itself, at a
+// multiple of BEND_STK: the first word of that region holds the thread's Thr,
+// so native code finds its allocation caches from sp alone (see rt/native.c).
+// A guard page lies between that word and the stack.
+#define BEND_STK ((uintptr_t)1 << 32)
+
+static void thr_stack(pthread_attr_t *attr) {
+  uintptr_t pg = (uintptr_t)sysconf(_SC_PAGESIZE);
+  char *m = mmap(NULL, 2 * BEND_STK, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
+  if (m == MAP_FAILED) bend_fail("could not map a thread's stack");
+  char *a = (char *)(((uintptr_t)m + BEND_STK - 1) & ~(BEND_STK - 1));
+  if (a > m) munmap(m, (size_t)(a - m));
+  munmap(a + BEND_STK, (size_t)(m + BEND_STK - a));
+  mprotect(a + pg, pg, PROT_NONE);
+  pthread_attr_setstack(attr, a + 2 * pg, BEND_STK - 2 * pg);
+}
+
 static void thr_register(uintptr_t top) {
   fault_stack();
   Thr *t = calloc(1, sizeof(Thr));
+  *(Thr **)(top & ~(BEND_STK - 1)) = t;
   t->top = top;
   t->id = pthread_self();
   t->live = 1;
@@ -2226,7 +2253,7 @@ static void par_start(void) {
     for (int i = 1; i < par_nthreads; i++) {
       pthread_attr_t attr;
       pthread_attr_init(&attr);
-      pthread_attr_setstacksize(&attr, (size_t)1 << 31);
+      thr_stack(&attr);
       pthread_t th;
       if (pthread_create(&th, &attr, par_worker, NULL) == 0) pthread_detach(th);
       pthread_attr_destroy(&attr);
@@ -3102,7 +3129,7 @@ static int bend_start(int argc, char **argv, V (*m)(void), int value) {
   gc_hook(io_hook);
   pthread_attr_t attr;
   pthread_attr_init(&attr);
-  pthread_attr_setstacksize(&attr, (size_t)1 << 32);
+  thr_stack(&attr);
   pthread_t th;
   if (pthread_create(&th, &attr, bend_thread, value ? (void *)1 : NULL) != 0) {
     perror("pthread_create");

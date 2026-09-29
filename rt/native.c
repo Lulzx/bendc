@@ -14,10 +14,39 @@
 #define BEND_NATIVE_MAP_BIT 1
 #define BEND_NATIVE_STR 1
 #define BEND_NATIVE_MAP 1
+#include <stddef.h>
 #include "bendrt_split.h"
 
 V *bn_alloc(V words) { return halloc((size_t)words); }
 V *bn_alloc_hole(V words) { return halloc_hole((size_t)words); }
+
+// The allocation fast path
+// ------------------------
+//
+// For the common sizes (2 to 6 words) native code allocates without a call
+// while the thread's cache for the size has a slot, as gc_alloc_x does
+// (N.fast in bendc.bend). What it relies on:
+//
+// - The word at sp & ~(BEND_STK - 1) is the thread's Thr (see thr_stack),
+//   and the cache of w words is &thr->cache[0][w - 2], at (w - 2) * 64.
+// - In a cache: bump at 0, end at 8, abits at 16 (the block's allocation
+//   bits), idx at 24 and j at 28 (uint32_t), bits at 32, objs at 40.
+// - If bump < end, the slot at bump is free (its index is idx): native code
+//   sets bump to bump + 8w and idx to idx + 1. Else if bits is not 0, the
+//   slot of index 64j + t (t its lowest set bit) is, at objs + 8w(64j + t):
+//   native code clears bit t of bits. Either way it then sets the slot's bit
+//   in abits and clears the slot's first two words. Else it calls bn_allocN,
+//   which refills the cache.
+//
+// A collection that stops the thread in between sees what it sees in the C
+// fast path: a slot whose bit is set later is not marked.
+_Static_assert(BEND_STK == (uintptr_t)1 << 32, "native code masks sp with 0xffffffff00000000");
+_Static_assert(sizeof(GcCache) == 64, "native code indexes caches by 64 bytes");
+_Static_assert(offsetof(Thr, cache) == 0, "native code reads the caches at the Thr");
+_Static_assert(offsetof(GcCache, bump) == 0 && offsetof(GcCache, end) == 8, "bump, end");
+_Static_assert(offsetof(GcCache, abits) == 16 && offsetof(GcCache, idx) == 24, "abits, idx");
+_Static_assert(offsetof(GcCache, j) == 28 && offsetof(GcCache, bits) == 32, "j, bits");
+_Static_assert(offsetof(GcCache, objs) == 40, "objs");
 
 // The common sizes, each with its size class known here, as the C
 // backend's CN2, CN3, ... know theirs.
