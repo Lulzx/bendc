@@ -15,6 +15,13 @@ ifeq ($(origin CC),default)
 CC = clang
 endif
 CFLAGS    ?= -O2 -w
+# clang's machine outliner, on at -O2 on arm64 Macs, costs the runtime's hot
+# paths a call each (see cc_cmd in rt/cc.c, which leaves it off for programs)
+ifeq ($(shell uname -sm),Darwin arm64)
+ifneq ($(filter clang cc,$(notdir $(CC))),)
+NOOUTLINE = -mno-outline
+endif
+endif
 BEND_BASE ?= $(HOME)/.bend/bend2/base.bend
 TCC       ?= tcc
 export CC BEND_BASE
@@ -29,7 +36,7 @@ build/bendc: seed/bendc.c rt/bendrt.h
 # does that, and builds it too when it is missing).
 build/bendrt.o: rt/bendrt_impl.c rt/bendrt_split.h
 	@mkdir -p build
-	$(CC) $(CFLAGS) -I rt -c rt/bendrt_impl.c -o $@
+	$(CC) $(CFLAGS) $(NOOUTLINE) -I rt -c rt/bendrt_impl.c -o $@
 
 # rt/bendrt_split.h and rt/bendrt_impl.c come from rt/bendrt.h.
 rt/bendrt_split.h rt/bendrt_impl.c: rt/bendrt.h tools/rtsplit.py

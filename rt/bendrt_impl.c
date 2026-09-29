@@ -129,7 +129,6 @@ int gc_minor;       // this collection keeps the marks of old objects
 int gc_rooting;     // marking from roots (not from objects)
 int gc_all_major;   // BEND_GC_MAJOR: every collection is a major one
 size_t gc_count;
-size_t gc_epoch;    // collections so far, bumped while the other threads are stopped
 int gc_stats;
 Thr *gc_thrs[GC_MAXTHR];
 int gc_nthr;
@@ -194,7 +193,7 @@ void gc_init(void) {
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
-  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0};
+  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0, gc_dirty};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -247,16 +246,28 @@ GcBlk *gc_new_small(int atomic, unsigned c) {
   __atomic_store_n(&gc_kind[at], 1, __ATOMIC_RELEASE);
   return b;
 }
+V *gc_bump_word(GcCache *k, uint32_t jw, size_t sw) {
+  uint32_t lo = jw * 64, n = k->blk->nobj - lo < 64 ? k->blk->nobj - lo : 64;
+  k->idx = lo + n < k->blk->nobj ? jw + 1 : 0;
+  gc_window(k, jw, n == 64 ? ~0ull : (1ull << n) - 1);
+  V *p = k->objs + (size_t)lo * sw;
+  p[0] = BEND_HOLE;
+  BEND_BARRIER();
+  k->end = p + n * sw;
+  k->bump = p + sw;
+  return p;
+}
 __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   size_t sw = gc_cls_w[c];
+  if (k->blk && k->idx) return gc_bump_word(k, k->idx, sw);
   if (k->blk && (k->bits = gc_next_bits(k))) {
+    gc_window(k, k->j, k->bits);
     int t = __builtin_ctzll(k->bits);
     k->bits &= k->bits - 1;
     uint32_t i = k->j * 64 + (uint32_t)t;
     V *p = k->objs + (size_t)i * sw;
     p[0] = BEND_HOLE;
     BEND_BARRIER();
-    gc_setbit(&k->abits[i >> 6], 1ull << (i & 63));
     if (!k->reuse)
       atomic_fetch_add_explicit(&gc_since, ((size_t)__builtin_popcountll(k->bits) + 1) * sw * sizeof(V),
         memory_order_relaxed);
@@ -272,6 +283,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
     if (q->nobj - used >= q->nobj / 5) {
       k->bump = k->end = NULL;
       k->j = (uint32_t)-1;
+      k->idx = 0;
       k->bits = 0;
       return gc_refill(k, atomic, c);
     }
@@ -336,26 +348,22 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   }
   k->blk = b;
   k->abits = GC_ALLOC(b);
-  // A slot's allocation bit is set when the slot is handed out, never
-  // before: a stale pointer must not mark a slot that is still free.
+  // (A slot's allocation bit is set when the slot goes to the cache: see
+  // GcCache for a stale pointer that marks it before it is handed out.)
   V *objs = gc_objs(b);
   k->objs = objs;
   k->nj = (b->nobj + 63) >> 6;
   if (fresh) {
-    // A fresh block is handed out by bumping a pointer.
+    // A fresh block is handed out by bumping a pointer, a word of its
+    // bitmap at a time.
     atomic_fetch_add_explicit(&gc_since, (size_t)b->nobj * sw * sizeof(V), memory_order_relaxed);
     k->bits = 0;
     k->j = k->nj;
-    k->bump = objs + sw;
-    k->end = objs + (size_t)b->nobj * sw;
-    k->idx = 1;
-    objs[0] = BEND_HOLE;
-    BEND_BARRIER();
-    GC_ALLOC(b)[0] |= 1;
-    return objs;
+    return gc_bump_word(k, 0, sw);
   }
   k->bump = k->end = NULL;
   k->j = (uint32_t)-1;
+  k->idx = 0;
   k->bits = 0;
   return gc_refill(k, atomic, c);
 }
@@ -411,11 +419,25 @@ __attribute__((noinline)) void bend_share_slow(V v) {
     __atomic_fetch_or(&p[0], BEND_SH, __ATOMIC_RELAXED);
   }
 }
+uintptr_t bend_arena_lo, bend_arena_n;
+__attribute__((noinline)) void bend_share_arena(V v) {
+  if ((v & 7) || (uintptr_t)v - bend_arena_lo >= bend_arena_n) return;
+  V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  if (!(w0 & BEND_SH) && w0 < ((V)1 << 22)) __atomic_fetch_or((V *)v, BEND_SH, __ATOMIC_RELAXED);
+}
 __attribute__((noinline)) void bend_deep(V v, unsigned w) {
   V *p = (V *)v;
-  for (unsigned j = 1; j < w; j++) bend_share(p[j]);
+  for (unsigned j = 1; j < w; j++) {
+    if (UNLIKELY((uintptr_t)p[j] - bend_arena_lo < bend_arena_n)) bend_share_arena(p[j]);
+    else bend_share(p[j]);
+  }
   __atomic_fetch_or(&p[0], BEND_SH | BEND_DEEP, __ATOMIC_RELEASE);
 }
+#if defined(BEND_DEBUG_POISON) || defined(BEND_DEBUG_FREE)
+#define BEND_IN_HEAP(v) do { if ((uintptr_t)(v) - gc_hot.base >= gc_hot.span) bend_fail("a match took an unshared node outside the heap"); } while (0)
+#else
+#define BEND_IN_HEAP(v) ((void)0)
+#endif
 #ifdef BEND_DEBUG_FREE
 #define bend_take(v, w) bend_take_at(v, w, __LINE__)
 #else
@@ -527,6 +549,14 @@ size_t rc_live(void) {
   for (uintptr_t bi = 0; bi < gc_top; bi++)
     if (gc_kind[bi] == 1 || gc_kind[bi] == 2)
       for (int j = 0; j < 64; j++) n += (size_t)__builtin_popcountll(gc_abits[bi * 64 + j]);
+  // (less the slots the caches hold, not handed out: see GcCache)
+  for (int i = 0; i < gc_nthr; i++)
+    for (int a = 0; a < 2; a++)
+      for (int c = 0; c < GC_NCLS; c++) {
+        GcCache *k = &gc_thrs[i]->cache[a][c];
+        if (k->bump < k->end) n -= (size_t)(k->end - k->bump) / gc_cls_w[c];
+        n -= (size_t)__builtin_popcountll(k->bits);
+      }
   return n;
 }
 void gc_root_add_locked(V *p, size_t n) {
@@ -553,9 +583,24 @@ void gc_scan(const void *lo, const void *hi) {
   uintptr_t a = ((uintptr_t)lo + 7) & ~(uintptr_t)7;
   for (const V *p = (const V *)a; (const void *)p < hi; p++) gc_mark(*p);
 }
+#define GC_PF 8
+#ifdef __TINYC__
+#else
+#endif
 void gc_drain(void) {
-  while (gc_sp > 0) {
-    GcItem it = gc_stk[--gc_sp];
+  GcItem q[GC_PF];
+  unsigned h = 0, n = 0;
+  for (;;) {
+    if (gc_sp > 0 && n < GC_PF) {
+      GcItem it = gc_stk[--gc_sp];
+      gc_fetch(it);
+      q[(h + n++) % GC_PF] = it;
+      continue;
+    }
+    if (n == 0) return;
+    GcItem it = q[h];
+    h = (h + 1) % GC_PF;
+    n--;
     for (size_t j = 0; j < it.n; j++) gc_mark(it.p[j]);
   }
 }
@@ -601,13 +646,24 @@ void gc_help(GcMk *m) {
     m->sp = n;
     gc_active++;
     gc_pool_release();
-    while (m->sp > 0) {
-      GcItem it = m->stk[--m->sp];
-      // (a long object is marked a piece at a time: the rest can be shared)
-      if (it.n > 4 * GC_CHUNK) {
-        m->stk[m->sp++] = (GcItem){it.p + 2 * GC_CHUNK, it.n - 2 * GC_CHUNK};
-        it.n = 2 * GC_CHUNK;
+    // (a ring of objects fetched ahead, as in gc_drain)
+    GcItem q[GC_PF];
+    unsigned h = 0, nq = 0;
+    while (m->sp > 0 || nq > 0) {
+      if (m->sp > 0 && nq < GC_PF) {
+        GcItem it = m->stk[--m->sp];
+        // (a long object is marked a piece at a time: the rest can be shared)
+        if (it.n > 4 * GC_CHUNK) {
+          m->stk[m->sp++] = (GcItem){it.p + 2 * GC_CHUNK, it.n - 2 * GC_CHUNK};
+          it.n = 2 * GC_CHUNK;
+        }
+        gc_fetch(it);
+        q[(h + nq++) % GC_PF] = it;
+        continue;
       }
+      GcItem it = q[h];
+      h = (h + 1) % GC_PF;
+      nq--;
       for (size_t j = 0; j < it.n; j++) gc_mark_par(it.p[j], m);
       if (m->sp > GC_CHUNK && __atomic_load_n(&gc_sp, __ATOMIC_RELAXED) == 0) gc_share(m);
     }
@@ -659,6 +715,14 @@ void gc_handler(int sig) {
     else gc_park(t);
   }
   errno = saved;
+}
+void gc_dirty_caches(void) {
+  for (int i = 0; i < gc_nthr; i++)
+    for (int a = 0; a < 2; a++)
+      for (int c = 0; c < GC_NCLS; c++) {
+        GcBlk *b = gc_thrs[i]->cache[a][c].blk;
+        if (b) gc_dirty[gc_bi(b)] = 1;
+      }
 }
 void gc_sweep(void) {
   memset(gc_partial, 0, sizeof gc_partial);
@@ -738,10 +802,21 @@ void gc_rescan_dirty(void) {
         gc_stk[gc_sp++] = (GcItem){gc_objs(b), b->words};
       }
     } else if (gc_kind[bi] == 1 && !b->atomic) {
-      for (uint32_t i = 0; i < b->nobj; i++) {
-        if (!(al[i >> 6] & mk[i >> 6] & (1ull << (i & 63)))) continue;
-        if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
-        gc_stk[gc_sp++] = (GcItem){gc_objs(b) + (size_t)i * b->words, b->words};
+      // One item per run of old objects side by side (scanned as one range
+      // of words): most blocks are dirty when reuse tokens are, and an item
+      // per object would touch a mark stack as big as the old objects.
+      uint32_t nw = (b->nobj + 63) >> 6;
+      for (uint32_t j = 0; j < nw; j++) {
+        uint64_t m = al[j] & mk[j];
+        if (j == (b->nobj >> 6)) m &= (1ull << (b->nobj & 63)) - 1;
+        while (m) {
+          unsigned lo = (unsigned)__builtin_ctzll(m);
+          uint64_t r = m >> lo;
+          unsigned len = ~r ? (unsigned)__builtin_ctzll(~r) : 64 - lo;
+          if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
+          gc_stk[gc_sp++] = (GcItem){gc_objs(b) + (size_t)(j * 64 + lo) * b->words, (size_t)len * b->words};
+          m = lo + len >= 64 ? 0 : m & ~(((1ull << len) - 1) << lo);
+        }
       }
     }
   }
@@ -765,7 +840,6 @@ __attribute__((noinline)) void gc_collect_locked(void) {
     }
   }
   while (atomic_load(&gc_acks) < n) sched_yield();
-  __atomic_store_n(&gc_epoch, gc_epoch + 1, __ATOMIC_RELAXED);
   jmp_buf jb;
   setjmp(jb);
   me->sp = (uintptr_t)&jb;
@@ -805,6 +879,7 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   gc_drain_par(n);
   if (gc_stats) clock_gettime(CLOCK_MONOTONIC, &ts);
   gc_sweep();
+  gc_dirty_caches();
   atomic_store(&gc_stopping, 0);
   while (atomic_load(&gc_inside) > 0) sched_yield();
   if (!gc_minor) gc_major_live = gc_live_bytes ? gc_live_bytes : 1;
@@ -893,7 +968,7 @@ void thr_register(uintptr_t top) {
   pthread_mutex_unlock(&gc_lock);
 }
 #define RUF(u, w) do { if (u) rc_free_at(u, w); } while (0)
-#define RUG(tok, w) ((tok) ? (UNLIKELY(__atomic_load_n(&gc_epoch, __ATOMIC_RELAXED)) ? bend_ru_young(tok, w) : (V *)(tok)) : halloc(w))
+#define RUG(tok, w) ((tok) ? bend_ru_dirty(tok) : halloc(w))
 #define RUFG(u, w) do { if (u) bend_free_slot((u), (w), 0); } while (0)
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))

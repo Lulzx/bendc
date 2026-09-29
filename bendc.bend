@@ -23061,14 +23061,11 @@ def N.fast.at(+w: U32, s: String, +l: String) -> As.Code:
   +k = (64 * (w - 2 : U32) : U32)
   N.cat([N.ws([As.addi(16, 31, 0), As.andhi(16, 16), As.ldr(16, 16, 0), As.ldpo(0, 17, 16, k), As.cmp(0, 17)]),
     N.one(As.IBc{As.bc(As.hs()), l ++ ".b"}),
-    N.ws([As.addi(17, 0, (8 * w : U32)), As.str(17, 16, k), As.ldrw(9, 16, (k + 24 : U32)), As.addwi(10, 9, 1),
-      As.strw(10, 16, (k + 24 : U32)), As.ldr(10, 16, (k + 16 : U32)), As.lsri(11, 9, 6), As.ldrx(12, 10, 11),
-      As.movz(13, 1, 0), As.lslv(13, 13, 9), As.orr(12, 12, 13), As.strx(12, 10, 11), As.stpo(31, 31, 0, 0)]),
+    N.ws([As.addi(17, 0, (8 * w : U32)), As.str(17, 16, k), As.stpo(31, 31, 0, 0)]),
     N.one(As.IB{As.b(), l ++ ".d"}), N.one(As.ILab{l ++ ".b"}), N.w(As.ldr(9, 16, (k + 32 : U32))),
     N.one(As.IBc{As.cbz(9), l ++ ".s"}),
     N.ws([As.rbit(10, 9), As.clz(10, 10), As.subi(11, 9, 1), As.and(11, 11, 9), As.str(11, 16, (k + 32 : U32)),
-      As.ldrw(12, 16, (k + 28 : U32)), As.ldr(13, 16, (k + 16 : U32)), As.ldrx(11, 13, 12), As.movz(17, 1, 0),
-      As.lslv(17, 17, 10), As.orr(11, 11, 17), As.strx(11, 13, 12), As.add6(10, 10, 12), As.movz(11, (8 * w : U32), 0),
+      As.ldrw(12, 16, (k + 28 : U32)), As.add6(10, 10, 12), As.movz(11, (8 * w : U32), 0),
       As.ldr(12, 16, (k + 40 : U32)), As.madd(0, 10, 11, 12), As.stpo(31, 31, 0, 0)]),
     N.one(As.IB{As.b(), l ++ ".d"}), N.one(As.ILab{l ++ ".s"}), N.one(As.ICall{As.bl(), s}),
     N.one(As.ILab{l ++ ".d"})])

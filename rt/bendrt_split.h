@@ -227,6 +227,8 @@ typedef struct GcBlk {
 // allocation and mark bits (gc_abits, gc_mbits: 64 words a block), and:
 typedef struct GcMeta {
   uint32_t recip;    // 2^32 / slot bytes, rounded up: a slot's index by multiplying
+                     // (exact for any byte of a block: the rounding adds less than
+                     // 2^16 / 2^32 of a slot, and a slot is under 2^16 bytes)
   uint8_t large, cls;
   uint16_t words;    // slot size in words (small blocks; 0 for a large object)
 } GcMeta;
@@ -235,13 +237,20 @@ _Static_assert(sizeof(GcBlk) <= GC_HDR, "GC_HDR holds a block header");
 // A thread's allocation cache for one size class: a fresh block is handed out
 // by bumping; a partly free one by the free bits of its bitmap, a word at a
 // time (the slots are not touched until they are handed out).
-// The first seven fields are read and written by native code too (its
+// The cache holds up to 64 slots at a time, a word of the allocation bitmap:
+// the slots from bump to end, or the free bits of word j. Their allocation
+// bits are set when the cache takes them (gc_window), so handing one out is
+// a bump or a bit taken (no bitmap write). A collection can then mark one it
+// has not handed out yet (from a stale pointer), which would make the object
+// later built there old; so every block a cache holds is dirty for the next
+// collection (gc_dirty_caches), which rescans its old objects.
+// bump, end, j, bits and objs are read and written by native code too (its
 // allocation fast path; see rt/native.c): their offsets and the struct's
 // size are fixed there.
 typedef struct GcCache {
   V *bump; V *end;
   uint64_t *abits;  // GC_ALLOC(blk)
-  uint32_t idx;     // the slot bump points at
+  uint32_t idx;     // bumping: the next word of the block to bump through (0: none)
   uint32_t j;
   uint64_t bits;    // free slots of word j
   V *objs;
@@ -326,7 +335,6 @@ extern int gc_minor;
 extern int gc_rooting;
 extern int gc_all_major;
 extern size_t gc_count;
-extern size_t gc_epoch;
 extern int gc_stats;
 extern Thr *gc_thrs[GC_MAXTHR];
 extern int gc_nthr;
@@ -358,6 +366,7 @@ typedef struct GcHot {
   int mt;
   int rc;  // reference counting (a program compiled with BEND_RC=1): no collections
   int rcmt; // rc and mt: a slot's allocation bit is set atomically
+  uint8_t *dirty;  // gc_dirty
 } GcHot;
 extern GcHot gc_hot;
 extern GcRange *gc_roots;
@@ -401,7 +410,8 @@ extern __thread Thr *thr_self;
 typedef struct { V *p; size_t n; } GcItem;
 extern GcItem *gc_stk;
 // Per block: an Array in it got a pointer stored since the last collection
-// (see arr_put), so a minor one rescans the block's old objects.
+// (see arr_put), or a node was built in a reuse token (bend_ru_dirty), so a
+// minor one rescans the block's old objects.
 extern uint8_t *gc_dirty;
 extern size_t gc_sp;
 extern size_t gc_cap;
@@ -424,14 +434,6 @@ void gc_collect_locked(void);
 
 GcBlk *gc_new_small(int atomic, unsigned c);
 
-// Sets a slot's allocation bit. Under reference counting other threads free
-// slots of the block as it is handed out, so with threads running the bit
-// is set in one instruction (a plain one could lose their frees).
-static inline void gc_setbit(uint64_t *w, uint64_t bit) {
-  if (UNLIKELY(gc_hot.rcmt)) __atomic_fetch_or(w, bit, __ATOMIC_RELAXED);
-  else *w |= bit;
-}
-
 // The next word of free bits in the cache's block; 0 when none is left.
 // The free slots' marks go here too: a slot handed out is young (bend_take_at
 // leaves a freed slot's mark when other threads run), or a minor collection
@@ -453,7 +455,22 @@ static inline uint64_t gc_next_bits(GcCache *k) {
   return 0;
 }
 
-// Slow path: the rest of the block's free words, or another block.
+// The slots of word jw of the cache's block, bits f, go to the cache: their
+// allocation bits are set now (see GcCache). When other threads run, they
+// may clear other bits of the word (frees): the bits are set in one
+// instruction then.
+static inline void gc_window(GcCache *k, uint32_t jw, uint64_t f) {
+  if (UNLIKELY(gc_hot.mt)) __atomic_fetch_or(&k->abits[jw], f, __ATOMIC_RELAXED);
+  else k->abits[jw] |= f;
+  BEND_BARRIER();
+}
+
+// Bumping through a fresh block: the slots of its word jw go to the cache,
+// and the first is handed out.
+V *gc_bump_word(GcCache *k, uint32_t jw, size_t sw);
+
+// Slow path: the next word of a block being bumped through, the rest of the
+// block's free words, or another block.
 __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c);
 
 __attribute__((noinline)) V *gc_alloc_large(size_t w, int atomic);
@@ -467,19 +484,17 @@ static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
   unsigned c = w >= 2 && w <= 16 ? (unsigned)w - 2 : gc_cls_of[w];
   GcCache *k = &thr_self->cache[atomic][c];
   V *p;
+  // (The slot's allocation bit is set: see GcCache.)
   if (k->bump < k->end) {
     p = k->bump;
     k->bump += gc_cls_w[c];
-    uint32_t i = k->idx++;
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
-    gc_setbit(&k->abits[i >> 6], 1ull << (i & 63));
   } else if (k->bits) {
     int t = __builtin_ctzll(k->bits);
     k->bits &= k->bits - 1;
     uint32_t i = k->j * 64 + (uint32_t)t;
     p = k->objs + (size_t)i * gc_cls_w[c];
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
-    gc_setbit(&k->abits[i >> 6], 1ull << (i & 63));
   } else {
     p = gc_refill(k, atomic, c);
   }
@@ -526,6 +541,15 @@ __attribute__((noinline)) void bend_share_slow(V v);
 // Numbers, characters and nullary constructors are below 2^32, and the heap
 // above (gc_init); a node already shared says so in its tag word (reading any
 // heap address is safe; writing needs the checks above).
+// A node in the device's arena (a result the CPU reads in place, see
+// gpu_pinnable) is shared, as matches do not test the heap bounds
+// (bend_take_at): marked so when first reached, from its root (gpu_run) or
+// from a shared node (bend_deep; bend_share, on every value used twice, is
+// not slowed by a test). Nothing else outside the heap is a node (or is
+// even and above 2^32).
+extern uintptr_t bend_arena_lo;
+extern uintptr_t bend_arena_n;
+__attribute__((noinline)) void bend_share_arena(V v);
 static inline void bend_share(V v) {
   // A word first, on its own branch (the heap bounds are then not loaded).
   if (LIKELY(v < ((V)1 << 32))) return;
@@ -544,15 +568,27 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w);
 // its block a reuse candidate for its class (gc_refill takes it when a 5th of
 // it is free). Nodes of up to 16 words are in small blocks whose slots are
 // exactly their size; larger ones are never freed.
+// The tag word is read with acquire, with threads or not (on arm64 a load
+// as cheap as a plain one, where a test of gc_hot.mt was three instructions
+// on each match). A node a match opens under the collector is in the heap:
+// every node is made by halloc (RC_TMP's nodes on the stack are for counted
+// programs, which call rc_take), a constant is made once and shared, and a
+// node in the device's arena is shared (bend_share_arena).
+// So the heap bounds are not tested, but in a debug build (BEND_IN_HEAP).
+#if defined(BEND_DEBUG_POISON) || defined(BEND_DEBUG_FREE)
+#define BEND_IN_HEAP(v) do { if ((uintptr_t)(v) - gc_hot.base >= gc_hot.span) bend_fail("a match took an unshared node outside the heap"); } while (0)
+#else
+#define BEND_IN_HEAP(v) ((void)0)
+#endif
 static inline void bend_free_slot(V v, unsigned w, unsigned line);
 static inline int bend_take_at(V v, unsigned w, unsigned line) {
-  const GcHot *h = &gc_hot;
-  V w0 = h->mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  V w0 = __atomic_load_n((V *)v, __ATOMIC_ACQUIRE);
   if (w0 & BEND_SH) {
     if (!(w0 & BEND_DEEP)) bend_deep(v, w);
     return 1;
   }
-  if (UNLIKELY((uintptr_t)v - h->base >= h->span || w > 16)) { bend_deep(v, w); return 1; }
+  BEND_IN_HEAP(v);
+  if (UNLIKELY(w > 16)) { bend_deep(v, w); return 1; }
   bend_free_slot(v, w, line);
   return 0;
 }
@@ -584,19 +620,18 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   (void)line;
   BEND_POISON_AT(v, w);
   uint64_t *cw = &h->cand[(size_t)(w - 2) * GC_CANDW + (bi >> 6)];
-  // A freed slot is young when it is handed out again. On one thread its
-  // mark goes here; when other threads run, the thread that hands the slot
-  // out clears it (gc_next_bits): cleared here, after the allocation bit, it
-  // could be the mark of the object another thread made in the slot since
-  // and a collection marked old, which the next minor collection would then
-  // not trace from (tests/par_reuse.bend).
+  // A freed slot is young when it is handed out again: the thread that
+  // hands it out clears its mark (gc_next_bits). Cleared here, after the
+  // allocation bit, it could be the mark of the object another thread made
+  // in the slot since and a collection marked old, which the next minor
+  // collection would then not trace from (tests/par_reuse.bend); and on one
+  // thread it would be a second write for nothing.
   // With threads the bit is cleared with release: the match's reads of the
   // node's fields, just before, must be done before another thread can take
   // the slot and write it. Relaxed, a weakly ordered CPU (arm64) could
   // finish those reads late and get the fields of that thread's new node:
   // this thread then owned nodes the other one still used, and freed or
   // rebuilt them under it (tests/par_free.bend).
-  uint64_t *mw = &gc_mbits[bi * 64 + (i >> 6)];
   if (UNLIKELY(h->mt)) {
     __atomic_fetch_and(aw, ~bit, __ATOMIC_RELEASE);
     // (a sample of the frees keeps the shared candidate words cool)
@@ -604,7 +639,6 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
       __atomic_fetch_or(cw, 1ull << (bi & 63), __ATOMIC_RELAXED);
   } else {
     *aw &= ~bit;
-    *mw &= ~bit;
     *cw |= 1ull << (bi & 63);
   }
 }
@@ -927,7 +961,7 @@ static inline void gc_mark(V w) {
   if (b->large) {
     if (a >= o + (uintptr_t)b->words * sizeof(V)) return;
   } else {
-    i = (a - o) / ((uintptr_t)b->words * sizeof(V));
+    i = (size_t)(((uint64_t)(a - o) * gc_meta[bi].recip) >> 32);  // (exact: see GcMeta)
     if (i >= b->nobj) return;
   }
   uint64_t bit = 1ull << (i & 63);
@@ -949,6 +983,20 @@ static inline void gc_mark(V w) {
 }
 
 void gc_scan(const void *lo, const void *hi);
+
+// An object is scanned some pops after it leaves the mark stack: it is
+// fetched (prefetched) when it leaves, and waits in a ring of GC_PF, so
+// the scan of the objects before it hides the fetch (the marked heap is
+// mostly out of the caches, and scanning is mostly waiting for memory).
+#define GC_PF 8
+#ifdef __TINYC__
+static inline void gc_fetch(GcItem it) { (void)it; }  // tcc has no prefetch
+#else
+static inline void gc_fetch(GcItem it) {
+  __builtin_prefetch(it.p);
+  if (it.n > 8) __builtin_prefetch(it.p + 8);
+}
+#endif
 
 void gc_drain(void);
 
@@ -1010,7 +1058,7 @@ static inline void gc_mark_par(V w, GcMk *m) {
   if (b->large) {
     if (a >= o + (uintptr_t)b->words * sizeof(V)) return;
   } else {
-    i = (a - o) / ((uintptr_t)b->words * sizeof(V));
+    i = (size_t)(((uint64_t)(a - o) * gc_meta[bi].recip) >> 32);  // (exact: see GcMeta)
     if (i >= b->nobj) return;
   }
   uint64_t bit = 1ull << (i & 63);
@@ -1035,6 +1083,13 @@ void gc_drain_par(int n);
 __attribute__((noinline)) void gc_park(Thr *t);
 
 void gc_handler(int sig);
+
+// Every block a thread's cache holds is dirty for the next collection: the
+// slots the cache has not handed out yet have their allocation bits, and one
+// a stale pointer marked would be old when an object is built there (see
+// GcCache). (A thread stopped in gc_refill has taken none of a new block's
+// slots before it records the block.)
+void gc_dirty_caches(void);
 
 void gc_sweep(void);
 
@@ -1141,23 +1196,26 @@ static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
 // Reuse under the collector (matches free, not counted): bend_take_ru is
 // bend_take, but a node that was not shared keeps its slot, answered as the
 // token (0 when it was shared), where a constructor gets built (CG1 and the
-// like). The build makes the slot young first: its mark is cleared, as a
-// slot handed out again has it cleared (a collection marked the node, or
-// marked it between the match and the build, reached from the stack), so
-// minor collections trace from it. Only this thread holds the slot, so
-// clearing its mark races with no one. Before the first collection no mark
-// is set (gc_epoch is 0), and the build skips it. (A collection that stops
-// this thread between that check and the build's stores marks the values
-// stored too: they are in its registers.)
+// like). The slot may be old (a collection marked the node, or marked it
+// between the match and the build, reached from the stack), and a minor
+// collection does not trace from an old object, so the build marks the
+// slot's block dirty first, as an Array store does (arr_dirty): the next
+// minor collection rescans the block's old objects (gc_rescan_dirty). That
+// is one byte to test, where making the slot young (clearing its mark) was
+// the slot's index and a word of the mark bitmap to write, on every build.
+// (A collection that stops this thread between the mark and the build's
+// stores rescans the block, and marks the values stored too: they are in
+// its registers. It keeps a reused old slot until a major collection, as
+// it does an old Array.)
 // RUFG frees a token no constructor took.
 static inline V bend_take_ru(V v, unsigned w) {
-  const GcHot *h = &gc_hot;
-  V w0 = h->mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  V w0 = __atomic_load_n((V *)v, __ATOMIC_ACQUIRE);
   if (w0 & BEND_SH) {
     if (!(w0 & BEND_DEEP)) bend_deep(v, w);
     return 0;
   }
-  if (UNLIKELY((uintptr_t)v - h->base >= h->span || w > 16)) { bend_deep(v, w); return 0; }
+  BEND_IN_HEAP(v);
+  if (UNLIKELY(w > 16)) { bend_deep(v, w); return 0; }
 #ifdef BEND_DEBUG_FREE
   bend_take(v, w);
   return 0;
@@ -1165,20 +1223,14 @@ static inline V bend_take_ru(V v, unsigned w) {
   BEND_POISON_AT(v, w);
   return v;
 }
-static inline V *bend_ru_young(V u, unsigned w) {
-  uintptr_t off = (uintptr_t)u - gc_hot.base;
-  uintptr_t bi = off >> GC_BLK_SHIFT;
-  uint32_t i = (uint32_t)(((off & (GC_BLK - 1)) - GC_HDR) / (w * sizeof(V)));
-  uint64_t bit = 1ull << (i & 63);
-  uint64_t *mw = &gc_mbits[bi * 64 + (i >> 6)];
-  if (UNLIKELY(gc_hot.mt)) {
-    if (__atomic_load_n(mw, __ATOMIC_RELAXED) & bit) __atomic_fetch_and(mw, ~bit, __ATOMIC_RELAXED);
-  } else {
-    *mw &= ~bit;
-  }
+static inline V *bend_ru_dirty(V u) {
+  const GcHot *h = &gc_hot;
+  uint8_t *d = &h->dirty[((uintptr_t)u - h->base) >> GC_BLK_SHIFT];
+  if (!__atomic_load_n(d, __ATOMIC_RELAXED)) __atomic_store_n(d, 1, __ATOMIC_RELAXED);
+  BEND_BARRIER();
   return (V *)u;
 }
-#define RUG(tok, w) ((tok) ? (UNLIKELY(__atomic_load_n(&gc_epoch, __ATOMIC_RELAXED)) ? bend_ru_young(tok, w) : (V *)(tok)) : halloc(w))
+#define RUG(tok, w) ((tok) ? bend_ru_dirty(tok) : halloc(w))
 static inline V CG1(V u, V t, V a) { V *p = RUG(u, 2); p[0] = t; p[1] = a; return (V)p; }
 static inline V CG2(V u, V t, V a, V b) { V *p = RUG(u, 3); p[0] = t; p[1] = a; p[2] = b; return (V)p; }
 static inline V CG3(V u, V t, V a, V b, V c) {
