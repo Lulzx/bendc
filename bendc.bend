@@ -4970,6 +4970,15 @@ def Gen.scalar.find(m: Maybe<&2, String>) -> Bool:
     case None{}:
       False{}
 
+# What a variable holds, as Gen.scalar.let says: a let's U32 local is
+# "(uN)" (a uint32_t), any other scalar's name is in parentheses.
+def Gen.scalar.u32.find(m: Maybe<&2, String>) -> U32:
+  match m:
+    case Some{+c}:
+      Bool.pick(U32, String.starts_with(c, "(u"), 2, Bool.pick(U32, Gen.scalar.c(c), 1, 0))
+    case None{}:
+      0
+
 # Whether a let's value is a variable holding a scalar.
 def Gen.scalar.var(+env: Env(), v: Core.Expr) -> Bool:
   match v:
@@ -5024,37 +5033,53 @@ def Gen.scalar.bound(m: Maybe<&2, String>) -> Bool:
 # What a let's value is: 2 a U32 (its C local is a uint32_t), 1 another
 # scalar (never shared), 0 anything else. A variable holding a scalar is 1;
 # a call is what its def or native returns; a match, what its cases give
-# (the least of them), a let what its body gives (bound: the names bound on
-# the way, which are none of env's).
-def Gen.scalar.tail(+g: G, +env: Env(), v: Core.Expr, +bound: List<&2, String>) -> U32:
+# (the least of them), a let what its body gives.
+# Names bound inside a let's value: a let's variable stands for what its
+# value is ("(u)" a U32, "(v)" another scalar, "x" anything else), a
+# pattern's for anything.
+def Gen.scalar.hide(xs: List<&2, String>, env: Env()) -> Env():
+  match xs:
+    case Nil{}:
+      env
+    case x <> t:
+      Bind{x, "x"} <> Gen.scalar.hide(t, env)
+
+def Gen.scalar.stand(+k: U32) -> String:
+  Bool.pick(String, U32.is_eq(k, 2), "(u)", Bool.pick(String, U32.is_eq(k, 1), "(v)", "x"))
+
+def Gen.scalar.tail(+g: G, v: Core.Expr, +env: Env()) -> U32:
   match v:
     case Core.EVar{+y}:
-      Bool.pick(U32, Bool.and(Bool.not(Str.has(bound, y)), Gen.scalar.find(Env.find(env, y))), 1, 0)
+      Gen.scalar.u32.find(Env.find(env, y))
     case Core.ENum{n}:
       2
     case Core.ECall{Core.EVar{+f}, args}:
-      Bool.pick(U32, Str.has(bound, f), 0, Gen.scalar.fn(g, f, Gen.scalar.bound(Env.find(env, f))))
+      Gen.scalar.fn(g, f, Gen.scalar.bound(Env.find(env, f)))
     case Core.ELet{p, x, b}:
-      Gen.scalar.tail(g, env, b, Pat.vars(p, bound))
+      match p:
+        case Core.PVar{+y}:
+          Gen.scalar.tail(g, b, Bind{y, Gen.scalar.stand(Gen.scalar.tail(g, x, env))} <> env)
+        case q:
+          Gen.scalar.tail(g, b, Gen.scalar.hide(Pat.vars(q, Nil{}), env))
     case Core.EMatch{scrs, cases}:
       match scrs:
         case a <> t:
-          Gen.scalar.tail(g, env, Core.EMatch{t, cases}, bound)
+          Gen.scalar.tail(g, Core.EMatch{t, cases}, env)
         case Nil{}:
           match cases:
             case Nil{}:
               2
             case c <> t:
-              U32.min(Gen.scalar.tail(g, env, c, bound), Gen.scalar.tail(g, env, Core.EMatch{Nil{}, t}, bound))
+              U32.min(Gen.scalar.tail(g, c, env), Gen.scalar.tail(g, Core.EMatch{Nil{}, t}, env))
     case Core.ECase{ps, b}:
-      Gen.scalar.tail(g, env, b, Pats.vars(ps, bound))
+      Gen.scalar.tail(g, b, Gen.scalar.hide(Pats.vars(ps, Nil{}), env))
     case Core.EAnn{y, t}:
-      Gen.scalar.tail(g, env, y, bound)
+      Gen.scalar.tail(g, y, env)
     case other:
       0
 
 def Gen.scalar.let(+g: G, +env: Env(), v: Core.Expr) -> U32:
-  Gen.scalar.tail(g, env, v, Nil{})
+  Gen.scalar.tail(g, v, env)
 
 def Gen.scalar.cty(+k: U32) -> String:
   Bool.pick(String, U32.is_eq(k, 2), "uint32_t ", "V ")
@@ -7413,13 +7438,15 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         # where f's result goes, dst moves to the hole, and f's code follows.
         case GSStmtCtor{+g, +env, +self, +tgt, +name, +args, +hole}:
           Gen.rec(fu, GSStmtCtorPick{U32.is_zero(hole), g, env, self, tgt, name, args, hole})
-        # A statement-level expression used as a value: ({ V r; ...; r; }).
-        case GSBlock{+g, +env, e}:
+        # A statement-level expression used as a value: ({ V r; ...; r; }),
+        # r a uint32_t when e is a U32 (so C selects and compares a U32 in
+        # 32 bits: editdist's min, 11.1G -> 8.6G cycles).
+        case GSBlock{+g, +env, +e}:
           do Gen<Doc>:
             +k : U32 <- Gen.fresh()
             +r : String <- Gen.pure(String, "r" ++ U32.show(k))
             b : Doc <- Gen.rec(fu, GSStmt{g, env, Self.none(), TSet{r}, e})
-            return Doc.list([DStr{"({ V " ++ r ++ ";\n"}, b, DStr{r ++ "; })"}])
+            return Doc.list([DStr{"({ " ++ Gen.scalar.cty(Gen.scalar.let(g, env, e)) ++ r ++ ";\n"}, b, DStr{r ++ "; })"}])
         case GSExpr{+g, +env, e}:
           match e:
             case Core.EVar{name}:
@@ -7470,7 +7497,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
                 +sk : U32 <- Gen.pure(U32, Gen.scalar.let(g, env, v))
-                +c : String <- Gen.pure(String, Gen.scalar.wrap(U32.is_ne(sk, 0), "v" ++ U32.show(k)))
+                +c : String <- Gen.pure(String, Gen.scalar.wrap(U32.is_ne(sk, 0),
+                  Bool.pick(String, U32.is_eq(sk, 2), "u", "v") ++ U32.show(k)))
                 d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
                 b : Doc <- Gen.rec(fu, GSStmt{g, Bind{x, c} <> env, self, tgt, body})
                 return Doc.list([DStr{Gen.scalar.cty(sk) ++ c ++ " = "}, d, DStr{";\n"}, Gen.own(g, Bind{x, c} <> env, [Bind{x, c}], body), b])
