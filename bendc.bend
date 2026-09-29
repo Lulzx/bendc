@@ -5028,17 +5028,75 @@ def Gen.scalar.bound(m: Maybe<&2, String>) -> Bool:
     case None{}:
       False{}
 
+# The names a block's binders bind, for Gen.u32.res: "+x" for one holding
+# a U32, "-x" for another. 0 when x is not there, 1 a U32, 2 not.
+def Gen.u32.look(sc: List<&2, String>, +x: String) -> U32:
+  match sc:
+    case Nil{}:
+      0
+    case +h <> t:
+      Bool.pick(U32, Str.eq(h, "+" ++ x), 1, Bool.pick(U32, Str.eq(h, "-" ++ x), 2, Gen.u32.look(t, x)))
+
+def Gen.u32.hide(xs: List<&2, String>, sc: List<&2, String>) -> List<&2, String>:
+  match xs:
+    case Nil{}:
+      sc
+    case x <> t:
+      ("-" ++ x) <> Gen.u32.hide(t, sc)
+
+# A let holding a U32 is bound to "(uK)", a uint32_t local.
+def Gen.u32.env(m: Maybe<&2, String>) -> Bool:
+  match m:
+    case Some{c}:
+      String.starts_with(c, "(u")
+    case None{}:
+      False{}
+
+# Whether a let or a match has a U32 value (its ({ .. }) block's local is
+# then a uint32_t). Its results all have one type, so one that is a U32
+# literal, a U32 local or a call returning a U32 is enough; sc is what the
+# binders passed on the way bind.
+def Gen.u32.res(+g: G, +env: Env(), e: Core.Expr, +sc: List<&2, String>) -> Bool:
+  match e:
+    case Core.ENum{n}:
+      True{}
+    case Core.EVar{+y}:
+      +k = Gen.u32.look(sc, y)
+      Bool.pick(Bool, U32.is_zero(k), Gen.u32.env(Env.find(env, y)), U32.is_eq(k, 1))
+    case Core.ECall{Core.EVar{+f}, args}:
+      Bool.and(U32.is_zero(Gen.u32.look(sc, f)), U32.is_eq(Gen.scalar.fn(g, f, Gen.scalar.bound(Env.find(env, f))), 2))
+    case Core.ELet{p, v, b}:
+      match p:
+        case Core.PVar{+x}:
+          Gen.u32.res(g, env, b, (Bool.pick(String, Gen.u32.res(g, env, v, sc), "+", "-") ++ x) <> sc)
+        case other:
+          Gen.u32.res(g, env, b, Gen.u32.hide(Pat.vars(other, Nil{}), sc))
+    case Core.EMatch{scrs, cases}:
+      match cases:
+        case Nil{}:
+          False{}
+        case c <> t:
+          Bool.or(Gen.u32.res(g, env, c, sc), Gen.u32.res(g, env, Core.EMatch{scrs, t}, sc))
+    case Core.ECase{ps, b}:
+      Gen.u32.res(g, env, b, Gen.u32.hide(Pats.vars(ps, Nil{}), sc))
+    case other:
+      False{}
+
 # What a let's value is: 2 a U32 (its C local is a uint32_t), 1 another
 # scalar (never shared), 0 anything else. A variable holding a scalar is 1;
 # a call is what its def or native returns.
 def Gen.scalar.let(+g: G, +env: Env(), v: Core.Expr) -> U32:
   match v:
     case Core.EVar{+y}:
-      Bool.pick(U32, Gen.scalar.find(Env.find(env, y)), 1, 0)
+      Bool.pick(U32, Gen.u32.env(Env.find(env, y)), 2, Bool.pick(U32, Gen.scalar.find(Env.find(env, y)), 1, 0))
     case Core.ENum{n}:
       2
     case Core.ECall{Core.EVar{+f}, args}:
       Gen.scalar.fn(g, f, Gen.scalar.bound(Env.find(env, f)))
+    case Core.ELet{p, x, b}:
+      Bool.pick(U32, Gen.u32.res(g, env, Core.ELet{p, x, b}, Nil{}), 2, 0)
+    case Core.EMatch{scrs, cases}:
+      Bool.pick(U32, Gen.u32.res(g, env, Core.EMatch{scrs, cases}, Nil{}), 2, 0)
     case other:
       0
 
@@ -7352,12 +7410,13 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         case GSStmtCtor{+g, +env, +self, +tgt, +name, +args, +hole}:
           Gen.rec(fu, GSStmtCtorPick{U32.is_zero(hole), g, env, self, tgt, name, args, hole})
         # A statement-level expression used as a value: ({ V r; ...; r; }).
-        case GSBlock{+g, +env, e}:
+        case GSBlock{+g, +env, +e}:
           do Gen<Doc>:
             +k : U32 <- Gen.fresh()
             +r : String <- Gen.pure(String, "r" ++ U32.show(k))
             b : Doc <- Gen.rec(fu, GSStmt{g, env, Self.none(), TSet{r}, e})
-            return Doc.list([DStr{"({ V " ++ r ++ ";\n"}, b, DStr{r ++ "; })"}])
+            return Doc.list([DStr{"({ " ++ Gen.scalar.cty(Bool.pick(U32, Gen.u32.res(g, env, e, Nil{}), 2, 0)) ++
+              r ++ ";\n"}, b, DStr{r ++ "; })"}])
         case GSExpr{+g, +env, e}:
           match e:
             case Core.EVar{name}:
@@ -7408,7 +7467,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
                 +sk : U32 <- Gen.pure(U32, Gen.scalar.let(g, env, v))
-                +c : String <- Gen.pure(String, Gen.scalar.wrap(U32.is_ne(sk, 0), "v" ++ U32.show(k)))
+                +c : String <- Gen.pure(String, Gen.scalar.wrap(U32.is_ne(sk, 0), Bool.pick(String, U32.is_eq(sk, 2), "u", "v") ++ U32.show(k)))
                 d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
                 b : Doc <- Gen.rec(fu, GSStmt{g, Bind{x, c} <> env, self, tgt, body})
                 return Doc.list([DStr{Gen.scalar.cty(sk) ++ c ++ " = "}, d, DStr{";\n"}, Gen.own(g, Bind{x, c} <> env, [Bind{x, c}], body), b])
@@ -17161,6 +17220,10 @@ def Opt.pm(t: Core.Tm, p: Core.Pt, r: OPm) -> OPm:
     case Core.CCtr{+k2, a <> ar} Core.PtCtr{+k, q <> qr}:
       Bool.pick(Unit -> OPm, Opt.pm.same(k, k2), u => Opt.pm(Core.CCtr{k2, ar}, Core.PtCtr{k, qr}, Opt.pm(a, q, r)),
         u => Opt.pm.name(k, k2, PmUnk{}))(Unit{})
+    case Core.CCtr{k2, Nil{}} Core.PtCtr{k, q <> qr}:
+      Opt.pm.name(k, k2, PmUnk{})
+    case Core.CCtr{k2, a <> ar} Core.PtCtr{k, Nil{}}:
+      Opt.pm.name(k, k2, PmUnk{})
     case Core.CLit{l} q:
       Opt.pm.lit(l, q, r)
     case t0 q:
@@ -17396,8 +17459,104 @@ def Opt.mat.scrs(scrs: List<&2, Core.Tm>, +cases: List<&2, Core.Tm>) -> OR:
     case other:
       RKeep{Core.CMat{other, cases}}
 
+# A match on several scrutinees, one a literal or a nullary constructor:
+# that column goes. A case whose pattern there does not match it goes too,
+# and each other case binds what its pattern there binds, a closed term, so
+# no binding captures (a copy for a literal, see Opt.ul, so loses the match
+# on it).
+def Opt.col.closed(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CLit{l}:
+      True{}
+    case Core.CCtr{k, as}:
+      List.is_empty(&2, Core.Tm, as)
+    case Core.CAnn{e, ty}:
+      Opt.col.closed(e)
+    case other:
+      False{}
+
+def Opt.col.has(scrs: List<&2, Core.Tm>) -> Bool:
+  match scrs:
+    case Nil{}:
+      False{}
+    case s <> r:
+      Bool.or(Opt.col.closed(s), Opt.col.has(r))
+
+# The first closed scrutinee, and the scrutinees without it.
+def Opt.col.tm(scrs: List<&2, Core.Tm>) -> Core.Tm:
+  match scrs:
+    case Nil{}:
+      Core.CBox{}
+    case +s <> r:
+      Bool.pick(Unit -> Core.Tm, Opt.col.closed(s), u => s, u => Opt.col.tm(r))(Unit{})
+
+def Opt.col.tms(scrs: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match scrs:
+    case Nil{}:
+      Nil{}
+    case +s <> +r:
+      Bool.pick(Unit -> List<&2, Core.Tm>, Opt.col.closed(s), u => r, u => s <> Opt.col.tms(r))(Unit{})
+
+# A case's pattern at that column, and its patterns without it.
+def Opt.col.pt(+scrs: List<&2, Core.Tm>, ps: List<&2, Core.Pt>) -> Core.Pt:
+  match scrs ps:
+    case s <> r +p <> pr:
+      Bool.pick(Unit -> Core.Pt, Opt.col.closed(s), u => p, u => Opt.col.pt(r, pr))(Unit{})
+    case r pr:
+      Core.PtVar{"_"}
+
+def Opt.col.pts(+scrs: List<&2, Core.Tm>, ps: List<&2, Core.Pt>) -> List<&2, Core.Pt>:
+  match scrs ps:
+    case s <> r +p <> +pr:
+      Bool.pick(Unit -> List<&2, Core.Pt>, Opt.col.closed(s), u => pr, u => p <> Opt.col.pts(r, pr))(Unit{})
+    case r pr:
+      pr
+
+# A case without the column: gone when its pattern there does not match,
+# a %miss when that is not known.
+def Opt.col.case(m: OPm, ps: List<&2, Core.Pt>, b: Core.Tm, rest: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match m:
+    case PmYes{qs, ts}:
+      Core.CCse{ps, Opt.lets(qs, ts, b)} <> rest
+    case PmNo{}:
+      rest
+    case PmUnk{}:
+      Core.CErr{"%miss"} <> rest
+
+def Opt.col.cases(+scrs: List<&2, Core.Tm>, +t: Core.Tm, cases: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match cases:
+    case Nil{}:
+      Nil{}
+    case c <> r:
+      match c:
+        case Core.CCse{+ps, b}:
+          Opt.col.case(Opt.pm(t, Opt.col.pt(scrs, ps), PmYes{Nil{}, Nil{}}), Opt.col.pts(scrs, ps), b, Opt.col.cases(scrs, t, r))
+        case other:
+          Core.CErr{"%miss"} <> Opt.col.cases(scrs, t, r)
+
+# Whether each case is one (none was unknown).
+def Opt.col.ok(cs: List<&2, Core.Tm>) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case c <> r:
+      match c:
+        case Core.CCse{ps, b}:
+          Opt.col.ok(r)
+        case other:
+          False{}
+
+def Opt.col.go(+scrs: List<&2, Core.Tm>, +cases: List<&2, Core.Tm>, +cs: List<&2, Core.Tm>) -> OR:
+  Bool.pick(Unit -> OR, Bool.and(Opt.col.ok(cs), Bool.not(List.is_empty(&2, Core.Tm, cs))),
+    u => RAll{Core.CMat{Opt.col.tms(scrs), cs}}, u => Opt.mat.scrs(scrs, cases))(Unit{})
+
+def Opt.col(+scrs: List<&2, Core.Tm>, +cases: List<&2, Core.Tm>) -> OR:
+  Bool.pick(Unit -> OR, Bool.and(Nat.is_lt(1n, List.length(&2, Core.Tm, scrs)), Opt.col.has(scrs)),
+    u => Opt.col.go(scrs, cases, Opt.col.cases(scrs, Opt.col.tm(scrs), cases)),
+    u => Opt.mat.scrs(scrs, cases))(Unit{})
+
 def Opt.mat.go(+r: OR, +scrs: List<&2, Core.Tm>, +cases: List<&2, Core.Tm>) -> OR:
-  Bool.pick(Unit -> OR, Opt.miss(r), u => Opt.mat.scrs(scrs, cases), u => r)(Unit{})
+  Bool.pick(Unit -> OR, Opt.miss(r), u => Opt.col(scrs, cases), u => r)(Unit{})
 
 def Opt.mat(+scrs: List<&2, Core.Tm>, +cases: List<&2, Core.Tm>) -> OR:
   Opt.mat.go(Opt.known(scrs, cases), scrs, cases)
@@ -17657,6 +17816,20 @@ def Opt.call(+f: String, +as: List<&2, Core.Arg>) -> OR:
   +k = Opt.fold(f, as)
   Bool.pick(Unit -> OR, Opt.nofold(k), u => Opt.push(f, as), u => RTo{k})(Unit{})
 
+# k+ of a Nat literal is a literal, when it fits (a copy for a literal,
+# see Opt.ul, passes its successor on).
+def Opt.suc(+k: U32, e: Core.Tm) -> OR:
+  match e:
+    case Core.CLit{l}:
+      match l:
+        case Core.LNat{+n}:
+          Bool.pick(OR, U32.is_lt(U32.add(n, k), n), RKeep{Core.CSuc{k, Core.CLit{Core.LNat{n}}}},
+            RTo{Core.CLit{Core.LNat{U32.add(n, k)}}})
+        case other:
+          RKeep{Core.CSuc{k, Core.CLit{other}}}
+    case other:
+      RKeep{Core.CSuc{k, other}}
+
 def Opt.rule(t: Core.Tm) -> OR:
   match t:
     case Core.CLet{p, v, b}:
@@ -17667,6 +17840,8 @@ def Opt.rule(t: Core.Tm) -> OR:
       Opt.app(f, as)
     case Core.CCall{f, as}:
       Opt.call(f, as)
+    case Core.CSuc{k, e}:
+      Opt.suc(k, e)
     case other:
       RKeep{other}
 
@@ -18266,6 +18441,7 @@ type ODec is Data:
   DSelf{f: String, i: Nat, name: String}
   DFuCtx{c: Map<&2, Core.Def>}
   DFuSelf{g: String, j: Nat, p: String, n: Nat, name: String}
+  DLit{c: Map<&2, Core.Def>}
 
 def Opt.sp.budget() -> U32:
   400
@@ -18446,6 +18622,147 @@ def Opt.fu.redirect(+name: String, +f: String, +j: Nat, +p: String, +as: List<&2
     case other:
       Core.CCall{f, as}
 
+# Unrolling
+# ---------
+#
+# A call that passes a small Nat literal (spk(22n, 0n, ..)), or a nullary
+# constructor for a parameter its callee's body matches on first
+# (nearest(.., False{})), calls a copy of the callee for it instead (u in
+# BEND_OPT): the copy's body takes the argument in the parameter's place,
+# simplified, so a match on it is gone (see Opt.col), and a self-call it
+# leaves, the literal one less, calls the next copy, made the round after.
+# A loop of a known count so becomes a chain of copies, each with the
+# arguments it reads known, which C inlines into straight code. Copies are
+# shared by name (the callee, the position and the argument), and only
+# bodies within a budget are copied (see Opt.ul.cap).
+def Opt.ul.budget() -> U32:
+  300
+
+def Opt.ul.total() -> U32:
+  1100
+
+def Opt.ul.max() -> U32:
+  64
+
+def Opt.ul.scr(+x: String, scrs: List<&2, Core.Tm>) -> Bool:
+  match scrs:
+    case Nil{}:
+      False{}
+    case s <> r:
+      Bool.or(Opt.is.var(x, Opt.strip(s)), Opt.ul.scr(x, r))
+
+# Whether a body is a match with x among its scrutinees.
+def Opt.ul.top(+x: String, b: Core.Tm) -> Bool:
+  match b:
+    case Core.CMat{scrs, cases}:
+      Opt.ul.scr(x, scrs)
+    case Core.CAnn{e, ty}:
+      Opt.ul.top(x, e)
+    case other:
+      False{}
+
+# Whether t matches on x somewhere (a count only carried along, as an
+# index counted up to a list's end, is not copied for).
+def Opt.ul.in(+x: String, t: Core.Tm) -> Bool:
+  match t:
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          False{}
+        case Core.Arg{r, e} <> t2:
+          Bool.or(Opt.ul.in(x, e), Opt.ul.in(x, Core.CCall{f, t2}))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Opt.ul.in(x, f)
+        case y <> t2:
+          Bool.or(Opt.ul.in(x, y), Opt.ul.in(x, Core.CApp{f, t2}))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          False{}
+        case y <> t2:
+          Bool.or(Opt.ul.in(x, y), Opt.ul.in(x, Core.CCtr{k, t2}))
+    case Core.CLam{p, b}:
+      Opt.ul.in(x, b)
+    case Core.CLet{p, v, b}:
+      Bool.or(Opt.ul.in(x, v), Opt.ul.in(x, b))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case +y <> t2:
+          Bool.or(Bool.or(Opt.is.var(x, Opt.strip(y)), Opt.ul.in(x, y)), Opt.ul.in(x, Core.CMat{t2, cases}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case c <> t2:
+              Bool.or(Opt.ul.in(x, c), Opt.ul.in(x, Core.CMat{Nil{}, t2}))
+    case Core.CCse{ps, b}:
+      Opt.ul.in(x, b)
+    case Core.CSuc{k, e}:
+      Opt.ul.in(x, e)
+    case Core.COp{op, y, b}:
+      Bool.or(Opt.ul.in(x, y), Opt.ul.in(x, b))
+    case Core.CAnn{e, ty}:
+      Opt.ul.in(x, e)
+    case other:
+      False{}
+
+# Whether an argument for x is copied for: a Nat literal of at most
+# Opt.ul.max() that b matches x on somewhere, or a nullary constructor b
+# matches x on first.
+def Opt.ul.arg(+x: String, +b: Core.Tm, a: Core.Tm) -> Bool:
+  match a:
+    case Core.CLit{l}:
+      match l:
+        case Core.LNat{n}:
+          Bool.and(U32.is_le(n, Opt.ul.max()), Opt.ul.in(x, b))
+        case other:
+          False{}
+    case Core.CCtr{k, as}:
+      Bool.and(List.is_empty(&2, Core.Tm, as), Opt.ul.top(x, b))
+    case Core.CAnn{e, ty}:
+      Opt.ul.arg(x, b, e)
+    case other:
+      False{}
+
+# The first position a call passes such an argument at (the arity when
+# none).
+def Opt.ul.pos(ps: List<&2, Core.Par>, as: List<&2, Core.Arg>, +i: Nat, +b: Core.Tm, +n: Nat) -> Nat:
+  match ps as:
+    case Core.Par{+x, rel, m, ty} <> pr Core.Arg{r, +e} <> ar:
+      Bool.pick(Unit -> Nat, Bool.and(Opt.rel.run(rel), Opt.ul.arg(x, b, e)),
+        u => i, u => Opt.ul.pos(pr, ar, 1n+i, b, n))(Unit{})
+    case qs bs:
+      n
+
+# The size of body a copy for an argument may take: the copies for a
+# literal n are n+1 deep, so their total is bounded.
+def Opt.ul.cap(a: Core.Tm) -> U32:
+  match a:
+    case Core.CLit{l}:
+      match l:
+        case Core.LNat{n}:
+          U32.min(Opt.ul.budget(), U32.div(Opt.ul.total(), U32.inc(n)))
+        case other:
+          0
+    case Core.CAnn{e, ty}:
+      Opt.ul.cap(e)
+    case other:
+      Opt.ul.budget()
+
+def Opt.ul.at(+b: Core.Tm, +i: Nat, +f: String, +as: List<&2, Core.Arg>) -> OPk:
+  Bool.pick(Unit -> OPk, Nat.is_eq(i, Inl.args.len(as)), u => PkNo{},
+    u => Bool.pick(Unit -> OPk, Opt.size.le(b, Opt.ul.cap(Opt.nth.arg(i, as))), u2 => Opt.sp.at.pos(i, f, as), u2 => PkNo{})(Unit{}))(Unit{})
+
+def Opt.ul.def(+f: String, +as: List<&2, Core.Arg>, d: Core.Def) -> OPk:
+  match d:
+    case Core.Def{name, +ps, +b, ret}:
+      Bool.pick(Unit -> OPk, Bool.and(Bool.and(Nat.is_eq(Inl.pars.len(ps), Inl.args.len(as)), Bool.not(Nat.is_eq(Inl.args.len(as), 0n))),
+          Bool.and(Bool.not(G.is_native(f)), Bool.not(String.starts_with(f, "IO.")))),
+        u => Opt.ul.at(b, Opt.ul.pos(ps, as, 0n, b, Inl.pars.len(ps)), f, as),
+        u => PkNo{})(Unit{})
+
 def Opt.sp.at(dec: ODec, +f: String, +as: List<&2, Core.Arg>) -> OPk:
   match dec:
     case DCtx{+c}:
@@ -18457,6 +18774,8 @@ def Opt.sp.at(dec: ODec, +f: String, +as: List<&2, Core.Arg>) -> OPk:
     case DFuSelf{+g, +j, +p, +n, name}:
       Bool.pick(Unit -> OPk, String.eq(f, g), u => Bool.pick(OPk, Opt.fu.is.call(p, n, Opt.nth.arg(j, as)), PkFuse{name, j, g, p}, PkNo{}),
         u => PkNo{})(Unit{})
+    case DLit{+c}:
+      Bool.pick(Unit -> OPk, Opt.has(c, f), u => Opt.ul.def(f, as, Opt.get(c, f)), u => PkNo{})(Unit{})
 
 def Opt.sp.redirect(k: OPk, t: Core.Tm) -> Core.Tm:
   match k:
@@ -18722,6 +19041,67 @@ def Opt.sp.rounds(k: Nat, +old: List<&2, OD>, +new: List<&2, OD>) -> List<&2, OD
 def Opt.spec(+flags: String, +ds: List<&2, OD>) -> List<&2, OD>:
   Bool.pick(Unit -> List<&2, OD>, Opt.on(flags, 112), u => Opt.sp.rounds(4n, Nil{}, ds), u => ds)(Unit{})
 
+# The copy for a literal: the body with it in place, walked twice, each
+# walk followed by the proven substitution (the match on the literal binds
+# its predecessor, which the substitution puts in the self-call).
+def Opt.ul.make.def(+name: String, +i: Nat, a: Core.Tm, d: Core.Def) -> OD:
+  match d:
+    case Core.Def{f, +ps, b, ret}:
+      OCore{Opt.rounds(2n, Opt.sub(Core.Def{name, Opt.sp.pars(Opt.drop.par(i, ps)),
+        Opt.go(Fuel.max(), OSub{Opt.nth.par(i, ps), Opt.strip(a), True{}}, b), ret}))}
+
+def Opt.ul.makes(+c: Map<&2, Core.Def>, ss: List<&2, OSp>) -> List<&2, OD>:
+  match ss:
+    case Nil{}:
+      Nil{}
+    case OSp{+name, +f, +i, a} <> r:
+      Opt.ul.make.def(name, i, a, Opt.get(c, f)) <> Opt.ul.makes(c, r)
+
+# Whether a def has calls the round sends to copies.
+def Opt.ul.live(+dec: ODec, d: OD) -> Bool:
+  match d:
+    case OCore{Core.Def{n, ps, b, ret}}:
+      Bool.not(List.is_empty(&2, OSp, Opt.sp.picks(dec, Opt.calls(b, True{}, Nil{}))))
+    case OKeep{k}:
+      False{}
+
+def Opt.ul.is(want: Bool, b: Bool) -> Bool:
+  match want:
+    case True{}:
+      b
+    case False{}:
+      Bool.not(b)
+
+# The defs with such calls (or, with want false, the others).
+def Opt.ul.keep(+dec: ODec, +want: Bool, ds: List<&2, OD>) -> List<&2, OD>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case +d <> +r:
+      Bool.pick(Unit -> List<&2, OD>, Opt.ul.is(want, Opt.ul.live(dec, d)), u => d <> Opt.ul.keep(dec, want, r),
+        u => Opt.ul.keep(dec, want, r))(Unit{})
+
+# Rounds of unrolling (see Opt.sp.rounds): old are the defs done, new
+# those whose calls may go to copies. A def whose calls a round sends to
+# copies is looked at again the round after, with the copies made, as a
+# call to a copy can pass another literal (spk(22n, 0n, ..) goes to spk's
+# copy for 22n, then to that one's copy for 0n); the rounds are enough for
+# two literals at the limit to reach 0n.
+def Opt.ul.rounds(k: Nat, +old: List<&2, OD>, +new: List<&2, OD>) -> List<&2, OD>:
+  match k:
+    case 0n:
+      List.append(&2, OD, old, new)
+    case 1n+j:
+      +c = Opt.defs(new, Opt.defs(old, Map.new(&2, Core.Def)))
+      +live = Opt.ul.keep(DLit{c}, True{}, new)
+      +idle = Opt.ul.keep(DLit{c}, False{}, new)
+      +made = Opt.ul.makes(c, Opt.sp.reqs(Opt.sp.picks(DLit{c}, Opt.bodies.calls(live, Nil{})), Opt.names(new, Opt.names(old, Set.new())), Nil{}))
+      Bool.pick(Unit -> List<&2, OD>, List.is_empty(&2, OD, live), u => List.append(&2, OD, old, idle),
+        u => Opt.ul.rounds(j, List.append(&2, OD, old, idle), List.append(&2, OD, Opt.sp.rws(DLit{c}, live), made)))(Unit{})
+
+def Opt.unroll(+flags: String, +ds: List<&2, OD>) -> List<&2, OD>:
+  Bool.pick(Unit -> List<&2, OD>, Opt.on(flags, 117), u => Opt.ul.rounds(130n, Nil{}, ds), u => ds)(Unit{})
+
 # Fusion
 # ------
 #
@@ -18895,7 +19275,7 @@ def Lo.program(+flags: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
   +g = G.new(ds)
   +ods = Opt.lowers(g, Lo.masks(g, ds, Map.new(&2, List<&2, Bool>)), ds)
   +rank = Opt.rank(ods, 0, Map.new(&2, U32))
-  Opt.raises(Opt.finish(Opt.resub(flags, Opt.fuse(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, False{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), Opt.mon(Opt.ctx(flags, True{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods))))))))
+  Opt.raises(Opt.finish(Opt.resub(flags, Opt.fuse(flags, Opt.unroll(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, False{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), Opt.mon(Opt.ctx(flags, True{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods)))))))))
 
 # Flat results (see Gen.def.unb): "%r:name" in the dps table holds a def's
 # result arity. A def's result is flat when its type has one constructor
@@ -23091,7 +23471,7 @@ def Main.opt(r: Result<&1, &1, U32 & String, String>) -> String:
     case Done{v}:
       v
     case Fail{e}:
-      "i..spf"
+      "i..spuf"
 
 # C for a program: matches free what they open unless BEND_NO_FREE is set
 # (bendc builds itself so: a compiler's heap is mostly shared, short-lived

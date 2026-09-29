@@ -756,12 +756,6 @@ void rc_let_go_arr(V a) {
     rc_drop(a);
   }
 }
-V arr_alloc(unsigned c) {
-  if (c > 31) bend_fail("an array past the deepest block class 31");
-  V *p = halloc(1 + ((size_t)1 << c));
-  p[0] = ARR_HDR(c);
-  return (V)p;
-}
 V arr_copy(unsigned c, const V *src, int share, V ts) {
   size_t n = (size_t)1 << c;
   V a = arr_alloc(c);
@@ -772,20 +766,6 @@ V arr_copy(unsigned c, const V *src, int share, V ts) {
     if (share) { if (gc_hot.rc) rc_dup_in(x, ts); else bend_share(x); }
     d[i] = x;
   }
-  return a;
-}
-V arr_new(V depth, V v) {
-  if (depth > 31) bend_fail("an array past the deepest block class 31");
-  unsigned c = (unsigned)depth;
-  size_t n = (size_t)1 << c;
-  V a = arr_alloc(c);
-  V *d = arr_cells(a);
-  if (c > 0) {
-    if (gc_hot.rc) rc_dupn(v, n - 1);
-    else bend_share(v);
-  }
-  if (v >= ((V)1 << 32)) arr_dirty(a);
-  for (size_t i = 0; i < n; i++) d[i] = v;
   return a;
 }
 V arr_node(V l, V r) {
