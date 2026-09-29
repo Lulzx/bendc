@@ -210,6 +210,75 @@ def Conv.call.r(+f: String, +rel: Core.Rel, +e: Core.Tm, +r: List<&2, Core.Arg>,
                 case (a9, b9):
                   (a9, Conv.call.r(f, rel, e, r, r1, hs, r2, b9))
 
+# A box looks nothing up: any scope's relation holds for it.
+def Conv.box(-U: List<&2, String> -> String -> Bool, e1: List<&2, Core.Val>, +hs: List<&2, String>, e2: List<&2, Core.Val>,
+    h: Law.ERel(e1, U, hs, e2)) -> Law.ERel(e1, Law.Lk(Core.CBox{}), hs, e2):
+  match e1:
+    case Nil{}:
+      match e2:
+        case Nil{}:
+          Unit{}
+        case y <> r2:
+          match h:
+    case x <> r1:
+      match x:
+        case Core.VBnd{+z, +w}:
+          match e2:
+            case Nil{}:
+              match h:
+                case (a9, b9):
+                  (Unit{}, Conv.box(U, r1, hs, Nil{}, b9))
+            case +y <> +r2:
+              match h:
+                case Inl{d9}:
+                  match d9:
+                    case (a9, b9):
+                      Inl{(Unit{}, Conv.box(U, r1, hs, y <> r2, b9))}
+                case Inr{k9}:
+                  match k9:
+                    case (a9, b9):
+                      Inr{(a9, Conv.box(U, r1, z <> hs, r2, b9))}
+        case Core.VLit{l9}:
+          match e2:
+            case Nil{}:
+              match h:
+            case y <> r2:
+              match h:
+                case (a9, b9):
+                  (a9, Conv.box(U, r1, hs, r2, b9))
+        case Core.VCtr{k9, fs9}:
+          match e2:
+            case Nil{}:
+              match h:
+            case y <> r2:
+              match h:
+                case (a9, b9):
+                  (a9, Conv.box(U, r1, hs, r2, b9))
+        case Core.VClo{env9, p9, b9}:
+          match e2:
+            case Nil{}:
+              match h:
+            case y <> r2:
+              match h:
+                case (a9, b9):
+                  (a9, Conv.box(U, r1, hs, r2, b9))
+        case Core.VFun{f9, as9}:
+          match e2:
+            case Nil{}:
+              match h:
+            case y <> r2:
+              match h:
+                case (a9, b9):
+                  (a9, Conv.box(U, r1, hs, r2, b9))
+        case Core.VTrm{t9}:
+          match e2:
+            case Nil{}:
+              match h:
+            case y <> r2:
+              match h:
+                case (a9, b9):
+                  (a9, Conv.box(U, r1, hs, r2, b9))
+
 def Conv.ctr.l(+k: String, +e: Core.Tm, +r: List<&2, Core.Tm>, e1: List<&2, Core.Val>, +hs: List<&2, String>, e2: List<&2, Core.Val>,
     h: Law.ERel(e1, Law.Lk(Core.CCtr{k, e <> r}), hs, e2)) -> Law.ERel(e1, Law.Lk(e), hs, e2):
   match e1:
@@ -1208,12 +1277,29 @@ def Cat(as: List<&2, Core.Val>, as2: List<&2, Core.Val>, +bs: List<&2, Core.Val>
               (a, Cat(r, s, bs, bs2, b, rb))
 
 # A def's parameters bound to related values: related scopes, none missing.
-def Bind(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, vs2: List<&2, Core.Val>, vr: Law.VRels(vs, vs2),
-    -U: List<&2, String> -> String -> Bool, +hs: List<&2, String>)
-    -> Law.ERel(Core.Scope.bind(ps, vs), U, hs, Core.Scope.bind(ps, vs2)):
+# The names a def's parameters bound to vs put in front of hs.
+def Bind.hs(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, hs: List<&2, String>) -> List<&2, String>:
   match ps:
     case Nil{}:
-      Unit{}
+      hs
+    case q <> pr:
+      match q:
+        case Core.Par{x, rel, mode, ty}:
+          match vs:
+            case Nil{}:
+              hs
+            case v <> r:
+              x <> Bind.hs(pr, r, hs)
+
+# A def's parameters bound to related values in front of related scopes:
+# related scopes, none missing (acc's relation past the parameters' names).
+def Bind.push(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, vs2: List<&2, Core.Val>, vr: Law.VRels(vs, vs2),
+    -U: List<&2, String> -> String -> Bool, +hs: List<&2, String>, acc: List<&2, Core.Val>, acc2: List<&2, Core.Val>,
+    ha: Law.ERel(acc, U, Bind.hs(ps, vs, hs), acc2))
+    -> Law.ERel(Core.Scope.push(ps, vs, acc), U, hs, Core.Scope.push(ps, vs2, acc2)):
+  match ps:
+    case Nil{}:
+      ha
     case q <> pr:
       match q:
         case Core.Par{+x, rel, mode, ty}:
@@ -1221,7 +1307,7 @@ def Bind(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, vs2: List<&2, Core.Val>
             case Nil{}:
               match vs2:
                 case Nil{}:
-                  Unit{}
+                  ha
                 case w <> s:
                   match vr:
             case v <> r:
@@ -1231,7 +1317,13 @@ def Bind(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, vs2: List<&2, Core.Val>
                 case w <> s:
                   match vr:
                     case (a, b):
-                      Inr{(({==}, a), Bind(pr, r, s, b, U, x <> hs))}
+                      Bind.push(pr, r, s, b, U, hs, Core.VBnd{x, v} <> acc, Core.VBnd{x, w} <> acc2, Inr{(({==}, a), ha)})
+
+# A def's parameters bound to related values: related scopes, none missing.
+def Bind(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, vs2: List<&2, Core.Val>, vr: Law.VRels(vs, vs2),
+    -U: List<&2, String> -> String -> Bool, +hs: List<&2, String>)
+    -> Law.ERel(Core.Scope.bind(ps, vs), U, hs, Core.Scope.bind(ps, vs2)):
+  Bind.push(ps, vs, vs2, vr, U, hs, Nil{}, Nil{}, Unit{})
 
 def Names.assoc(a: List<&2, String>, +b: List<&2, String>, +c: List<&2, String>)
     -> {Core.Dead.cat(Core.Dead.cat(a, b), c) == Core.Dead.cat(a, Core.Dead.cat(b, c)) : List<&2, String>}:
@@ -2546,8 +2638,8 @@ def L.dead(~prim: String -> List<&2, Core.Val> -> Core.Res,
                           match rel:
                             case (+e2, +f, eq, +h):
                               %eq : Law.RRel(Core.run(~prim, 1n+p, ds, Core.SArgs{e1, Core.Arg{Core.Era{}, e} <> r}), U, Core.run(~prim, 1n+q, Core.Defs.dead(ds), _))
-                              L.dead(~prim, ~ok, p, q, le, ds, Core.SThen{Core.run(~prim, p, ds, Core.SArgs{e1, r}), Core.KCons{Core.VTrm{e}}}, Unit{}, Core.SThen{Core.run(~prim, q, Core.Defs.dead(ds), Core.SArgs{e2, Core.Args.dead(r)}), Core.KCons{Core.VTrm{Core.Tm.dead(e)}}}, U, Inl{(Core.run(~prim, q, Core.Defs.dead(ds), Core.SArgs{e2, Core.Args.dead(r)}), Core.KCons{Core.VTrm{Core.Tm.dead(e)}}, {==}, (Core.VTrm{Core.Tm.dead(e)}, {==}, {==}),
-                                L.dead(~prim, ~ok, p, q, le, ds, Core.SArgs{e1, r}, Unit{}, Core.SArgs{e2, Core.Args.dead(r)}, Law.Lk(Core.CBox{}), (e2, f, {==}, Conv.call.r(f, Core.Era{}, Core.Tm.dead(e), Core.Args.dead(r), e1, Nil{}, e2, h))))})
+                              L.dead(~prim, ~ok, p, q, le, ds, Core.SThen{Core.run(~prim, p, ds, Core.SEval{e1, Core.CBox{}}), Core.KATail{e1, r}}, Unit{}, Core.SThen{Core.run(~prim, q, Core.Defs.dead(ds), Core.SEval{e2, Core.CBox{}}), Core.KATail{e2, Core.Args.dead(r)}}, U, Inl{(Core.run(~prim, q, Core.Defs.dead(ds), Core.SEval{e2, Core.CBox{}}), Core.KATail{e2, Core.Args.dead(r)}, {==}, (e2, f, {==}, Conv.call.r(f, Core.Era{}, Core.Tm.dead(e), Core.Args.dead(r), e1, Nil{}, e2, h)),
+                                L.dead(~prim, ~ok, p, q, le, ds, Core.SEval{e1, Core.CBox{}}, Dec.tm.of(Core.CBox{}), Core.SEval{e2, Core.CBox{}}, Law.Lk(Core.CBox{}), (e2, {==}, Conv.box(Law.Lk(Core.CCall{f, Core.Arg{Core.Era{}, Core.Tm.dead(e)} <> Core.Args.dead(r)}), e1, Nil{}, e2, h))))})
             case Core.SThen{+r1, +k1}:
               match r1:
                 case Core.ROk{+ov1}:

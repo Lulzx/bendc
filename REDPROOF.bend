@@ -451,8 +451,8 @@ def L.drop(n: Nat, vs: List<&2, Core.Val>)
         case v <> r:
           L.drop(m, r)
 
-def L.bind(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>)
-    -> {Core.Vals.red(Core.Scope.bind(ps, vs)) == Core.Scope.bind(ps, Core.Vals.red(vs)) : List<&2, Core.Val>}:
+def L.push(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, acc: List<&2, Core.Val>)
+    -> {Core.Vals.red(Core.Scope.push(ps, vs, acc)) == Core.Scope.push(ps, Core.Vals.red(vs), Core.Vals.red(acc)) : List<&2, Core.Val>}:
   match ps:
     case Nil{}:
       {==}
@@ -463,8 +463,11 @@ def L.bind(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>)
             case Nil{}:
               {==}
             case v <> vr:
-              %L.bind(pr, vr) : {Core.VBnd{x, Core.Val.red(v)} <> Core.Vals.red(Core.Scope.bind(pr, vr)) == Core.VBnd{x, Core.Val.red(v)} <> _ : List<&2, Core.Val>}
-              {==}
+              L.push(pr, vr, Core.VBnd{x, v} <> acc)
+
+def L.bind(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>)
+    -> {Core.Vals.red(Core.Scope.bind(ps, vs)) == Core.Scope.bind(ps, Core.Vals.red(vs)) : List<&2, Core.Val>}:
+  L.push(ps, vs, Nil{})
 
 # Patterns
 # ========
@@ -722,9 +725,9 @@ def L.mono(~prim: String -> List<&2, Core.Val> -> Core.Res,
                             L.mono(~prim, p, q, le, ds, Core.SThen{Core.run(~prim, p, ds, Core.SEval{env, e}), Core.KATail{env, r}}, nf),
                             L.mono(~prim, p, q, le, ds, Core.SEval{env, e}, L.nf(~prim, p, ds, Core.run(~prim, p, ds, Core.SEval{env, e}), Core.KATail{env, r}, nf)))
                         case Core.Era{}:
-                          L.mono.then(~prim, p, q, ds, Core.SArgs{env, r}, Core.KCons{Core.VTrm{e}},
-                            L.mono(~prim, p, q, le, ds, Core.SThen{Core.run(~prim, p, ds, Core.SArgs{env, r}), Core.KCons{Core.VTrm{e}}}, nf),
-                            L.mono(~prim, p, q, le, ds, Core.SArgs{env, r}, L.nf(~prim, p, ds, Core.run(~prim, p, ds, Core.SArgs{env, r}), Core.KCons{Core.VTrm{e}}, nf)))
+                          L.mono.then(~prim, p, q, ds, Core.SEval{env, Core.CBox{}}, Core.KATail{env, r},
+                            L.mono(~prim, p, q, le, ds, Core.SThen{Core.run(~prim, p, ds, Core.SEval{env, Core.CBox{}}), Core.KATail{env, r}}, nf),
+                            L.mono(~prim, p, q, le, ds, Core.SEval{env, Core.CBox{}}, L.nf(~prim, p, ds, Core.run(~prim, p, ds, Core.SEval{env, Core.CBox{}}), Core.KATail{env, r}, nf)))
             case Core.SThen{+r, +k}:
               match r:
                 case Core.RFail{+m}:
@@ -1522,9 +1525,9 @@ def L.red(~prim: String -> List<&2, Core.Val> -> Core.Res,
                             L.red(~prim, ~ok, ~one, p, q, le, ds, Core.SThen{Core.run(~prim, p, ds, Core.SEval{env, e}), Core.KATail{env, r}}, nf),
                             L.red(~prim, ~ok, ~one, p, q, le, ds, Core.SEval{env, e}, L.nf(~prim, p, ds, Core.run(~prim, p, ds, Core.SEval{env, e}), Core.KATail{env, r}, nf)))
                         case Core.Era{}:
-                          L.then(~prim, p, q, ds, Core.SArgs{env, r}, Core.KCons{Core.VTrm{e}},
-                            L.red(~prim, ~ok, ~one, p, q, le, ds, Core.SThen{Core.run(~prim, p, ds, Core.SArgs{env, r}), Core.KCons{Core.VTrm{e}}}, nf),
-                            L.red(~prim, ~ok, ~one, p, q, le, ds, Core.SArgs{env, r}, L.nf(~prim, p, ds, Core.run(~prim, p, ds, Core.SArgs{env, r}), Core.KCons{Core.VTrm{e}}, nf)))
+                          L.then(~prim, p, q, ds, Core.SEval{env, Core.CBox{}}, Core.KATail{env, r},
+                            L.red(~prim, ~ok, ~one, p, q, le, ds, Core.SThen{Core.run(~prim, p, ds, Core.SEval{env, Core.CBox{}}), Core.KATail{env, r}}, nf),
+                            L.red(~prim, ~ok, ~one, p, q, le, ds, Core.SEval{env, Core.CBox{}}, L.nf(~prim, p, ds, Core.run(~prim, p, ds, Core.SEval{env, Core.CBox{}}), Core.KATail{env, r}, nf)))
             case Core.SThen{+r, +k}:
               match r:
                 case Core.RFail{+m}:
