@@ -8986,24 +8986,312 @@ def Par.go(+g: G, +d: String, e: Core.Expr, +n: U32, top: Bool) -> Core.Expr:
 def Par.expr(+g: G, +d: String, +n: U32, e: Core.Expr) -> Core.Expr:
   Par.go(g, d, e, n, True{})
 
-def Par.decl(+g: G, d: Decl) -> Decl:
-  match d:
-    case DDef{+name, ps, body, ret}:
-      DDef{name, ps, Par.expr(g, name, 0, body), ret}
+# Independent calls in a block. A block is a def's body, a case's or a
+# lambda's: a chain of lets and the expression they end in. A call is
+# heavy when it calls a def (not a native or an effect) that recurses
+# (Par.rec) or forks (fs: a def with a parallel let). The heavy calls of a block that no let of it feeds may
+# run at once: two or more become a parallel let, at the place of the
+# block where the most of them can move (the top, or after the last let
+# they read). A call under a lambda or a match's cases stays, as do a
+# parallel let's values and a call that ends the block (a loop's tail
+# call). As any parallel let, it forks only above the frontier.
+def Par.heavy(+g: G, +d: String, +fs: List<&2, String>, +f: String) -> Bool:
+  +k = DInfo.kind(G.def(g, f))
+  Bool.and(Bool.not(Bool.or(U32.is_eq(k, 1), U32.is_eq(k, 2))), Bool.or(Par.rec(g, d, f), Str.has(fs, f)))
+
+# Whether e reads one of the names s.
+def Par.dep(s: List<&2, String>, +e: Core.Expr) -> Bool:
+  match s:
+    case Nil{}:
+      False{}
+    case +k <> t:
+      Bool.pick(Unit -> Bool, Expr.free(e, k), u => True{}, u => Par.dep(t, e))(Unit{})
+
+# Whether the call of f on args may move: heavy, and reading none of s.
+def Par.ok(+g: G, +d: String, +fs: List<&2, String>, +s: List<&2, String>, +f: String,
+  +args: List<&2, Core.Expr>) -> Bool:
+  Bool.and(Par.heavy(g, d, fs, f), Bool.not(Par.dep(s, Core.ECall{Core.EVar{f}, args})))
+
+# The calls of e that move, in order, before acc (top: e is a whole node,
+# not a call or constructor rebuilt with the rest of its operands; tl: e
+# ends the block).
+def Par.calls(e: Core.Expr, top: Bool, tl: Bool, +g: G, +d: String, +fs: List<&2, String>,
+  +s: List<&2, String>, +acc: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match e:
+    case Core.ECall{f, args}:
+      match f:
+        case Core.EVar{+n}:
+          match args:
+            case Nil{}:
+              Bool.pick(List<&2, Core.Expr>, Bool.and(Bool.and(top, Bool.not(tl)), Par.heavy(g, d, fs, n)),
+                Core.ECall{Core.EVar{n}, Nil{}} <> acc, acc)
+            case +a <> +t:
+              Bool.pick(Unit -> List<&2, Core.Expr>, Bool.and(Bool.and(top, Bool.not(tl)), Par.ok(g, d, fs, s, n, a <> t)),
+                u => Core.ECall{Core.EVar{n}, a <> t} <> acc,
+                u => Par.calls(a, True{}, False{}, g, d, fs, s,
+                  Par.calls(Core.ECall{Core.EVar{n}, t}, False{}, False{}, g, d, fs, s, acc)))(Unit{})
+        case other:
+          match args:
+            case Nil{}:
+              Par.calls(other, True{}, False{}, g, d, fs, s, acc)
+            case a <> t:
+              Par.calls(a, True{}, False{}, g, d, fs, s, Par.calls(Core.ECall{other, t}, False{}, False{}, g, d, fs, s, acc))
+    case Core.ECtor{+k, args}:
+      match args:
+        case Nil{}:
+          acc
+        case +a <> +t:
+          Bool.pick(Unit -> List<&2, Core.Expr>, Bool.and(top, Str.eq(k, "%par")), u => acc,
+            u => Par.calls(a, True{}, False{}, g, d, fs, s,
+              Par.calls(Core.ECtor{k, t}, False{}, False{}, g, d, fs, s, acc)))(Unit{})
+    case Core.EOp{op, a, b}:
+      Par.calls(a, True{}, False{}, g, d, fs, s, Par.calls(b, True{}, False{}, g, d, fs, s, acc))
+    case Core.ELet{p, v, b}:
+      Par.calls(v, True{}, False{}, g, d, fs, s, Par.calls(b, True{}, tl, g, d, fs, Pat.vars(p, s), acc))
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case Nil{}:
+          acc
+        case a <> t:
+          Par.calls(a, True{}, False{}, g, d, fs, s, Par.calls(Core.EMatch{t, cases}, True{}, False{}, g, d, fs, s, acc))
+    case Core.ESucc{k, x}:
+      Par.calls(x, True{}, False{}, g, d, fs, s, acc)
+    case Core.EAnn{x, ty}:
+      Par.calls(x, True{}, tl, g, d, fs, s, acc)
+    case other:
+      acc
+
+def Par.ncalls(+e: Core.Expr, +g: G, +d: String, +fs: List<&2, String>, +s: List<&2, String>) -> Nat:
+  List.length(&2, Core.Expr, Par.calls(e, True{}, False{}, g, d, fs, s, Nil{}))
+
+def Par.bname(+n: U32, +j: Nat) -> String:
+  "_pb" ++ U32.show(n) ++ "_" ++ Nat.show(j)
+
+# e with the calls Par.calls lists replaced by the names _pbN_J, J from j.
+def Par.sub(e: Core.Expr, top: Bool, tl: Bool, +j: Nat, +n: U32, +g: G, +d: String,
+  +fs: List<&2, String>, +s: List<&2, String>) -> Core.Expr:
+  match e:
+    case Core.ECall{f, args}:
+      match f:
+        case Core.EVar{+x}:
+          match args:
+            case Nil{}:
+              Bool.pick(Core.Expr, Bool.and(Bool.and(top, Bool.not(tl)), Par.heavy(g, d, fs, x)),
+                Core.EVar{Par.bname(n, j)}, Core.ECall{Core.EVar{x}, Nil{}})
+            case +a <> +t:
+              Bool.pick(Unit -> Core.Expr, Bool.and(Bool.and(top, Bool.not(tl)), Par.ok(g, d, fs, s, x, a <> t)),
+                u => Core.EVar{Par.bname(n, j)},
+                u => Expr.push(Par.sub(a, True{}, False{}, j, n, g, d, fs, s),
+                  Par.sub(Core.ECall{Core.EVar{x}, t}, False{}, False{}, Nat.add(j, Par.ncalls(a, g, d, fs, s)), n, g, d, fs, s)))(Unit{})
+        case other:
+          match args:
+            case Nil{}:
+              Core.ECall{Par.sub(other, True{}, False{}, j, n, g, d, fs, s), Nil{}}
+            case +a <> t:
+              Expr.push(Par.sub(a, True{}, False{}, j, n, g, d, fs, s),
+                Par.sub(Core.ECall{other, t}, False{}, False{}, Nat.add(j, Par.ncalls(a, g, d, fs, s)), n, g, d, fs, s))
+    case Core.ECtor{+k, args}:
+      match args:
+        case Nil{}:
+          Core.ECtor{k, Nil{}}
+        case +a <> +t:
+          Bool.pick(Unit -> Core.Expr, Bool.and(top, Str.eq(k, "%par")), u => Core.ECtor{k, a <> t},
+            u => Expr.push(Par.sub(a, True{}, False{}, j, n, g, d, fs, s),
+              Par.sub(Core.ECtor{k, t}, False{}, False{}, Nat.add(j, Par.ncalls(a, g, d, fs, s)), n, g, d, fs, s)))(Unit{})
+    case Core.EOp{op, +a, b}:
+      Core.EOp{op, Par.sub(a, True{}, False{}, j, n, g, d, fs, s),
+        Par.sub(b, True{}, False{}, Nat.add(j, Par.ncalls(a, g, d, fs, s)), n, g, d, fs, s)}
+    case Core.ELet{+p, +v, b}:
+      Core.ELet{p, Par.sub(v, True{}, False{}, j, n, g, d, fs, s),
+        Par.sub(b, True{}, tl, Nat.add(j, Par.ncalls(v, g, d, fs, s)), n, g, d, fs, Pat.vars(p, s))}
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case Nil{}:
+          Core.EMatch{Nil{}, cases}
+        case +a <> t:
+          Expr.push(Par.sub(a, True{}, False{}, j, n, g, d, fs, s),
+            Par.sub(Core.EMatch{t, cases}, True{}, False{}, Nat.add(j, Par.ncalls(a, g, d, fs, s)), n, g, d, fs, s))
+    case Core.ESucc{k, x}:
+      Core.ESucc{k, Par.sub(x, True{}, False{}, j, n, g, d, fs, s)}
+    case Core.EAnn{x, ty}:
+      Core.EAnn{Par.sub(x, True{}, tl, j, n, g, d, fs, s), ty}
     case other:
       other
 
-def Par.decls(+g: G, ds: List<&2, Decl>) -> List<&2, Decl>:
+# The names a block's lets bind, from e on.
+def Par.svars(e: Core.Expr, acc: List<&2, String>) -> List<&2, String>:
+  match e:
+    case Core.ELet{p, v, b}:
+      Par.svars(b, Pat.vars(p, acc))
+    case other:
+      acc
+
+# How many calls may move to the top of the block e (none of its lets feeds them).
+def Par.here(+e: Core.Expr, +g: G, +d: String, +fs: List<&2, String>) -> Nat:
+  List.length(&2, Core.Expr, Par.calls(e, True{}, True{}, g, d, fs, Par.svars(e, Nil{}), Nil{}))
+
+# The most calls that may move to one place of the block e.
+def Par.most(e: Core.Expr, +g: G, +d: String, +fs: List<&2, String>) -> Nat:
+  match e:
+    case Core.ELet{+p, +v, +b}:
+      Nat.max(Par.here(Core.ELet{p, v, b}, g, d, fs), Par.most(b, g, d, fs))
+    case other:
+      Par.here(other, g, d, fs)
+
+def Par.bpats(k: Nat, +n: U32, +j: Nat) -> List<&2, Core.Pat>:
+  match k:
+    case 0n:
+      Nil{}
+    case 1n+r:
+      Core.PVar{Par.bname(n, j)} <> Par.bpats(r, n, 1n+j)
+
+# The parallel let at the top of e.
+def Par.put(+e: Core.Expr, +n: U32, +g: G, +d: String, +fs: List<&2, String>) -> Core.Expr:
+  +s = Par.svars(e, Nil{})
+  +cs = Par.calls(e, True{}, True{}, g, d, fs, s, Nil{})
+  Core.ELet{Core.PCtor{"%par", Par.bpats(List.length(&2, Core.Expr, cs), n, 0n)}, Core.ECtor{"%par", cs},
+    Par.sub(e, True{}, True{}, 0n, n, g, d, fs, s)}
+
+# The parallel let at the first place of e where m calls may move.
+def Par.at(e: Core.Expr, +m: Nat, +n: U32, +g: G, +d: String, +fs: List<&2, String>) -> Core.Expr:
+  match e:
+    case Core.ELet{+p, +v, +b}:
+      Bool.pick(Unit -> Core.Expr, Nat.is_eq(Par.here(Core.ELet{p, v, b}, g, d, fs), m),
+        u => Par.put(Core.ELet{p, v, b}, n, g, d, fs), u => Core.ELet{p, v, Par.at(b, m, n, g, d, fs)})(Unit{})
+    case other:
+      Par.put(other, n, g, d, fs)
+
+def Par.blk(+e: Core.Expr, +n: U32, +g: G, +d: String, +fs: List<&2, String>) -> Core.Expr:
+  +m = Par.most(e, g, d, fs)
+  Bool.pick(Unit -> Core.Expr, Nat.is_gt(m, 1n), u => Par.at(e, m, n, g, d, fs), u => e)(Unit{})
+
+# e with each block's independent calls parallel, inner blocks first (n:
+# the nesting depth, which keeps the names of nested blocks apart).
+def Par.hoist(e: Core.Expr, +n: U32, +g: G, +d: String, +fs: List<&2, String>) -> Core.Expr:
+  match e:
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Core.ECall{Par.hoist(f, U32.inc(n), g, d, fs), Nil{}}
+        case a <> t:
+          Expr.push(Par.hoist(a, U32.inc(n), g, d, fs), Par.hoist(Core.ECall{f, t}, n, g, d, fs))
+    case Core.ECtor{k, args}:
+      match args:
+        case Nil{}:
+          Core.ECtor{k, Nil{}}
+        case a <> t:
+          Expr.push(Par.hoist(a, U32.inc(n), g, d, fs), Par.hoist(Core.ECtor{k, t}, n, g, d, fs))
+    case Core.EOp{op, a, b}:
+      Core.EOp{op, Par.hoist(a, U32.inc(n), g, d, fs), Par.hoist(b, U32.inc(n), g, d, fs)}
+    case Core.ELam{p, b}:
+      Core.ELam{p, Par.blk(Par.hoist(b, U32.inc(n), g, d, fs), U32.inc(n), g, d, fs)}
+    case Core.ELet{p, v, b}:
+      Core.ELet{p, Par.hoist(v, U32.inc(n), g, d, fs), Par.hoist(b, U32.inc(n), g, d, fs)}
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.push(Par.hoist(a, U32.inc(n), g, d, fs), Par.hoist(Core.EMatch{t, cases}, n, g, d, fs))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Par.hoist(c, U32.inc(n), g, d, fs), Par.hoist(Core.EMatch{Nil{}, t}, n, g, d, fs))
+    case Core.ECase{ps, b}:
+      Core.ECase{ps, Par.blk(Par.hoist(b, U32.inc(n), g, d, fs), U32.inc(n), g, d, fs)}
+    case Core.ESucc{k, x}:
+      Core.ESucc{k, Par.hoist(x, U32.inc(n), g, d, fs)}
+    case Core.EAnn{x, ty}:
+      Core.EAnn{Par.hoist(x, U32.inc(n), g, d, fs), ty}
+    case other:
+      other
+
+# Whether e has a parallel let.
+def Par.forks.e(e: Core.Expr) -> Bool:
+  match e:
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Par.forks.e(f)
+        case a <> t:
+          Bool.or(Par.forks.e(a), Par.forks.e(Core.ECall{f, t}))
+    case Core.ECtor{k, args}:
+      match args:
+        case Nil{}:
+          False{}
+        case a <> t:
+          Bool.or(Par.forks.e(a), Par.forks.e(Core.ECtor{k, t}))
+    case Core.EOp{op, a, b}:
+      Bool.or(Par.forks.e(a), Par.forks.e(b))
+    case Core.ELam{p, b}:
+      Par.forks.e(b)
+    case Core.ELet{p, v, b}:
+      match p:
+        case Core.PCtor{+k, ps}:
+          Bool.or(Str.eq(k, "%par"), Bool.or(Par.forks.e(v), Par.forks.e(b)))
+        case other:
+          Bool.or(Par.forks.e(v), Par.forks.e(b))
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Bool.or(Par.forks.e(a), Par.forks.e(Core.EMatch{t, cases}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case c <> t:
+              Bool.or(Par.forks.e(c), Par.forks.e(Core.EMatch{Nil{}, t}))
+    case Core.ECase{ps, b}:
+      Par.forks.e(b)
+    case Core.ESucc{k, x}:
+      Par.forks.e(x)
+    case Core.EAnn{x, ty}:
+      Par.forks.e(x)
+    case other:
+      False{}
+
+# The defs that fork.
+def Par.forks(ds: List<&2, Decl>) -> List<&2, String>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> +t:
+      match d:
+        case DDef{+name, ps, body, ret}:
+          Bool.pick(List<&2, String>, Par.forks.e(body), name <> Par.forks(t), Par.forks(t))
+        case other:
+          Par.forks(t)
+
+def Par.decl(+g: G, +fs: List<&2, String>, d: Decl) -> Decl:
+  match d:
+    case DDef{+name, ps, body, ret}:
+      DDef{name, ps, Par.expr(g, name, 0, Par.blk(Par.hoist(body, 1, g, name, fs), 0, g, name, fs)), ret}
+    case other:
+      other
+
+def Par.decls(+g: G, +fs: List<&2, String>, ds: List<&2, Decl>) -> List<&2, Decl>:
   match ds:
     case Nil{}:
       Nil{}
     case d <> t:
-      Par.decl(g, d) <> Par.decls(g, t)
+      Par.decl(g, fs, d) <> Par.decls(g, fs, t)
+
+# Rounds until the defs that fork (fs) stop growing (at most k): a round
+# that moves calls of defs that fork may make more defs fork.
+def Par.rounds(k: Nat, +g: G, +fs: List<&2, String>, +ds: List<&2, Decl>) -> List<&2, Decl>:
+  match k:
+    case 0n:
+      Par.decls(g, fs, ds)
+    case 1n+r:
+      +out = Par.decls(g, fs, ds)
+      +fs2 = Par.forks(out)
+      Bool.pick(Unit -> List<&2, Decl>, Nat.is_gt(List.length(&2, String, fs2), List.length(&2, String, fs)),
+        u => Par.rounds(r, g, fs2, ds), u => out)(Unit{})
 
 def Par.auto(on: Bool, +ds: List<&2, Decl>) -> List<&2, Decl>:
   match on:
     case True{}:
-      Par.decls(G.new(ds), ds)
+      Par.rounds(6n, G.new(ds), Nil{}, ds)
     case False{}:
       ds
 
@@ -9714,7 +10002,7 @@ def Unb.calls(e: Core.Expr, +wm: Map<&2, List<&2, Unb>>, +bound: List<&2, String
     case Core.ELam{+pt, b}:
       Core.ELam{pt, Unb.calls(b, wm, Pat.vars(pt, bound), U32.inc(n), True{})}
     case Core.ELet{+pt, v, b}:
-      Core.ELet{pt, Unb.calls(v, wm, bound, U32.inc(n), True{}), Unb.calls(b, wm, Pat.vars(pt, bound), U32.inc(n), True{})}
+      Unb.float(pt, Unb.calls(v, wm, bound, U32.inc(n), True{}), Unb.calls(b, wm, Pat.vars(pt, bound), U32.inc(n), True{}))
     case Core.EMatch{scrs, cases}:
       match scrs:
         case a <> t:
