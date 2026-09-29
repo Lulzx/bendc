@@ -16580,10 +16580,119 @@ def Opt.before(xs: List<&2, String>, +rank: Map<&2, U32>, +i: U32) -> Bool:
     case +x <> t:
       Bool.and(Opt.before.one(x, rank, i), Opt.before(t, rank, i))
 
+# A result built of variables, literals and constructors only.
+def Opt.shape.atom(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CVar{x}:
+      True{}
+    case Core.CLit{l}:
+      True{}
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          True{}
+        case a <> r:
+          Bool.and(Opt.shape.atom(a), Opt.shape.atom(Core.CCtr{k, r}))
+    case Core.CAnn{e, ty}:
+      Opt.shape.atom(e)
+    case other:
+      False{}
+
+# Constructor patterns (a number's would not go to the device, see Gpu).
+def Opt.shape.pat(p: Core.Pt) -> Bool:
+  match p:
+    case Core.PtVar{x}:
+      True{}
+    case Core.PtCtr{k, ps}:
+      match ps:
+        case Nil{}:
+          True{}
+        case q <> r:
+          Bool.and(Opt.shape.pat(q), Opt.shape.pat(Core.PtCtr{k, r}))
+    case other:
+      False{}
+
+def Opt.shape.pats(ps: List<&2, Core.Pt>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case q <> r:
+      Bool.and(Opt.shape.pat(q), Opt.shape.pats(r))
+
+# Whether constructor fields hold a variable (a node, not a constant).
+def Opt.shape.holds(as: List<&2, Core.Tm>) -> Bool:
+  match as:
+    case Nil{}:
+      False{}
+    case a <> r:
+      match a:
+        case Core.CVar{x}:
+          True{}
+        case Core.CCtr{k, bs}:
+          Bool.or(Opt.shape.holds(bs), Opt.shape.holds(r))
+        case other:
+          Opt.shape.holds(r)
+
+# Whether a result builds a node (a constructor with fields).
+def Opt.shape.builds(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case x <> t2:
+          Opt.shape.builds(Core.CMat{t2, cases})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case c <> r:
+              Bool.or(Opt.shape.builds(c), Opt.shape.builds(Core.CMat{Nil{}, r}))
+    case Core.CCse{ps, b}:
+      Opt.shape.builds(b)
+    case Core.CAnn{e, ty}:
+      Opt.shape.builds(e)
+    case Core.CLet{p, v, b}:
+      Opt.shape.builds(b)
+    case Core.CCtr{k, as}:
+      Opt.shape.holds(as)
+    case other:
+      False{}
+
+# A def that only matches and builds: every case's result is an atom, or
+# a match of the same kind.
+def Opt.shape(t: Core.Tm) -> Bool:
+  match t:
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case x <> t2:
+          Opt.shape(Core.CMat{t2, cases})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              True{}
+            case c <> r:
+              Bool.and(Opt.shape(c), Opt.shape(Core.CMat{Nil{}, r}))
+    case Core.CCse{ps, b}:
+      Bool.and(Opt.shape.pats(ps), Opt.shape(b))
+    case Core.CAnn{e, ty}:
+      Opt.shape(e)
+    case Core.CLet{p, v, b}:
+      Bool.and(Opt.shape.atom(v), Opt.shape(b))
+    case other:
+      Opt.shape.atom(other)
+
+# A def small enough to inline: its size is in the budget, or in three
+# times it for a def that only matches its arguments and builds its result
+# of what the match reads (inlined, the nodes its caller opens and those it
+# opens are there for the result to be built in, see RU, and a match on a
+# constructor the caller built is gone).
+def Opt.fits(+flags: String, +b: Core.Tm) -> Bool:
+  Bool.or(Opt.size.le(b, Opt.budget(flags)),
+    Bool.and(Bool.and(Opt.shape(b), Opt.shape.builds(b)), Opt.size.le(b, U32.mul(3, Opt.budget(flags)))))
+
 def Opt.small(+flags: String, +rank: Map<&2, U32>, +d: Core.Def) -> Bool:
   match d:
     case Core.Def{+name, ps, +b, ret}:
-      Bool.and(Bool.and(Opt.size.le(b, Opt.budget(flags)), Bool.not(G.is_native(name))),
+      Bool.and(Bool.and(Opt.fits(flags, b), Bool.not(G.is_native(name))),
         Bool.and(Bool.not(String.starts_with(name, "IO.")),
           Opt.before(Inl.names(b, 3, Nil{}), rank, Pair.snd(Map<&2, U32>, U32, Map.get(U32, 0, rank, name)))))
 
