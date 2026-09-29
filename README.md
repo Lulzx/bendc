@@ -454,9 +454,17 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
 Base implements `U32` as a 32-bit vector of `Bool`s, which proofs can reason about. `bendc` replaces
 those defs, and the `Nat`/`F32`/`Array` primitives, with native C; `Nat` arithmetic stops with an
 error past 2^48 - 1, where the official runtime does. Memory is managed by a conservative mark-sweep collector: the threads that run
-Bend code are stopped with a signal while it marks their stacks. The program runs on a thread with a
-4 GB stack, so deep non-tail recursion is fine: a million-deep recursive list builds and folds in about
-0.1s, where the official runtime overflows its stack at 100,000.
+Bend code are stopped with a signal while it marks their stacks. It runs after every 8 MB allocated,
+or after half of what lived at the last collection if that is more, so a program whose objects die
+young keeps a small heap. A minor collection marks only what was made since the last one. When two
+minor collections in a row find that three quarters of what was made since lives on, the step
+becomes 32 times bigger for the rest of the run: such a program (the compiler building its tables,
+say) would otherwise mark the same objects again and again. The step also doubles when, over 8
+collections, the program was stopped in them for more than a tenth of the time: with many threads,
+or on a busy machine, stopping every thread costs more than the marking, and the heap grows to make
+the stops rarer. `BEND_GC_MIN_MB=n` fixes it at n MB, and `BEND_GC_STATS=1` prints each collection.
+The program runs on a thread with a 4 GB stack, so deep non-tail recursion is fine: a million-deep
+recursive list builds and folds in about 0.1s, where the official runtime overflows its stack at 100,000.
 
 A parallel let forks every value but the last onto a Chase-Lev work-stealing deque and joins them in
 reverse; a fork nobody stole runs inline, so fine-grained recursion stays cheap (`pow2!(26n)` from the
@@ -929,8 +937,12 @@ versions rebuild both. This change applies to both modes, and it cut bendc's own
 On the GPU, most of the memory is Metal's: making the device alone costs about 6 MB. The rest is
 kept down three ways:
 
-- Metal is linked with the program (weakly, through a `.linker_option` in `rt/gpuhost.h`), which
-  the loader maps for about 3 MB less than opening it at the first `!`-call.
+- Metal is not linked, since loading it costs about 4 MB of resident memory, and a run on the
+  CPU would pay that too. A run that may use the GPU (no `--gpu off`, no `BEND_GPU=off`) starts
+  the program again with Metal inserted (`DYLD_INSERT_LIBRARIES`, see `g_preload` in
+  `rt/gpuhost.h`). The loader maps an inserted library the way it maps a linked one, for about
+  3 MB less than opening it at the first `!`-call. Where the insertion is refused, the first
+  `!`-call opens Metal.
 - The first run keeps Metal's binary archive of the kernels in `~/Library/Caches/bend`, named by a
   hash of the device code; later runs load the library and the pipelines from it, for 1 MB where
   compiling costs 2.5 (an archive for another GPU or OS misses, and the kernels compile again).
