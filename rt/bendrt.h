@@ -203,6 +203,7 @@ typedef struct GcCache {
 } GcCache;
 
 struct PDeque;
+struct PSch;
 
 // Classes of up to 16 words (nodes) reuse the slots matches free.
 #define GC_RQCLS 15
@@ -216,6 +217,7 @@ typedef struct Thr {
   pthread_t id;
   volatile int live;
   struct PDeque *dq;
+  struct PSch *sch;
   uint32_t rng;
   // Claiming a reuse block (gc_refill): a stop signal that comes meanwhile
   // is deferred (deferred is set) until the claim is over.
@@ -1397,6 +1399,7 @@ static void gc_collect(void) {
 }
 
 static struct PDeque *pdq_new(void);
+static struct PSch *psch_new(void);
 
 // Registers the calling thread; top is an address near the base of its stack.
 // A fault (a deep recursion past the machine stack, most likely) reports
@@ -1454,6 +1457,7 @@ static void thr_register(uintptr_t top) {
   t->live = 1;
   t->rng = (uint32_t)(uintptr_t)t ^ 0x9e3779b9u;
   t->dq = pdq_new();
+  t->sch = psch_new();
   thr_set(t);
   pthread_mutex_lock(&gc_lock);
   if (gc_nthr == GC_MAXTHR) bend_fail("too many threads");
@@ -2276,12 +2280,223 @@ static inline void cpu_relax(void) {
 #endif
 }
 
+// Latent tasks
+// ------------
+//
+// The C backend's parallel lets do not use the deques above. Every value
+// but the last is a latent task: a descriptor on the forking thread's stack
+// (the lambda-lifted code of the value, its captured values, a state),
+// pushed on a stack that only this thread reads (PSch.lat). Pushing a task
+// and joining one that nobody took are plain loads and stores, and the
+// value then runs as a call. So every parallel let may fork, at any depth,
+// and there is no depth frontier to tune. A thread with nothing to do asks
+// a busy one for work: it writes its id into the busy thread's want. The
+// busy one answers at its next push, or while it waits at a join, with its
+// oldest latent task (the one nearest the root of its recursion, so the
+// biggest), or with none (PL_NONE). The asker runs the task and marks it
+// done. At the join the owner waits for it, running other work meanwhile,
+// and asks the thread that took it first. This is work stealing with
+// private deques (Acar, Chargueraud and Rainey, PPoPP 2013). On one thread
+// (par_seq) the generated code runs a parallel let's values in order and
+// pushes nothing.
+
+#define PL_LATENT 0
+#define PL_STOLEN 1
+#define PL_DONE 2
+#define PL_NONE ((PLat *)1)
+// A new thread's want: its first push starts the pool (par_answer).
+#define PL_START (-1)
+
+// A latent task: fn applied to a, its k captured values and a dummy
+// argument, as a closure's code is (the generated code makes one as
+// {fn, (V[k + 1]){captured values}, k}).
+typedef struct PLat { V (*fn)(V *); V *a; V k; V res; V st; V by; } PLat;
+
+// Those descriptors are stack structs whose address is taken, so clang's
+// default stack protector (-fstack-protector-strong on macOS) guards every
+// function with a parallel let, its one-thread path too (4% more
+// instructions on tree-matmul). The generated code, which indexes no array
+// but with constants, turns it off between BEND_CODE_BEGIN and _END.
+#if defined(__clang__) && defined(__has_attribute)
+#if __has_attribute(no_stack_protector)
+#define BEND_CODE_BEGIN _Pragma("clang attribute push(__attribute__((no_stack_protector)), apply_to = function)")
+#define BEND_CODE_END _Pragma("clang attribute pop")
+#endif
+#endif
+#ifndef BEND_CODE_BEGIN
+#define BEND_CODE_BEGIN
+#define BEND_CODE_END
+#endif
+
+typedef struct PSch {
+  PLat **lat;          // latent tasks, oldest first (the owner's alone)
+  long bot, top, cap;  // lat[top..bot) are latent, lat[..top) were taken
+  int id;
+  int depth;           // parallel lets that push, above the running code
+  _Atomic int busy;    // runs Bend code: worth asking
+  // (want and mail sit in lines of their own: other threads write them)
+  _Atomic int want __attribute__((aligned(128)));   // the asker's id + 1
+  PLat *_Atomic mail __attribute__((aligned(128))); // the answer to this thread's ask
+} PSch;
+
+static PSch *par_schs[GC_MAXTHR];
+static _Atomic int par_nsch;
+// 1: parallel lets run their values in order (one thread).
+static int par_seq = 1;
+
+static void par_start(void);
+
+static struct PSch *psch_new(void) {
+  PSch *s;
+  if (posix_memalign((void **)&s, 128, sizeof(PSch))) bend_fail("out of memory");
+  memset(s, 0, sizeof *s);
+  s->cap = 1024;
+  s->lat = malloc((size_t)s->cap * sizeof(PLat *));
+  atomic_store(&s->busy, 1);
+  atomic_store(&s->want, PL_START);
+  int i = atomic_fetch_add(&par_nsch, 1);
+  s->id = i;
+  __atomic_store_n(&par_schs[i], s, __ATOMIC_RELEASE);
+  return s;
+}
+
+__attribute__((noinline)) static void par_grow(PSch *s) {
+  s->cap *= 2;
+  s->lat = realloc(s->lat, (size_t)s->cap * sizeof(PLat *));
+  if (!s->lat) bend_fail("out of memory");
+}
+
+// Answers the thread that asks s's owner (the caller): with the oldest
+// latent task, marked taken (reference counted, what it captures is
+// marked first: see rc_publish), or with none.
+__attribute__((noinline)) static void par_answer(PSch *s) {
+  int w = atomic_exchange_explicit(&s->want, 0, memory_order_acquire);
+  if (w == PL_START) {
+    if (par_nthreads > 1 && !atomic_load_explicit(&par_started, memory_order_relaxed)) par_start();
+    return;
+  }
+  if (w <= 0) return;
+  PSch *t = __atomic_load_n(&par_schs[w - 1], __ATOMIC_ACQUIRE);
+  PLat *d = PL_NONE;
+  if (s->top < s->bot) {
+    d = s->lat[s->top++];
+    if (gc_hot.rc)
+      for (V i = 0; i < d->k; i++) rc_publish(d->a[i]);
+    d->by = (V)(w - 1);
+    __atomic_store_n(&d->st, PL_STOLEN, __ATOMIC_RELAXED);
+  }
+  atomic_store_explicit(&t->mail, d, memory_order_release);
+}
+
+static inline void par_push(PLat *d) {
+  PSch *s = thr_self->sch;
+  if (UNLIKELY(s->bot == s->cap)) par_grow(s);
+  s->lat[s->bot++] = d;
+  if (UNLIKELY(atomic_load_explicit(&s->want, memory_order_relaxed))) par_answer(s);
+}
+
+static void par_run(PLat *d) {
+  PSch *s = thr_self->sch;
+  int depth = s->depth;
+  s->depth = 0;
+  V r = d->fn(d->a);
+  s->depth = depth;
+  d->res = r;
+  __atomic_store_n(&d->st, PL_DONE, __ATOMIC_RELEASE);
+}
+
+// Asks v for a task: its answer, or NULL (none, or v did not answer in
+// time and the ask was taken back).
+static PLat *par_ask_one(PSch *me, PSch *v) {
+  if (!v || v == me || !atomic_load_explicit(&v->busy, memory_order_relaxed) ||
+      atomic_load_explicit(&v->want, memory_order_relaxed))
+    return NULL;
+  atomic_store_explicit(&me->mail, NULL, memory_order_relaxed);
+  int z = 0;
+  if (!atomic_compare_exchange_strong(&v->want, &z, me->id + 1)) return NULL;
+  for (long spins = 0;; spins++) {
+    PLat *d = atomic_load_explicit(&me->mail, memory_order_acquire);
+    if (d) return d == PL_NONE ? NULL : d;
+    // (an ask of this thread, meanwhile, is answered: asks never wait on
+    // each other in a cycle)
+    if (atomic_load_explicit(&me->want, memory_order_relaxed)) par_answer(me);
+    if (spins == 4096) {
+      int m = me->id + 1;
+      if (atomic_compare_exchange_strong(&v->want, &m, 0)) return NULL;
+    }
+    cpu_relax();
+  }
+}
+
+// Asks the busy threads, from a random one, until one gives a task.
+static PLat *par_ask(PSch *me) {
+  int n = atomic_load_explicit(&par_nsch, memory_order_acquire);
+  if (n <= 1) return NULL;
+  Thr *t = thr_self;
+  t->rng = t->rng * 1664525u + 1013904223u;
+  int s = (int)(t->rng >> 8) % n;
+  for (int i = 0; i < n; i++) {
+    PLat *d = par_ask_one(me, __atomic_load_n(&par_schs[(s + i) % n], __ATOMIC_ACQUIRE));
+    if (d) return d;
+  }
+  return NULL;
+}
+
+// At the join of d, which another thread took: runs other work until d is
+// done, asking the thread that took d first.
+__attribute__((noinline)) static V par_wait(PSch *s, PLat *d) {
+  s->top = s->bot;
+  PSch *by = par_schs[d->by];
+  for (int spins = 0; __atomic_load_n(&d->st, __ATOMIC_ACQUIRE) != PL_DONE;) {
+    if (atomic_load_explicit(&s->want, memory_order_relaxed)) par_answer(s);
+    PLat *x = par_ask_one(s, by);
+    if (!x && spins > 16) x = par_ask(s);
+    if (x) { par_run(x); spins = 0; continue; }
+    if (++spins < 64) cpu_relax();
+    else if (spins < 256) sched_yield();
+    else { struct timespec ts = {0, 20000}; nanosleep(&ts, NULL); }
+  }
+  return d->res;
+}
+
+// Whether a parallel let pushes its values (then par_end follows its
+// joins): not on one thread, nor par_front lets deep in the running task.
+static inline int par_go(void) {
+  if (par_seq) return 0;
+  PSch *s = thr_self->sch;
+  if (s->depth >= par_front) return 0;
+  s->depth++;
+  return 1;
+}
+static inline void par_end(void) { thr_self->sch->depth--; }
+
+// The join of the latent task d, the last one pushed: a call when nobody
+// took it.
+static inline V par_pop(PLat *d) {
+  PSch *s = thr_self->sch;
+  s->bot--;
+  if (LIKELY(__atomic_load_n(&d->st, __ATOMIC_RELAXED) == PL_LATENT)) return d->fn(d->a);
+  return par_wait(s, d);
+}
+
 static void *par_worker(void *arg) {
   (void)arg;
   thr_register((uintptr_t)__builtin_frame_address(0) + 16);
+  PSch *me = thr_self->sch;
+  atomic_store(&me->busy, 0);
+  atomic_store(&me->want, 0);
   for (int spins = 0;;) {
+    if (atomic_load_explicit(&me->want, memory_order_relaxed)) par_answer(me);
     PTask *t = par_steal();
     if (t) { par_exec(t); spins = 0; continue; }
+    PLat *d = par_ask(me);
+    if (d) {
+      atomic_store_explicit(&me->busy, 1, memory_order_relaxed);
+      par_run(d);
+      atomic_store_explicit(&me->busy, 0, memory_order_relaxed);
+      spins = 0;
+      continue;
+    }
     if (++spins < 512) { cpu_relax(); continue; }
     pthread_mutex_lock(&par_mu);
     atomic_fetch_add(&par_sleepers, 1);
@@ -3170,6 +3385,7 @@ static int bend_start(int argc, char **argv, V (*m)(void), int value) {
     }
   }
   par_nthreads = thr > 0 ? (int)thr : cpu_count();
+  par_seq = par_nthreads <= 1;
   // Fork 2^6 tasks a thread deep, then run subtrees in order.
   if (par_nthreads > 1) {
     int f = 0;
