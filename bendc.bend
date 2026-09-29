@@ -10144,17 +10144,60 @@ def Bor.arg.b(+g: G, +rc: Bool, +a: Core.Expr, +tags: Env(), st: Bool, +j: U32, 
     case other:
       Bor.arg.o(Bool.and(rc, RC.tmp.syn(g, other)), other, tags, st, j, r)
 
-def Bor.arg(+g: G, +rc: Bool, b: Bool, a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
-  match b:
+# A value read out of a parameter (x, tag f<i>) and passed to a scalar
+# parameter (sc) or an operator: a number, which holds no reference (so it
+# does not make the def own its parameter).
+def Bor.scalar(sc: Bool, +tags: Env(), a: Core.Expr) -> Bool:
+  match sc:
     case True{}:
-      Bor.arg.b(g, rc, a, tags, st, j, r)
+      match a:
+        case Core.EVar{+x}:
+          String.starts_with(Bor.tag(tags, x), "f")
+        case other:
+          False{}
+    case False{}:
+      False{}
+
+# A let's value, but for a variable naming one read out of a parameter
+# (which gets its reference there, RC.bdup, as an inlined Char.is_eq's
+# do): its uses are the new name's, which is not tagged.
+def Bor.letv(+tags: Env(), +p: Core.Pat, +v: Core.Expr) -> Core.Expr:
+  match p:
+    case Core.PVar{x}:
+      Bool.pick(Core.Expr, Bor.scalar(True{}, tags, v), Core.ENum{0}, v)
+    case other:
+      v
+
+# An operator's operands but the numbers read out of a parameter.
+def Bor.ops(+tags: Env(), xs: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case +a <> t:
+      Bor.keep(Bool.not(Bor.scalar(True{}, tags, a)), a, Bor.ops(tags, t))
+
+# An argument the callee owns (sc: a scalar parameter's).
+def Bor.arg.own.go(hit: Bool, a: Core.Expr, r: BorA) -> BorA:
+  match hit:
+    case True{}:
+      r
     case False{}:
       BorA{ev, ys} = r
       BorA{ev, List.append(&2, Core.Expr, ys, [a])}
 
+def Bor.arg.own(sc: Bool, +tags: Env(), +a: Core.Expr, r: BorA) -> BorA:
+  Bor.arg.own.go(Bor.scalar(sc, tags, a), a, r)
+
+def Bor.arg(+g: G, +rc: Bool, sc: Bool, b: Bool, a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
+  match b:
+    case True{}:
+      Bor.arg.b(g, rc, a, tags, st, j, r)
+    case False{}:
+      Bor.arg.own(sc, tags, a, r)
+
 # A call's events, and the arguments it owns.
-def Bor.args(+g: G, +rc: Bool, mask: List<&2, Bool>, args: List<&2, Core.Expr>, +fl: List<&2, Bool>, +tags: Env(),
-  +st: Bool, +j: U32, r: BorA) -> BorA:
+def Bor.args(+g: G, +rc: Bool, mask: List<&2, Bool>, args: List<&2, Core.Expr>, +fl: List<&2, Bool>,
+  +sc: List<&2, Bool>, +tags: Env(), +st: Bool, +j: U32, r: BorA) -> BorA:
   match mask args:
     case Nil{} xs:
       BorA{ev, ys} = r
@@ -10162,9 +10205,10 @@ def Bor.args(+g: G, +rc: Bool, mask: List<&2, Bool>, args: List<&2, Core.Expr>, 
     case m <> mt Nil{}:
       r
     case True{} <> mt a <> at:
-      Bor.args(g, rc, mt, at, Bor.tail(fl), tags, st, U32.inc(j), Bor.arg(g, rc, Bor.head(fl), a, tags, st, j, r))
+      Bor.args(g, rc, mt, at, Bor.tail(fl), Bor.tail(sc), tags, st, U32.inc(j),
+        Bor.arg(g, rc, Bor.head(sc), Bor.head(fl), a, tags, st, j, r))
     case False{} <> mt a <> at:
-      Bor.args(g, rc, mt, at, Bor.tail(fl), tags, st, U32.inc(j), r)
+      Bor.args(g, rc, mt, at, Bor.tail(fl), Bor.tail(sc), tags, st, U32.inc(j), r)
 
 def Bor.call.name(local: Bool, +cx: BorC, +tags: Env(), +h: String, tail: Bool, +args: List<&2, Core.Expr>,
   acc: List<&2, String>) -> BorA:
@@ -10174,7 +10218,8 @@ def Bor.call.name(local: Bool, +cx: BorC, +tags: Env(), +h: String, tail: Bool, 
     case False{}:
       BorC{+g, +bm, +self, +n, +tmp} = cx
       +full : Bool = Bool.and(tmp, Nat.is_eq(List.length(&2, Bool, DInfo.mask(G.def(g, h))), List.length(&2, Core.Expr, args)))
-      Bor.args(g, full, DInfo.mask(G.def(g, h)), args, Bor.list(Bor.get(bm, h)), tags,
+      Bor.args(g, full, DInfo.mask(G.def(g, h)), args, Bor.list(Bor.get(bm, h)),
+        Bor.list(DGrp.id(G.get(DGrp, DGrp{"", 0}, bm, "%s" ++ h))), tags,
         Bool.and(tail, Bool.and(Str.eq(self, h), Nat.is_eq(n, List.length(&2, Core.Expr, args)))), 0, BorA{acc, Nil{}})
 
 def Bor.call(+cx: BorC, +tags: Env(), +loc: List<&2, String>, tail: Bool, f: Core.Expr, +args: List<&2, Core.Expr>,
@@ -10209,7 +10254,7 @@ def Bor.ev(n: Nat, +cx: BorC, +tags: Env(), +loc: List<&2, String>, +st: List<&2
           Bor.uses(FV.expr(b, Pat.vars(p, Nil{}), Nil{}), tags, acc)
         case Core.ELet{+p, v, b}:
           Bor.ev(m, cx, Bor.binds(Pat.vars(p, Nil{}), "", tags), Pat.vars(p, loc), st, tail, b,
-            Bor.ev(m, BorC.par(cx, p), tags, loc, st, False{}, v, acc))
+            Bor.ev(m, BorC.par(cx, p), tags, loc, st, False{}, Bor.letv(tags, p, v), acc))
         case Core.EMatch{scrs, cases}:
           match scrs:
             case Nil{}:
@@ -10226,7 +10271,7 @@ def Bor.ev(n: Nat, +cx: BorC, +tags: Env(), +loc: List<&2, String>, +st: List<&2
         case Core.ESucc{k, x}:
           Bor.ev(m, cx, tags, loc, st, False{}, x, acc)
         case Core.EOp{op, a, b}:
-          Bor.ev(m, cx, tags, loc, st, False{}, Core.ECtor{"", [a, b]}, acc)
+          Bor.ev(m, cx, tags, loc, st, False{}, Core.ECtor{"", Bor.ops(tags, [a, b])}, acc)
         case Core.EAnn{x, t}:
           Bor.ev(m, cx, tags, loc, st, False{}, x, acc)
         case other:
@@ -10305,6 +10350,15 @@ def Bor.cand(ps: List<&2, Core.Param>, mask: List<&2, Bool>) -> String:
     case pl ml:
       ""
 
+# A def's scalar parameters ("1"), kept for every def under "%s" and its
+# name: a variable passed to one is used, but holds no reference.
+def Bor.scal(ps: List<&2, Core.Param>) -> String:
+  match ps:
+    case Nil{}:
+      ""
+    case Core.Param{x, m, +t} <> pt:
+      Bool.pick(String, Gen.scalar.ty(t), "1", "0") ++ Bor.scal(pt)
+
 def Bor.ok(+g: G, +name: String, +gpus: List<&2, String>, +body: Core.Expr) -> Bool:
   Bool.and(Bool.and(U32.is_eq(DInfo.kind(G.def(g, name)), 0), String.is_empty(DGrp.id(G.dps(g, name)))),
     Bool.and(Bool.not(Str.eq(name, "main")), Bool.and(Bool.not(Str.has(gpus, name)), Bool.not(Expr.has_par(body)))))
@@ -10321,8 +10375,9 @@ def Bor.init(ds: List<&2, Decl>, +g: G, +gpus: List<&2, String>, m: Map<&2, DGrp
   match ds:
     case Nil{}:
       m
-    case DDef{+name, ps, +body, ret} <> t:
-      Bor.init(t, g, gpus, Bor.init.one(Bor.ok(g, name, gpus, body), name, ps, DInfo.mask(G.def(g, name)), m))
+    case DDef{+name, +ps, +body, ret} <> t:
+      Bor.init(t, g, gpus, Bor.init.one(Bor.ok(g, name, gpus, body), name, ps, DInfo.mask(G.def(g, name)),
+        Map.set(&2, DGrp, m, "%s" ++ name, DGrp{Bor.scal(ps), 0})))
     case d <> t:
       Bor.init(t, g, gpus, m)
 
