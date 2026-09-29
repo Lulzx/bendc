@@ -35,7 +35,8 @@ typedef struct {
 #define GPU_SIM 2
 
 static pthread_mutex_t gpu_lock = PTHREAD_MUTEX_INITIALIZER;
-static KW gpu_kq_cpu;       // (see gpu_kq_host)
+static KW gpu_kq_cpu;    // (see gpu_kq_host)
+static KW gpu_kq_order;  // BEND_GPU_KQSORT: sort the waiting calls (see gpu_kq_sort)
 static int gpu_mode = -1;
 static int gpu_log;         // BEND_GPU_LOG: 1 for a line a call, 2 for more
 static double gpu_tout;     // the last copy out's time (BEND_GPU_LOG)
@@ -374,6 +375,7 @@ static int gpu_setup(const GpuProg *prog) {
   gpu_lanes = (KW)gpu_env("BEND_GPU_LANES", sim ? 64 : 8192);
   // (the simulator runs every call on the device: it tests that code)
   gpu_kq_cpu = (KW)gpu_env("BEND_GPU_KQCPU", sim ? 0 : 4);
+  gpu_kq_order = (KW)gpu_env("BEND_GPU_KQSORT", 1);
   gpu_budget = (KW)gpu_env("BEND_GPU_STEPS", sim ? 37 : 16384);
   KW f = 0;
   while (((KW)1 << f) < gpu_lanes) f++;
@@ -520,6 +522,16 @@ static int gpu_nest;
 // lists in prog->kqh (scalar arguments and result), the host runs them on
 // the CPU, where a serial chain runs far faster, and hands each lane its
 // result as bend_kq would. 1 when it did.
+//
+// A call that could fork (its callees' parallel lets; the device runs them in
+// order on the lane and, past K_KQSTEPS, gives up and forks through frames)
+// is run on the CPU too, and that is always correct: F_name is the same pure
+// def compiled for the CPU, and its value is the device's. Only speed is in
+// question, and the CPU runtime runs such a call's parallel lets on its own
+// threads, while the device would give a lone call one lane (or, past
+// K_KQSTEPS, a restart through frames), so a few waiting calls are better
+// off on the CPU either way. Its result is a scalar, so the lane keeps no
+// pointer into the CPU's heap.
 static int gpu_kq_host(const GpuProg *prog, KW *H, const KParams *P, KW waiting) {
   if (waiting > gpu_kq_cpu || prog->kqh == NULL) return 0;
   KW n = P->nlanes;
@@ -547,6 +559,47 @@ static int gpu_kq_host(const GpuProg *prog, KW *H, const KParams *P, KW waiting)
   gpu_nest = 0;
   if (gpu_log == 2) fprintf(stderr, "bend gpu: kq ran %llu calls on the CPU\n", (unsigned long long)k);
   return 1;
+}
+
+// The waiting calls in order of their def and arguments, before the device
+// runs them: a SIMD group runs its lanes' calls in step, and calls with the
+// same def and leading arguments tend to take the same branches (raytrace's
+// column quarters: pixels past the width, or not, alike across the group).
+// A lane's saved state names no lane (its frames and heap chunk are the
+// arena's), so the calls can trade lanes; the lanes that wait stay the same.
+static KW *gpu_ks_H, gpu_ks_n;
+static int gpu_ks_cmp(const void *x, const void *y) {
+  KW a = *(const KW *)x, b = *(const KW *)y;
+  for (int j = 7; j < K_LANE; j++) {
+    if (j == 8 || j == 9) continue;
+    KW u = gpu_ks_H[j * gpu_ks_n + a], v = gpu_ks_H[j * gpu_ks_n + b];
+    if (u != v) return u < v ? -1 : 1;
+  }
+  return a < b ? -1 : a > b;
+}
+static void gpu_kq_sort(KW *H, const KParams *P, KW waiting) {
+  KW n = P->nlanes, k = 0;
+  KW *ix = malloc(waiting * sizeof(KW)), *st = malloc(waiting * K_LANE * sizeof(KW));
+  if (!ix || !st) { free(ix); free(st); return; }
+  KW *L = H + P->lane0;
+  for (KW l = 0; l < n && k < waiting; l++) {
+    if (L[l] == PC_KQ) ix[k++] = l;
+  }
+  gpu_ks_H = L;
+  gpu_ks_n = n;
+  qsort(ix, k, sizeof(KW), gpu_ks_cmp);
+  for (KW i = 0; i < k; i++) {
+    for (int j = 0; j < K_LANE; j++) st[i * K_LANE + j] = L[j * n + ix[i]];
+  }
+  // (the lanes that wait, in lane order, take the calls in sorted order)
+  KW i = 0;
+  for (KW l = 0; l < n && i < k; l++) {
+    if (L[l] != PC_KQ) continue;
+    for (int j = 0; j < K_LANE; j++) L[j * n + l] = st[i * K_LANE + j];
+    i++;
+  }
+  free(ix);
+  free(st);
 }
 
 static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
@@ -628,6 +681,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     if (__atomic_load_n(&gpu_A[KA_DONE], __ATOMIC_SEQ_CST) != 0) break;
     for (KW l = 0; l < gpu_lanes; l++) waiting += H[P.lane0 + l] == PC_KQ;
     if (waiting > 0 && gpu_kq_host(prog, H, &P, waiting)) waiting = 0;
+    if (waiting > 1 && gpu_kq_order) gpu_kq_sort(H, &P, waiting);
     if (waiting > 0) {
       // (again, after the arena grows, while a call runs out of it)
       for (;;) {
