@@ -1731,3 +1731,228 @@ def L.call(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.D
             Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
           L.call.at(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, q, le, e1, f, as, e2, i, Core.Inline.has(ins, f), Core.Inline.look(ins, f), agree(f), h, ih, ih2)
 
+# Steps
+# =====
+
+# A term's step, the pass taken j deep.
+def Step.eval(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), +e1: List<&2, Core.Val>, t: Core.Tm, +e2: List<&2, Core.Val>, +j: Nat,
+    +h: Law.ERel(ins, e1, e2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)), ih2: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, t}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, t, True{})})):
+  match t:
+    case Core.CVar{+x}:
+      %Sh.var(ins, j, x) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CVar{x}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih(q, le, Core.SLook{e1, x}, Core.SLook{e2, x}, (e2, {==}, h))
+    case Core.CLit{+l}:
+      %Sh.lit(ins, j, l) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CLit{l}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih(q, le, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VLit{l}}}, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VLit{l}}}, Inl{(Core.ROk{Nil{}}, Core.KCons{Core.VLit{l}}, {==}, (Core.VLit{l}, {==}, {==}), Unit{})})
+    case Core.CRef{+f}:
+      %Sh.ref(ins, j, f) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CRef{f}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih(q, le, Core.SCallDef{f, Nil{}}, Core.SCallDef{f, Nil{}}, Inl{(Nil{}, {==}, Unit{})})
+    case Core.CCall{+f, +as}:
+      L.call(~prim, ~ins, ~ok, ~one, ~ds, ~agree, k, p, 1n+q, le, e1, f, as, e2, j, h, ih, ih2)
+    case Core.CApp{+f, +as}:
+      %Sh.app(ins, j, f, as) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CApp{f, as}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEvals{e1, f <> as}), Core.KApp{}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Tm.inline(ins, j, f, True{}) <> Core.Tms.inline(ins, j, as)}), Core.KApp{}},
+        Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Tm.inline(ins, j, f, True{}) <> Core.Tms.inline(ins, j, as)}), Core.KApp{}, {==}, {==},
+          ih(q, le, Core.SEvals{e1, f <> as}, Core.SEvals{e2, Core.Tm.inline(ins, j, f, True{}) <> Core.Tms.inline(ins, j, as)}, (e2, j, {==}, h)))})
+    case Core.CCtr{+c, +as}:
+      %Sh.ctr(ins, j, c, as) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CCtr{c, as}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEvals{e1, as}), Core.KCtr{c}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Tms.inline(ins, j, as)}), Core.KCtr{c}},
+        Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Tms.inline(ins, j, as)}), Core.KCtr{c}, {==}, {==},
+          ih(q, le, Core.SEvals{e1, as}, Core.SEvals{e2, Core.Tms.inline(ins, j, as)}, (e2, j, {==}, h)))})
+    case Core.CLam{+pt, +b}:
+      %Sh.lam(ins, j, pt, b) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CLam{pt, b}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih(q, le, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VClo{e1, pt, b}}}, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VClo{e2, pt, Core.Tm.inline(ins, j, b, True{})}}}, Inl{(Core.ROk{Nil{}}, Core.KCons{Core.VClo{e2, pt, Core.Tm.inline(ins, j, b, True{})}}, {==}, (Core.VClo{e2, pt, Core.Tm.inline(ins, j, b, True{})}, {==}, ({==}, j, {==}, h)), Unit{})})
+    case Core.CLet{+pt, +v, +b}:
+      %Sh.let(ins, j, pt, v, b) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CLet{pt, v, b}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEval{e1, v}), Core.KLet{e1, pt, b}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, v, True{})}), Core.KLet{e2, pt, Core.Tm.inline(ins, j, b, True{})}},
+        Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, v, True{})}), Core.KLet{e2, pt, Core.Tm.inline(ins, j, b, True{})}, {==}, (e2, j, {==}, h),
+          ih(q, le, Core.SEval{e1, v}, Core.SEval{e2, Core.Tm.inline(ins, j, v, True{})}, (e2, j, {==}, h)))})
+    case Core.CMat{+scrs, +cs}:
+      %Sh.mat(ins, j, scrs, cs) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CMat{scrs, cs}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEvals{e1, scrs}), Core.KMat{e1, cs}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Tms.inline(ins, j, scrs)}), Core.KMat{e2, Core.Tms.inline(ins, j, cs)}},
+        Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Tms.inline(ins, j, scrs)}), Core.KMat{e2, Core.Tms.inline(ins, j, cs)}, {==}, (e2, j, {==}, h),
+          ih(q, le, Core.SEvals{e1, scrs}, Core.SEvals{e2, Core.Tms.inline(ins, j, scrs)}, (e2, j, {==}, h)))})
+    case Core.CCse{+ps, +b}:
+      %Sh.cse(ins, j, ps, b) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CCse{ps, b}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih(q, le, Core.SThen{Core.RFail{"a case outside a match"}, Core.KApp{}}, Core.SThen{Core.RFail{"a case outside a match"}, Core.KApp{}}, Inl{(Core.RFail{"a case outside a match"}, Core.KApp{}, {==}, {==}, Unit{})})
+    case Core.CSuc{+n, +e}:
+      %Sh.suc(ins, j, n, e) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CSuc{n, e}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEval{e1, e}), Core.KSuc{n}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, e, True{})}), Core.KSuc{n}},
+        Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, e, True{})}), Core.KSuc{n}, {==}, {==},
+          ih(q, le, Core.SEval{e1, e}, Core.SEval{e2, Core.Tm.inline(ins, j, e, True{})}, (e2, j, {==}, h)))})
+    case Core.COp{+op, +a, +b}:
+      %Sh.op(ins, j, op, a, b) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.COp{op, a, b}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEvals{e1, [a, b]}), Core.KOp{op}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, [Core.Tm.inline(ins, j, a, True{}), Core.Tm.inline(ins, j, b, True{})]}), Core.KOp{op}},
+        Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, [Core.Tm.inline(ins, j, a, True{}), Core.Tm.inline(ins, j, b, True{})]}), Core.KOp{op}, {==}, {==},
+          ih(q, le, Core.SEvals{e1, [a, b]}, Core.SEvals{e2, [Core.Tm.inline(ins, j, a, True{}), Core.Tm.inline(ins, j, b, True{})]}, (e2, j, {==}, h)))})
+    case Core.CAnn{+e, +ty}:
+      %Sh.ann(ins, j, e, ty) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CAnn{e, ty}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih(q, le, Core.SEval{e1, e}, Core.SEval{e2, Core.Tm.inline(ins, j, e, True{})}, (e2, j, {==}, h))
+    case Core.CTyp{+n, +as}:
+      %Sh.typ(ins, j, n, as) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CTyp{n, as}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih(q, le, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VTrm{Core.CBox{}}}}, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VTrm{Core.CBox{}}}}, Inl{(Core.ROk{Nil{}}, Core.KCons{Core.VTrm{Core.CBox{}}}, {==}, (Core.VTrm{Core.CBox{}}, {==}, {==}), Unit{})})
+    case Core.CBox{}:
+      %Sh.box(ins, j) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CBox{}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih(q, le, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VTrm{Core.CBox{}}}}, Core.SThen{Core.ROk{Nil{}}, Core.KCons{Core.VTrm{Core.CBox{}}}}, Inl{(Core.ROk{Nil{}}, Core.KCons{Core.VTrm{Core.CBox{}}}, {==}, (Core.VTrm{Core.CBox{}}, {==}, {==}), Unit{})})
+    case Core.CErr{+m}:
+      %Sh.err(ins, j, m) : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEval{e1, Core.CErr{m}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, _}))
+      ih(q, le, Core.SThen{Core.RFail{m}, Core.KApp{}}, Core.SThen{Core.RFail{m}, Core.KApp{}}, Inl{(Core.RFail{m}, Core.KApp{}, {==}, {==}, Unit{})})
+
+def Step.evals(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), +e1: List<&2, Core.Val>, es: List<&2, Core.Tm>, +e2: List<&2, Core.Val>, +j: Nat,
+    +h: Law.ERel(ins, e1, e2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)), ih2: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SEvals{e1, es}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SEvals{e2, Core.Tms.inline(ins, j, es)})):
+  match es:
+    case Nil{}:
+      Unit{}
+    case +t <> +r:
+      ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEval{e1, t}), Core.KTail{e1, r}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, t, True{})}), Core.KTail{e2, Core.Tms.inline(ins, j, r)}},
+        Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, t, True{})}), Core.KTail{e2, Core.Tms.inline(ins, j, r)}, {==}, (e2, j, {==}, h),
+          ih(q, le, Core.SEval{e1, t}, Core.SEval{e2, Core.Tm.inline(ins, j, t, True{})}, (e2, j, {==}, h)))})
+
+# A call's arguments, where the other program runs them as a call's (bb)
+# or as scrutinees.
+def Step.args(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), +e1: List<&2, Core.Val>, +e2: List<&2, Core.Val>, +j: Nat, bb: Bool, as: List<&2, Core.Arg>,
+    +h: Law.ERel(ins, e1, e2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)), ih2: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SArgs{e1, as}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Law.ArgsT(bb, e2, Core.Args.inline(ins, j, as)))):
+  match bb:
+    case True{}:
+      match as:
+        case Nil{}:
+          Unit{}
+        case a <> +r:
+          match a:
+            case Core.Arg{rl, +e}:
+              match rl:
+                case Core.Run{}:
+                  ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEval{e1, e}), Core.KATail{e1, r}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, e, True{})}), Core.KATail{e2, Core.Args.inline(ins, j, r)}},
+                    Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, e, True{})}), Core.KATail{e2, Core.Args.inline(ins, j, r)}, {==}, (e2, j, True{}, {==}, h),
+                      ih(q, le, Core.SEval{e1, e}, Core.SEval{e2, Core.Tm.inline(ins, j, e, True{})}, (e2, j, {==}, h)))})
+                case Core.Era{}:
+                  ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEval{e1, Core.CBox{}}), Core.KATail{e1, r}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.CBox{}}), Core.KATail{e2, Core.Args.inline(ins, j, r)}},
+                    Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.CBox{}}), Core.KATail{e2, Core.Args.inline(ins, j, r)}, {==}, (e2, j, True{}, {==}, h),
+                      ih(q, le, Core.SEval{e1, Core.CBox{}}, Core.SEval{e2, Core.CBox{}}, (e2, 0n, {==}, h)))})
+    case False{}:
+      match as:
+        case Nil{}:
+          Unit{}
+        case a <> +r:
+          match a:
+            case Core.Arg{rl, +e}:
+              match rl:
+                case Core.Run{}:
+                  ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEval{e1, e}), Core.KATail{e1, r}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, e, True{})}), Core.KTail{e2, Core.Args.scrs(Core.Args.inline(ins, j, r))}},
+                    Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.Tm.inline(ins, j, e, True{})}), Core.KTail{e2, Core.Args.scrs(Core.Args.inline(ins, j, r))}, {==}, (e2, j, False{}, {==}, h),
+                      ih(q, le, Core.SEval{e1, e}, Core.SEval{e2, Core.Tm.inline(ins, j, e, True{})}, (e2, j, {==}, h)))})
+                case Core.Era{}:
+                  ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEval{e1, Core.CBox{}}), Core.KATail{e1, r}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.CBox{}}), Core.KTail{e2, Core.Args.scrs(Core.Args.inline(ins, j, r))}},
+                    Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{e2, Core.CBox{}}), Core.KTail{e2, Core.Args.scrs(Core.Args.inline(ins, j, r))}, {==}, (e2, j, False{}, {==}, h),
+                      ih(q, le, Core.SEval{e1, Core.CBox{}}, Core.SEval{e2, Core.CBox{}}, (e2, 0n, {==}, h)))})
+
+def Step.then(~prim: String -> List<&2, Core.Val> -> Core.Res, ~ins: Map<&2, Core.Def>, ~ok: @op:String -> @vs1:List<&2, Core.Val> -> @vs2:List<&2, Core.Val> -> Law.VRels(ins, vs1, vs2) -> Law.PRel(ins, prim(op, vs1), prim(op, vs2)), ~one: @op:String -> @vs:List<&2, Core.Val> -> Red.Fits(prim(op, vs), Red.WLen{1n}), ~ds: List<&2, Core.Def>, ~agree: @f:String -> Dead.Tru(Core.Inline.has(ins, f)) -> Dead.Tru(String.eq(Law.Def.name(Core.Inline.look(ins, f)), f)) -> Law.Found(ds, f, Law.Def.pars(Core.Inline.look(ins, f)), Core.Inline.body(Core.Inline.look(ins, f))), +k: Nat, +p: Nat, +q: Nat, +le: Red.Le(p, q), r1: Core.Res, r2: Core.Res, +rr: Law.RRel(ins, r1, r2), k1: Core.Kont, +k2: Core.Kont,
+    kr: Law.KRel(ins, k1, k2), ih: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)), ih2: @m2:Nat -> Red.Le(p, m2) -> @t1:Core.Sel -> @t2:Core.Sel -> Law.SRel(ins, ds, m2, t1, t2) -> Law.RRel(ins, Core.run(~prim, p, ds, t1), Core.run(~prim, m2, Core.Defs.inline(ins, k, ds), t2)))
+    -> Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SThen{r1, k1}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SThen{r2, k2})):
+  match r1:
+    case Core.ROk{+vs1}:
+      match r2:
+        case Core.ROk{+vs2}:
+          ih(q, le, Core.SOk{k1, vs1}, Core.SOk{k2, vs2}, Inl{(k2, vs2, {==}, kr, rr)})
+        case Core.REnv{+env2}:
+          match rr:
+        case Core.RNo{}:
+          match rr:
+        case Core.RFail{+m2}:
+          match rr:
+    case Core.REnv{+env1}:
+      match r2:
+        case Core.ROk{+vs2}:
+          match rr:
+        case Core.REnv{+env2}:
+          match k1:
+            case Core.KCall{+fa}:
+              Unit{}
+            case Core.KApp{}:
+              Unit{}
+            case Core.KCtr{+ka}:
+              Unit{}
+            case Core.KLet{+enva, +pa, +ba}:
+              Unit{}
+            case Core.KBind{+ba}:
+              match kr:
+                case (+j, eq):
+                  %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SThen{Core.REnv{env1}, Core.KBind{ba}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SThen{Core.REnv{env2}, _}))
+                  ih(q, le, Core.SEval{env1, ba}, Core.SEval{env2, Core.Tm.inline(ins, j, ba, True{})}, (env2, j, {==}, rr))
+            case Core.KMat{+enva, +casesa}:
+              Unit{}
+            case Core.KCase{+enva, +vsa, +ba, +resta}:
+              match kr:
+                case (+e2, +vs2, +j, eq, +vr, +h):
+                  %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SThen{Core.REnv{env1}, Core.KCase{enva, vsa, ba, resta}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SThen{Core.REnv{env2}, _}))
+                  ih(q, le, Core.SEval{env1, ba}, Core.SEval{env2, Core.Tm.inline(ins, j, ba, True{})}, (env2, j, {==}, rr))
+            case Core.KSuc{+ka}:
+              Unit{}
+            case Core.KOp{+opa}:
+              Unit{}
+            case Core.KTail{+enva, +esa}:
+              Unit{}
+            case Core.KATail{+enva, +asa}:
+              Unit{}
+            case Core.KCons{+va}:
+              Unit{}
+            case Core.KApply{+vsa}:
+              Unit{}
+            case Core.KBody{+ba, +resta}:
+              match kr:
+                case (+j, +rest2, eq, +vr):
+                  %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SThen{Core.REnv{env1}, Core.KBody{ba, resta}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SThen{Core.REnv{env2}, _}))
+                  ih2(q, le, Core.SThen{Core.run(~prim, p, ds, Core.SEval{env1, ba}), Core.KApply{resta}}, Core.SThen{Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{env2, Core.Tm.inline(ins, j, ba, True{})}), Core.KApply{rest2}},
+                    Inl{(Core.run(~prim, q, Core.Defs.inline(ins, k, ds), Core.SEval{env2, Core.Tm.inline(ins, j, ba, True{})}), Core.KApply{rest2}, {==}, (rest2, {==}, vr),
+                      ih(q, le, Core.SEval{env1, ba}, Core.SEval{env2, Core.Tm.inline(ins, j, ba, True{})}, (env2, j, {==}, rr)))})
+        case Core.RNo{}:
+          match rr:
+        case Core.RFail{+m2}:
+          match rr:
+    case Core.RNo{}:
+      match r2:
+        case Core.ROk{+vs2}:
+          match rr:
+        case Core.REnv{+env2}:
+          match rr:
+        case Core.RNo{}:
+          match k1:
+            case Core.KCall{+fa}:
+              Unit{}
+            case Core.KApp{}:
+              Unit{}
+            case Core.KCtr{+ka}:
+              Unit{}
+            case Core.KLet{+enva, +pa, +ba}:
+              Unit{}
+            case Core.KBind{+ba}:
+              Unit{}
+            case Core.KMat{+enva, +casesa}:
+              Unit{}
+            case Core.KCase{+enva, +vsa, +ba, +resta}:
+              match kr:
+                case (+e2, +vs2, +j, eq, +vr, +h):
+                  %eq : Law.RRel(ins, Core.run(~prim, 1n+p, ds, Core.SThen{Core.RNo{}, Core.KCase{enva, vsa, ba, resta}}), Core.run(~prim, 1n+q, Core.Defs.inline(ins, k, ds), Core.SThen{Core.RNo{}, _}))
+                  ih(q, le, Core.SMatch{enva, vsa, resta}, Core.SMatch{e2, vs2, Core.Tms.inline(ins, j, resta)}, (e2, vs2, j, {==}, vr, h))
+            case Core.KSuc{+ka}:
+              Unit{}
+            case Core.KOp{+opa}:
+              Unit{}
+            case Core.KTail{+enva, +esa}:
+              Unit{}
+            case Core.KATail{+enva, +asa}:
+              Unit{}
+            case Core.KCons{+va}:
+              Unit{}
+            case Core.KApply{+vsa}:
+              Unit{}
+            case Core.KBody{+ba, +resta}:
+              Unit{}
+        case Core.RFail{+m2}:
+          match rr:
+    case Core.RFail{+m1}:
+      Unit{}
+
