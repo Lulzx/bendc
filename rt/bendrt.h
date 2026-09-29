@@ -298,11 +298,27 @@ static size_t gc_nruns;
 static pthread_mutex_t gc_lock = PTHREAD_MUTEX_INITIALIZER;
 static GcBlk *gc_partial[2][GC_NCLS];
 static _Atomic size_t gc_since;         // bytes handed out since the last collection
-static size_t gc_limit = (size_t)256 << 20;
-static size_t gc_limit_min = (size_t)256 << 20;
+// A collection comes after gc_limit bytes: gc_limit_min times gc_grow, or
+// gc_factor times what lived at the last one if that is more. A minor
+// collection finds what died young; what dies old waits for a major one,
+// which comes when what lives grows past gc_minor_k times what lived after
+// the last major one, plus gc_slack times gc_grow.
+// gc_grow starts at 1: a program whose young objects mostly die collects
+// often, in a small heap, and its peak memory stays near what lives. It
+// becomes gc_grow_max for good when two minor collections in a row find
+// that 3/4 of what was made since the one before lives on: such a program
+// (a compiler building its tables, say) would mark the same objects again
+// and again, and more of them die when it waits longer. It also doubles
+// when, over the last 8 collections, the program spent more than a tenth of
+// its time stopped in them (with many threads, or with the machine busy,
+// each stop costs more than the marking).
 // (Read at start: libc's number parsing takes a lock a stopped thread may hold.)
-static double gc_minor_k = 2.0, gc_factor = 0.0;
-static size_t gc_slack = (size_t)64 << 20;
+static size_t gc_limit = (size_t)8 << 20;
+static size_t gc_limit_min = (size_t)8 << 20;
+static double gc_minor_k = 2.0, gc_factor = 0.5;
+static size_t gc_slack = (size_t)8 << 20;
+static unsigned gc_grow = 1, gc_grow_max = 32, gc_kept_run;
+static double gc_t_end, gc_t_run, gc_t_stop;  // seconds (see gc_now)
 static size_t gc_live_bytes;
 static size_t gc_major_live;
 static int gc_minor;       // this collection keeps the marks of old objects
@@ -423,7 +439,9 @@ static void gc_init(void) {
   if (getenv("BEND_GC_FACTOR")) gc_factor = atof(getenv("BEND_GC_FACTOR"));
   if (getenv("BEND_GC_SLACK_MB")) gc_slack = (size_t)atol(getenv("BEND_GC_SLACK_MB")) << 20;
   const char *m = getenv("BEND_GC_MIN_MB");
-  if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20;
+  // (a heap size set this way stays: BEND_GC_GROW=n lets it grow n times)
+  if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20, gc_grow_max = 1;
+  if (getenv("BEND_GC_GROW") && atoi(getenv("BEND_GC_GROW")) > 0) gc_grow_max = (unsigned)atoi(getenv("BEND_GC_GROW"));
   // Reference counting frees every object: the collector never runs.
   if (bend_rc_req) gc_limit = gc_limit_min = (size_t)-1;
 }
@@ -1533,10 +1551,16 @@ static void gc_rescan_dirty(void) {
   }
 }
 
+static double gc_now(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (double)t.tv_sec + (double)t.tv_nsec * 1e-9;
+}
+
 __attribute__((noinline)) static void gc_collect_locked(void) {
   Thr *me = thr_self;
-  struct timespec t0, t1;
-  if (gc_stats) clock_gettime(CLOCK_MONOTONIC, &t0);
+  double t0 = gc_now();
+  size_t live0 = gc_live_bytes;
   atomic_store(&gc_acks, 0);
   atomic_store(&gc_stopping, 1);
   int n = 0;
@@ -1554,7 +1578,7 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
   // A major collection forgets every mark; a minor one keeps the old
   // objects' (the heap is written only while an object is built, and the
   // exceptions are reached from roots).
-  gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack;
+  gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack * gc_grow;
   if (!gc_minor) {
     for (uintptr_t bi = 0; bi < gc_top; bi++) {
       if (gc_kind[bi] == 1 || gc_kind[bi] == 2) memset(gc_mbits + bi * 64, 0, 64 * sizeof(uint64_t));
@@ -1591,18 +1615,30 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
   while (atomic_load(&gc_inside) > 0) sched_yield();
   if (!gc_minor) gc_major_live = gc_live_bytes ? gc_live_bytes : 1;
   {
-    size_t want = (size_t)(gc_factor * (double)gc_live_bytes);
-    gc_limit = want > gc_limit_min ? want : gc_limit_min;
+    if (gc_minor) {
+      size_t kept = gc_live_bytes > live0 ? gc_live_bytes - live0 : 0;
+      gc_kept_run = kept * 4 > gc_since * 3 ? gc_kept_run + 1 : 0;
+      if (gc_kept_run >= 2) gc_grow = gc_grow_max;
+    }
+    double t1 = gc_now();
+    if (gc_t_end > 0) gc_t_run += t0 - gc_t_end;
+    gc_t_stop += t1 - t0;
+    gc_t_end = t1;
+    if ((gc_count & 7) == 7) {
+      if (gc_t_stop * 10 > gc_t_run + gc_t_stop && gc_grow < gc_grow_max) gc_grow = gc_grow * 2 < gc_grow_max ? gc_grow * 2 : gc_grow_max;
+      gc_t_run = gc_t_stop = 0;
+    }
+    size_t want = (size_t)(gc_factor * (double)gc_live_bytes), least = gc_limit_min * gc_grow;
+    gc_limit = want > least ? want : least;
   }
   gc_since = 0;
   gc_count++;
   if (gc_stats) {
-    clock_gettime(CLOCK_MONOTONIC, &t1);
     fprintf(stderr, "[gc %zu %s] live %zu MB, heap %zu MB, next at +%zu MB, %zu rescans next, %.1f ms"
       " (marking %.1f ms, %d threads)\n",
       gc_count, gc_minor ? "minor" : "major", gc_live_bytes >> 20, (size_t)(gc_top << GC_BLK_SHIFT) >> 20,
       gc_limit >> 20, gc_nrem,
-      (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6,
+      (gc_t_end - t0) * 1e3,
       (ts.tv_sec - tm.tv_sec) * 1e3 + (ts.tv_nsec - tm.tv_nsec) / 1e6, n + 1);
   }
 }
@@ -2010,6 +2046,8 @@ BEND_UINL V F_Array_dswap_x37w(V a, V i, V v) {
   return C2(0, a, old);
 }
 static inline V F_Array_dnew(V d, V v) { return arr_new(d, v); }
+// (an array of scalars, see Arrw in bendc.bend: narrow on the device only)
+#define F_Array_dnew_x37w F_Array_dnew
 static inline V F_Array_dclone(V a) { return C2(0, a, arr_copy(arr_cls(a), arr_cells(a), 1, ((V *)a)[0] & RC_TS)); }
 
 // The atomics, on a cell's U32 (its low half: the cell is a U32 below 2^32).
@@ -2615,10 +2653,16 @@ static void *par_worker(void *arg) {
   return NULL;
 }
 
+// The tasks queued in the deques (the slots from top to bot, and one more
+// each side for a pop or a steal the collection stopped halfway; the rest
+// are stale, and a task is held on its forker's stack until it is joined).
 static void par_hook(void) {
   for (int i = 0; i < gc_nthr; i++) {
     PDeque *d = gc_thrs[i]->dq;
-    if (d) gc_scan(d->buf, d->buf + d->mask + 1);
+    if (!d) continue;
+    long t = atomic_load(&d->top) - 1, b = atomic_load(&d->bot) + 1;
+    if (b - t > d->mask + 1) t = b - (d->mask + 1);
+    for (long j = t; j < b; j++) gc_mark((V)d->buf[j & d->mask]);
   }
 }
 
