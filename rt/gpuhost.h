@@ -36,6 +36,7 @@ typedef struct {
 static pthread_mutex_t gpu_lock = PTHREAD_MUTEX_INITIALIZER;
 static int gpu_mode = -1;
 static int gpu_log;
+static double gpu_secs[2];  // the device's time in the two kernels (BEND_GPU_LOG)
 static KW *gpu_H;          // the arena
 static size_t gpu_Hn;      // its bytes
 static size_t gpu_Hmax;    // the most it grows to (BEND_GPU_MB)
@@ -275,6 +276,13 @@ static int g_dispatch(const KParams *P, GId pso) {
   g_msg(cb, "commit");
   g_msg(cb, "waitUntilCompleted");
   unsigned long st = G_SEND(unsigned long (*)(GId, GSel))(cb, g_sel("status"));
+  if (gpu_log) {
+    double (*tm)(GId, GSel) = G_SEND(double (*)(GId, GSel));
+    double dt = tm(cb, g_sel("GPUEndTime")) - tm(cb, g_sel("GPUStartTime"));
+    gpu_secs[pso != g_pso] += dt;
+    const char *lv = getenv("BEND_GPU_LOG");
+    if (lv && lv[0] == '2') fprintf(stderr, "bend gpu: %s %.4fs\n", pso != g_pso ? "kq" : "main", dt);
+  }
   if (st != 4) gpu_note("a dispatch failed: %s", g_err_text(g_msg(cb, "error")));
   g_pool_pop(pool);
   return st == 4;
@@ -492,6 +500,16 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
       }
 #endif
       if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) break;
+      const char *lv = getenv("BEND_GPU_LOG");
+      if (lv && lv[0] == '2') {
+        KW n = gpu_lanes, fb = 0, kq = 0;
+        for (KW l = 0; l < n; l++) {
+          KW *ls = H + P.lane0 + l;
+          if (ls[9 * n] != ls[8 * n] && ls[0] == ls[9 * n]) { fb++; kq = ls[7 * n]; }
+        }
+        fprintf(stderr, "bend gpu: kq ran %llu lanes, %llu gave up (kq %llu)\n", (unsigned long long)waiting,
+          (unsigned long long)fb, (unsigned long long)kq);
+      }
     } else if (active == 0 && gpu_A[KA_QHEAD] == gpu_A[KA_QTAIL]) {
       // Nothing runs, waits or is queued, and the root has not returned.
       gpu_note("%s", "the device stalled");
@@ -504,8 +522,9 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
     return 0;
   }
   if (gpu_log) {
-    fprintf(stderr, "bend gpu: done in %llu dispatches, %llu MB of arena\n", (unsigned long long)rounds,
-      (unsigned long long)((KW)gpu_A[KA_HEAP] * K_CHUNK * 8 >> 20));
+    fprintf(stderr, "bend gpu: done in %llu dispatches, %llu MB of arena, %.3fs + %.3fs on the device\n",
+      (unsigned long long)rounds, (unsigned long long)((KW)gpu_A[KA_HEAP] * K_CHUNK * 8 >> 20), gpu_secs[0],
+      gpu_secs[1]);
   }
   gpu_nout = 0;
   int ok = gpu_copy_out(prog, &P, H[2], out);
