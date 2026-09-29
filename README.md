@@ -466,10 +466,39 @@ Parallel lets are also found. Bend is pure, so the operands of one node (an oper
 arguments, a constructor's fields) may run in any order. Where two or more of them call back into
 the def, as in `fib(n - 1) + fib(n - 2)` or `merge(msort(a), msort(b))`, `bendc` turns them into a
 parallel let, and the fork depth above keeps the small calls cheap. An argument the callee erases or
-never reads stays where it is. The pass is on by default and `BEND_AUTO_PAR=0` turns it off. With
-`BEND_NO_FREE=1` it defaults to off (`BEND_AUTO_PAR=1` turns it back on), because a compiler's tree
-walks are small and called often, and forking them made bendc's self-build 60% slower. `fib 44`
-runs 4.5x faster on 12 cores, and `sort` in [Benchmarks](#benchmarks) 2.4x.
+never reads stays where it is.
+
+The pass also looks at blocks: a def's body, a case's, or a lambda's, which is a chain of lets and
+the expression they end in. In a block, a call is heavy when it calls a def (not a native) that
+recurses, or a def that forks. The pass collects the heavy calls that no let of the block feeds.
+It puts them into one parallel let, placed where the most of them can move: the top of the block,
+or just after the last let that one of them reads. So `a = f(l)`, `b = f(r)`, `g(a, b)` forks
+`f(l)` and `f(r)`. A def that is not recursive itself but calls such defs, such as one that adds
+the four quadrant products of a matrix product, forks too.
+
+Some calls always stay where they are:
+
+- a call under a lambda or in a match's cases;
+- a value of a parallel let the program wrote;
+- a call that ends the block, so that a loop's tail call stays a jump.
+
+Only whether a call recurses or forks makes it heavy, not its size. The cutoff is the fork depth:
+past the frontier, a parallel let runs its values in order.
+
+The pass is on by default and `BEND_AUTO_PAR=0` turns it off. With `BEND_NO_FREE=1` it defaults
+to off (`BEND_AUTO_PAR=1` turns it back on). A compiler's tree walks are small and called often.
+With the pass on, bendc builds itself to the same C, but in 1.75s where it takes 0.85s with the
+pass off. `fib 44` runs 4.5x faster on 12 cores, and `sort` in [Benchmarks](#benchmarks) 2.4x.
+
+Each of the 16 official benchmark programs writes its parallelism out, as parallel lets. To test
+the pass, each parallel let `a b = x y` in them was rewritten as the lets `a = x` and `b = y`,
+40 in all. On the rewritten programs, bendc forks at as many places as on the programs as written,
+and the PAR times match the originals within the noise of a shared machine (load 12 to 22). The
+pass before blocks already recovered the batch trees: the optimizer inlines a let that is used
+once into its use, which gives an operator or a call with two recursive operands. The block rule
+recovers the rest. These are merkle's `audit` and `pgen`, and tree-matmul's `add4`, `vadd2` and
+four-way `cksum`. On the programs as written, the pass also
+forks symreg's `esize` and a second let in tree-matmul's `round`.
 
 IO follows Base's continuation-passing `IO` type. An effect call becomes a request node that an event
 loop answers, as in the official runtime: computations run their pure code up to their next effect,
@@ -660,9 +689,10 @@ bendc is fastest in 10 of the 48 program and mode pairs:
 - GPU: hashmap, lexer and queens (`rc`).
 
 In the other 38 pairs, the official build is fastest. None of bendc's wins come from parallelism
-the program does not write. The automatic parallelism pass (see
-[How it works](#how-it-works)) changes the generated C for only one of the 16 programs, symreg,
-and symreg is slower than the official build in every mode.
+the program does not write. When this table was measured, the automatic parallelism pass (see
+[How it works](#how-it-works)) changed the generated C for only one of the 16 programs, symreg,
+and symreg is slower than the official build in every mode. All 16 programs write their
+parallelism out. With it removed, the pass finds it again (see How it works).
 
 Where bendc loses, and why:
 
@@ -684,7 +714,11 @@ Where bendc loses, and why:
   the chunk lists (`S_szip`, a quarter of the samples).
 - **terrain.** `bendc -o` links the runtime as a separate object, and there `arr_new` was a call,
   so clang did not know a new array's size and masked every index with a mask loaded from the
-  array. `arr_new` is now inline: 57G instructions, now 51G (the official build: 45G).
+  array. `arr_new` is now inline: 57G instructions, now 51G (the official build: 45G). The traced
+  `bend_dead` has since added 19G back (70G). Nested unboxing splits `fill`'s and `hist`'s
+  `Array<U32> & U32` parameter into two, but the unused `U32` field keeps its type variable. So
+  each loop step calls `bend_dead` on it. With those calls removed from the C, terrain takes
+  54G. If the field were known to be a `U32`, the calls would not be generated.
 - **lexer.** The program allocates a mode node (`InId{h}`) and a string cell for every character.
   The official build appears to store a constructor with a single field without allocating a
   node. Either that representation or in-place reuse would remove the allocations.

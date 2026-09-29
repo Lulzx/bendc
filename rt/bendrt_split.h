@@ -196,6 +196,7 @@ struct PDeque;
 
 // Classes of up to 16 words (nodes) reuse the slots matches free.
 #define GC_RQCLS 15
+#define ARR_SPARES 8
 
 typedef struct Thr {
   GcCache cache[2][GC_NCLS];
@@ -210,9 +211,14 @@ typedef struct Thr {
   // Claiming a reuse block (gc_refill): a stop signal that comes meanwhile
   // is deferred (deferred is set) until the claim is over.
   volatile sig_atomic_t claiming, deferred;
+  // Arrays the program is done with (arr_dead), for the next Array.new of
+  // their class; a collection forgets them (arr_hook).
+  V spare[ARR_SPARES];
+  uint32_t nspare;
 } Thr;
 
 void gc_park(Thr *t);
+void gc_join(void);
 
 typedef struct { V *p; size_t n; } GcRange;
 typedef struct { uint32_t at, len; } GcRun;
@@ -851,6 +857,85 @@ void gc_scan(const void *lo, const void *hi);
 
 void gc_drain(void);
 
+// Parallel marking: the threads a collection stopped help drain the mark
+// stack, which is then a shared pool (under gc_pool_lock). A helper takes a
+// chunk into its own stack, marks with an atomic or (two helpers may reach
+// one object), and gives half its stack back when the pool runs dry. The
+// marking is over when the pool is empty and no helper holds work, both read
+// under the lock. Only the collector's own lock: a helper runs in a signal
+// handler, and no thread the collector stopped can hold it.
+#define GC_CHUNK 64
+#define GC_MKCAP ((size_t)1 << 16)
+typedef struct { GcItem *stk; size_t sp; } GcMk;
+extern GcMk gc_mks[GC_MAXTHR + 1];
+extern int gc_nmks;
+#ifdef __TINYC__
+// (tcc's compare-and-swap is not atomic on arm64: two threads can both win.
+// The mutex is taken only by the collector and the threads it stopped.)
+extern pthread_mutex_t gc_pool_mx;
+#else
+extern int gc_pool_lock;
+#endif
+extern size_t gc_active;
+extern _Atomic int gc_marking;
+extern _Atomic unsigned gc_mark_gen;
+extern _Atomic int gc_helpers;
+extern _Atomic int gc_in_help;
+
+#ifdef __TINYC__
+static inline void gc_pool_acquire(void) { pthread_mutex_lock(&gc_pool_mx); }
+static inline void gc_pool_release(void) { pthread_mutex_unlock(&gc_pool_mx); }
+#else
+static inline void gc_pool_acquire(void) {
+  for (int k = 0;; k++) {
+    int z = 0;
+    if (__atomic_compare_exchange_n(&gc_pool_lock, &z, 1, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)) return;
+    if (k > 64) sched_yield();
+  }
+}
+
+static inline void gc_pool_release(void) { __atomic_store_n(&gc_pool_lock, 0, __ATOMIC_RELEASE); }
+#endif
+
+// Half of a helper's stack back to the pool.
+void gc_share(GcMk *m);
+
+static inline void gc_mark_par(V w, GcMk *m) {
+  uintptr_t a = (uintptr_t)(w & 0x7fffffffffffffffull);
+  uintptr_t off = a - (uintptr_t)gc_base;
+  if (off >= (gc_top << GC_BLK_SHIFT)) return;
+  uintptr_t bi = off >> GC_BLK_SHIFT;
+  uint8_t kd = gc_kind[bi];
+  if (kd == 0) return;
+  if (kd == 3) bi -= gc_back[bi];
+  GcBlk *b = gc_blk(bi);
+  uintptr_t o = (uintptr_t)gc_objs(b);
+  if (a < o && !b->large) return;
+  size_t i = 0;
+  if (b->large) {
+    if (a >= o + (uintptr_t)b->words * sizeof(V)) return;
+  } else {
+    i = (a - o) / ((uintptr_t)b->words * sizeof(V));
+    if (i >= b->nobj) return;
+  }
+  uint64_t bit = 1ull << (i & 63);
+  if (!(GC_ALLOC(b)[i >> 6] & bit)) return;
+  uint64_t *mw = &GC_MARK(b)[i >> 6];
+  if (__atomic_load_n(mw, __ATOMIC_RELAXED) & bit) return;
+  if (__atomic_fetch_or(mw, bit, __ATOMIC_RELAXED) & bit) return;
+  if (b->atomic) return;
+  if (m->sp == GC_MKCAP) gc_share(m);
+  m->stk[m->sp++] = (GcItem){(V *)(o + i * (uintptr_t)b->words * sizeof(V)), b->words};
+}
+
+void gc_help(GcMk *m);
+
+// A stopped thread, when the pool opens.
+void gc_join(void);
+
+// Drains the mark stack, with the n stopped threads' help.
+void gc_drain_par(int n);
+
 // A thread stopped for a collection: its registers on its stack, it waits.
 __attribute__((noinline)) void gc_park(Thr *t);
 
@@ -967,7 +1052,7 @@ static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
 // one. A shared array's cells are shared as they are copied.
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))
-static inline unsigned arr_cls(V a) { return (unsigned)(((V *)a)[0] & 31); }
+static inline unsigned arr_cls(V a) { return (unsigned)(((const uint32_t *)a)[0] & 31); }
 static inline V *arr_cells(V a) { return (V *)a + 1; }
 static inline int arr_shared(V a) {
   V w0 = __atomic_load_n((V *)a, __ATOMIC_RELAXED);
@@ -997,9 +1082,39 @@ void rc_let_go_arr(V a);
 // a new array's size, and a loop over it does not reload the mask.
 static inline V arr_alloc(unsigned c) {
   if (c > 31) bend_fail("an array past the deepest block class 31");
+  Thr *t = thr_self;
+  if (t)
+    for (int i = 0; i < ARR_SPARES; i++) {
+      V a = t->spare[i];
+      if (a && arr_cls(a) == c) {
+        t->spare[i] = 0;
+        return a;
+      }
+    }
   V *p = halloc(1 + ((size_t)1 << c));
   p[0] = ARR_HDR(c);
   return (V)p;
+}
+
+// Traced, an unshared array no path of the program uses any more (see
+// bend_dead) is one of the thread's spares (the oldest goes when all
+// ARR_SPARES are taken), which arr_alloc hands out again (its header is
+// ARR_HDR(c): not shared). The spares are no roots: a
+// collection forgets them before it traces (a thread stopped between
+// taking one and clearing its slot holds it in a register, which the stack
+// scan sees).
+void arr_dead(V a);
+
+void arr_hook(void);
+
+// The program is done with v (traced: a variable that no path of its scope
+// uses, or that a case does not use and another case of its match does). An
+// unshared array goes to arr_dead; anything else is the collector's.
+static inline void bend_dead(V v) {
+  if (LIKELY(v < ((V)1 << 32))) return;
+  if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
+  V w0 = gc_hot.mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  if ((w0 | 31) == (ARR_TAG | 31)) arr_dead(v);
 }
 
 // 2^c cells from src (a shared source's are shared) into a new array.
@@ -1017,7 +1132,9 @@ static inline V arr_new(V depth, V v) {
     else bend_share(v);
   }
   if (v >= ((V)1 << 32)) arr_dirty(a);
-  for (size_t i = 0; i < n; i++) d[i] = v;
+  // (four cells a step: a whole number of steps from 4 cells up)
+  if (n < 4) for (size_t i = 0; i < n; i++) d[i] = v;
+  else for (size_t i = 0; i < n; i += 4) { d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = v; }
   return a;
 }
 

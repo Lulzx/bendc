@@ -35,9 +35,11 @@ typedef atomic_uint KAU;
 #define K_CAS(p, e, v) atomic_compare_exchange_weak_explicit((p), &(e), (v), memory_order_relaxed, memory_order_relaxed)
 #define K_FENCE() atomic_thread_fence(mem_flags::mem_device, memory_order_seq_cst, thread_scope_device)
 #define KF(u) as_type<float>((uint)(u))
-#define KUF(f) ((KW)as_type<uint>((float)(f)))
+#define KUF(f) ((KU)as_type<uint>((float)(f)))
 #define KMF(n) n
 #define KINLINE inline
+#define KNOINLINE __attribute__((noinline))
+#define KAUTO auto
 #define K_ATW(p) ((device atomic_uint *)(p))
 #define K_SIMD_ALL(b) simd_all(b)
 #else
@@ -57,11 +59,18 @@ typedef uint32_t KAU;
 #define K_CAS(p, e, v) __atomic_compare_exchange_n((p), &(e), (v), 1, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 #define K_FENCE() __atomic_thread_fence(__ATOMIC_SEQ_CST)
 static inline float k_f_of(KW u) { union { uint32_t i; float f; } x; x.i = (uint32_t)u; return x.f; }
-static inline KW k_u_of(float f) { union { uint32_t i; float f; } x; x.f = f; return x.i; }
+static inline KU k_u_of(float f) { union { uint32_t i; float f; } x; x.f = f; return x.i; }
 #define KF(u) k_f_of(u)
 #define KUF(f) k_u_of(f)
 #define KMF(n) n##f
 #define KINLINE static inline
+#define KNOINLINE static
+#ifdef __TINYC__
+// (tcc has no __auto_type: a word holds a KU as well, the natives truncate)
+#define KAUTO KW
+#else
+#define KAUTO __auto_type
+#endif
 #define K_ATW(p) ((KAU *)(p))
 #define K_SIMD_ALL(b) (b)
 #endif
@@ -73,6 +82,7 @@ static inline KW k_u_of(float f) { union { uint32_t i; float f; } x; x.f = f; re
 #define KA_QHEAD 3
 #define KA_QTAIL 4
 #define KA_ACTIVE 5
+#define KA_GROW 6    // a KQ_ call ran out of arena (see bend_kq)
 #define KA_SEQ 16
 
 // Where things are, in words of the arena (H) unless said otherwise.
@@ -118,11 +128,23 @@ typedef struct {
   KDEV KAU *A;
   KW ab, an, gb, lane;
   KW pc, fp, rv, dep, hp, he, ax;
+  KU ko[8];            // a flat call's result fields (see KBOX)
+  KW hs;               // where the lane's current heap chunk starts (or its hp at load)
   KU err;
   KW kq, kqret, kqfb;  // a KQ_ call: its def, where its value goes, the way through frames
   KW kqa[KQ_ARGS];     // and its arguments
+  KW kqlim;            // the blocks it may run (K_KQLIM)
   KCP KParams *P;
 } KCtx;
+
+// A KQ_ call made from the kernel's blocks (not past the fork limit) may
+// reach a parallel let deep in its callees: it runs K_KQSTEPS blocks at most,
+// then gives up and runs through the frames, which fork. Its kqfb has
+// K_KQLIM set.
+#define K_KQLIM ((KW)1 << 40)
+#ifndef K_KQSTEPS
+#define K_KQSTEPS ((KW)1 << 22)
+#endif
 
 #define KIMM(t) ((((KW)(t)) << 3) | 1)
 #define KBOOL(b) ((b) ? KIMM(1) : KIMM(0))
@@ -176,6 +198,7 @@ KINLINE KW k_alloc(KTHR KCtx *c, KW n) {
       return KPTR(c, c->P->heap0 + 1);
     }
     c->hp = start;
+    c->hs = start;
     c->he = start + k * K_CHUNK;
   }
   KW i = c->hp;
@@ -184,11 +207,55 @@ KINLINE KW k_alloc(KTHR KCtx *c, KW n) {
   return KPTR(c, i + 1);
 }
 
+// A flat call (KX_ or KQ_) neither forks nor writes into older objects, and
+// an object only points to older ones: what the call allocated is garbage
+// unless its result reaches it. k_region takes it back: all of it when the
+// result is older than the call (or not an object), else all but the result,
+// moved down, when the result is the only new object it reaches. h0 and e0
+// are the lane's hp and he before the call; when the call took a new chunk,
+// only that chunk's words are taken back.
+KINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
+  if (c->hp == h0) return r;
+  KW lo = c->he == e0 ? h0 : c->hs;
+  KW b = c->ab + (lo << 3), n = (c->hp - lo) << 3;
+  if (r - b >= n) {
+    c->hp = lo;
+    return r;
+  }
+  KW p = (r - c->ab) >> 3, m = c->H[p - 1];
+  for (KW i = 1; i < m; i++) {
+    if (c->H[p + i] - b < n) return r;
+  }
+  for (KW i = 0; i <= m; i++) c->H[lo + i] = c->H[p - 1 + i];
+  c->hp = lo + m + 1;
+  return KPTR(c, lo + 1);
+}
+#define KREG(e) ({ KW kh0_ = c->hp, ke0_ = c->he; KW kr_ = (e); k_region(c, kh0_, ke0_, kr_); })
+// The same for a call whose result is a scalar (a U32, F32 or Bool): it reaches
+// nothing the call allocated.
+#define KSCAL(e) ({ KW kh0_ = c->hp, ke0_ = c->he; KU kr_ = (e); if (c->he == ke0_) c->hp = kh0_; kr_; })
+
+// A flat def keeps a Nat parameter in a KU: a Nat past 2^32 - 1 fails the call
+// over to the CPU (a counted loop never gets there). KSET assigns a parameter
+// at a tail call, with that check for a KU (a U32, F32 or Bool passes it).
+#define KNAT32(v) ({ KW kv_ = (v); if ((kv_ >> 32) != 0) k_fail(c, KE_NAT); (KU)kv_; })
+#define KSET(a, v) ((a) = sizeof(a) == 4 ? KNAT32(v) : (v))
+
 KINLINE KW k_node(KTHR KCtx *c, KW tag, KW n) {
   KW p = k_alloc(c, n + 1);
   c->H[KIX(c, p)] = tag;
   return p;
 }
+
+// A flat def whose result is one constructor of 2 to 8 scalar fields leaves
+// the fields in c->ko and no node (raytrace 1.35x faster). KBOX builds the
+// node for a caller that keeps the value whole.
+KINLINE KW k_box(KTHR KCtx *c, KW n) {
+  KW r = k_node(c, 0, n);
+  for (KW i = 0; i < n; i++) c->H[KIX(c, r) + 1 + i] = c->ko[i];
+  return r;
+}
+#define KBOX(n, e) ({ (void)(e); k_box(c, n); })
 
 // A frame: [return pc, parent frame, aux, size, slots...], from the heap;
 // one still on top of it when it returns gives its words back.
@@ -381,8 +448,10 @@ KINLINE bool k_arr(KTHR KCtx *c) { k_fail(c, KE_FX); return false; }
 #define KF_Array_datomic_dfadd(c, ...) KF_ARR(c)
 
 #define KU32(x) ((KW)(KU)(x))
-#define KU1(name, expr) KINLINE KW KF_U32_d##name(KTHR KCtx *c, KW a) { return expr; }
-#define KU2(name, expr) KINLINE KW KF_U32_d##name(KTHR KCtx *c, KW a, KW b) { return expr; }
+// U32 and F32 values fit a KU: their natives take and give KUs, and so a
+// flat def's locals (KAUTO) and its U32, F32 and Bool parameters are KUs.
+#define KU1(name, expr) KINLINE KU KF_U32_d##name(KTHR KCtx *c, KU a) { return expr; }
+#define KU2(name, expr) KINLINE KU KF_U32_d##name(KTHR KCtx *c, KU a, KU b) { return expr; }
 KU1(inc, KU32(a + 1))
 KU2(add, KU32(a + b))
 KU2(sub, KU32(a - b))
@@ -395,8 +464,8 @@ KU2(or, a | b)
 KU2(xor, a ^ b)
 KU1(shl, KU32(a << 1))
 KU1(shr, a >> 1)
-KU2(shln, b >= 32 ? 0 : KU32(a << b))
-KU2(shrn, b >= 32 ? 0 : a >> b)
+KINLINE KU KF_U32_dshln(KTHR KCtx *c, KU a, KW b) { return b >= 32 ? 0 : KU32(a << b); }
+KINLINE KU KF_U32_dshrn(KTHR KCtx *c, KU a, KW b) { return b >= 32 ? 0 : a >> b; }
 KU2(cmp, k_cmp3(a, b))
 KU2(is__eq, KBOOL(a == b))
 KU2(is__ne, KBOOL(a != b))
@@ -406,11 +475,11 @@ KU2(is__gt, KBOOL(a > b))
 KU2(is__ge, KBOOL(a >= b))
 KU1(is__zero, KBOOL(a == 0))
 KU1(is__even, KBOOL((a & 1) == 0))
-KU1(to__nat, a)
-KU1(from__nat, KU32(a))
+KINLINE KW KF_U32_dto__nat(KTHR KCtx *c, KU a) { return a; }
+KINLINE KU KF_U32_dfrom__nat(KTHR KCtx *c, KW a) { return KU32(a); }
 KU2(min, a < b ? a : b)
 KU2(max, a < b ? b : a)
-KINLINE KW KF_U32_dpow(KTHR KCtx *c, KW a, KW n) {
+KINLINE KU KF_U32_dpow(KTHR KCtx *c, KU a, KW n) {
   KU r = 1, b = (KU)a;
   for (KW e = n; e; e >>= 1) {
     if (e & 1) r *= b;
@@ -418,15 +487,15 @@ KINLINE KW KF_U32_dpow(KTHR KCtx *c, KW a, KW n) {
   }
   return r;
 }
-KINLINE KW KF_U32_dlog2(KTHR KCtx *c, KW n) {
+KINLINE KW KF_U32_dlog2(KTHR KCtx *c, KU n) {
   KW d = 0;
   while (n > 1) { d++; n >>= 1; }
   return d;
 }
 KU1(to__f32, KUF((float)(KU)a))
 
-#define KF1(name, expr) KINLINE KW KF_F32_d##name(KTHR KCtx *c, KW a) { float x = KF(a); return expr; }
-#define KF2(name, expr) KINLINE KW KF_F32_d##name(KTHR KCtx *c, KW a, KW b) { float x = KF(a), y = KF(b); return expr; }
+#define KF1(name, expr) KINLINE KU KF_F32_d##name(KTHR KCtx *c, KU a) { float x = KF(a); return expr; }
+#define KF2(name, expr) KINLINE KU KF_F32_d##name(KTHR KCtx *c, KU a, KU b) { float x = KF(a), y = KF(b); return expr; }
 KF2(add, KUF(x + y))
 KF2(sub, KUF(x - y))
 KF2(mul, KUF(x * y))
@@ -552,6 +621,7 @@ KINLINE void k_load(KTHR KCtx *c, KCOH KW *H, KDEV KAU *A, KCP KParams *P, KDEV 
   c->dep = ls[3 * n];
   c->hp = ls[4 * n];
   c->he = ls[5 * n];
+  c->hs = c->hp;
   c->ax = ls[6 * n];
   c->kq = ls[7 * n];
   c->kqret = ls[8 * n];
@@ -653,9 +723,26 @@ static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   KTHR KCtx *c = &cx;
   k_load(c, H, A, P, G, lane);
   bool ok = true;
+  KW h0 = c->hp, e0 = c->he;
+  c->kqlim = (c->kqfb & K_KQLIM) ? K_KQSTEPS : ~(KW)0;
   KW r = k_kq(c, &ok);
+  // A call that ran out of arena waits for the host to grow it, and runs
+  // again (what it allocated is garbage: its result reached none of it).
+  if (c->err == KE_HEAP) {
+    c->hp = h0;
+    c->he = e0;
+    K_STORE(&A[KA_GROW], 1u);
+    k_save(c);
+    return;
+  }
+  // A call that gave up (ok false) runs again through the frames.
+  if (!ok) {
+    if (c->he == e0) c->hp = h0;
+  } else {
+    r = k_region(c, h0, e0, r);
+  }
   c->rv = r;
-  c->pc = ok ? c->kqret : c->kqfb;
+  c->pc = ok ? c->kqret : (c->kqfb & ~K_KQLIM);
   if (c->err != 0) {
     KU z = 0;
     K_CAS(&A[KA_ERR], z, c->err);
