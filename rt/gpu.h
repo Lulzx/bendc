@@ -128,7 +128,7 @@ typedef struct {
   KDEV KAU *A;
   KW ab, an, gb, lane;
   KW pc, fp, rv, dep, hp, he, ax;
-  KU ko[8];            // a flat call's result fields (see KBOX)
+  KW ko[8];            // a flat call's result fields (see KBOX)
   KW hs;               // where the lane's current heap chunk starts (or its hp at load)
   KU err;
   KW kq, kqret, kqfb;  // a KQ_ call: its def, where its value goes, the way through frames
@@ -233,7 +233,7 @@ KINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
 #define KREG(e) ({ KW kh0_ = c->hp, ke0_ = c->he; KW kr_ = (e); k_region(c, kh0_, ke0_, kr_); })
 // The same for a call whose result is a scalar (a U32, F32 or Bool): it reaches
 // nothing the call allocated.
-#define KSCAL(e) ({ KW kh0_ = c->hp, ke0_ = c->he; KU kr_ = (e); if (c->he == ke0_) c->hp = kh0_; kr_; })
+#define KSCAL(e) ({ KW kh0_ = c->hp, ke0_ = c->he; KU kr_ = (e); c->hp = c->he == ke0_ ? kh0_ : c->hs; kr_; })
 
 // A flat def keeps a Nat parameter in a KU: a Nat past 2^32 - 1 fails the call
 // over to the CPU (a counted loop never gets there). KSET assigns a parameter
@@ -424,19 +424,71 @@ KINLINE KW KF_String_deq(KTHR KCtx *c, KW a, KW b) { k_fail(c, KE_FX); return 0;
 KINLINE KW KF_Map_dbit(KTHR KCtx *c, KW a, KW b) { k_fail(c, KE_FX); return 0; }
 KINLINE KW KF_Map_dget(KTHR KCtx *c, KW a, KW b, KW d) { k_fail(c, KE_FX); return 0; }
 KINLINE KW KF_Map_dhas(KTHR KCtx *c, KW a, KW b) { k_fail(c, KE_FX); return 0; }
-// An Array is a host block (see "Arrays" in bendrt.h): the device runs no
-// Array operation, and a call that meets one runs on the CPU.
+// An Array is a node {ARR_HDR(c), 2^c cells}, as on the CPU (see "Arrays"
+// in bendrt.h). The device builds them in the arena and reads any; it
+// writes only its own (a call that writes one of the CPU's runs on the
+// CPU), and runs no match on one (ANode, ALeaf) and no atomic. A flat
+// def's let of an Array.get or Array.swap pair makes no pair (KXSLetArr in
+// bendc.bend): k_aget and k_aswap answer the cell.
+#define K_ARR_HDR(n) ((KW)0xFFF00 | (KW)(n))
 KINLINE bool k_arr(KTHR KCtx *c) { k_fail(c, KE_FX); return false; }
 #define KF_ARR(c) (k_fail(c, KE_FX), (KW)0)
-#define KF_Array_dsize(c, ...) KF_ARR(c)
-#define KF_Array_dget(c, ...) KF_ARR(c)
-#define KF_Array_dswap(c, ...) KF_ARR(c)
-#define KF_Array_dset(c, ...) KF_ARR(c)
-#define KF_Array_dget_x37w(c, ...) KF_ARR(c)
-#define KF_Array_dswap_x37w(c, ...) KF_ARR(c)
-#define KF_Array_dset_x37w(c, ...) KF_ARR(c)
-#define KF_Array_dnew(c, ...) KF_ARR(c)
-#define KF_Array_dclone(c, ...) KF_ARR(c)
+KINLINE KW k_amask(KTHR KCtx *c, KW a) { return ((KW)1 << (k_word(c, a, 0) & 31)) - 1; }
+KINLINE KW k_aget(KTHR KCtx *c, KW a, KW i) { return k_word(c, a, 1 + ((KW)(KU)i & k_amask(c, a))); }
+// The index of cell i of a, for a write (0, and the call fails over, for
+// an array of the CPU's).
+KINLINE KW k_acell(KTHR KCtx *c, KW a, KW i) {
+  if (!k_in(c, a)) {
+    k_fail(c, KE_FX);
+    return c->P->heap0;
+  }
+  KW w = KIX(c, a);
+  return w + 1 + ((KW)(KU)i & (((KW)1 << (c->H[w] & 31)) - 1));
+}
+KINLINE KW k_aswap(KTHR KCtx *c, KW a, KW i, KW v) {
+  KW p = k_acell(c, a, i);
+  KW o = c->H[p];
+  c->H[p] = v;
+  return o;
+}
+KINLINE KW k_apair(KTHR KCtx *c, KW a, KW x) {
+  KW p = k_node(c, 0, 2);
+  c->H[KIX(c, p) + 1] = a;
+  c->H[KIX(c, p) + 2] = x;
+  return p;
+}
+KINLINE KW KF_Array_dnew(KTHR KCtx *c, KW d, KW v) {
+  if (d > 24) {
+    k_fail(c, KE_FX);
+    return 0;
+  }
+  KW n = (KW)1 << d;
+  KW p = k_alloc(c, n + 1);
+  KW w = KIX(c, p);
+  // (out of arena, p is in the scratch chunk: a 1-cell array there)
+  if (c->err != 0) n = 1, d = 0;
+  c->H[w] = K_ARR_HDR(d);
+  for (KW i = 0; i < n; i++) c->H[w + 1 + i] = v;
+  return p;
+}
+KINLINE KW KF_Array_dclone(KTHR KCtx *c, KW a) {
+  KW m = k_amask(c, a);
+  KW d = k_word(c, a, 0) & 31;
+  KW p = KF_Array_dnew(c, d, 0);
+  KW w = KIX(c, p);
+  for (KW i = 0; i <= m; i++) c->H[w + 1 + i] = k_word(c, a, 1 + i);
+  return k_apair(c, a, p);
+}
+KINLINE KW KF_Array_dsize(KTHR KCtx *c, KW a) { return k_apair(c, a, k_amask(c, a) + 1); }
+KINLINE KW KF_Array_dget(KTHR KCtx *c, KW a, KW i) { return k_apair(c, a, k_aget(c, a, i)); }
+KINLINE KW KF_Array_dswap(KTHR KCtx *c, KW a, KW i, KW v) { return k_apair(c, a, k_aswap(c, a, i, v)); }
+KINLINE KW KF_Array_dset(KTHR KCtx *c, KW a, KW i, KW v) {
+  c->H[k_acell(c, a, i)] = v;
+  return a;
+}
+#define KF_Array_dget_x37w KF_Array_dget
+#define KF_Array_dswap_x37w KF_Array_dswap
+#define KF_Array_dset_x37w KF_Array_dset
 #define KF_Array_datomic_dadd(c, ...) KF_ARR(c)
 #define KF_Array_datomic_dmin(c, ...) KF_ARR(c)
 #define KF_Array_datomic_dmax(c, ...) KF_ARR(c)

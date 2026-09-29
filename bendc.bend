@@ -13433,39 +13433,63 @@ def KX.v(+k: U32) -> String:
   "x" ++ U32.show(k)
 
 # A flat def's result goes back in c->ko, no node, when its type has one
-# constructor of 2 to 8 fields that each fit a KU (see KBOX in rt/gpu.h):
-# KX.ko is the def's number of fields then, else 0.
-def KX.ko.fields(fs: List<&2, Field>) -> Bool:
+# constructor of 2 to 8 fields, or is a pair, whose fields each fit a KU or
+# are arrays (see KBOX in rt/gpu.h): KX.ko.tys is the fields' C types then
+# (an array's a KW), else none, and KX.ko their number.
+def KX.ko.fty(+h: String) -> String:
+  Bool.pick(String, KX.narrow(h), "KU", Bool.pick(String, Str.eq(h, "Array"), "KW", ""))
+
+def KX.ko.fields(fs: List<&2, Field>) -> List<&2, String>:
   match fs:
     case Nil{}:
-      True{}
+      Nil{}
     case Field{x, t} <> r:
-      Bool.and(KX.narrow(P.head(t)), KX.ko.fields(r))
+      KX.ko.fty(P.head(t)) <> KX.ko.fields(r)
 
-def KX.ko.ctors(cs: List<&2, Ctor>) -> U32:
+def KX.ko.types(ts: List<&2, Core.Expr>) -> List<&2, String>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      KX.ko.fty(P.head(t)) <> KX.ko.types(r)
+
+def KX.ko.fit(+tys: List<&2, String>) -> List<&2, String>:
+  +n = U32.from_nat(List.length(&2, String, tys))
+  Bool.pick(List<&2, String>, Bool.and(Bool.not(Str.has(tys, "")), Bool.and(U32.is_le(2, n), U32.is_le(n, 8))), tys, Nil{})
+
+def KX.ko.ctors(cs: List<&2, Ctor>) -> List<&2, String>:
   match cs:
-    case Ctor{x, +fs} <> Nil{}:
-      +n = U32.from_nat(List.length(&2, Field, fs))
-      Bool.pick(U32, Bool.and(KX.ko.fields(fs), Bool.and(U32.is_le(2, n), U32.is_le(n, 8))), n, 0)
+    case Ctor{x, fs} <> Nil{}:
+      KX.ko.fit(KX.ko.fields(fs))
     case other:
-      0
+      Nil{}
 
-def KX.ko.ty(d: Decl) -> U32:
+def KX.ko.ty(d: Decl) -> List<&2, String>:
   match d:
     case DType{n, ps, cs}:
       KX.ko.ctors(cs)
     case other:
-      0
+      Nil{}
 
-def KX.ko.def(+g: G, d: Decl) -> U32:
+def KX.ko.ret(+g: G, r: Core.Expr) -> List<&2, String>:
+  match r:
+    case Core.ETy{+n, ts}:
+      Bool.pick(List<&2, String>, Str.eq(n, "&"), KX.ko.fit(KX.ko.types(ts)), KX.ko.ty(G.body(g, "%" ++ n)))
+    case other:
+      KX.ko.ty(G.body(g, "%" ++ P.head(other)))
+
+def KX.ko.def(+g: G, d: Decl) -> List<&2, String>:
   match d:
     case DDef{n, ps, b, r}:
-      KX.ko.ty(G.body(g, "%" ++ P.head(r)))
+      KX.ko.ret(g, r)
     case other:
-      0
+      Nil{}
+
+def KX.ko.tys(+g: G, +name: String) -> List<&2, String>:
+  Bool.pick(List<&2, String>, U32.is_zero(DInfo.kind(G.def(g, name))), KX.ko.def(g, G.body(g, name)), Nil{})
 
 def KX.ko(+g: G, +name: String) -> U32:
-  Bool.pick(U32, U32.is_zero(DInfo.kind(G.def(g, name))), KX.ko.def(g, G.body(g, name)), 0)
+  U32.from_nat(List.length(&2, String, KX.ko.tys(g, name)))
 
 # A call of a def with n fields in c->ko, for a caller that keeps the value.
 def KX.box(+n: U32) -> String:
@@ -13487,12 +13511,12 @@ def KX.ko.get(+n: Nat, +i: U32) -> String:
       "c->ko[" ++ U32.show(i) ++ "] = KFLD(ko_, " ++ U32.show(i) ++ "); " ++ KX.ko.get(m, U32.inc(i))
 
 # The fields of a call's result, read from c->ko into locals xk_i.
-def KX.ko.locals(+k: U32, +n: Nat, +i: U32) -> String:
-  match n:
-    case 0n:
+def KX.ko.locals(+k: U32, tys: List<&2, String>, +i: U32) -> String:
+  match tys:
+    case Nil{}:
       ""
-    case 1n+m:
-      "KU " ++ KX.v(k) ++ "_" ++ U32.show(i) ++ " = c->ko[" ++ U32.show(i) ++ "]; " ++ KX.ko.locals(k, m, U32.inc(i))
+    case t <> r:
+      t ++ " " ++ KX.v(k) ++ "_" ++ U32.show(i) ++ " = c->ko[" ++ U32.show(i) ++ "]; " ++ KX.ko.locals(k, r, U32.inc(i))
 
 def KX.ko.names(+k: U32, +n: Nat, +i: U32) -> List<&2, String>:
   match n:
@@ -13522,12 +13546,38 @@ def KX.kept(+g: G, +f: String, args: List<&2, Core.Expr>) -> List<&2, Core.Expr>
   KX.kept.info(G.def(g, f), args)
 
 # Whether a let binds the fields of a call's result left in c->ko.
-def KX.let.ko(+g: G, p: Core.Pat, v: Core.Expr) -> Bool:
+# A let's value: 1 for a call whose result fields are in c->ko, 2 for an
+# Array.get and 3 for an Array.swap opened as a pair (no pair is built:
+# see KXSLetArr), else 0.
+def KX.arr.op(+f: String, +n: Nat) -> Nat:
+  Bool.pick(Nat, Bool.and(Str.has(["Array.get", "Array.get%w"], f), Nat.is_eq(n, 3n)), 2n,
+    Bool.pick(Nat, Bool.and(Str.has(["Array.swap", "Array.swap%w"], f), Nat.is_eq(n, 4n)), 3n, 0n))
+
+def KX.let.ko.pick(+arr: Nat, ko: Bool) -> Nat:
+  match arr:
+    case 0n:
+      Bool.pick(Nat, ko, 1n, 0n)
+    case 1n+q:
+      1n+q
+
+def KX.let.ko(+g: G, p: Core.Pat, v: Core.Expr) -> Nat:
   match p v:
-    case Core.PCtor{n, ps} Core.ECall{Core.EVar{+f}, args}:
-      Bool.not(U32.is_zero(KX.ko(g, f)))
+    case Core.PCtor{n, ps} Core.ECall{Core.EVar{+f}, +args}:
+      KX.let.ko.pick(Bool.pick(Nat, Nat.is_eq(List.length(&2, Core.Pat, ps), 2n), KX.arr.op(f, List.length(&2, Core.Expr, args)),
+        0n), Bool.not(U32.is_zero(KX.ko(g, f))))
     case q w:
-      False{}
+      0n
+
+# An Array.get (sw False) or Array.swap (sw True) of the words ds (the type,
+# the array, the index and the value), into locals xk_0 (the array) and xk_1
+# (the cell read).
+def KX.arr.call(sw: Bool, +k: U32, ds: List<&2, Doc>) -> Doc:
+  match ds:
+    case t <> a <> r:
+      Doc.list([DStr{"KW " ++ KX.v(k) ++ "_0 = "}, a, DStr{"; KW " ++ KX.v(k) ++ "_1 = " ++ Bool.pick(String, sw, "k_aswap", "k_aget") ++
+        "(c, " ++ KX.v(k) ++ "_0"}, Doc.list(K.commas_pre(r)), DStr{");\n"}])
+    case other:
+      DStr{"k_fail(c, KE_FX);\n"}
 
 # A flat def's function: a def that loops is not inlined (the kernel's code
 # grows past the GPU's instruction cache, raytrace 1.5x slower).
@@ -14156,9 +14206,13 @@ type KXSel is Type:
   KXSMatchGo{g: G, env: Env(), self: KSelf, tgt: KTgt, r: List<&2, String> & Doc, cases: List<&2, Core.Expr>}
   KXSMatch{g: G, env: Env(), self: KSelf, tgt: KTgt, scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>}
   KXSLet{g: G, env: Env(), self: KSelf, tgt: KTgt, p: Core.Pat, v: Core.Expr, body: Core.Expr}
-  KXSLetGo{ko: Bool, g: G, env: Env(), self: KSelf, tgt: KTgt, p: Core.Pat, v: Core.Expr, body: Core.Expr}
+  KXSLetGo{ko: Nat, g: G, env: Env(), self: KSelf, tgt: KTgt, p: Core.Pat, v: Core.Expr, body: Core.Expr}
   KXSLetKo{g: G, env: Env(), self: KSelf, tgt: KTgt, ps: List<&2, Core.Pat>, f: String, args: List<&2, Core.Expr>,
       body: Core.Expr}
+  KXSLetArr{sw: Bool, g: G, env: Env(), self: KSelf, tgt: KTgt, ps: List<&2, Core.Pat>, args: List<&2, Core.Expr>,
+      body: Core.Expr}
+  KXSRetArr{sw: Bool, g: G, env: Env(), n: U32, args: List<&2, Core.Expr>}
+  KXSRetArrGo{op: Nat, g: G, env: Env(), n: U32, f: String, args: List<&2, Core.Expr>}
   KXSRetCall{same: Bool, g: G, env: Env(), n: U32, f: String, args: List<&2, Core.Expr>}
   KXSRetKo{g: G, env: Env(), n: U32, e: Core.Expr}
   KXSRet{g: G, env: Env(), n: U32, e: Core.Expr}
@@ -14212,6 +14266,12 @@ def KXSel.ty(k: KXSel) -> Type:
     case KXSLetGo{ko, g, env, self, tgt, p, v, body}:
       KM(Doc)
     case KXSLetKo{g, env, self, tgt, ps, f, args, body}:
+      KM(Doc)
+    case KXSLetArr{sw, g, env, self, tgt, ps, args, body}:
+      KM(Doc)
+    case KXSRetArr{sw, g, env, n, args}:
+      KM(Doc)
+    case KXSRetArrGo{op, g, env, n, f, args}:
       KM(Doc)
     case KXSRetCall{same, g, env, n, f, args}:
       KM(Doc)
@@ -14277,6 +14337,12 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
         case KXSLetGo{ko, g, env, self, tgt, p, v, body}:
           K.out(Doc, DNil{})
         case KXSLetKo{g, env, self, tgt, ps, f, args, body}:
+          K.out(Doc, DNil{})
+        case KXSLetArr{sw, g, env, self, tgt, ps, args, body}:
+          K.out(Doc, DNil{})
+        case KXSRetArr{sw, g, env, n, args}:
+          K.out(Doc, DNil{})
+        case KXSRetArrGo{op, g, env, n, f, args}:
           K.out(Doc, DNil{})
         case KXSRetCall{same, g, env, n, f, args}:
           K.out(Doc, DNil{})
@@ -14452,10 +14518,30 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
         # locals, the pattern's fields bind them.
         case KXSLetGo{ko, +g, +env, +self, +tgt, p, v, body}:
           match ko p v:
-            case True{} Core.PCtor{n, ps} Core.ECall{Core.EVar{f}, args}:
+            case 1n Core.PCtor{n, ps} Core.ECall{Core.EVar{f}, args}:
               KX.go(fu, KXSLetKo{g, env, self, tgt, ps, f, args, body})
+            case 2n Core.PCtor{n, ps} Core.ECall{f, args}:
+              KX.go(fu, KXSLetArr{False{}, g, env, self, tgt, ps, args, body})
+            case 3n Core.PCtor{n, ps} Core.ECall{f, args}:
+              KX.go(fu, KXSLetArr{True{}, g, env, self, tgt, ps, args, body})
             case k2 p2 v2:
               KX.go(fu, KXSLetPlain{g, env, self, tgt, p2, v2, body})
+        # (a, x) = Array.get(T, arr, i) or Array.swap(T, arr, i, v): the
+        # array and the cell, with no pair in between.
+        case KXSLetArr{sw, +g, +env, +self, +tgt, ps, args, body}:
+          do KM<Doc>:
+            +k : U32 <- K.fresh()
+            ds : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, args})
+            b : Doc <- KX.go(fu, KXSStmt{g, List.append(&2, Bind, PatR.binds(K.pats(g, ps, KX.ko.names(k, 2n, 0), PatR{Nil{},
+              Nil{}})), env), self, tgt, body})
+            return Doc.list([KX.arr.call(sw, k, ds), b])
+        # A return of an Array.get or Array.swap's pair, by a def whose
+        # result goes in c->ko.
+        case KXSRetArr{sw, +g, +env, +n, args}:
+          do KM<Doc>:
+            +k : U32 <- K.fresh()
+            ds : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, args})
+            return Doc.list([DStr{"{ "}, KX.arr.call(sw, k, ds), DStr{KX.ko.set(k, 2n, 0) ++ "return 0; }\n"}])
         case KXSLetKo{+g, +env, +self, +tgt, ps, +f, args, body}:
           +n = U32.to_nat(KX.ko(g, f))
           do KM<Doc>:
@@ -14464,7 +14550,7 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
             KX.go(fu, KXSKFlatNeed{g, f})
             b : Doc <- KX.go(fu, KXSStmt{g, List.append(&2, Bind, PatR.binds(K.pats(g, ps, KX.ko.names(k, n, 0), PatR{Nil{},
               Nil{}})), env), self, tgt, body})
-            return Doc.list([KX.call(False{}, f, ks), DStr{";\n" ++ KX.ko.locals(k, n, 0) ++ "\n"}, b])
+            return Doc.list([KX.call(False{}, f, ks), DStr{";\n" ++ KX.ko.locals(k, KX.ko.tys(g, f), 0) ++ "\n"}, b])
         # A return from a def whose result goes in c->ko (n fields): a
         # constructor's fields go there, a call of such a def leaves them.
         case KXSRet{+g, +env, +n, +e}:
@@ -14476,12 +14562,20 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
                 +k : U32 <- K.fresh()
                 ds : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, args})
                 return Doc.list([DStr{"{ "}, KX.temps(ds, k, 0), DStr{KX.ko.set(k, U32.to_nat(n), 0) ++ "return 0; }\n"}])
-            case Core.ECall{Core.EVar{+f}, args}:
-              KX.go(fu, KXSRetCall{U32.is_eq(KX.ko(g, f), n), g, env, n, f, args})
+            case Core.ECall{Core.EVar{+f}, +args}:
+              KX.go(fu, KXSRetArrGo{KX.arr.op(f, List.length(&2, Core.Expr, args)), g, env, n, f, args})
             case other:
               do KM<Doc>:
                 d : Doc <- KX.go(fu, KXSExpr{g, env, other})
                 return Doc.list([DStr{"{ KW ko_ = "}, d, DStr{"; " ++ KX.ko.get(U32.to_nat(n), 0) ++ "return 0; }\n"}])
+        case KXSRetArrGo{op, +g, +env, +n, +f, args}:
+          match op:
+            case 2n:
+              KX.go(fu, KXSRetArr{False{}, g, env, n, args})
+            case 3n:
+              KX.go(fu, KXSRetArr{True{}, g, env, n, args})
+            case other:
+              KX.go(fu, KXSRetCall{U32.is_eq(KX.ko(g, f), n), g, env, n, f, args})
         case KXSRetCall{same, +g, +env, +n, +f, +args}:
           match same:
             case True{}:
