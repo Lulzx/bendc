@@ -213,6 +213,8 @@ typedef struct GcBlk {
 // allocation and mark bits (gc_abits, gc_mbits: 64 words a block), and:
 typedef struct GcMeta {
   uint32_t recip;    // 2^32 / slot bytes, rounded up: a slot's index by multiplying
+                     // (exact for any byte of a block: the rounding adds less than
+                     // 2^16 / 2^32 of a slot, and a slot is under 2^16 bytes)
   uint8_t large, cls;
   uint16_t words;    // slot size in words (small blocks; 0 for a large object)
 } GcMeta;
@@ -937,7 +939,7 @@ static inline void gc_mark(V w) {
   if (b->large) {
     if (a >= o + (uintptr_t)b->words * sizeof(V)) return;
   } else {
-    i = (a - o) / ((uintptr_t)b->words * sizeof(V));
+    i = (size_t)(((uint64_t)(a - o) * gc_meta[bi].recip) >> 32);  // (exact: see GcMeta)
     if (i >= b->nobj) return;
   }
   uint64_t bit = 1ull << (i & 63);
@@ -959,6 +961,16 @@ static inline void gc_mark(V w) {
 }
 
 void gc_scan(const void *lo, const void *hi);
+
+// An object is scanned some pops after it leaves the mark stack: it is
+// fetched (prefetched) when it leaves, and waits in a ring of GC_PF, so
+// the scan of the objects before it hides the fetch (the marked heap is
+// mostly out of the caches, and scanning is mostly waiting for memory).
+#define GC_PF 8
+static inline void gc_fetch(GcItem it) {
+  __builtin_prefetch(it.p);
+  if (it.n > 8) __builtin_prefetch(it.p + 8);
+}
 
 void gc_drain(void);
 
@@ -1020,7 +1032,7 @@ static inline void gc_mark_par(V w, GcMk *m) {
   if (b->large) {
     if (a >= o + (uintptr_t)b->words * sizeof(V)) return;
   } else {
-    i = (a - o) / ((uintptr_t)b->words * sizeof(V));
+    i = (size_t)(((uint64_t)(a - o) * gc_meta[bi].recip) >> 32);  // (exact: see GcMeta)
     if (i >= b->nobj) return;
   }
   uint64_t bit = 1ull << (i & 63);

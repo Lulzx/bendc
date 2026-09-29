@@ -552,9 +552,21 @@ void gc_scan(const void *lo, const void *hi) {
   uintptr_t a = ((uintptr_t)lo + 7) & ~(uintptr_t)7;
   for (const V *p = (const V *)a; (const void *)p < hi; p++) gc_mark(*p);
 }
+#define GC_PF 8
 void gc_drain(void) {
-  while (gc_sp > 0) {
-    GcItem it = gc_stk[--gc_sp];
+  GcItem q[GC_PF];
+  unsigned h = 0, n = 0;
+  for (;;) {
+    if (gc_sp > 0 && n < GC_PF) {
+      GcItem it = gc_stk[--gc_sp];
+      gc_fetch(it);
+      q[(h + n++) % GC_PF] = it;
+      continue;
+    }
+    if (n == 0) return;
+    GcItem it = q[h];
+    h = (h + 1) % GC_PF;
+    n--;
     for (size_t j = 0; j < it.n; j++) gc_mark(it.p[j]);
   }
 }
@@ -600,13 +612,24 @@ void gc_help(GcMk *m) {
     m->sp = n;
     gc_active++;
     gc_pool_release();
-    while (m->sp > 0) {
-      GcItem it = m->stk[--m->sp];
-      // (a long object is marked a piece at a time: the rest can be shared)
-      if (it.n > 4 * GC_CHUNK) {
-        m->stk[m->sp++] = (GcItem){it.p + 2 * GC_CHUNK, it.n - 2 * GC_CHUNK};
-        it.n = 2 * GC_CHUNK;
+    // (a ring of objects fetched ahead, as in gc_drain)
+    GcItem q[GC_PF];
+    unsigned h = 0, nq = 0;
+    while (m->sp > 0 || nq > 0) {
+      if (m->sp > 0 && nq < GC_PF) {
+        GcItem it = m->stk[--m->sp];
+        // (a long object is marked a piece at a time: the rest can be shared)
+        if (it.n > 4 * GC_CHUNK) {
+          m->stk[m->sp++] = (GcItem){it.p + 2 * GC_CHUNK, it.n - 2 * GC_CHUNK};
+          it.n = 2 * GC_CHUNK;
+        }
+        gc_fetch(it);
+        q[(h + nq++) % GC_PF] = it;
+        continue;
       }
+      GcItem it = q[h];
+      h = (h + 1) % GC_PF;
+      nq--;
       for (size_t j = 0; j < it.n; j++) gc_mark_par(it.p[j], m);
       if (m->sp > GC_CHUNK && __atomic_load_n(&gc_sp, __ATOMIC_RELAXED) == 0) gc_share(m);
     }
