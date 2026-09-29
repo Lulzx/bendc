@@ -10,7 +10,7 @@
 // the caller runs the call on the CPU.
 //
 // On Apple the kernel runs on Metal, reached through the Objective-C
-// runtime (no extra link flags: this file asks the linker for Metal).
+// runtime, loaded at start (see g_preload): no extra link flags.
 // BEND_GPU=sim runs it in a simulator on the CPU instead (the same code as
 // C, lanes interleaved); BEND_GPU=off, or --gpu off, runs !-calls on the
 // CPU. BEND_GPU_LOG=1 says what happened.
@@ -77,11 +77,39 @@ static long gpu_env(const char *name, long dflt) {
 #endif
 
 #if BEND_METAL
-// Metal is linked (weakly, so a Mac without it still runs the program): the
-// loader maps it with the program for less memory than dlopen at the first
-// call (15 MB against 18).
-__asm__(".linker_option \"-framework\", \"Metal\"");
-extern void *MTLCreateSystemDefaultDevice(void) __attribute__((weak_import));
+// Metal is not linked: loading it costs about 4 MB of resident memory, which a
+// run on the CPU would pay too. A run that may use the GPU loads it at start,
+// by running the program again with Metal inserted
+// (DYLD_INSERT_LIBRARIES): the loader then maps it as it maps linked
+// libraries, for about 3 MB less than dlopen at the first call. Where the
+// insertion is refused (a restricted process, say), g_open opens it.
+#include <mach-o/dyld.h>
+#define G_METAL "/System/Library/Frameworks/Metal.framework/Metal"
+static void *(*MTLCreateSystemDefaultDevice)(void);
+__attribute__((constructor)) static void g_preload(int argc, char **argv) {
+  const char *m = getenv("BEND_GPU");
+  if (getenv("BEND_METAL_PRELOAD")) {
+    // (the second run: what programs it starts get neither variable)
+    unsetenv("BEND_METAL_PRELOAD");
+    unsetenv("DYLD_INSERT_LIBRARIES");
+    return;
+  }
+  if ((m && (strcmp(m, "off") == 0 || strcmp(m, "sim") == 0)) || getenv("DYLD_INSERT_LIBRARIES")) return;
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "--") == 0) break;
+    if (strcmp(argv[i], "--gpu") == 0 && i + 1 < argc && strcmp(argv[i + 1], "off") == 0) return;
+    if (strcmp(argv[i], "--bend-help") == 0) return;
+  }
+  if (dlsym(RTLD_DEFAULT, "MTLCreateSystemDefaultDevice")) return;
+  char path[PATH_MAX];
+  uint32_t n = sizeof path;
+  if (_NSGetExecutablePath(path, &n) != 0) return;
+  setenv("DYLD_INSERT_LIBRARIES", G_METAL, 1);
+  setenv("BEND_METAL_PRELOAD", "1", 1);
+  execv(path, argv);
+  unsetenv("DYLD_INSERT_LIBRARIES");
+  unsetenv("BEND_METAL_PRELOAD");
+}
 typedef void *GId;
 typedef void *GSel;
 typedef struct { unsigned long w, h, d; } GSize;
@@ -219,6 +247,11 @@ static void g_save(unsigned long long h, GId d, GId d_kq) {
 }
 
 static int g_open(void) {
+  MTLCreateSystemDefaultDevice = (void *(*)(void))dlsym(RTLD_DEFAULT, "MTLCreateSystemDefaultDevice");
+  if (!MTLCreateSystemDefaultDevice) {
+    void *mtl = dlopen(G_METAL, RTLD_LAZY);
+    if (mtl) MTLCreateSystemDefaultDevice = (void *(*)(void))dlsym(mtl, "MTLCreateSystemDefaultDevice");
+  }
   void *objc = dlopen("/usr/lib/libobjc.A.dylib", RTLD_LAZY);
   if (!objc || !MTLCreateSystemDefaultDevice) { gpu_note("%s", "no Metal"); return 0; }
   g_class = (GId (*)(const char *))dlsym(objc, "objc_getClass");

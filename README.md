@@ -875,8 +875,12 @@ versions rebuild both. This change applies to both modes, and it cut bendc's own
 On the GPU, most of the memory is Metal's: making the device alone costs about 6 MB. The rest is
 kept down three ways:
 
-- Metal is linked with the program (weakly, through a `.linker_option` in `rt/gpuhost.h`), which
-  the loader maps for about 3 MB less than opening it at the first `!`-call.
+- Metal is not linked, since loading it costs about 4 MB of resident memory, and a run on the
+  CPU would pay that too. A run that may use the GPU (no `--gpu off`, no `BEND_GPU=off`) starts
+  the program again with Metal inserted (`DYLD_INSERT_LIBRARIES`, see `g_preload` in
+  `rt/gpuhost.h`). The loader maps an inserted library the way it maps a linked one, for about
+  3 MB less than opening it at the first `!`-call. Where the insertion is refused, the first
+  `!`-call opens Metal.
 - The first run keeps Metal's binary archive of the kernels in `~/Library/Caches/bend`, named by a
   hash of the device code; later runs load the library and the pipelines from it, for 1 MB where
   compiling costs 2.5 (an archive for another GPU or OS misses, and the kernels compile again).
