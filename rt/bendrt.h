@@ -89,6 +89,16 @@ typedef uint64_t Term;
 #endif
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
+// A def's U_ function (a flat result, stored through o) is inlined into its
+// callers, where o is then registers. (GCC refuses always_inline on a
+// recursive function; tcc has no inlining.)
+#if defined(__clang__)
+#define BEND_UINL static inline __attribute__((always_inline))
+#elif defined(__TINYC__)
+#define BEND_UINL static
+#else
+#define BEND_UINL static inline
+#endif
 
 #ifdef BEND_DEBUG_FREE
 #include <execinfo.h>
@@ -117,8 +127,13 @@ static inline V TAG(V v) {
   }
   return t & ~BEND_SH_BITS;
 }
+#define IS_N(v, t) (!((v) & 1) && TAG(v) == (t))
 #else
 static inline V TAG(V v) { return (v & 1) ? (v >> 3) : ((V *)v)[0] & ~BEND_SH_BITS; }
+// A match's test for a constructor with fields: an immediate (a nullary
+// constructor) never is one, and a node's tag word is loaded without a
+// select, so a match's cases share one load.
+static inline int IS_N(V v, V t) { return !(v & 1) && (((V *)v)[0] & ~BEND_SH_BITS) == t; }
 #endif
 
 __attribute__((noreturn)) static void bend_fail(const char *msg) {
@@ -142,8 +157,8 @@ __attribute__((noreturn)) static void bend_fail(const char *msg) {
 #define GC_BLK ((uintptr_t)1 << GC_BLK_SHIFT)
 #define GC_MAXBLK ((uintptr_t)1 << 22)
 #define GC_HDR 64
-#define GC_SMALL 256
-#define GC_NCLS 31
+#define GC_SMALL 2052
+#define GC_NCLS 43
 #define GC_MAXTHR 256
 #define GC_SIG SIGUSR2
 
@@ -153,7 +168,7 @@ typedef struct GcBlk {
   uint32_t nblk;     // blocks spanned
   uint8_t atomic;    // holds no pointers: never scanned
   uint8_t large;
-  uint8_t owned;     // in a thread's cache: not swept
+  uint8_t owned;     // in a thread's cache (or being made): not swept, not claimed
   uint8_t cls;
   struct GcBlk *next;
 } GcBlk;
@@ -191,14 +206,20 @@ typedef struct Thr {
   volatile int live;
   struct PDeque *dq;
   uint32_t rng;
+  // Claiming a reuse block (gc_refill): a stop signal that comes meanwhile
+  // is deferred (deferred is set) until the claim is over.
+  volatile sig_atomic_t claiming, deferred;
 } Thr;
+
+static void gc_park(Thr *t);
 
 typedef struct { V *p; size_t n; } GcRange;
 typedef struct { uint32_t at, len; } GcRun;
 
 static const uint16_t gc_cls_w[GC_NCLS] = {
   2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-  20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256};
+  20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256,
+  320, 384, 448, 516, 640, 768, 896, 1028, 1280, 1536, 1792, 2052};
 static uint8_t gc_cls_of[GC_SMALL + 1];
 
 static char *gc_base;
@@ -273,8 +294,24 @@ static TlsSlots *tls_get(void) {
 }
 #define thr_self (*(Thr **)&tls_get()->self)
 #define par_depth (tls_get()->par_depth)
+#define thr_set(t) (thr_self = (t))
+#elif defined(__APPLE__) && defined(__aarch64__)
+// A Mach-O thread-local is reached through a call (every allocation reads
+// thr_self); a pthread key's slot is one load off the thread's TSD base,
+// which is what pthread_getspecific reads.
+// (The key is made before main: a thread not registered reads NULL.)
+static pthread_key_t thr_key;
+__attribute__((constructor)) static void thr_key_init(void) { pthread_key_create(&thr_key, NULL); }
+static inline Thr *thr_get(void) {
+  uintptr_t tsd;
+  __asm__("mrs %0, tpidrro_el0" : "=r"(tsd));
+  return ((Thr **)(tsd & ~(uintptr_t)7))[thr_key];
+}
+#define thr_self (thr_get())
+#define thr_set(t) pthread_setspecific(thr_key, (t))
 #else
 static __thread Thr *thr_self;
+#define thr_set(t) (thr_self = (t))
 #endif
 
 typedef struct { V *p; size_t n; } GcItem;
@@ -358,17 +395,25 @@ static GcBlk *gc_new_small(int atomic, unsigned c) {
   b->nblk = 1;
   b->atomic = (uint8_t)atomic;
   b->cls = (uint8_t)c;
-  gc_kind[at] = 1;
+  b->owned = 1;
+  __atomic_store_n(&gc_kind[at], 1, __ATOMIC_RELEASE);
   return b;
 }
 
 // The next word of free bits in the cache's block; 0 when none is left.
+// The free slots' marks go here too: a slot handed out is young (bend_take_at
+// leaves a freed slot's mark when other threads run), or a minor collection
+// would take the new object for an old one and not trace what it holds.
 static inline uint64_t gc_next_bits(GcCache *k) {
   GcBlk *b = k->blk;
   while (++k->j < k->nj) {
-    uint64_t f = ~GC_ALLOC(b)[k->j];
+    uint64_t f = ~__atomic_load_n(&GC_ALLOC(b)[k->j], __ATOMIC_RELAXED);
     if (k->j == (b->nobj >> 6)) f &= (1ull << (b->nobj & 63)) - 1;
-    if (f) return f;
+    if (f) {
+      uint64_t *m = &GC_MARK(b)[k->j];
+      if (__atomic_load_n(m, __ATOMIC_RELAXED) & f) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
+      return f;
+    }
   }
   return 0;
 }
@@ -389,15 +434,19 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
         memory_order_relaxed);
     return p;
   }
-  pthread_mutex_lock(&gc_lock);
-  if (k->blk) { k->blk->owned = 0; k->blk = NULL; }
+  if (k->blk) { __atomic_store_n(&k->blk->owned, 0, __ATOMIC_RELEASE); k->blk = NULL; }
   // First the next block, in address order, where matches freed slots and a
   // 5th is free: lists built from its free slots stay in order in memory.
-  // Candidate bits may be stale; the block is checked here.
+  // Candidate bits may be stale; the block is checked here. A block is
+  // claimed by setting its owned flag (0 to 1), without gc_lock: no
+  // collection runs meanwhile (the thread's stop is deferred), so a block
+  // that is a small one stays one, and a new one is owned before it is one.
   GcBlk *b = NULL;
   k->reuse = 0;
   if (!atomic && c < GC_RQCLS) {
     Thr *t = thr_self;
+    t->claiming = 1;
+    atomic_signal_fence(memory_order_seq_cst);
     uint64_t *cand = gc_cand + (size_t)c * GC_CANDW;
     uintptr_t nw = (gc_top + 63) >> 6;
     uintptr_t at = t->rcur[c] < gc_top ? t->rcur[c] : 0;
@@ -409,31 +458,41 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
         uintptr_t bi = (w << 6) + (uintptr_t)__builtin_ctzll(f);
         f &= f - 1;
         __atomic_fetch_and(&cand[w], ~(1ull << (bi & 63)), __ATOMIC_RELAXED);
-        if (bi >= gc_top || gc_kind[bi] != 1) continue;
+        if (bi >= gc_top || __atomic_load_n(&gc_kind[bi], __ATOMIC_ACQUIRE) != 1) continue;
         GcBlk *q = gc_blk(bi);
-        if (q->cls != c || q->atomic || q->owned) continue;
+        if (q->cls != c || q->atomic || __atomic_load_n(&q->owned, __ATOMIC_RELAXED)) continue;
+        uint8_t z = 0;
+        if (!__atomic_compare_exchange_n(&q->owned, &z, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) continue;
         uint32_t used = 0;
         for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(GC_ALLOC(q)[j]);
-        if (q->nobj - used < q->nobj / 5) continue;
+        if (q->nobj - used < q->nobj / 5) { __atomic_store_n(&q->owned, 0, __ATOMIC_RELEASE); continue; }
         b = q;
         k->reuse = 1;
         t->rcur[c] = (uint32_t)bi + 1;
       }
     }
+    atomic_signal_fence(memory_order_seq_cst);
+    t->claiming = 0;
+    atomic_signal_fence(memory_order_seq_cst);
+    if (t->deferred) { t->deferred = 0; gc_park(t); }
   }
   int fresh = 0;
   if (b == NULL) {
+    pthread_mutex_lock(&gc_lock);
     if (gc_since >= gc_limit) gc_collect_locked();
     // (A partly free block may have been claimed for reuse since the sweep.)
     b = gc_partial[atomic][c];
-    while (b && b->owned) b = b->next;
+    uint8_t z = 0;
+    while (b && !__atomic_compare_exchange_n(&b->owned, &z, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) {
+      b = b->next;
+      z = 0;
+    }
     fresh = b == NULL;
     if (b) gc_partial[atomic][c] = b->next;
     else b = gc_new_small(atomic, c);
+    pthread_mutex_unlock(&gc_lock);
   }
-  b->owned = 1;
   k->blk = b;
-  pthread_mutex_unlock(&gc_lock);
   // A slot's allocation bit is set when the slot is handed out, never
   // before: a stale pointer must not mark a slot that is still free.
   V *objs = gc_objs(b);
@@ -529,7 +588,7 @@ static inline V *halloc_hole(size_t words) { return gc_alloc_x(words, 0, 1); }
 // hands it to bend_take: a shared node stays (and the fields it hands out
 // become shared too), any other is dead once its fields are read, so its slot
 // goes on the thread's free list, and the next allocation of its size takes
-// it. A freed slot's mark is cleared: reused, it is a young object for minor
+// it. A reused slot's mark is cleared: it holds a young object for minor
 // collections. The free lists are roots, so a collection keeps them.
 
 // The small block and slot index of a heap object, or 0 when v is not one.
@@ -628,14 +687,15 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
 #endif
   (void)line;
   uint64_t *cw = &h->cand[(size_t)(w - 2) * GC_CANDW + (bi >> 6)];
-  // A freed slot is young when it is handed out again: its mark goes too,
-  // after its allocation bit (no collection marks it then), and in one
-  // instruction when other threads run (a collection may stop this one
-  // anywhere and set other marks of the word).
+  // A freed slot is young when it is handed out again. On one thread its
+  // mark goes here; when other threads run, the thread that hands the slot
+  // out clears it (gc_next_bits): cleared here, after the allocation bit, it
+  // could be the mark of the object another thread made in the slot since
+  // and a collection marked old, which the next minor collection would then
+  // not trace from (tests/par_reuse.bend).
   uint64_t *mw = &gc_mbits[bi * 64 + (i >> 6)];
   if (UNLIKELY(h->mt)) {
     __atomic_fetch_and(aw, ~bit, __ATOMIC_RELAXED);
-    if (UNLIKELY(*mw & bit)) __atomic_fetch_and(mw, ~bit, __ATOMIC_RELAXED);
     // (a sample of the frees keeps the shared candidate words cool)
     if ((i & 15) == 0 && !(*cw & (1ull << (bi & 63))))
       __atomic_fetch_or(cw, 1ull << (bi & 63), __ATOMIC_RELAXED);
@@ -654,6 +714,13 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
 #else
 #define bend_take(v, w) bend_take_at(v, w, 0)
 #endif
+
+// A flat result (a def's U_ function): node t's k fields go out through o,
+// then t is taken when matches free (a shared node shares its fields).
+static inline void bend_open(V t, V *o, unsigned k, int take) {
+  for (unsigned i = 0; i < k; i++) o[i] = FLD(t, i);
+  if (take) bend_take(t, k + 1);
+}
 
 // Registers words that hold values (a global cache, say) as roots.
 static void gc_root_add_locked(V *p, size_t n) {
@@ -692,7 +759,9 @@ static inline void gc_mark(V w) {
   if (kd == 3) bi -= gc_back[bi];
   GcBlk *b = gc_blk(bi);
   uintptr_t o = (uintptr_t)gc_objs(b);
-  if (a < o) return;
+  // A large object's header counts as the object: gc_alloc_large returns
+  // gc_objs(b) after it unlocks, so a thread stopped in the unlock holds b.
+  if (a < o && !b->large) return;
   size_t i = 0;
   if (b->large) {
     if (a >= o + (uintptr_t)b->words * sizeof(V)) return;
@@ -730,18 +799,24 @@ static void gc_drain(void) {
   }
 }
 
+// A thread stopped for a collection: its registers on its stack, it waits.
+__attribute__((noinline)) static void gc_park(Thr *t) {
+  jmp_buf jb;
+  setjmp(jb);
+  atomic_fetch_add(&gc_inside, 1);
+  t->sp = (uintptr_t)&jb;
+  atomic_fetch_add(&gc_acks, 1);
+  while (atomic_load(&gc_stopping)) sched_yield();
+  atomic_fetch_sub(&gc_inside, 1);
+}
+
 static void gc_handler(int sig) {
   (void)sig;
   int saved = errno;
   Thr *t = thr_self;
   if (t != NULL && atomic_load(&gc_stopping)) {
-    jmp_buf jb;
-    setjmp(jb);
-    atomic_fetch_add(&gc_inside, 1);
-    t->sp = (uintptr_t)&jb;
-    atomic_fetch_add(&gc_acks, 1);
-    while (atomic_load(&gc_stopping)) sched_yield();
-    atomic_fetch_sub(&gc_inside, 1);
+    if (t->claiming) t->deferred = 1;
+    else gc_park(t);
   }
   errno = saved;
 }
@@ -957,7 +1032,7 @@ static void thr_register(uintptr_t top) {
   t->live = 1;
   t->rng = (uint32_t)(uintptr_t)t ^ 0x9e3779b9u;
   t->dq = pdq_new();
-  thr_self = t;
+  thr_set(t);
   pthread_mutex_lock(&gc_lock);
   if (gc_nthr == GC_MAXTHR) bend_fail("too many threads");
   gc_thrs[gc_nthr] = t;
@@ -1337,33 +1412,33 @@ static inline V F_Map_dbit(V key, V pos) {
 
 #define U(x) ((uint32_t)(x))
 static inline V nat_low32(V n) { return U(n); }
-static inline V F_U32_dinc(V a) { return U(a + 1); }
-static inline V F_U32_dadd(V a, V b) { return U(a + b); }
-static inline V F_U32_dsub(V a, V b) { return U(a - b); }
-static inline V F_U32_dmul(V a, V b) { return U(U(a) * U(b)); }
-static inline V F_U32_ddiv(V a, V b) { return b == 0 ? 0 : U(a) / U(b); }
-static inline V F_U32_dmod(V a, V b) { return b == 0 ? a : U(a) % U(b); }
-static inline V F_U32_dnot(V a) { return U(~a); }
-static inline V F_U32_dand(V a, V b) { return a & b; }
-static inline V F_U32_dor(V a, V b) { return a | b; }
-static inline V F_U32_dxor(V a, V b) { return a ^ b; }
-static inline V F_U32_dshl(V a) { return U(a << 1); }
-static inline V F_U32_dshr(V a) { return a >> 1; }
-static inline V F_U32_dshln(V a, V n) { return n >= 32 ? 0 : U(a << n); }
-static inline V F_U32_dshrn(V a, V n) { return n >= 32 ? 0 : a >> n; }
+static inline uint32_t F_U32_dinc(V a) { return U(U(a) + 1u); }
+static inline uint32_t F_U32_dadd(V a, V b) { return U(U(a) + U(b)); }
+static inline uint32_t F_U32_dsub(V a, V b) { return U(U(a) - U(b)); }
+static inline uint32_t F_U32_dmul(V a, V b) { return U(U(a) * U(b)); }
+static inline uint32_t F_U32_ddiv(V a, V b) { return b == 0 ? 0 : U(a) / U(b); }
+static inline uint32_t F_U32_dmod(V a, V b) { return b == 0 ? a : U(a) % U(b); }
+static inline uint32_t F_U32_dnot(V a) { return U(~U(a)); }
+static inline uint32_t F_U32_dand(V a, V b) { return U(a) & U(b); }
+static inline uint32_t F_U32_dor(V a, V b) { return U(a) | U(b); }
+static inline uint32_t F_U32_dxor(V a, V b) { return U(a) ^ U(b); }
+static inline uint32_t F_U32_dshl(V a) { return U(U(a) << 1); }
+static inline uint32_t F_U32_dshr(V a) { return U(a) >> 1; }
+static inline uint32_t F_U32_dshln(V a, V n) { return n >= 32 ? 0 : U(U(a) << U(n)); }
+static inline uint32_t F_U32_dshrn(V a, V n) { return n >= 32 ? 0 : U(a) >> U(n); }
 static inline V F_U32_dcmp(V a, V b) { return a < b ? IMM(0) : a == b ? IMM(1) : IMM(2); }
-static inline V F_U32_dis__eq(V a, V b) { return BOOL(a == b); }
-static inline V F_U32_dis__ne(V a, V b) { return BOOL(a != b); }
-static inline V F_U32_dis__lt(V a, V b) { return BOOL(a < b); }
-static inline V F_U32_dis__le(V a, V b) { return BOOL(a <= b); }
-static inline V F_U32_dis__gt(V a, V b) { return BOOL(a > b); }
-static inline V F_U32_dis__ge(V a, V b) { return BOOL(a >= b); }
-static inline V F_U32_dis__zero(V a) { return BOOL(a == 0); }
-static inline V F_U32_dis__even(V a) { return BOOL((a & 1) == 0); }
+static inline uint32_t F_U32_dis__eq(V a, V b) { return BOOL(U(a) == U(b)); }
+static inline uint32_t F_U32_dis__ne(V a, V b) { return BOOL(U(a) != U(b)); }
+static inline uint32_t F_U32_dis__lt(V a, V b) { return BOOL(U(a) < U(b)); }
+static inline uint32_t F_U32_dis__le(V a, V b) { return BOOL(U(a) <= U(b)); }
+static inline uint32_t F_U32_dis__gt(V a, V b) { return BOOL(U(a) > U(b)); }
+static inline uint32_t F_U32_dis__ge(V a, V b) { return BOOL(U(a) >= U(b)); }
+static inline uint32_t F_U32_dis__zero(V a) { return BOOL(U(a) == 0); }
+static inline uint32_t F_U32_dis__even(V a) { return BOOL((a & 1) == 0); }
 static inline V F_U32_dto__nat(V a) { return a; }
-static inline V F_U32_dfrom__nat(V n) { return nat_low32(n); }
-static inline V F_U32_dmin(V a, V b) { return a < b ? a : b; }
-static inline V F_U32_dmax(V a, V b) { return a < b ? b : a; }
+static inline uint32_t F_U32_dfrom__nat(V n) { return nat_low32(n); }
+static inline uint32_t F_U32_dmin(V a, V b) { return U(a) < U(b) ? U(a) : U(b); }
+static inline uint32_t F_U32_dmax(V a, V b) { return U(a) < U(b) ? U(b) : U(a); }
 static inline V F_U32_dpow(V a, V n) {
   // a^n mod 2^32; an odd a has an order dividing 2^30, an even one reaches 0.
   V e = n;
@@ -1676,10 +1751,15 @@ static V par_join(V tv) {
   PTask *p = pdq_pop(thr_self->dq);
   if (p == t) return apply(t->clo, 0);
   if (p) par_exec(p);
-  while (__atomic_load_n(&t->state, __ATOMIC_ACQUIRE) != P_DONE) {
+  // With nothing to steal, a joiner spins a little, then yields its core,
+  // then naps (the task it waits for may be running on a thread that has no
+  // core of its own when there are more threads than cores).
+  for (int spins = 0; __atomic_load_n(&t->state, __ATOMIC_ACQUIRE) != P_DONE;) {
     PTask *o = par_steal();
-    if (o) par_exec(o);
-    else cpu_relax();
+    if (o) { par_exec(o); spins = 0; continue; }
+    if (++spins < 64) cpu_relax();
+    else if (spins < 256) sched_yield();
+    else { struct timespec ts = {0, 20000}; nanosleep(&ts, NULL); }
   }
   return t->res;
 }
@@ -2382,6 +2462,9 @@ static void *bend_thread(void *arg) {
 }
 
 static int bend_gpu = 1;
+// --gpu SIZE: the device arena's first size in MB (0: the default), so a
+// call that needs it does not first fill a smaller one.
+static long bend_gpu_mb = 0;
 
 static const char *CLI_HELP =
   "usage: %s [options] [arguments]\n"
@@ -2416,6 +2499,14 @@ static int bend_start(int argc, char **argv, V (*m)(void), int value) {
     } else if (strcmp(a, "--gpu") == 0) {
       if (v == NULL) cli_fail("expected on, off or a size like 4GB after --gpu");
       bend_gpu = strcmp(v, "off") != 0;
+      {
+        char *end = NULL;
+        long n = strtol(v, &end, 10);
+        if (end != v && n > 0) {
+          if (strcmp(end, "GB") == 0 || strcmp(end, "G") == 0 || strcmp(end, "gb") == 0) bend_gpu_mb = n << 10;
+          else if (strcmp(end, "MB") == 0 || strcmp(end, "M") == 0 || strcmp(end, "mb") == 0) bend_gpu_mb = n;
+        }
+      }
       i++;
     } else {
       io_argv[io_argc++] = argv[i];

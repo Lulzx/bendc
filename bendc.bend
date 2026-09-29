@@ -4045,10 +4045,12 @@ def Gen.arr(xs: List<&2, Doc>) -> Doc:
 
 # Where a statement's value goes: returned, assigned to a C variable, or
 # stored through dst (in a D_ function of destination-passing group id).
+# TOut: a flat result (see Gen.def.unb), its k fields stored through o.
 type Tgt is Data:
   TRet{}
   TSet{v: String}
   TDst{id: String, n: U32}
+  TOut{k: U32, free: Bool}
 
 type Self is Data:
   Self{name: String, mask: List<&2, Bool>, cps: List<&2, String>}
@@ -4064,6 +4066,9 @@ def Gen.ret(t: Tgt, d: Doc) -> Doc:
       Doc.list([DStr{v}, DStr{" = "}, d, DStr{";\n"}])
     case TDst{id, n}:
       Doc.list([DStr{"*dst = "}, d, DStr{";\nreturn 0;\n"}])
+    case TOut{k, free}:
+      Doc.list([DStr{"bend_open("}, d, DStr{", o, " ++ U32.show(k) ++ ", " ++ Bool.pick(String, free, "1", "0") ++
+        ");\nreturn 0;\n"}])
 
 # A pattern against a C path yields tests and bindings.
 type PatR is Data:
@@ -4163,7 +4168,7 @@ def Gen.pat.go(
                     case 0n:
                       Gen.pat.go(Core.PCtor{name, Nil{}}, 0n, g, path, 0, None{}, 0n,
                         Gen.pat.node(False{}, ar, path,
-                          Gen.pat.tag(single, "TAG(" ++ path ++ ") == " ++ U32.show(tag), r)))
+                          Gen.pat.tag(single, "IS_N(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)))
                     case 1n:
                       Gen.pat.tag(single, "(" ++ path ++ ") == IMM(" ++ U32.show(tag) ++ ")", r)
                     case 2n:
@@ -4214,7 +4219,7 @@ def Gen.pat.go(
                     case 0n:
                       Gen.pat.go(Core.PCtor{name, [a]}, 0n, g, path, 0, None{}, 0n,
                         Gen.pat.node(True{}, ar, path,
-                          Gen.pat.tag(single, "TAG(" ++ path ++ ") == " ++ U32.show(tag), r)))
+                          Gen.pat.tag(single, "IS_N(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)))
                     case 1n:
                       Gen.pat.tag(single, "(" ++ path ++ ") == IMM(" ++ U32.show(tag) ++ ")", r)
                     case 2n:
@@ -4265,7 +4270,7 @@ def Gen.pat.go(
                     case 0n:
                       Gen.pat.go(Core.PCtor{name, [a, b]}, 0n, g, path, 0, None{}, 0n,
                         Gen.pat.node(True{}, ar, path,
-                          Gen.pat.tag(single, "TAG(" ++ path ++ ") == " ++ U32.show(tag), r)))
+                          Gen.pat.tag(single, "IS_N(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)))
                     case 1n:
                       Gen.pat.tag(single, "(" ++ path ++ ") == IMM(" ++ U32.show(tag) ++ ")", r)
                     case 2n:
@@ -4319,7 +4324,7 @@ def Gen.pat.go(
                     case 0n:
                       Gen.pat.go(Core.PCtor{name, h <> t}, 0n, g, path, 0, None{}, 0n,
                         Gen.pat.node(True{}, ar, path,
-                          Gen.pat.tag(single, "TAG(" ++ path ++ ") == " ++ U32.show(tag), r)))
+                          Gen.pat.tag(single, "IS_N(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)))
                     case 1n:
                       Gen.pat.tag(single, "(" ++ path ++ ") == IMM(" ++ U32.show(tag) ++ ")", r)
                     case 2n:
@@ -4625,6 +4630,8 @@ def Gen.is_ret(t: Tgt) -> Bool:
       False{}
     case TDst{id, n}:
       True{}
+    case TOut{k, free}:
+      True{}
 
 def Gen.is_tail(+env: Env(), +self: Self, +tgt: Tgt, +name: String, +args: List<&2, Core.Expr>) ->
   Bool:
@@ -4795,6 +4802,66 @@ def Gen.scalar.var(+env: Env(), v: Core.Expr) -> Bool:
     case other:
       False{}
 
+# The natives whose result is a U32, and those whose result is another
+# scalar (a Bool, a Nat, an F32).
+def Gen.scalar.u32s() -> List<&2, String>:
+  ["U32.inc", "U32.add", "U32.sub", "U32.mul", "U32.div", "U32.mod", "U32.not",
+   "U32.and", "U32.or", "U32.xor", "U32.shl", "U32.shr", "U32.shln", "U32.shrn",
+   "U32.from_nat", "U32.min", "U32.max", "U32.pow", "U32.log2", "F32.bits", "F32.to_u32"]
+
+def Gen.scalar.others() -> List<&2, String>:
+  ["U32.is_eq", "U32.is_ne", "U32.is_lt", "U32.is_le", "U32.is_gt", "U32.is_ge",
+   "U32.is_zero", "U32.is_even", "U32.to_nat", "U32.to_f32",
+   "F32.add", "F32.sub", "F32.mul", "F32.div", "F32.mod", "F32.pow", "F32.atan2",
+   "F32.is_eq", "F32.is_ne", "F32.is_lt", "F32.is_le", "F32.is_gt", "F32.is_ge",
+   "F32.neg", "F32.abs", "F32.sqrt", "F32.exp", "F32.log", "F32.log2",
+   "F32.log10", "F32.sin", "F32.cos", "F32.tan", "F32.asin", "F32.acos",
+   "F32.atan", "F32.sinh", "F32.cosh", "F32.tanh", "F32.floor", "F32.ceil",
+   "F32.trunc"]
+
+def Gen.scalar.ret.ty(+t: String) -> U32:
+  Bool.pick(U32, Str.eq(t, "U32"), 2, Bool.pick(U32, Gen.scalar.ty(t), 1, 0))
+
+# What a def's result is: 2 a U32, 1 another scalar, 0 anything else.
+def Gen.scalar.ret(d: Decl) -> U32:
+  match d:
+    case DDef{n, ps, b, r}:
+      Gen.scalar.ret.ty(P.head(r))
+    case other:
+      0
+
+def Gen.scalar.fn(+g: G, +f: String, local: Bool) -> U32:
+  match local:
+    case True{}:
+      0
+    case False{}:
+      Bool.pick(U32, Str.has(Gen.scalar.u32s(), f), 2,
+        Bool.pick(U32, Str.has(Gen.scalar.others(), f), 1, Gen.scalar.ret(G.body(g, f))))
+
+def Gen.scalar.bound(m: Maybe<&2, String>) -> Bool:
+  match m:
+    case Some{c}:
+      True{}
+    case None{}:
+      False{}
+
+# What a let's value is: 2 a U32 (its C local is a uint32_t), 1 another
+# scalar (never shared), 0 anything else. A variable holding a scalar is 1;
+# a call is what its def or native returns.
+def Gen.scalar.let(+g: G, +env: Env(), v: Core.Expr) -> U32:
+  match v:
+    case Core.EVar{+y}:
+      Bool.pick(U32, Gen.scalar.find(Env.find(env, y)), 1, 0)
+    case Core.ENum{n}:
+      2
+    case Core.ECall{Core.EVar{+f}, args}:
+      Gen.scalar.fn(g, f, Gen.scalar.bound(Env.find(env, f)))
+    case other:
+      0
+
+def Gen.scalar.cty(+k: U32) -> String:
+  Bool.pick(String, U32.is_eq(k, 2), "uint32_t ", "V ")
+
 #
 # A value bound to a variable used twice (on some path) is marked shared
 # where it is bound (bend_share). A match or destructuring let that opens a
@@ -4820,9 +4887,9 @@ def Use.n(+x: String, e: Core.Expr) -> U32:
         case a <> t:
           (Use.n(x, a) + Use.n(x, Core.ECtor{n, t}) : U32)
     case Core.ELam{p, b}:
-      Use.n(x, b)
+      Bool.pick(U32, Str.has(Pat.vars(p, Nil{}), x), 0, Use.n(x, b))
     case Core.ELet{p, v, b}:
-      (Use.n(x, v) + Use.n(x, b) : U32)
+      (Use.n(x, v) + Bool.pick(U32, Str.has(Pat.vars(p, Nil{}), x), 0, Use.n(x, b)) : U32)
     case Core.EMatch{scrs, cases}:
       match scrs:
         case a <> t:
@@ -4834,7 +4901,7 @@ def Use.n(+x: String, e: Core.Expr) -> U32:
             case c <> t:
               U32.max(Use.n(x, c), Use.n(x, Core.EMatch{Nil{}, t}))
     case Core.ECase{ps, b}:
-      Use.n(x, b)
+      Bool.pick(U32, Str.has(Pats.vars(ps, Nil{}), x), 0, Use.n(x, b))
     case Core.ESucc{k, y}:
       Use.n(x, y)
     case Core.EOp{op, a, b}:
@@ -4985,6 +5052,40 @@ def Gen.par.mode(m: Maybe<&2, String>, +sn: String) -> Nat:
       Bool.pick(Nat, Str.eq(v, sn), 1n, 3n)
     case None{}:
       3n
+
+# A parallel let of n values forks lg(n) levels deep: par_depth counts
+# log2 of the tasks above, so the frontier (par_front) is 2^par_front tasks
+# whatever the fan-out.
+def Gen.par.lg(n: Nat) -> U32:
+  match n:
+    case 0n:
+      1
+    case 1n:
+      1
+    case 2n:
+      1
+    case 3n:
+      2
+    case 4n:
+      2
+    case 5n:
+      3
+    case 6n:
+      3
+    case 7n:
+      3
+    case 8n:
+      3
+    case 9n+m:
+      4
+
+# Past the frontier, a def with a sequential clone (S_name) calls it; any
+# other def runs its parallel let's values in order (sn = "").
+def Gen.par.def(+sn: String) -> String:
+  Bool.pick(String, String.is_empty(sn), "", "#define " ++ Gen.f(sn) ++ " S_" ++ Gen.mangle(sn) ++ "\n")
+
+def Gen.par.undef(+sn: String) -> String:
+  Bool.pick(String, String.is_empty(sn), "", "#undef " ++ Gen.f(sn) ++ "\n")
 
 def Gen.par.decls(n: Nat, +k: U32, +i: U32) -> String:
   match n:
@@ -5383,7 +5484,7 @@ def K.isflat(g: G, name: String) -> KM(Bool):
 def K.sq.decl.go(kind: Nat, d: Decl, +g: G, +name: String, +mask: List<&2, Bool>) -> KM(Bool):
   match kind d:
     case 0n DDef{n, ps, body, ret}:
-      K.fl.and(U32.is_le(K.kept(mask), 8), K.fl.expr(g, KSelf{name, 1, mask}, K.params(ps, mask), R.ops(body, "Nat"),
+      K.fl.and(U32.is_le(K.kept(mask), 12), K.fl.expr(g, KSelf{name, 1, mask}, K.params(ps, mask), R.ops(body, "Nat"),
         True{}))
     case k o:
       KM.pure(Bool, False{})
@@ -5428,6 +5529,83 @@ def PatR.conds(r: PatR) -> List<&2, String>:
   conds
 
 # A match's scrutinees: their C variables and the code binding them.
+# Flat results. U_name stores a flat result's fields through o (see
+# Gen.def.unb); Gen.sret is its arity, 0 for a def that returns a node.
+def DGrp.n(d: DGrp) -> U32:
+  DGrp{id, n} = d
+  n
+
+def Gen.sret(+g: G, +name: String) -> U32:
+  DGrp.n(G.dps(g, "%r:" ++ name))
+
+def Gen.pvars(ps: List<&2, Core.Pat>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Core.PVar{x} <> t:
+      Gen.pvars(t)
+    case p <> t:
+      False{}
+
+def Gen.pnames(ps: List<&2, Core.Pat>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.PVar{x} <> t:
+      x <> Gen.pnames(t)
+    case p <> t:
+      Gen.pnames(t)
+
+def Gen.out.binds(xs: List<&2, String>, +o: String, +i: U32) -> Env():
+  match xs:
+    case Nil{}:
+      Nil{}
+    case x <> t:
+      Bind{x, o ++ "[" ++ U32.show(i) ++ "]"} <> Gen.out.binds(t, o, U32.inc(i))
+
+def Gen.out.stores(ds: List<&2, Doc>, +i: U32) -> Doc:
+  match ds:
+    case Nil{}:
+      DNil{}
+    case d <> t:
+      Doc.list([DStr{"o[" ++ U32.show(i) ++ "] = "}, d, DStr{";\n"}, Gen.out.stores(t, U32.inc(i))])
+
+# Whether f(as) is a full call of a def with a flat result of n fields.
+def Gen.out.full(+g: G, +env: Env(), +f: String, +n: Nat, +as: List<&2, Core.Expr>) -> Bool:
+  Bool.and(Bool.and(Nat.is_gt(n, 0n), U32.is_eq(Gen.sret(g, f), U32.from_nat(n))),
+    Bool.and(Bool.not(Env.has(env, f)),
+      Nat.is_eq(List.length(&2, Bool, DInfo.mask(G.def(g, f))), List.length(&2, Core.Expr, as))))
+
+# A let opening a call's flat result into variables: the fields go into a
+# local array.
+def Gen.out.let(+g: G, +env: Env(), +f: String, +qs: List<&2, Core.Pat>, +as: List<&2, Core.Expr>) -> Bool:
+  Bool.and(Gen.pvars(qs), Gen.out.full(g, env, f, List.length(&2, Core.Pat, qs), as))
+
+# A constructor or a call returned as a flat result.
+def Gen.out.ctor(t: Tgt, +args: List<&2, Core.Expr>) -> Bool:
+  match t:
+    case TOut{k, free}:
+      U32.is_eq(k, U32.from_nat(List.length(&2, Core.Expr, args)))
+    case other:
+      False{}
+
+def Gen.out.call(+g: G, +env: Env(), t: Tgt, +name: String, +args: List<&2, Core.Expr>) -> Bool:
+  match t:
+    case TOut{k, free}:
+      Gen.out.full(g, env, name, U32.to_nat(k), args)
+    case other:
+      False{}
+
+# A flat result of two fields returned by Array.get (1) or Array.swap (2),
+# unless a local shadows them; else 0.
+def Gen.out.arr(+env: Env(), t: Tgt, +name: String) -> Nat:
+  match t:
+    case TOut{k, free}:
+      Bool.pick(Nat, Bool.or(Bool.not(U32.is_eq(k, 2)), Env.has(env, name)), 0n,
+        Bool.pick(Nat, Str.eq(name, "Array.get"), 1n, Bool.pick(Nat, Str.eq(name, "Array.swap"), 2n, 0n)))
+    case other:
+      0n
+
 type Scrs is Data:
   Scrs{cs: List<&2, String>, code: Doc}
 
@@ -5518,6 +5696,20 @@ type GSel is Data:
   GSLetPar{g: G, env: Env(), self: Self, tgt: Tgt, ps: List<&2, Core.Pat>, v: Core.Expr, body: Core.Expr}
   GSLetCtor{g: G, env: Env(), self: Self, tgt: Tgt, name: String, ps: List<&2, Core.Pat>, v: Core.Expr,
     body: Core.Expr, par: Bool}
+  GSLetUnb{g: G, env: Env(), self: Self, tgt: Tgt, name: String, ps: List<&2, Core.Pat>, v: Core.Expr, body: Core.Expr}
+  GSLetCall{g: G, env: Env(), self: Self, tgt: Tgt, name: String, ps: List<&2, Core.Pat>, f: String,
+    args: List<&2, Core.Expr>, body: Core.Expr}
+  GSLetGet{hit: Bool, g: G, env: Env(), self: Self, tgt: Tgt, name: String, f: String, a: String,
+    x: String, t: Core.Expr, arr: Core.Expr, idx: Core.Expr, body: Core.Expr}
+  GSLetOut{hit: Bool, g: G, env: Env(), self: Self, tgt: Tgt, name: String, ps: List<&2, Core.Pat>,
+    f: String, args: List<&2, Core.Expr>, body: Core.Expr}
+  GSLetSwap{hit: Bool, g: G, env: Env(), self: Self, tgt: Tgt, name: String, f: String, a: String,
+    x: String, t: Core.Expr, arr: Core.Expr, idx: Core.Expr, v: Core.Expr, body: Core.Expr}
+  GSRetArr{hit: Nat, g: G, env: Env(), tgt: Tgt, name: String, args: List<&2, Core.Expr>}
+  GSSwap{g: G, env: Env(), k: U32, arr: Core.Expr, idx: Core.Expr, v: Core.Expr}
+  GSCallU{g: G, env: Env(), name: String, s: Split, o: String}
+  GSRetCtor{out: Bool, g: G, env: Env(), tgt: Tgt, name: String, args: List<&2, Core.Expr>}
+  GSRetCall{out: Bool, g: G, env: Env(), tgt: Tgt, name: String, args: List<&2, Core.Expr>}
   GSLet{g: G, env: Env(), self: Self, tgt: Tgt, p: Core.Pat, v: Core.Expr, body: Core.Expr}
   GSCases{g: G, env: Env(), self: Self, tgt: Tgt, cs: List<&2, String>, cases: List<&2, Core.Expr>}
 
@@ -5657,6 +5849,26 @@ def GSel.none(k: GSel) -> GSel.ty(k):
     case GSLetPar{g, env, self, tgt, ps, v, body}:
       DNil{}
     case GSLetCtor{g, env, self, tgt, name, ps, v, body, par}:
+      DNil{}
+    case GSLetUnb{g, env, self, tgt, name, ps, v, body}:
+      DNil{}
+    case GSLetCall{g, env, self, tgt, name, ps, f, args, body}:
+      DNil{}
+    case GSLetGet{hit, g, env, self, tgt, name, f, a, x, t, arr, idx, body}:
+      DNil{}
+    case GSLetOut{hit, g, env, self, tgt, name, ps, f, args, body}:
+      DNil{}
+    case GSLetSwap{hit, g, env, self, tgt, name, f, a, x, t, arr, idx, v, body}:
+      DNil{}
+    case GSRetArr{hit, g, env, tgt, name, args}:
+      DNil{}
+    case GSSwap{g, env, k, arr, idx, v}:
+      DNil{}
+    case GSCallU{g, env, name, s, o}:
+      DNil{}
+    case GSRetCtor{out, g, env, tgt, name, args}:
+      DNil{}
+    case GSRetCall{out, g, env, tgt, name, args}:
       DNil{}
     case GSLet{g, env, self, tgt, p, v, body}:
       DNil{}
@@ -5901,14 +6113,12 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         case GSDstJump{+g, +env, +tgt, +name, args}:
           Gen.rec(fu, GSDstJumpSplit{g, env, tgt, name,
             Gen.split(DInfo.mask(G.def(g, name)), args, Split{Nil{}, Nil{}, Nil{}, False{}})})
-        case GSStmtCallDst{+g, +env, +tgt, +name, args, dst}:
+        case GSStmtCallDst{+g, +env, +tgt, +name, +args, dst}:
           match dst:
             case True{}:
               Gen.rec(fu, GSDstJump{g, env, tgt, name, args})
             case False{}:
-              do Gen<Doc>:
-                d : Doc <- Gen.rec(fu, GSCall{g, env, Core.EVar{name}, args})
-                return Gen.ret(tgt, d)
+              Gen.rec(fu, GSRetCall{Gen.out.call(g, env, tgt, name, args), g, env, tgt, name, args})
         case GSStmtCall{+g, +env, +self, +tgt, +name, +args, tail}:
           match tail:
             case True{}:
@@ -5946,9 +6156,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         case GSStmtCtorPick{none, +g, +env, +self, +tgt, +name, +args, +hole}:
           match none:
             case True{}:
-              do Gen<Doc>:
-                d : Doc <- Gen.rec(fu, GSExpr{g, env, Core.ECtor{name, args}})
-                return Gen.ret(tgt, d)
+              Gen.rec(fu, GSRetCtor{Gen.out.ctor(tgt, args), g, env, tgt, name, args})
             case False{}:
               Gen.rec(fu, GSStmtCtorHole{g, env, self, tgt, name, args, hole,
                 Gen.dst.nth(U32.to_nat(hole), Core.EErr{"hole"} <> args)})
@@ -6009,10 +6217,11 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case False{}:
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
-                +c : String <- Gen.pure(String, Gen.scalar.wrap(Gen.scalar.var(env, v), "v" ++ U32.show(k)))
+                +sk : U32 <- Gen.pure(U32, Gen.scalar.let(g, env, v))
+                +c : String <- Gen.pure(String, Gen.scalar.wrap(U32.is_ne(sk, 0), "v" ++ U32.show(k)))
                 d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
                 b : Doc <- Gen.rec(fu, GSStmt{g, Bind{x, c} <> env, self, tgt, body})
-                return Doc.list([DStr{"V " ++ c ++ " = "}, d, DStr{";\n"}, Gen.shares.g(g, [Bind{x, c}], body), b])
+                return Doc.list([DStr{Gen.scalar.cty(sk) ++ c ++ " = "}, d, DStr{";\n"}, Gen.shares.g(g, [Bind{x, c}], body), b])
         case GSCasesNext{+g, +env, +self, +tgt, +cs, rest, conds, b}:
           match conds:
             case Nil{}:
@@ -6126,19 +6335,20 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         # in order below it, through S_name.
         case GSParFront{+g, +env, +sn, +k, +vs}:
           +n = List.length(&2, Core.Expr, vs)
+          +lg = U32.show(Gen.par.lg(n))
           do Gen<Doc>:
             sq : Doc <- Gen.rec(fu, GSParSeq{g, env, k, 0, vs, False{}})
             +j : U32 <- Gen.fresh()
             fk : Doc <- Gen.rec(fu, GSParVals{g, env, j, 0, vs})
-            return Doc.list([DStr{Gen.par.decls(n, k, 0) ++ "\nif (par_depth >= par_front) {\n#define " ++ Gen.f(sn) ++ " S_" ++
-              Gen.mangle(sn) ++ "\n"}, sq, DStr{"#undef " ++ Gen.f(sn) ++ "\n} else {\npar_depth += 1;\n"}, fk,
-              DStr{Gen.par.copy(n, k, j, 0) ++ "\npar_depth -= 1;\n}\n"}])
+            return Doc.list([DStr{Gen.par.decls(n, k, 0) ++ "\nif (par_depth >= par_front) {\n" ++ Gen.par.def(sn)}, sq,
+              DStr{Gen.par.undef(sn) ++ "} else {\npar_depth += " ++ lg ++ ";\n"}, fk,
+              DStr{Gen.par.copy(n, k, j, 0) ++ "\npar_depth -= " ++ lg ++ ";\n}\n"}])
         case GSParSq{sq, +g, +env, +sn, +k, +vs}:
           match sq:
             case True{}:
               Gen.rec(fu, GSParFront{g, env, sn, k, vs})
             case False{}:
-              Gen.rec(fu, GSParVals{g, env, k, 0, vs})
+              Gen.rec(fu, GSParFront{g, env, "", k, vs})
         case GSParPick{mode, +g, +env, +sn, +k, +vs}:
           match mode:
             case 1n:
@@ -6165,7 +6375,132 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case True{}:
               Gen.rec(fu, GSLetPar{g, env, self, tgt, ps, v, body})
             case False{}:
-              Gen.rec(fu, GSLetPat{g, env, self, tgt, Core.PCtor{name, ps}, v, body})
+              Gen.rec(fu, GSLetUnb{g, env, self, tgt, name, ps, v, body})
+        # A let opening a call's pair or record: Array.get's pair is the
+        # array and its cell; a flat result's fields go into a local array.
+        case GSLetUnb{+g, +env, +self, +tgt, +name, ps, v, +body}:
+          match v:
+            case Core.ECall{Core.EVar{+f}, args}:
+              Gen.rec(fu, GSLetCall{g, env, self, tgt, name, ps, f, args, body})
+            case other:
+              Gen.rec(fu, GSLetPat{g, env, self, tgt, Core.PCtor{name, ps}, other, body})
+        case GSLetCall{+g, +env, +self, +tgt, +name, ps, +f, args, +body}:
+          match ps args:
+            case Core.PVar{+a} <> Core.PVar{+x} <> Nil{} t <> arr <> idx <> Nil{}:
+              Gen.rec(fu, GSLetGet{Bool.and(Bool.and(Str.eq(f, "Array.get"), Str.eq(name, "Tuple")),
+                Bool.not(Env.has(env, f))), g, env, self, tgt, name, f, a, x, t, arr, idx, body})
+            case Core.PVar{+a} <> Core.PVar{+x} <> Nil{} t <> arr <> idx <> v <> Nil{}:
+              Gen.rec(fu, GSLetSwap{Bool.and(Bool.and(Str.eq(f, "Array.swap"), Str.eq(name, "Tuple")),
+                Bool.not(Env.has(env, f))), g, env, self, tgt, name, f, a, x, t, arr, idx, v, body})
+            case +qs +as:
+              Gen.rec(fu, GSLetOut{Gen.out.let(g, env, f, qs, as), g, env, self, tgt, name, qs, f, as, body})
+        case GSLetGet{hit, +g, +env, +self, +tgt, +name, +f, +a, +x, t, arr, idx, +body}:
+          match hit:
+            case True{}:
+              do Gen<Doc>:
+                +k : U32 <- Gen.fresh()
+                +ca : String <- Gen.pure(String, "ga" ++ U32.show(k))
+                +cx : String <- Gen.pure(String, "gx" ++ U32.show(k))
+                da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
+                di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
+                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, cx} <> env, self, tgt, body})
+                return Doc.list([DStr{"V " ++ ca ++ " = "}, da, DStr{";\nV " ++ cx ++ " = *arr_at(" ++ ca ++ ", "}, di,
+                  DStr{"); bend_share(" ++ cx ++ ");\n"}, Gen.shares.g(g, [Bind{a, ca}, Bind{x, cx}], body), b])
+            case False{}:
+              +qs = {[Core.PVar{a}, Core.PVar{x}] : List<&2, Core.Pat>}
+              +as = {[t, arr, idx] : List<&2, Core.Expr>}
+              Gen.rec(fu, GSLetOut{Gen.out.let(g, env, f, qs, as), g, env, self, tgt, name, qs, f, as, body})
+        # (a, x) = Array.swap(T, arr, i, v): the old cell and the array, with
+        # no pair in between.
+        case GSLetSwap{hit, +g, +env, +self, +tgt, +name, +f, +a, +x, t, arr, idx, v, +body}:
+          match hit:
+            case True{}:
+              do Gen<Doc>:
+                +k : U32 <- Gen.fresh()
+                +ca : String <- Gen.pure(String, "ga" ++ U32.show(k))
+                +cx : String <- Gen.pure(String, "gx" ++ U32.show(k))
+                sw : Doc <- Gen.rec(fu, GSSwap{g, env, k, arr, idx, v})
+                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, cx} <> env, self, tgt, body})
+                return Doc.list([sw, Gen.shares.g(g, [Bind{a, ca}, Bind{x, cx}], body), b])
+            case False{}:
+              +qs = {[Core.PVar{a}, Core.PVar{x}] : List<&2, Core.Pat>}
+              +as = {[t, arr, idx, v] : List<&2, Core.Expr>}
+              Gen.rec(fu, GSLetOut{Gen.out.let(g, env, f, qs, as), g, env, self, tgt, name, qs, f, as, body})
+        # V gaK = arr; V gxK = old cell, with v stored in it.
+        case GSSwap{+g, +env, +k, arr, idx, v}:
+          +ks = U32.show(k)
+          do Gen<Doc>:
+            da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
+            di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
+            dv : Doc <- Gen.rec(fu, GSExpr{g, env, v})
+            return Doc.list([DStr{"V ga" ++ ks ++ " = "}, da, DStr{";\nV gi" ++ ks ++ " = "}, di, DStr{";\nV gv" ++ ks ++ " = "},
+              dv, DStr{";\nV *gp" ++ ks ++ " = arr_at(ga" ++ ks ++ ", gi" ++ ks ++ ");\nV gx" ++ ks ++ " = *gp" ++ ks ++
+              ";\narr_put(ga" ++ ks ++ ", gp" ++ ks ++ ", gv" ++ ks ++ ");\n"}])
+        # A flat result of two fields returned from Array.get (1) or
+        # Array.swap (2): the array and the cell go straight out.
+        case GSRetArr{hit, +g, +env, +tgt, +name, +args}:
+          match hit args:
+            case 1n t <> arr <> idx <> Nil{}:
+              do Gen<Doc>:
+                +k : U32 <- Gen.fresh()
+                +ks : String <- Gen.pure(String, U32.show(k))
+                da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
+                di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
+                return Doc.list([DStr{"{\nV ga" ++ ks ++ " = "}, da, DStr{";\nV gx" ++ ks ++ " = *arr_at(ga" ++ ks ++ ", "}, di,
+                  DStr{"); bend_share(gx" ++ ks ++ ");\no[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
+            case 2n t <> arr <> idx <> v <> Nil{}:
+              do Gen<Doc>:
+                +k : U32 <- Gen.fresh()
+                +ks : String <- Gen.pure(String, U32.show(k))
+                sw : Doc <- Gen.rec(fu, GSSwap{g, env, k, arr, idx, v})
+                return Doc.list([DStr{"{\n"}, sw, DStr{"o[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
+            case h as:
+              do Gen<Doc>:
+                d : Doc <- Gen.rec(fu, GSCall{g, env, Core.EVar{name}, as})
+                return Gen.ret(tgt, d)
+        case GSLetOut{hit, +g, +env, +self, +tgt, +name, +ps, +f, +args, +body}:
+          match hit:
+            case True{}:
+              do Gen<Doc>:
+                +k : U32 <- Gen.fresh()
+                +o : String <- Gen.pure(String, "uo" ++ U32.show(k))
+                c : Doc <- Gen.rec(fu, GSCallU{g, env, f, Gen.split(DInfo.mask(G.def(g, f)), args,
+                  Split{Nil{}, Nil{}, Nil{}, False{}}), o})
+                +binds : Env() <- Gen.pure(Env(), Gen.out.binds(Gen.pnames(ps), o, 0))
+                b : Doc <- Gen.rec(fu, GSStmt{g, List.append(&2, Bind, binds, env), self, tgt, body})
+                return Doc.list([DStr{"V " ++ o ++ "[" ++ U32.show(Gen.sret(g, f)) ++ "]; "}, c, DStr{";\n"},
+                  Gen.shares.g(g, binds, body), b])
+            case False{}:
+              Gen.rec(fu, GSLetPat{g, env, self, tgt, Core.PCtor{name, ps}, Core.ECall{Core.EVar{f}, args}, body})
+        case GSCallU{+g, +env, +name, s, +o}:
+          match s:
+            case Split{kept, all, extra, full}:
+              do Gen<Doc>:
+                Gen.ref(name)
+                ks : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, kept})
+                return Doc.list([DStr{"U_" ++ Gen.mangle(name) ++ "("}, Gen.commas(List.append(&2, Doc, ks, [DStr{o}])),
+                  DStr{")"}])
+        # A flat result's constructor stores its fields; a call of a def with
+        # a flat result of the same arity passes o on.
+        case GSRetCtor{out, +g, +env, +tgt, +name, +args}:
+          match out:
+            case True{}:
+              do Gen<Doc>:
+                ds : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, args})
+                return Doc.list([Gen.out.stores(ds, 0), DStr{"return 0;\n"}])
+            case False{}:
+              do Gen<Doc>:
+                d : Doc <- Gen.rec(fu, GSExpr{g, env, Core.ECtor{name, args}})
+                return Gen.ret(tgt, d)
+        case GSRetCall{out, +g, +env, +tgt, +name, +args}:
+          match out:
+            case True{}:
+              do Gen<Doc>:
+                c : Doc <- Gen.rec(fu, GSCallU{g, env, name, Gen.split(DInfo.mask(G.def(g, name)), args,
+                  Split{Nil{}, Nil{}, Nil{}, False{}}), "o"})
+                return Doc.list([DStr{"return "}, c, DStr{";\n"}])
+            case False{}:
+              Gen.rec(fu, GSRetArr{Gen.out.arr(env, tgt, name), g, env, tgt, name, args})
         case GSLet{+g, +env, +self, +tgt, p, v, body}:
           match p:
             case Core.PVar{+x}:
@@ -6223,19 +6558,71 @@ def Gen.memo.add.go(st: St, b: Bind) -> Unit & St:
 def Gen.memo.add(b: Bind) -> Gen(Unit):
   st => Gen.memo.add.go(st, b)
 
+# A def's U32 parameters live in uint32_t locals: the C parameter is aK_
+# and the local aK, so clang sees 32-bit values (a loop over them, a self
+# call's goto top, can then use 32-bit vector lanes).
+def Gen.u32.if(+c: String, rest: List<&2, String>, keep: Bool) -> List<&2, String>:
+  match keep:
+    case True{}:
+      c <> rest
+    case False{}:
+      rest
+
+def Gen.u32.names(ps: List<&2, Core.Param>, mask: List<&2, Bool>, +i: U32) -> List<&2, String>:
+  match ps mask:
+    case Core.Param{x, m, +t} <> pt True{} <> mt:
+      Gen.u32.if("a" ++ U32.show(i), Gen.u32.names(pt, mt, U32.inc(i)), Str.eq(t, "U32"))
+    case Core.Param{x, m, t} <> pt False{} <> mt:
+      Gen.u32.names(pt, mt, U32.inc(i))
+    case pl ml:
+      Nil{}
+
+def Gen.u32.of(d: Decl, +mask: List<&2, Bool>) -> List<&2, String>:
+  match d:
+    case DDef{n, ps, b, r}:
+      Gen.u32.names(ps, mask, 0)
+    case other:
+      Nil{}
+
+def Gen.u32(+g: G, +name: String, +mask: List<&2, Bool>) -> List<&2, String>:
+  Gen.u32.of(G.body(g, name), mask)
+
+def Gen.cparams.u.go(ps: List<&2, String>, +us: List<&2, String>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case +h <> t:
+      ("V " ++ h ++ Bool.pick(String, Str.has(us, h), "_", "")) <> Gen.cparams.u.go(t, us)
+
+def Gen.cparams.u(ps: List<&2, String>, +us: List<&2, String>) -> String:
+  match ps:
+    case Nil{}:
+      "void"
+    case h <> t:
+      String.join(Gen.cparams.u.go(h <> t, us), ", ")
+
+def Gen.u32.open(us: List<&2, String>) -> String:
+  match us:
+    case Nil{}:
+      ""
+    case +h <> t:
+      "uint32_t " ++ h ++ " = (uint32_t)" ++ h ++ "_;\n" ++ Gen.u32.open(t)
+
 # S_name, a seq def's sequential clone: its parallel lets run in order and
 # its calls to itself stay in S_name (F_name is renamed to it inside).
 def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr, +env: Env(),
   +params: List<&2, String>) -> Gen(Unit):
   match sq:
     case True{}:
-      +head = "static V S_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams(params) ++ ")"
+      +us = Gen.u32(g, name, mask)
+      +head = "static V S_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
       do Gen<Unit>:
         Gen.proto(DStr{head ++ ";\n"})
         Gen.memo.add(Bind{"%seqmode", name})
         b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
         Gen.memo.add(Bind{"%seqmode", ""})
-        Gen.code(Doc.list([DStr{"#define " ++ Gen.f(name) ++ " S_" ++ Gen.mangle(name) ++ "\n" ++ head ++ " {\ntop:;\n"},
+        Gen.code(Doc.list([DStr{"#define " ++ Gen.f(name) ++ " S_" ++ Gen.mangle(name) ++ "\n" ++ head ++ " {\n" ++
+          Gen.u32.open(us) ++ "top:;\n"},
           Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n#undef " ++ Gen.f(name) ++ "\n"}]))
     case False{}:
       Gen.pure(Unit, Unit{})
@@ -6317,16 +6704,51 @@ def Expr.has_par(e: Core.Expr) -> Bool:
     case other:
       False{}
 
-def Gen.def.plain(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
+def Gen.def.boxed(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
   +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
 ) -> Gen(Unit):
-  +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
+  +us = Gen.u32(g, name, mask)
+  +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n"})
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
-    Gen.code(Doc.list([DStr{head ++ " {\ntop:;\n"}, Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
+    Gen.code(Doc.list([DStr{head ++ " {\n" ++ Gen.u32.open(us) ++ "top:;\n"}, Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
     Gen.wrapper(name, wargs)
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
+
+# A def with a flat result of k fields: U_name stores them through o, and
+# F_name, for the callers that want a node, builds it from them. U_name is
+# inlined into its callers (BEND_UINL), so o stays in registers.
+def Gen.def.unb(+k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
+  +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
+) -> Gen(Unit):
+  +u = "U_" ++ Gen.mangle(name)
+  +us = Gen.u32(g, name, mask)
+  +uhead = "static V " ++ u ++ "(" ++ String.join(List.append(&2, String, Gen.cparams.u.go(params, us), ["V *o"]), ", ") ++ ")"
+  +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
+  do Gen<Unit>:
+    Gen.proto(DStr{head ++ ";\n" ++ uhead ++ ";\n"})
+    b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TOut{k, Gen.free(g)}, R.ops(body, "Nat"))
+    Gen.code(Doc.list([DStr{"BEND_UINL" ++ String.drop(uhead, 6n) ++ " {\n" ++ Gen.u32.open(us) ++ "top:;\n"},
+      Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
+    Gen.code(DStr{head ++ " { V o[" ++ U32.show(k) ++ "]; " ++ u ++ "(" ++ String.join(List.append(&2, String, params,
+      ["o"]), ", ") ++ "); return CN(0, " ++ U32.show(k) ++ ", o); }\n"})
+    Gen.wrapper(name, wargs)
+
+def Gen.def.plain.pick(boxed: Bool, +k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
+  +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
+) -> Gen(Unit):
+  match boxed:
+    case True{}:
+      Gen.def.boxed(g, name, mask, body, params, env, wargs)
+    case False{}:
+      Gen.def.unb(k, g, name, mask, body, params, env, wargs)
+
+def Gen.def.plain(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
+  +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
+) -> Gen(Unit):
+  +k = Gen.sret(g, name)
+  Gen.def.plain.pick(U32.is_zero(k), k, g, name, mask, body, params, env, wargs)
 
 def Gen.def.body.pick(plain: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
   +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
@@ -6909,6 +7331,51 @@ def Expr.mentions(e: Core.Expr, +k: String) -> Bool:
     case other:
       False{}
 
+# Whether k is free in e: as Expr.mentions, but a pattern that binds k hides
+# its scope.
+def Expr.free(e: Core.Expr, +k: String) -> Bool:
+  match e:
+    case Core.EVar{+n}:
+      Str.eq(n, k)
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Expr.free(f, k)
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.free(a, k), u => True{}, u => Expr.free(Core.ECall{f, t}, k))(Unit{})
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          False{}
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.free(a, k), u => True{}, u => Expr.free(Core.ECtor{n, t}, k))(Unit{})
+    case Core.ELam{p, +b}:
+      Bool.pick(Unit -> Bool, Str.has(Pat.vars(p, Nil{}), k), u => False{}, u => Expr.free(b, k))(Unit{})
+    case Core.ELet{p, +v, +b}:
+      Bool.pick(Unit -> Bool, Expr.free(v, k), u => True{},
+        u => Bool.pick(Unit -> Bool, Str.has(Pat.vars(p, Nil{}), k), w => False{}, w => Expr.free(b, k))(Unit{}))(Unit{})
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.free(a, k), u => True{}, u => Expr.free(Core.EMatch{t, cases}, k))(Unit{})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case +c <> t:
+              Bool.pick(Unit -> Bool, Expr.free(c, k), u => True{},
+                u => Expr.free(Core.EMatch{Nil{}, t}, k))(Unit{})
+    case Core.ECase{ps, +b}:
+      Bool.pick(Unit -> Bool, Str.has(Pats.vars(ps, Nil{}), k), u => False{}, u => Expr.free(b, k))(Unit{})
+    case Core.ESucc{n, x}:
+      Expr.free(x, k)
+    case Core.EOp{op, +a, +b}:
+      Bool.pick(Unit -> Bool, Expr.free(a, k), u => True{}, u => Expr.free(b, k))(Unit{})
+    case Core.EAnn{x, ty}:
+      Expr.free(x, k)
+    case other:
+      False{}
+
 def DInfo.kind(i: DInfo) -> U32:
   DInfo{kind, mask} = i
   kind
@@ -7170,6 +7637,898 @@ def Par.auto(on: Bool, +ds: List<&2, Decl>) -> List<&2, Decl>:
   match on:
     case True{}:
       Par.decls(G.new(ds), ds)
+    case False{}:
+      ds
+
+# Unboxed parameters. A parameter whose type has one constructor of two to eight fields (a
+# record, a pair) can go as its fields. Such a def f gets a worker, f%u,
+# that takes the fields as parameters, and f becomes a wrapper that opens
+# the node and calls f%u (closures and partial calls still use f). In f%u
+# the parameter is its constructor rebuilt from the fields, which a pattern
+# then opens again without building it (Unb.known). A full call of f passes
+# a constructor argument's fields as they are, and opens any other argument
+# with a let around the call (for Array.get's pair, the code generator then
+# reads the cell without building the pair: see GSLetUnb). A parameter is
+# unboxed when each use of it is a pattern or an argument of a worker.
+# BEND_UNBOX=0 turns this off.
+
+# A flat type: its constructor, and its fields' type heads.
+type Unb is Data:
+  Unb{ctor: String, tys: List<&2, String>}
+
+def Unb.none() -> Unb:
+  Unb{"", Nil{}}
+
+def Unb.is(u: Unb) -> Bool:
+  Unb{k, ts} = u
+  Bool.not(String.is_empty(k))
+
+def Unb.arity(u: Unb) -> Nat:
+  Unb{k, ts} = u
+  List.length(&2, String, ts)
+
+def Unb.tys.of(u: Unb) -> List<&2, String>:
+  Unb{k, ts} = u
+  ts
+
+def Unb.ctor.of(u: Unb) -> String:
+  Unb{k, ts} = u
+  k
+
+def Unb.tys(fs: List<&2, Field>) -> List<&2, String>:
+  match fs:
+    case Nil{}:
+      Nil{}
+    case Field{n, t} <> r:
+      P.phead(t) <> Unb.tys(r)
+
+def Unb.fits(+fs: List<&2, Field>) -> Bool:
+  +n = List.length(&2, Field, fs)
+  Bool.and(Nat.is_ge(n, 2n), Nat.is_le(n, 8n))
+
+def Unb.type.put(ok: Bool, +key: String, u: Unb, m: Map<&2, Unb>) -> Map<&2, Unb>:
+  match ok:
+    case True{}:
+      Map.set(&2, Unb, m, key, u)
+    case False{}:
+      m
+
+# The flat types, by type name ("&" for a pair) or, with ctor, by
+# constructor name.
+def Unb.type(+ctor: Bool, +name: String, cs: List<&2, Ctor>, m: Map<&2, Unb>) -> Map<&2, Unb>:
+  match cs:
+    case Ctor{+k, +fs} <> Nil{}:
+      Unb.type.put(Unb.fits(fs), Bool.pick(String, ctor, k, Bool.pick(String, Str.eq(name, "Sigma"), "&", name)),
+        Unb{k, Unb.tys(fs)}, m)
+    case other:
+      m
+
+def Unb.types(+ctor: Bool, ds: List<&2, Decl>, m: Map<&2, Unb>) -> Map<&2, Unb>:
+  match ds:
+    case Nil{}:
+      m
+    case DType{name, ps, cs} <> t:
+      Unb.types(ctor, t, Unb.type(ctor, name, cs, m))
+    case d <> t:
+      Unb.types(ctor, t, m)
+
+def Unb.find(+m: Map<&2, Unb>, +t: String) -> Unb:
+  G.get(Unb, Unb.none(), m, t)
+
+# A def's parameters that may go unboxed: plain or shared, of a flat type.
+def Unb.cands(+ts: Map<&2, Unb>, ps: List<&2, Core.Param>) -> List<&2, Unb>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Param{x, +m, +t} <> r:
+      Bool.pick(Unb, Bool.or(U32.is_zero(m), U32.is_eq(m, 2)), Unb.find(ts, t), Unb.none()) <> Unb.cands(ts, r)
+
+def Unb.any(us: List<&2, Unb>) -> Bool:
+  match us:
+    case Nil{}:
+      False{}
+    case u <> t:
+      Bool.or(Unb.is(u), Unb.any(t))
+
+def Unb.ok.def(+name: String, +ret: Core.Expr, +laws: Map<&2, Decl>) -> Bool:
+  Bool.not(Bool.or(Bool.or(G.is_native(name), Str.eq(name, "main")),
+    Bool.or(G.erased_ty(Ty.head(ret)), Pair.snd(Map<&2, Decl>, Bool, Map.has(&2, Decl, laws, name)))))
+
+def Unb.put(ok: Bool, +name: String, us: List<&2, Unb>, m: Map<&2, List<&2, Unb>>) ->
+  Map<&2, List<&2, Unb>>:
+  match ok:
+    case True{}:
+      Map.set(&2, List<&2, Unb>, m, name, us)
+    case False{}:
+      m
+
+def Unb.cand(+name: String, +ret: Core.Expr, +laws: Map<&2, Decl>, +us: List<&2, Unb>,
+  m: Map<&2, List<&2, Unb>>) -> Map<&2, List<&2, Unb>>:
+  Unb.put(Bool.and(Unb.ok.def(name, ret, laws), Unb.any(us)), name, us, m)
+
+def Unb.cands.all(+ts: Map<&2, Unb>, +laws: Map<&2, Decl>, ds: List<&2, Decl>,
+  m: Map<&2, List<&2, Unb>>) -> Map<&2, List<&2, Unb>>:
+  match ds:
+    case Nil{}:
+      m
+    case DDef{+name, ps, body, +ret} <> t:
+      Unb.cands.all(ts, laws, t, Unb.cand(name, ret, laws, Unb.cands(ts, ps), m))
+    case d <> t:
+      Unb.cands.all(ts, laws, t, m)
+
+# A def's worker flags (Nil when it has no worker).
+def Unb.flags(+wm: Map<&2, List<&2, Unb>>, +f: String) -> List<&2, Unb>:
+  G.get(List<&2, Unb>, Nil{}, wm, f)
+
+def Unb.has.ctor(us: List<&2, Unb>, +k: String) -> Bool:
+  match us:
+    case Nil{}:
+      False{}
+    case Unb{c, ts} <> t:
+      Bool.or(Str.eq(c, k), Unb.has.ctor(t, k))
+
+# Whether a call of f may take a k node field-wise (f has a worker with a
+# k parameter).
+def Unb.wk(f: Core.Expr, +k: String, +wm: Map<&2, List<&2, Unb>>) -> Bool:
+  match f:
+    case Core.EVar{+n}:
+      Unb.has.ctor(Unb.flags(wm, n), k)
+    case other:
+      False{}
+
+def Unb.is_var(e: Core.Expr, +p: String) -> Bool:
+  match e:
+    case Core.EVar{+x}:
+      Str.eq(x, p)
+    case other:
+      False{}
+
+# How e uses the variable p, of constructor k: 0 not at all, 1 only as a
+# node a pattern opens, an argument of a worker, or the result (tail) of a
+# def whose result has constructor rk, 2 also otherwise. A list field is
+# its head, then the node rebuilt with the rest.
+def Unb.use(e: Core.Expr, +tail: Bool, +p: String, +k: String, +rk: String, +wm: Map<&2, List<&2, Unb>>) -> U32:
+  match e:
+    case Core.EVar{+x}:
+      Bool.pick(U32, Str.eq(x, p), Bool.pick(U32, Bool.and(tail, Str.eq(rk, k)), 1, 2), 0)
+    case Core.ECall{+f, args}:
+      match args:
+        case Nil{}:
+          Unb.use(f, False{}, p, k, rk, wm)
+        case +a <> t:
+          U32.max(Bool.pick(U32, Bool.and(Unb.is_var(a, p), Unb.wk(f, k, wm)), 1, Unb.use(a, False{}, p, k, rk, wm)),
+            Unb.use(Core.ECall{f, t}, False{}, p, k, rk, wm))
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          0
+        case +a <> t:
+          U32.max(Unb.use(a, False{}, p, k, rk, wm), Unb.use(Core.ECtor{n, t}, False{}, p, k, rk, wm))
+    case Core.ELam{pt, +b}:
+      Bool.pick(U32, Str.has(Pat.vars(pt, Nil{}), p), 0, Unb.use(b, False{}, p, k, rk, wm))
+    case Core.ELet{pt, +v, +b}:
+      U32.max(Bool.pick(U32, Unb.is_var(v, p), 1, Unb.use(v, False{}, p, k, rk, wm)),
+        Bool.pick(U32, Str.has(Pat.vars(pt, Nil{}), p), 0, Unb.use(b, tail, p, k, rk, wm)))
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case +a <> t:
+          U32.max(Bool.pick(U32, Unb.is_var(a, p), 1, Unb.use(a, False{}, p, k, rk, wm)),
+            Unb.use(Core.EMatch{t, cases}, tail, p, k, rk, wm))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              0
+            case +c <> t:
+              U32.max(Unb.use(c, tail, p, k, rk, wm), Unb.use(Core.EMatch{Nil{}, t}, tail, p, k, rk, wm))
+    case Core.ECase{ps, +b}:
+      Bool.pick(U32, Str.has(Pats.vars(ps, Nil{}), p), 0, Unb.use(b, tail, p, k, rk, wm))
+    case Core.ESucc{n, x}:
+      Unb.use(x, False{}, p, k, rk, wm)
+    case Core.EOp{op, +a, +b}:
+      U32.max(Unb.use(a, False{}, p, k, rk, wm), Unb.use(b, False{}, p, k, rk, wm))
+    case Core.EAnn{x, ty}:
+      Unb.use(x, tail, p, k, rk, wm)
+    case other:
+      0
+
+def Unb.prune.one(+x: String, u: Unb, +body: Core.Expr, +rk: String, +wm: Map<&2, List<&2, Unb>>) -> Unb:
+  Unb{+k, ts} = u
+  Bool.pick(Unb, Bool.and(Bool.not(String.is_empty(k)), U32.is_eq(Unb.use(body, True{}, x, k, rk, wm), 1)),
+    Unb{k, ts}, Unb.none())
+
+def Unb.prune.ps(ps: List<&2, Core.Param>, us: List<&2, Unb>, +body: Core.Expr, +rk: String,
+  +wm: Map<&2, List<&2, Unb>>) -> List<&2, Unb>:
+  match ps us:
+    case Core.Param{x, m, t} <> pt u <> ut:
+      Unb.prune.one(x, u, body, rk, wm) <> Unb.prune.ps(pt, ut, body, rk, wm)
+    case pl ul:
+      Nil{}
+
+def Unb.prune.put(us: List<&2, Unb>, +name: String, ps: List<&2, Core.Param>, +body: Core.Expr, +rk: String,
+  +wm: Map<&2, List<&2, Unb>>, acc: Map<&2, List<&2, Unb>>) -> Map<&2, List<&2, Unb>>:
+  match us:
+    case Nil{}:
+      acc
+    case u <> t:
+      Map.set(&2, List<&2, Unb>, acc, name, Unb.prune.ps(ps, u <> t, body, rk, wm))
+
+# A def's result: its constructor when flat, and the def's arity.
+type URet is Data:
+  URet{u: Unb, n: U32}
+
+def URet.u(r: URet) -> Unb:
+  URet{u, n} = r
+  u
+
+def URet.n(r: URet) -> U32:
+  URet{u, n} = r
+  n
+
+def Unb.ret(+rm: Map<&2, URet>, +f: String) -> Unb:
+  URet.u(G.get(URet, URet{Unb.none(), 0}, rm, f))
+
+def Unb.rets(+ts: Map<&2, Unb>, ds: List<&2, Decl>, m: Map<&2, URet>) -> Map<&2, URet>:
+  match ds:
+    case Nil{}:
+      m
+    case DDef{+name, +ps, body, +ret} <> t:
+      Unb.rets(ts, t, Map.set(&2, URet, m, name, URet{Unb.find(ts, Ty.head(ret)),
+        U32.from_nat(List.length(&2, Core.Param, ps))}))
+    case d <> t:
+      Unb.rets(ts, t, m)
+
+# One round of pruning: a parameter stays unboxed when its uses allow it
+# under the last round's flags.
+def Unb.prune(ds: List<&2, Decl>, +rm: Map<&2, URet>, +wm: Map<&2, List<&2, Unb>>,
+  acc: Map<&2, List<&2, Unb>>) -> Map<&2, List<&2, Unb>>:
+  match ds:
+    case Nil{}:
+      acc
+    case DDef{+name, ps, +body, ret} <> t:
+      Unb.prune(t, rm, wm, Unb.prune.put(Unb.flags(wm, name), name, ps, body, Unb.ctor.of(Unb.ret(rm, name)), wm, acc))
+    case d <> t:
+      Unb.prune(t, rm, wm, acc)
+
+def Unb.names(+pre: String, ts: List<&2, String>, +j: U32) -> List<&2, String>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      (pre ++ U32.show(j)) <> Unb.names(pre, r, U32.inc(j))
+
+def Unb.vars(xs: List<&2, String>) -> List<&2, Core.Expr>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case x <> t:
+      Core.EVar{x} <> Unb.vars(t)
+
+def Unb.pvars(xs: List<&2, String>) -> List<&2, Core.Pat>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case x <> t:
+      Core.PVar{x} <> Unb.pvars(t)
+
+# The names of a worker's parameters for the fields of its parameter x.
+def Unb.fields(+x: String, u: Unb) -> List<&2, String>:
+  Unb.names("_ub_" ++ x ++ "_", Unb.tys.of(u), 0)
+
+# The node a worker's parameter x stands for: its constructor over the
+# fields' parameters.
+def Unb.rebox(+x: String, +u: Unb) -> Core.Expr:
+  Unb{k, ts} = u
+  Core.ECtor{k, Unb.vars(Unb.fields(x, u))}
+
+# e with p replaced by r, where p is free.
+def Unb.sub(e: Core.Expr, +p: String, +r: Core.Expr) -> Core.Expr:
+  match e:
+    case Core.EVar{+x}:
+      Bool.pick(Core.Expr, Str.eq(x, p), r, Core.EVar{x})
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Core.ECall{Unb.sub(f, p, r), Nil{}}
+        case a <> t:
+          Expr.push(Unb.sub(a, p, r), Unb.sub(Core.ECall{f, t}, p, r))
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          Core.ECtor{n, Nil{}}
+        case a <> t:
+          Expr.push(Unb.sub(a, p, r), Unb.sub(Core.ECtor{n, t}, p, r))
+    case Core.ELam{+pt, +b}:
+      Core.ELam{pt, Bool.pick(Core.Expr, Str.has(Pat.vars(pt, Nil{}), p), b, Unb.sub(b, p, r))}
+    case Core.ELet{+pt, v, +b}:
+      Core.ELet{pt, Unb.sub(v, p, r), Bool.pick(Core.Expr, Str.has(Pat.vars(pt, Nil{}), p), b, Unb.sub(b, p, r))}
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.push(Unb.sub(a, p, r), Unb.sub(Core.EMatch{t, cases}, p, r))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Unb.sub(c, p, r), Unb.sub(Core.EMatch{Nil{}, t}, p, r))
+    case Core.ECase{+ps, +b}:
+      Core.ECase{ps, Bool.pick(Core.Expr, Str.has(Pats.vars(ps, Nil{}), p), b, Unb.sub(b, p, r))}
+    case Core.ESucc{k, x}:
+      Core.ESucc{k, Unb.sub(x, p, r)}
+    case Core.EOp{op, a, b}:
+      Core.EOp{op, Unb.sub(a, p, r), Unb.sub(b, p, r)}
+    case Core.EAnn{x, ty}:
+      Core.EAnn{Unb.sub(x, p, r), ty}
+    case other:
+      other
+
+def Unb.sub.if(on: Bool, +x: String, +u: Unb, e: Core.Expr) -> Core.Expr:
+  match on:
+    case True{}:
+      Unb.sub(e, x, Unb.rebox(x, u))
+    case False{}:
+      e
+
+def Unb.subs(ps: List<&2, Core.Param>, us: List<&2, Unb>, e: Core.Expr) -> Core.Expr:
+  match ps us:
+    case Core.Param{+x, m, t} <> pt +u <> ut:
+      Unb.subs(pt, ut, Unb.sub.if(Unb.is(u), x, u, e))
+    case pl ul:
+      e
+
+# A let binding x to a full call of a def with a flat result opens it into
+# variables, when each use of x allows it (see Unb.use): x is then its
+# constructor rebuilt from them.
+def Unb.lvar.go(hit: Bool, +x: String, +u: Unb, v: Core.Expr, b: Core.Expr) -> Core.Expr:
+  match hit:
+    case True{}:
+      +xs = Unb.names("_ubl_" ++ x ++ "_", Unb.tys.of(u), 0)
+      Core.ELet{Core.PCtor{Unb.ctor.of(u), Unb.pvars(xs)}, v, Unb.sub(b, x, Core.ECtor{Unb.ctor.of(u), Unb.vars(xs)})}
+    case False{}:
+      Core.ELet{Core.PVar{x}, v, b}
+
+def Unb.lvar.call(+tail: Bool, +x: String, +rm: Map<&2, URet>, +rk: String, +wm: Map<&2, List<&2, Unb>>,
+  +bound: List<&2, String>, v: Core.Expr, +b: Core.Expr) -> Core.Expr:
+  match v:
+    case Core.ECall{Core.EVar{+f}, +args}:
+      +r = G.get(URet, URet{Unb.none(), 0}, rm, f)
+      Unb.lvar.go(Bool.and(Bool.and(Unb.is(URet.u(r)), Bool.not(Str.has(bound, f))),
+        Bool.and(U32.is_eq(URet.n(r), U32.from_nat(List.length(&2, Core.Expr, args))),
+          U32.is_eq(Unb.use(b, tail, x, Unb.ctor.of(URet.u(r)), rk, wm), 1))), x, URet.u(r), Core.ECall{Core.EVar{f}, args}, b)
+    case other:
+      Core.ELet{Core.PVar{x}, other, b}
+
+def Unb.lvar(+tail: Bool, p: Core.Pat, +rm: Map<&2, URet>, +rk: String, +wm: Map<&2, List<&2, Unb>>,
+  +bound: List<&2, String>, v: Core.Expr, b: Core.Expr) -> Core.Expr:
+  match p:
+    case Core.PVar{+x}:
+      Unb.lvar.call(tail, x, rm, rk, wm, bound, v, b)
+    case other:
+      Core.ELet{other, v, b}
+
+# e with its let-bound flat results opened, innermost first (tail: e is
+# the def's result; rk: its constructor).
+def Unb.lvars(e: Core.Expr, +tail: Bool, +rm: Map<&2, URet>, +rk: String, +wm: Map<&2, List<&2, Unb>>,
+  +bound: List<&2, String>) -> Core.Expr:
+  match e:
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Core.ECall{Unb.lvars(f, False{}, rm, rk, wm, bound), Nil{}}
+        case a <> t:
+          Expr.push(Unb.lvars(a, False{}, rm, rk, wm, bound), Unb.lvars(Core.ECall{f, t}, False{}, rm, rk, wm, bound))
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          Core.ECtor{n, Nil{}}
+        case a <> t:
+          Expr.push(Unb.lvars(a, False{}, rm, rk, wm, bound), Unb.lvars(Core.ECtor{n, t}, False{}, rm, rk, wm, bound))
+    case Core.ELam{+pt, b}:
+      Core.ELam{pt, Unb.lvars(b, False{}, rm, rk, wm, Pat.vars(pt, bound))}
+    case Core.ELet{+pt, v, b}:
+      Unb.lvar(tail, pt, rm, rk, wm, bound, Unb.lvars(v, False{}, rm, rk, wm, bound),
+        Unb.lvars(b, tail, rm, rk, wm, Pat.vars(pt, bound)))
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.push(Unb.lvars(a, False{}, rm, rk, wm, bound), Unb.lvars(Core.EMatch{t, cases}, tail, rm, rk, wm, bound))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Unb.lvars(c, tail, rm, rk, wm, bound), Unb.lvars(Core.EMatch{Nil{}, t}, tail, rm, rk, wm, bound))
+    case Core.ECase{+ps, b}:
+      Core.ECase{ps, Unb.lvars(b, tail, rm, rk, wm, Pats.vars(ps, bound))}
+    case Core.ESucc{k, x}:
+      Core.ESucc{k, Unb.lvars(x, False{}, rm, rk, wm, bound)}
+    case Core.EOp{op, a, b}:
+      Core.EOp{op, Unb.lvars(a, False{}, rm, rk, wm, bound), Unb.lvars(b, False{}, rm, rk, wm, bound)}
+    case Core.EAnn{x, ty}:
+      Core.EAnn{Unb.lvars(x, tail, rm, rk, wm, bound), ty}
+    case other:
+      other
+
+# Known constructors: a match on a flat constructor's node, or a let that
+# opens one, binds its fields' values instead (a variable pattern for the
+# node rebuilds it).
+type ULet is Data:
+  ULet{p: Core.Pat, v: Core.Expr}
+
+def Unb.free.none(xs: List<&2, String>, +e: Core.Expr) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case x <> t:
+      Bool.and(Bool.not(Expr.free(e, x)), Unb.free.none(t, e))
+
+# let p = v; e, with the lets v opens with (a worker call's own) floated out
+# of it, so the code generator sees the call (see GSLetOut): each when its
+# variables are not free in e (but for those p binds again).
+def Unb.float(+p: Core.Pat, v: Core.Expr, +e: Core.Expr) -> Core.Expr:
+  match v:
+    case Core.ELet{+q, +w, +c}:
+      Bool.pick(Unit -> Core.Expr, Unb.free.none(Pat.vars(q, Nil{}), Core.ELam{p, e}),
+        u => Core.ELet{q, w, Unb.float(p, c, e)}, u => Core.ELet{p, Core.ELet{q, w, c}, e})(Unit{})
+    case other:
+      Core.ELet{p, other, e}
+
+def Unb.wrap(ls: List<&2, ULet>, e: Core.Expr) -> Core.Expr:
+  match ls:
+    case Nil{}:
+      e
+    case ULet{p, v} <> t:
+      Unb.float(p, v, Unb.wrap(t, e))
+
+def Unb.shape.one(+u: Unb, +es: List<&2, Core.Expr>) -> Unb:
+  Bool.pick(Unb, Bool.and(Unb.is(u), Nat.is_eq(Unb.arity(u), List.length(&2, Core.Expr, es))), u, Unb.none())
+
+def Unb.shape(+cm: Map<&2, Unb>, scrs: List<&2, Core.Expr>) -> List<&2, Unb>:
+  match scrs:
+    case Nil{}:
+      Nil{}
+    case Core.ECtor{+k, +es} <> t:
+      Unb.shape.one(Unb.find(cm, k), es) <> Unb.shape(cm, t)
+    case s <> t:
+      Unb.none() <> Unb.shape(cm, t)
+
+def Unb.args(s: Core.Expr) -> List<&2, Core.Expr>:
+  match s:
+    case Core.ECtor{k, es}:
+      es
+    case other:
+      [other]
+
+def Unb.scrs.one(hit: Bool, s: Core.Expr, rest: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match hit:
+    case True{}:
+      List.append(&2, Core.Expr, Unb.args(s), rest)
+    case False{}:
+      s <> rest
+
+def Unb.scrs(sh: List<&2, Unb>, scrs: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match sh scrs:
+    case u <> ut s <> st:
+      Unb.scrs.one(Unb.is(u), s, Unb.scrs(ut, st))
+    case ul sl:
+      sl
+
+type UPats is Data:
+  UPats{ps: List<&2, Core.Pat>, lets: List<&2, ULet>}
+
+def Unb.wild(ts: List<&2, String>) -> List<&2, Core.Pat>:
+  match ts:
+    case Nil{}:
+      Nil{}
+    case t <> r:
+      Core.PVar{"_"} <> Unb.wild(r)
+
+def Unb.pat.wild(ts: List<&2, String>, r: UPats) -> UPats:
+  UPats{ps, lets} = r
+  UPats{List.append(&2, Core.Pat, Unb.wild(ts), ps), lets}
+
+def Unb.pat.rebox(+x: String, k: String, +xs: List<&2, String>, r: UPats) -> UPats:
+  UPats{ps, lets} = r
+  UPats{List.append(&2, Core.Pat, Unb.pvars(xs), ps), ULet{Core.PVar{x}, Core.ECtor{k, Unb.vars(xs)}} <> lets}
+
+def Unb.pat.bind(wild: Bool, +x: String, +u: Unb, +j: U32, r: UPats) -> UPats:
+  match wild:
+    case True{}:
+      Unb.pat.wild(Unb.tys.of(u), r)
+    case False{}:
+      Unb.pat.rebox(x, Unb.ctor.of(u), Unb.names("_ubm" ++ U32.show(j) ++ "_", Unb.tys.of(u), 0), r)
+
+def Unb.pat(p: Core.Pat, u: Unb, +j: U32, r: UPats) -> UPats:
+  match p:
+    case Core.PCtor{k, qs}:
+      UPats{ps, lets} = r
+      UPats{List.append(&2, Core.Pat, qs, ps), lets}
+    case Core.PVar{+x}:
+      Unb.pat.bind(Str.eq(x, "_"), x, u, j, r)
+    case other:
+      Unb.pat.bind(True{}, "_", u, j, r)
+
+def Unb.pat.one(hit: Bool, p: Core.Pat, u: Unb, +j: U32, r: UPats) -> UPats:
+  match hit:
+    case True{}:
+      Unb.pat(p, u, j, r)
+    case False{}:
+      UPats{ps, lets} = r
+      UPats{p <> ps, lets}
+
+def Unb.pats(sh: List<&2, Unb>, ps: List<&2, Core.Pat>, +j: U32) -> UPats:
+  match sh ps:
+    case +u <> ut p <> pt:
+      Unb.pat.one(Unb.is(u), p, u, j, Unb.pats(ut, pt, U32.inc(j)))
+    case ul pl:
+      UPats{pl, Nil{}}
+
+def Unb.case(r: UPats, b: Core.Expr) -> Core.Expr:
+  UPats{ps, lets} = r
+  Core.ECase{ps, Unb.wrap(lets, b)}
+
+def Unb.cases(+sh: List<&2, Unb>, cs: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case Core.ECase{ps, b} <> t:
+      Unb.case(Unb.pats(sh, ps, 0), b) <> Unb.cases(sh, t)
+    case c <> t:
+      c <> Unb.cases(sh, t)
+
+def Unb.mat.go(+sh: List<&2, Unb>, scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>) -> Core.Expr:
+  Core.EMatch{Unb.scrs(sh, scrs), Unb.cases(sh, cases)}
+
+def Unb.mat(+cm: Map<&2, Unb>, e: Core.Expr) -> Core.Expr:
+  match e:
+    case Core.EMatch{+scrs, cases}:
+      Unb.mat.go(Unb.shape(cm, scrs), scrs, cases)
+    case other:
+      other
+
+def Unb.mat.top(top: Bool, +cm: Map<&2, Unb>, e: Core.Expr) -> Core.Expr:
+  match top:
+    case True{}:
+      Unb.mat(cm, e)
+    case False{}:
+      e
+
+# A let opening a flat constructor's node: a match on its fields' values,
+# which binds them all at once (a value may name a variable the pattern
+# binds).
+def Unb.let.go(hit: Bool, +k: String, qs: List<&2, Core.Pat>, v: Core.Expr, b: Core.Expr) -> Core.Expr:
+  match hit:
+    case True{}:
+      Core.EMatch{Unb.args(v), [Core.ECase{qs, b}]}
+    case False{}:
+      Core.ELet{Core.PCtor{k, qs}, v, b}
+
+def Unb.let.ctor(+cm: Map<&2, Unb>, +k: String, qs: List<&2, Core.Pat>, v: Core.Expr, b: Core.Expr) -> Core.Expr:
+  match v:
+    case Core.ECtor{+c, +es}:
+      Unb.let.go(Bool.and(Str.eq(c, k), Unb.is(Unb.shape.one(Unb.find(cm, k), es))), k, qs, Core.ECtor{c, es}, b)
+    case other:
+      Core.ELet{Core.PCtor{k, qs}, other, b}
+
+def Unb.let(+cm: Map<&2, Unb>, p: Core.Pat, v: Core.Expr, b: Core.Expr) -> Core.Expr:
+  match p:
+    case Core.PCtor{+k, qs}:
+      Unb.let.ctor(cm, k, qs, v, b)
+    case other:
+      Core.ELet{other, v, b}
+
+def Unb.known(+cm: Map<&2, Unb>, e: Core.Expr, top: Bool) -> Core.Expr:
+  match e:
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Core.ECall{Unb.known(cm, f, True{}), Nil{}}
+        case a <> t:
+          Expr.push(Unb.known(cm, a, True{}), Unb.known(cm, Core.ECall{f, t}, False{}))
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          Core.ECtor{n, Nil{}}
+        case a <> t:
+          Expr.push(Unb.known(cm, a, True{}), Unb.known(cm, Core.ECtor{n, t}, False{}))
+    case Core.ELam{pt, b}:
+      Core.ELam{pt, Unb.known(cm, b, True{})}
+    case Core.ELet{pt, v, b}:
+      Unb.let(cm, pt, Unb.known(cm, v, True{}), Unb.known(cm, b, True{}))
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Unb.mat.top(top, cm, Expr.push(Unb.known(cm, a, True{}), Unb.known(cm, Core.EMatch{t, cases}, False{})))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Unb.known(cm, c, True{}), Unb.known(cm, Core.EMatch{Nil{}, t}, False{}))
+    case Core.ECase{ps, b}:
+      Core.ECase{ps, Unb.known(cm, b, True{})}
+    case Core.ESucc{k, x}:
+      Core.ESucc{k, Unb.known(cm, x, True{})}
+    case Core.EOp{op, a, b}:
+      Core.EOp{op, Unb.known(cm, a, True{}), Unb.known(cm, b, True{})}
+    case Core.EAnn{x, ty}:
+      Core.EAnn{Unb.known(cm, x, True{}), ty}
+    case other:
+      other
+
+# Calls of workers: a worker's arguments, and the lets that open the ones not built in place.
+type UArgs is Data:
+  UArgs{args: List<&2, Core.Expr>, lets: List<&2, ULet>}
+
+def Unb.arg.open(+k: String, v: Core.Expr, +names: List<&2, String>, r: UArgs) -> UArgs:
+  UArgs{args, lets} = r
+  UArgs{List.append(&2, Core.Expr, Unb.vars(names), args), ULet{Core.PCtor{k, Unb.pvars(names)}, v} <> lets}
+
+def Unb.arg.ctor(same: Bool, +k: String, es: List<&2, Core.Expr>, +names: List<&2, String>, r: UArgs) -> UArgs:
+  match same:
+    case True{}:
+      UArgs{args, lets} = r
+      UArgs{List.append(&2, Core.Expr, es, args), lets}
+    case False{}:
+      Unb.arg.open(k, Core.ECtor{k, es}, names, r)
+
+def Unb.arg.flat(a: Core.Expr, +k: String, +n: Nat, +names: List<&2, String>, r: UArgs) -> UArgs:
+  match a:
+    case Core.ECtor{+c, +es}:
+      Unb.arg.ctor(Bool.and(Str.eq(c, k), Nat.is_eq(n, List.length(&2, Core.Expr, es))), k, es, names, r)
+    case other:
+      Unb.arg.open(k, other, names, r)
+
+def Unb.arg(hit: Bool, a: Core.Expr, u: Unb, +names: List<&2, String>, r: UArgs) -> UArgs:
+  match hit:
+    case True{}:
+      Unb{+k, +ts} = u
+      Unb.arg.flat(a, k, List.length(&2, String, ts), names, r)
+    case False{}:
+      UArgs{args, lets} = r
+      UArgs{a <> args, lets}
+
+def Unb.cargs(us: List<&2, Unb>, as: List<&2, Core.Expr>, +n: U32, +i: U32) -> UArgs:
+  match us as:
+    case +u <> ut a <> at:
+      Unb.arg(Unb.is(u), a, u, Unb.names("_ub" ++ U32.show(n) ++ "_" ++ U32.show(i) ++ "_", Unb.tys.of(u), 0),
+        Unb.cargs(ut, at, n, U32.inc(i)))
+    case ul al:
+      UArgs{al, Nil{}}
+
+def Unb.call.fin(+f: String, r: UArgs) -> Core.Expr:
+  UArgs{as, lets} = r
+  Unb.wrap(lets, Core.ECall{Core.EVar{f ++ "%u"}, as})
+
+def Unb.call.pick(hit: Bool, us: List<&2, Unb>, +f: String, args: List<&2, Core.Expr>, +n: U32) -> Core.Expr:
+  match hit:
+    case True{}:
+      Unb.call.fin(f, Unb.cargs(us, args, n, 0))
+    case False{}:
+      Core.ECall{Core.EVar{f}, args}
+
+def Unb.call.us(+us: List<&2, Unb>, +bound: List<&2, String>, +f: String, +args: List<&2, Core.Expr>, +n: U32) -> Core.Expr:
+  Unb.call.pick(Bool.and(Bool.and(Unb.any(us), Bool.not(Str.has(bound, f))),
+    Nat.is_eq(List.length(&2, Unb, us), List.length(&2, Core.Expr, args))), us, f, args, n)
+
+# A full call of a def with a worker (not a local of its name) calls the
+# worker.
+def Unb.call(+wm: Map<&2, List<&2, Unb>>, +bound: List<&2, String>, +n: U32, e: Core.Expr) -> Core.Expr:
+  match e:
+    case Core.ECall{Core.EVar{+f}, args}:
+      Unb.call.us(Unb.flags(wm, f), bound, f, args, n)
+    case other:
+      other
+
+def Unb.call.top(top: Bool, +wm: Map<&2, List<&2, Unb>>, +bound: List<&2, String>, +n: U32, e: Core.Expr) -> Core.Expr:
+  match top:
+    case True{}:
+      Unb.call(wm, bound, n, e)
+    case False{}:
+      e
+
+# e with its calls of workers' defs rewritten (n: the nesting depth, which
+# keeps the names of the lets apart; bound: the locals in scope).
+def Unb.calls(e: Core.Expr, +wm: Map<&2, List<&2, Unb>>, +bound: List<&2, String>, +n: U32, top: Bool) -> Core.Expr:
+  match e:
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Unb.call.top(top, wm, bound, n, Core.ECall{Unb.calls(f, wm, bound, U32.inc(n), True{}), Nil{}})
+        case a <> t:
+          Unb.call.top(top, wm, bound, n, Expr.push(Unb.calls(a, wm, bound, U32.inc(n), True{}),
+            Unb.calls(Core.ECall{f, t}, wm, bound, n, False{})))
+    case Core.ECtor{k, args}:
+      match args:
+        case Nil{}:
+          Core.ECtor{k, Nil{}}
+        case a <> t:
+          Expr.push(Unb.calls(a, wm, bound, U32.inc(n), True{}), Unb.calls(Core.ECtor{k, t}, wm, bound, n, False{}))
+    case Core.ELam{+pt, b}:
+      Core.ELam{pt, Unb.calls(b, wm, Pat.vars(pt, bound), U32.inc(n), True{})}
+    case Core.ELet{+pt, v, b}:
+      Core.ELet{pt, Unb.calls(v, wm, bound, U32.inc(n), True{}), Unb.calls(b, wm, Pat.vars(pt, bound), U32.inc(n), True{})}
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.push(Unb.calls(a, wm, bound, U32.inc(n), True{}), Unb.calls(Core.EMatch{t, cases}, wm, bound, n, False{}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Unb.calls(c, wm, bound, U32.inc(n), True{}), Unb.calls(Core.EMatch{Nil{}, t}, wm, bound, n, False{}))
+    case Core.ECase{+ps, b}:
+      Core.ECase{ps, Unb.calls(b, wm, Pats.vars(ps, bound), U32.inc(n), True{})}
+    case Core.ESucc{k, x}:
+      Core.ESucc{k, Unb.calls(x, wm, bound, U32.inc(n), True{})}
+    case Core.EOp{op, a, b}:
+      Core.EOp{op, Unb.calls(a, wm, bound, U32.inc(n), True{}), Unb.calls(b, wm, bound, U32.inc(n), True{})}
+    case Core.EAnn{x, ty}:
+      Core.EAnn{Unb.calls(x, wm, bound, U32.inc(n), True{}), ty}
+    case other:
+      other
+
+def Unb.params.of(xs: List<&2, String>, +m: U32, ts: List<&2, String>) -> List<&2, Core.Param>:
+  match xs ts:
+    case x <> xt t <> tt:
+      Core.Param{x, m, t} <> Unb.params.of(xt, m, tt)
+    case xl tl:
+      Nil{}
+
+def Unb.param(hit: Bool, p: Core.Param, +u: Unb) -> List<&2, Core.Param>:
+  match hit:
+    case True{}:
+      Core.Param{+x, m, t} = p
+      Unb.params.of(Unb.fields(x, u), m, Unb.tys.of(u))
+    case False{}:
+      [p]
+
+def Unb.params(ps: List<&2, Core.Param>, us: List<&2, Unb>) -> List<&2, Core.Param>:
+  match ps us:
+    case p <> pt +u <> ut:
+      List.append(&2, Core.Param, Unb.param(Unb.is(u), p, u), Unb.params(pt, ut))
+    case pl ul:
+      pl
+
+def Unb.wrapper.one(hit: Bool, +x: String, +u: Unb, r: UArgs) -> UArgs:
+  match hit:
+    case True{}:
+      Unb{k, ts} = u
+      Unb.arg.open(k, Core.EVar{x}, Unb.fields(x, u), r)
+    case False{}:
+      UArgs{as, lets} = r
+      UArgs{Core.EVar{x} <> as, lets}
+
+# The wrapper's call of the worker: its unboxed parameters opened.
+def Unb.wrapper(ps: List<&2, Core.Param>, us: List<&2, Unb>) -> UArgs:
+  match ps us:
+    case Core.Param{+x, m, t} <> pt +u <> ut:
+      Unb.wrapper.one(Unb.is(u), x, u, Unb.wrapper(pt, ut))
+    case pl ul:
+      UArgs{Nil{}, Nil{}}
+
+# Whether e is a full call of a def with a flat result, after the lets it
+# opens with.
+def Unb.flat.tail(e: Core.Expr, +rm: Map<&2, URet>) -> Bool:
+  match e:
+    case Core.ELet{p, v, b}:
+      Unb.flat.tail(b, rm)
+    case Core.ECall{f, as}:
+      match f:
+        case Core.EVar{+h}:
+          +r = G.get(URet, URet{Unb.none(), 0}, rm, h)
+          Bool.and(Unb.is(URet.u(r)), U32.is_eq(URet.n(r), U32.from_nat(List.length(&2, Core.Expr, as))))
+        case other:
+          False{}
+    case other:
+      False{}
+
+# a in front of the arguments of the call under e's lets.
+def Unb.push.deep(a: Core.Expr, e: Core.Expr) -> Core.Expr:
+  match e:
+    case Core.ELet{p, v, b}:
+      Core.ELet{p, v, Unb.push.deep(a, b)}
+    case other:
+      Expr.push(a, other)
+
+def Unb.pull.one(hit: Bool, a: Core.Expr, +x: String, e: Core.Expr) -> Core.Expr:
+  match hit:
+    case True{}:
+      Unb.float(Core.PVar{x}, a, Unb.push.deep(Core.EVar{x}, e))
+    case False{}:
+      Unb.push.deep(a, e)
+
+# e with each call's arguments that call a def with a flat result let-bound
+# before it (_ufD_I: the call's depth D, the argument's place I from the
+# end), so Unb.lvars opens them: the optimizer's inlining nests such calls
+# (look(.., look(.., st))), and a flat call that is an argument builds its
+# node.
+def Unb.flet(e: Core.Expr, +rm: Map<&2, URet>, +d: U32) -> Core.Expr:
+  match e:
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Core.ECall{Unb.flet(f, rm, d), Nil{}}
+        case a <> +t:
+          +a2 = Unb.flet(a, rm, U32.inc(d))
+          Unb.pull.one(Unb.flat.tail(a2, rm), a2,
+            "_uf" ++ U32.show(d) ++ "_" ++ U32.show(U32.from_nat(List.length(&2, Core.Expr, t))),
+            Unb.flet(Core.ECall{f, t}, rm, d))
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          Core.ECtor{n, Nil{}}
+        case a <> t:
+          Expr.push(Unb.flet(a, rm, U32.inc(d)), Unb.flet(Core.ECtor{n, t}, rm, d))
+    case Core.ELam{pt, b}:
+      Core.ELam{pt, Unb.flet(b, rm, d)}
+    case Core.ELet{pt, v, b}:
+      Core.ELet{pt, Unb.flet(v, rm, d), Unb.flet(b, rm, d)}
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.push(Unb.flet(a, rm, d), Unb.flet(Core.EMatch{t, cases}, rm, d))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Unb.flet(c, rm, d), Unb.flet(Core.EMatch{Nil{}, t}, rm, d))
+    case Core.ECase{ps, b}:
+      Core.ECase{ps, Unb.flet(b, rm, d)}
+    case Core.ESucc{k, x}:
+      Core.ESucc{k, Unb.flet(x, rm, d)}
+    case Core.EOp{op, a, b}:
+      Core.EOp{op, Unb.flet(a, rm, d), Unb.flet(b, rm, d)}
+    case Core.EAnn{x, ty}:
+      Core.EAnn{Unb.flet(x, rm, d), ty}
+    case other:
+      other
+
+def Unb.fix(+rm: Map<&2, URet>, +rk: String, +wm: Map<&2, List<&2, Unb>>, +cm: Map<&2, Unb>, e: Core.Expr) -> Core.Expr:
+  Unb.calls(Unb.known(cm, Unb.lvars(Unb.flet(e, rm, 0), True{}, rm, rk, wm, Nil{}), True{}), wm, Nil{}, 0, True{})
+
+def Unb.decl.pick(hit: Bool, +us: List<&2, Unb>, +rm: Map<&2, URet>, +wm: Map<&2, List<&2, Unb>>,
+  +cm: Map<&2, Unb>, +name: String, +ps: List<&2, Core.Param>, body: Core.Expr, +ret: Core.Expr) -> List<&2, Decl>:
+  match hit:
+    case True{}:
+      [DDef{name ++ "%u", Unb.params(ps, us), Unb.fix(rm, Unb.ctor.of(Unb.ret(rm, name)), wm, cm,
+        Unb.subs(ps, us, body)), ret}, DDef{name, ps, Unb.call.fin(name, Unb.wrapper(ps, us)), ret}]
+    case False{}:
+      [DDef{name, ps, Unb.fix(rm, Unb.ctor.of(Unb.ret(rm, name)), wm, cm, body), ret}]
+
+def Unb.decl.go(+us: List<&2, Unb>, +rm: Map<&2, URet>, +wm: Map<&2, List<&2, Unb>>, +cm: Map<&2, Unb>,
+  +name: String, +ps: List<&2, Core.Param>, body: Core.Expr, +ret: Core.Expr) -> List<&2, Decl>:
+  Unb.decl.pick(Unb.any(us), us, rm, wm, cm, name, ps, body, ret)
+
+def Unb.decl(+rm: Map<&2, URet>, +wm: Map<&2, List<&2, Unb>>, +cm: Map<&2, Unb>, d: Decl) -> List<&2, Decl>:
+  match d:
+    case DDef{+name, +ps, body, +ret}:
+      Unb.decl.go(Unb.flags(wm, name), rm, wm, cm, name, ps, body, ret)
+    case other:
+      [other]
+
+def Unb.decls(+rm: Map<&2, URet>, +wm: Map<&2, List<&2, Unb>>, +cm: Map<&2, Unb>, ds: List<&2, Decl>) ->
+  List<&2, Decl>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> t:
+      List.append(&2, Decl, Unb.decl(rm, wm, cm, d), Unb.decls(rm, wm, cm, t))
+
+# Two rounds of pruning: a parameter a worker takes field-wise may lose its
+# flag in the first.
+def Unb.run(+ds: List<&2, Decl>, +rm: Map<&2, URet>, +w0: Map<&2, List<&2, Unb>>) -> List<&2, Decl>:
+  Unb.decls(rm, Unb.prune(ds, rm, Unb.prune(ds, rm, w0, MTip{}), MTip{}), Unb.types(True{}, ds, MTip{}), ds)
+
+def Unb.program.go(+ds: List<&2, Decl>, +ts: Map<&2, Unb>) -> List<&2, Decl>:
+  Unb.run(ds, Unb.rets(ts, ds, MTip{}), Unb.cands.all(ts, G.laws(ds, MTip{}), ds, MTip{}))
+
+def Unb.program(on: Bool, +ds: List<&2, Decl>) -> List<&2, Decl>:
+  match on:
+    case True{}:
+      Unb.program.go(ds, Unb.types(False{}, ds, MTip{}))
     case False{}:
       ds
 
@@ -8490,6 +9849,14 @@ def Main.auto_par(r: Result<&1, &1, U32 & String, String>, free: Bool) -> Bool:
       Main.auto_par.set(String.is_empty(v), v, free)
     case Fail{e}:
       free
+
+# Unboxed parameters (see Unb.program): on unless BEND_UNBOX=0.
+def Main.unbox(r: Result<&1, &1, U32 & String, String>) -> Bool:
+  match r:
+    case Done{v}:
+      Bool.not(String.eq(v, "0"))
+    case Fail{e}:
+      True{}
 
 def Main.js.path(r: String & String) -> String:
   (p, h) = r
@@ -11828,6 +13195,8 @@ def J.ret(t: Tgt, d: Doc) -> Doc:
       Doc.list([DStr{v}, DStr{" = "}, d, DStr{";\n"}])
     case TDst{id, n}:
       Doc.list([DStr{"*dst = "}, d, DStr{";\nreturn 0;\n"}])
+    case TOut{k, free}:
+      Doc.list([DStr{"return "}, d, DStr{";\n"}])
 
 def J.tail.temps(ds: List<&2, Doc>, +i: U32) -> Doc:
   match ds:
@@ -15233,6 +16602,55 @@ def Lo.program(+flags: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
   +rank = Opt.rank(ods, 0, Map.new(&2, U32))
   Opt.raises(Opt.finish(Opt.fuse(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods))))))
 
+# Flat results (see Gen.def.unb): "%r:name" in the dps table holds a def's
+# result arity. A def's result is flat when its type has one constructor
+# of two to eight fields, and the def is no destination-passing one and
+# has no parallel let (its sequential clone returns a node).
+def Unb.sret.ty(d: Decl) -> Nat:
+  match d:
+    case DType{n, ps, cs}:
+      match cs:
+        case Ctor{k, +fs} <> Nil{}:
+          Bool.pick(Nat, Unb.fits(fs), List.length(&2, Field, fs), 0n)
+        case other:
+          0n
+    case other:
+      0n
+
+def Unb.sret.head(+g: G, +t: String) -> Nat:
+  Unb.sret.ty(G.body(g, "%" ++ Bool.pick(String, Str.eq(t, "&"), "Sigma", t)))
+
+def Unb.sret.def(+g: G, +name: String, +body: Core.Expr, +ret: Core.Expr) -> Nat:
+  Bool.pick(Nat, Bool.or(Bool.or(Expr.has_par(body), Bool.not(String.is_empty(DGrp.id(G.dps(g, name))))),
+    Bool.or(G.is_native(name), Str.eq(name, "main"))), 0n, Unb.sret.head(g, Ty.head(ret)))
+
+def Unb.sret.put(k: Nat, +name: String, m: Map<&2, DGrp>) -> Map<&2, DGrp>:
+  match k:
+    case 0n:
+      m
+    case 1n+q:
+      Map.set(&2, DGrp, m, "%r:" ++ name, DGrp{"", U32.from_nat(1n+q)})
+
+def Unb.sret.all(+g: G, ds: List<&2, Decl>, m: Map<&2, DGrp>) -> Map<&2, DGrp>:
+  match ds:
+    case Nil{}:
+      m
+    case DDef{+name, ps, +body, +ret} <> t:
+      Unb.sret.all(g, t, Unb.sret.put(Unb.sret.def(g, name, body, ret), name, m))
+    case d <> t:
+      Unb.sret.all(g, t, m)
+
+def G.dps.map(g: G) -> Map<&2, DGrp>:
+  G{ctors, defs, bodies, dps} = g
+  dps
+
+def Unb.sret(on: Bool, +ds: List<&2, Decl>, +g: G) -> G:
+  match on:
+    case True{}:
+      G.with_dps(g, Unb.sret.all(g, ds, G.dps.map(g)))
+    case False{}:
+      g
+
 def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
@@ -15271,9 +16689,9 @@ def Gen.program.m(+g: G) -> Gen(String):
     Gen.all(g, ["main"], Set.new())
     Gen.entry(g, G.body(g, "main"))
 
-def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String) -> COut:
-  +ds = Par.auto(par, Lo.program(opt, Pick.decls(ds0)))
-  +g = Dps.build(G.new(ds), ds, free)
+def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool) -> COut:
+  +ds = Unb.program(unb, Par.auto(par, Lo.program(opt, Pick.decls(ds0))))
+  +g = Unb.sret(unb, ds, Dps.build(G.new(ds), ds, free))
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
 
@@ -18332,8 +19750,9 @@ def Main.emit.c(+ds: List<&2, Decl>) -> IO(Unit):
     r : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
     r2 : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
     ap : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_AUTO_PAR")
+    ub : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_UNBOX")
     op : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_OPT")
-    Main.emit(ds, Gen.program(ds, Main.free(r), Main.auto_par(ap, Main.free(r2)), Main.opt(op)))
+    Main.emit(ds, Gen.program(ds, Main.free(r), Main.auto_par(ap, Main.free(r2)), Main.opt(op), Main.unbox(ub)))
 
 def J.entry.ty(+j: JG, +ret: Core.Expr, io: Bool) -> Gen(String):
   match io:
