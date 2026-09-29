@@ -6108,12 +6108,27 @@ def RU.takes.pick(+rc: Bool, ru: Bool, ts: List<&2, RuT>, +left: List<&2, String
     case False{}:
       DStr{old}
 
+# A token's size in words: u<words>_<node>.
+def RU.w.go(s: String) -> String:
+  match s:
+    case SNil{}:
+      ""
+    case SCon{Chr{+c}, t}:
+      Bool.pick(Unit -> String, U32.is_eq(c, 95), u => "", u => SCon{Chr{c}, RU.w.go(t)})(Unit{})
+
+def RU.w(s: String) -> String:
+  match s:
+    case SNil{}:
+      "0"
+    case SCon{c, t}:
+      RU.w.go(t)
+
 def RU.frees(+h: String, ts: List<&2, String>) -> Doc:
   match ts:
     case Nil{}:
       DNil{}
     case +x <> t:
-      Doc.list([DStr{h ++ "(" ++ x ++ ");\n"}, RU.frees(h, t)])
+      Doc.list([DStr{h ++ "(" ++ x ++ ", " ++ RU.w(x) ++ ");\n"}, RU.frees(h, t)])
 
 # Whether a pattern opens a node.
 def Gen.opens(binds: Env()) -> Bool:

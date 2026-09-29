@@ -750,9 +750,9 @@ void thr_register(uintptr_t top) {
   __atomic_store_n(&gc_nthr, n1, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&gc_lock);
 }
-#define RUF(u) do { if (u) rc_free_at(u, 0); } while (0)
+#define RUF(u, w) do { if (u) rc_free_at(u, w); } while (0)
 #define RUG(tok, w) ((tok) ? bend_ru_young(tok, w) : halloc(w))
-#define RUFG(u) do { if (u) bend_take((u), gc_meta[((uintptr_t)(u) - gc_hot.base) >> GC_BLK_SHIFT].words); } while (0)
+#define RUFG(u, w) do { if (u) bend_take((u), (w)); } while (0)
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))
 void rc_let_go_arr(V a) {

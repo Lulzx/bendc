@@ -1509,7 +1509,7 @@ static inline V CHN(V t, int n, const V *xs) {
 // Reuse (counted programs): a constructor built where a match freed a node
 // of its size takes that node's slot, tok (rc_take_ru's: 0 when the node was
 // shared, then a new slot). A case that does not build in its token frees
-// it (RUF).
+// it (RUF, with its size in words).
 static inline V CR1(V u, V t, V a) { V *p = RU(u, 2); p[0] = t; p[1] = a; return (V)p; }
 static inline V CR2(V u, V t, V a, V b) { V *p = RU(u, 3); p[0] = t; p[1] = a; p[2] = b; return (V)p; }
 static inline V CR3(V u, V t, V a, V b, V c) {
@@ -1529,7 +1529,7 @@ static inline V CRH2(V u, V t, V a, V b) { return CR2(u, t, a, b); }
 static inline V CRH3(V u, V t, V a, V b, V c) { return CR3(u, t, a, b, c); }
 static inline V CRH4(V u, V t, V a, V b, V c, V d) { return CR4(u, t, a, b, c, d); }
 static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
-#define RUF(u) do { if (u) rc_free_at(u, 0); } while (0)
+#define RUF(u, w) do { if (u) rc_free_at(u, w); } while (0)
 
 // Reuse under the collector (matches free, not counted): bend_take_ru is
 // bend_take, but a node that was not shared keeps its slot, answered as the
@@ -1580,7 +1580,7 @@ static inline V CGN(V u, V t, int n, const V *xs) {
   for (int i = 0; i < n; i++) p[i + 1] = xs[i];
   return (V)p;
 }
-#define RUFG(u) do { if (u) bend_take((u), gc_meta[((uintptr_t)(u) - gc_hot.base) >> GC_BLK_SHIFT].words); } while (0)
+#define RUFG(u, w) do { if (u) bend_take((u), (w)); } while (0)
 
 // Arrays
 // ------
