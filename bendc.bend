@@ -6354,9 +6354,14 @@ def KSelf.mask(s: KSelf) -> List<&2, Bool>:
   KSelf{n, e, m} = s
   m
 
-# Whether an analysis is the seq one (KSelf.entry 1, or 2 for the GPU's):
-# see K.isseq.
+# Whether an analysis is the seq one (KSelf.entry 1, or 2 and 3 for the
+# GPU's): see K.isseq.
 def KSelf.seq(s: KSelf) -> Bool:
+  KSelf{n, +e, m} = s
+  Bool.and(U32.is_le(1, e), U32.is_le(e, 3))
+
+# Whether the seq analysis takes a parallel let (not in mode 3: K.isseq1).
+def KSelf.par(s: KSelf) -> Bool:
   KSelf{n, +e, m} = s
   Bool.or(U32.is_eq(e, 1), U32.is_eq(e, 2))
 
@@ -6614,7 +6619,8 @@ def Anf.go(fuel: Nat, k: AnfSel) -> AnfSel.ty(k):
         case ANSt{+g, +bound, e, n}:
           match e:
             case Core.ELet{+p, v, b}:
-              Anf.go(fu, ANStLet{K.pat.is_par(p), g, bound, p, v, b, n})
+              # (the analysis of mode 3 keeps parallel lets, to refuse them: K.isseq1)
+              Anf.go(fu, ANStLet{Bool.and(K.pat.is_par(p), Bool.not(Str.has(bound, "%keeppar"))), g, bound, p, v, b, n})
             case Core.EMatch{scrs, cases}:
               Anf.go(fu, ANStMatch{g, bound, Anf.go(fu, ANExs{g, bound, scrs, False{}, n, Nil{}}), cases})
             case other:
@@ -6657,14 +6663,21 @@ def KQ.anf.if(grp: Bool, +g: G, bound: List<&2, String>, e: Core.Expr) -> Core.E
     case False{}:
       e
 
-def K.seq.key(+grp: Bool, +name: String) -> String:
-  Bool.pick(String, grp, "%seqg ", "%seq ") ++ name
+def K.seq.key(+grp: U32, +name: String) -> String:
+  "%seq" ++ U32.show(grp) ++ " " ++ name
 
 # In the GPU's seq analysis (KSelf.entry 2) a seq def may call other seq
 # defs: see K.isseq.
 def KSelf.grp(s: KSelf) -> Bool:
-  KSelf{n, e, m} = s
-  U32.is_eq(e, 2)
+  KSelf{n, +e, m} = s
+  Bool.or(U32.is_eq(e, 2), U32.is_eq(e, 3))
+
+# The mode a callee is analysed in (see FLSeqCall): mode 3 refuses the
+# def's own parallel lets only (its callees run on its lane, a bounded
+# number of steps: see K.call.seq.kq).
+def KSelf.callee(s: KSelf) -> U32:
+  KSelf{n, +e, m} = s
+  Bool.pick(U32, U32.is_eq(e, 3), 2, e)
 
 # Whether v calls a def (in the GPU's seq analysis a let's value may call
 # any def at statement level: see FLFlCallDef).
@@ -6701,11 +6714,11 @@ type FlSel is Type:
   FLFlDecl{g: G, name: String, info: DInfo, d: Decl}
   FLIsflatMemo{g: G, name: String, m: Maybe<&2, String>}
   FLIsflat{g: G, name: String}
-  FLSeqCall{ok: Bool, g: G, f: String}
-  FLSqDeclGo{grp: Bool, kind: Nat, d: Decl, g: G, name: String, mask: List<&2, Bool>}
-  FLSqDecl{grp: Bool, g: G, name: String, info: DInfo, d: Decl}
-  FLIsseqMemo{grp: Bool, g: G, name: String, m: Maybe<&2, String>}
-  FLIsseq{grp: Bool, g: G, name: String}
+  FLSeqCall{ok: Bool, mode: U32, g: G, f: String}
+  FLSqDeclGo{grp: U32, kind: Nat, d: Decl, g: G, name: String, mask: List<&2, Bool>}
+  FLSqDecl{grp: U32, g: G, name: String, info: DInfo, d: Decl}
+  FLIsseqMemo{grp: U32, g: G, name: String, m: Maybe<&2, String>}
+  FLIsseq{grp: U32, g: G, name: String}
 
 def FlSel.ty(k: FlSel) -> Type:
   match k:
@@ -6747,7 +6760,7 @@ def FlSel.ty(k: FlSel) -> Type:
       KM(Bool)
     case FLIsflat{g, name}:
       KM(Bool)
-    case FLSeqCall{ok, g, f}:
+    case FLSeqCall{ok, mode, g, f}:
       KM(Bool)
     case FLSqDeclGo{grp, kind, d, g, name, mask}:
       KM(Bool)
@@ -6800,7 +6813,7 @@ def K.fl.go(n: Nat, k: FlSel) -> FlSel.ty(k):
           K.out(Bool, False{})
         case FLIsflat{g, name}:
           K.out(Bool, False{})
-        case FLSeqCall{ok, g, f}:
+        case FLSeqCall{ok, mode, g, f}:
           K.out(Bool, False{})
         case FLSqDeclGo{grp, kind, d, g, name, mask}:
           K.out(Bool, False{})
@@ -6851,7 +6864,7 @@ def K.fl.go(n: Nat, k: FlSel) -> FlSel.ty(k):
             case False{}:
               do KM<Bool>:
                 +a : Bool <- K.fl.go(fu, FLIsflat{g, f})
-                b : Bool <- K.fl.go(fu, FLSeqCall{Bool.and(Bool.and(KSelf.grp(self), tail), Bool.not(a)), g, f})
+                b : Bool <- K.fl.go(fu, FLSeqCall{Bool.and(Bool.and(KSelf.grp(self), tail), Bool.not(a)), KSelf.callee(self), g, f})
                 K.fl.and(Bool.or(a, b), K.fl.go(fu, FLFlExprs{g, self, bound, kept}))
         case FLFlCallKind{kind, extra, full, +g, +self, +bound, +f, kept, tail}:
           match kind extra full:
@@ -6895,7 +6908,7 @@ def K.fl.go(n: Nat, k: FlSel) -> FlSel.ty(k):
         case FLFlLetGo{par, +g, +self, +bound, p, +v, b, +tail}:
           match par:
             case True{}:
-              K.fl.and(Bool.and(KSelf.seq(self), tail), K.fl.go(fu, FLFlLetPar{g, self, bound, p, v, b}))
+              K.fl.and(Bool.and(KSelf.par(self), tail), K.fl.go(fu, FLFlLetPar{g, self, bound, p, v, b}))
             case False{}:
               do KM<Bool>:
                 # In the seq analysis a let at statement level may call the def itself
@@ -6957,18 +6970,19 @@ def K.fl.go(n: Nat, k: FlSel) -> FlSel.ty(k):
           do KM<Bool>:
             m : Maybe<&2, String> <- K.memo.get("%flat " ++ name)
             K.fl.go(fu, FLIsflatMemo{g, name, m})
-        case FLSeqCall{ok, +g, +f}:
+        case FLSeqCall{ok, +mode, +g, +f}:
           match ok:
             case True{}:
-              K.fl.go(fu, FLIsseq{True{}, g, f})
+              K.fl.go(fu, FLIsseq{mode, g, f})
             case False{}:
               KM.pure(Bool, False{})
         case FLSqDeclGo{+grp, kind, d, +g, +name, +mask}:
           match kind d:
             case 0n DDef{n, ps, body, ret}:
               +bound = K.params(ps, mask)
-              K.fl.and(U32.is_le(K.kept(mask), 12), K.fl.go(fu, FLFlExpr{g, KSelf{name, Bool.pick(U32, grp, 2, 1), mask}, bound,
-                KQ.anf.if(grp, g, bound, R.ops(body, "Nat")), True{}}))
+              +ab = Bool.pick(List<&2, String>, U32.is_eq(grp, 3), "%keeppar" <> bound, bound)
+              K.fl.and(U32.is_le(K.kept(mask), 12), K.fl.go(fu, FLFlExpr{g, KSelf{name, grp, mask}, bound,
+                KQ.anf.if(U32.is_le(2, grp), g, ab, R.ops(body, "Nat")), True{}}))
             case k o:
               KM.pure(Bool, False{})
         case FLSqDecl{grp, +g, +name, info, d}:
@@ -7001,12 +7015,17 @@ def K.isflat(g: G, name: String) -> KM(Bool):
 # or a parallel let's value): its sequential part (past the fork limit)
 # runs in KQ_name (see KQ.def).
 def K.isseq(+g: G, +name: String) -> KM(Bool):
-  K.fl.go(Fuel.max(), FLIsseq{False{}, g, name})
+  K.fl.go(Fuel.max(), FLIsseq{1, g, name})
 
 # The GPU's seq defs: also those that call other seq defs (its KQ_ code
 # holds theirs: see KQ.def).
 def K.isseqg(+g: G, +name: String) -> KM(Bool):
-  K.fl.go(Fuel.max(), FLIsseq{True{}, g, name})
+  K.fl.go(Fuel.max(), FLIsseq{2, g, name})
+
+# The GPU's seq defs with no parallel let of their own: a call of one from
+# the kernel's blocks runs on its lane (see K.call.seq.kq).
+def K.isseq1(+g: G, +name: String) -> KM(Bool):
+  K.fl.go(Fuel.max(), FLIsseq{3, g, name})
 
 # Whether a def is seq (see K.isseq): flat but for its parallel lets and
 # calls to itself.
@@ -14454,6 +14473,35 @@ def KX.expr(g: G, env: Env(), e: Core.Expr) -> KM(Doc):
 def KX.scrs(g: G, env: Env(), xs: List<&2, Core.Expr>) -> KM(List<&2, String> & Doc):
   KX.go(Fuel.max(), KXSScrs{g, env, xs})
 
+# A call of a seq def from the kernel's blocks: a KQ_ request (PC_KQ), as a
+# parallel let's value past the fork limit is (see KSParSeqKq); the value
+# comes back at ret, or the call goes through frames at fb. (symreg's climb,
+# 32 rounds on one lane, took 1.6s through frames.)
+def K.call.seq.kq(+g: G, +name: String, +ks: List<&2, Doc>) -> KM(Doc):
+  do KM<Doc>:
+    +e : U32 <- K.fn(name)
+    +ret : U32 <- K.fresh()
+    +after : U32 <- K.fresh()
+    +fb : U32 <- K.fresh()
+    +k : U32 <- K.slot()
+    K.put(Doc.list([DStr{"c->kq = " ++ U32.show(e) ++ "; c->kqret = " ++ U32.show(ret) ++ "; c->kqfb = " ++ U32.show(fb) ++
+      " | K_KQLIM;\n"},
+      KQ.req(ks, 0), DStr{"KPC = PC_KQ;\n"}]))
+    K.start(fb)
+    K.put(Doc.list([DStr{"{ KW nf = KPUSH(" ++ U32.show(ret) ++ ", " ++ U32.show(e) ++ ");\n"},
+      K.args.put(KQ.req.args(U32.to_nat(Gen.len(ks)), 0), 0), DStr{"KFP = nf; KPC = " ++ U32.show(e) ++ "; }\n"}]))
+    K.start(ret)
+    K.putS(S(k) ++ " = KRV;\nKPC = " ++ U32.show(after) ++ ";\n")
+    K.start(after)
+    return DStr{S(k)}
+
+def K.call.seq.pick(sq: Bool, +g: G, +name: String, +ks: List<&2, Doc>) -> KM(Doc):
+  match sq:
+    case True{}:
+      K.call.seq.kq(g, name, ks)
+    case False{}:
+      K.call.flat(g, name, ks, False{})
+
 # A flat def called from the kernel's blocks.
 def K.call.flat.k(+g: G, +name: String, +ks: List<&2, Doc>, flat: Bool) -> KM(Doc):
   match flat:
@@ -14463,7 +14511,9 @@ def K.call.flat.k(+g: G, +name: String, +ks: List<&2, Doc>, flat: Bool) -> KM(Do
         lp : Bool <- K.loops(g, name)
         K.call.flat.k.pick(Bool.and(lp, U32.is_le(Gen.len(ks), 8)), g, name, ks)
     case False{}:
-      K.call.flat(g, name, ks, False{})
+      do KM<Doc>:
+        sq : Bool <- K.isseq1(g, name)
+        K.call.seq.pick(Bool.and(sq, U32.is_le(Gen.len(ks), 12)), g, name, ks)
 
 # A full call: natives are expressions, effects fail, flat defs are
 # functions, other defs are called through frames.
@@ -15182,14 +15232,21 @@ def KQ.gcall(+g: G, +env: Env(), +self: KSelf, v: Core.Expr) -> KM(Bool):
     case other:
       KM.pure(Bool, False{})
 
-# Whether a def returns a scalar: a call of it that recurses (eval in
-# symreg, hot) does not give back what it allocated (see KQSCallGo).
+# Whether a def returns a scalar: a call of it does not give back what it
+# allocated (see KQSCallGo; symreg calls eval 110 times a candidate).
 def KQ.scalret(d: Decl) -> Bool:
   match d:
     case DDef{n, ps, body, ret}:
       Str.has(["U32", "F32", "Bool", "Nat", "Char"], P.head(ret))
     case other:
       False{}
+
+# Whether a call gives back what it allocated (see KQSCallGo): not with a
+# scalar result; with a node, a call of another def, or of the def itself
+# when the node is a record of scalars (symreg's batch: the result moves
+# down, a subtree's candidates go).
+def KQ.reg(me: Bool, sc: Bool, +ko: U32) -> Bool:
+  Bool.and(Bool.not(sc), Bool.or(Bool.not(me), Bool.not(U32.is_zero(ko))))
 
 def KQ.split(+g: G, +f: String, args: List<&2, Core.Expr>) -> Split:
   Gen.split(DInfo.mask(G.def(g, f)), args, Split{Nil{}, Nil{}, Nil{}, False{}})
@@ -15306,17 +15363,19 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                 K.start(0)
                 blocks : Doc <- K.cap.take(saved)
                 K.flat.add(Doc.list([DStr{"\nKINLINE KW KQ_" ++ Gen.mangle(name) ++ "(KTHR KCtx *c" ++ KQ.params(n, 0) ++
-                  ", KTHR bool *ok) {\nKQ_STACK;\nKW sp = 0, pc = " ++ U32.show(l) ++ ", RV = 0;\n" ++ KQ.init(n, 0) ++
-                  KQ.init.rest(Nat.sub(12n, n), U32.from_nat(n)) ++ "for (;;) {\nswitch (pc) {\n"}, blocks,
+                  ", KTHR bool *ok) {\nKQ_STACK;\nKW sp = 0, pc = " ++ U32.show(l) ++ ", RV = 0, st = c->kqlim;\n" ++ KQ.init(n, 0) ++
+                  KQ.init.rest(Nat.sub(12n, n), U32.from_nat(n)) ++
+                  "for (;;) {\nif (st-- == 0) { *ok = false; return 0; }\nswitch (pc) {\n"}, blocks,
                   DStr{"default:\n*ok = false;\nreturn 0;\n}\n}\n}\n"}]))
                 K.memo.put("%kqcase", "case " ++ U32.show(e) ++ ": return KQ_" ++ Gen.mangle(name) ++ "(c" ++ KQ.case.args(n, 0) ++
                   ", ok);\n")
             case False{}:
               KM.pure(Unit, Unit{})
-        # A call of another def keeps the lane's hp and he under its return pc:
-        # at the resume what the call allocated is given back (k_region: the
-        # call is flat, so only its result can reach it; symreg's candidate
-        # trees). A call of the def itself does not (eval, a hot recursion).
+        # A call that gives back what it allocated (KQ.reg) keeps the lane's hp
+        # and he under its return pc: at the resume k_region takes the words
+        # back (the call is flat, so only its result can reach them). Calls
+        # with a scalar result, and self calls that build a tree (gen), do not:
+        # the check cost symreg 0.5s.
         case KQSCallGo{+reg, +g, +env, +self, +x, s, +e, +body}:
           Split{kept, all, extra, full} = s
           # Saved: the variables the rest of the code uses.
@@ -15347,7 +15406,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
         case KQSCall{+g, +env, +self, +x, +f, args, body}:
           do KM<Unit>:
             +e : U32 <- KQ.go(fu, KQSEntry{g, f})
-            KQ.go(fu, KQSCallGo{Bool.not(Bool.and(Str.eq(f, KSelf.name(self)), KQ.scalret(G.body(g, f)))), g, env, self, x,
+            KQ.go(fu, KQSCallGo{KQ.reg(Str.eq(f, KSelf.name(self)), KQ.scalret(G.body(g, f)), KX.ko(g, f)), g, env, self, x,
               KQ.split(g, f, args), e, body})
         # The entry of seq def f in the KQ_ function being made: its blocks are
         # made (aside) the first time.

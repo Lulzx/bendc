@@ -127,8 +127,18 @@ typedef struct {
   KU err;
   KW kq, kqret, kqfb;  // a KQ_ call: its def, where its value goes, the way through frames
   KW kqa[KQ_ARGS];     // and its arguments
+  KW kqlim;            // the blocks it may run (K_KQLIM)
   KCP KParams *P;
 } KCtx;
+
+// A KQ_ call made from the kernel's blocks (not past the fork limit) may
+// reach a parallel let deep in its callees: it runs K_KQSTEPS blocks at most,
+// then gives up and runs through the frames, which fork. Its kqfb has
+// K_KQLIM set.
+#define K_KQLIM ((KW)1 << 40)
+#ifndef K_KQSTEPS
+#define K_KQSTEPS ((KW)1 << 22)
+#endif
 
 #define KIMM(t) ((((KW)(t)) << 3) | 1)
 #define KBOOL(b) ((b) ? KIMM(1) : KIMM(0))
@@ -708,6 +718,7 @@ static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   k_load(c, H, A, P, G, lane);
   bool ok = true;
   KW h0 = c->hp, e0 = c->he;
+  c->kqlim = (c->kqfb & K_KQLIM) ? K_KQSTEPS : ~(KW)0;
   KW r = k_kq(c, &ok);
   // A call that gave up (ok false) runs again through the frames.
   if (!ok) {
@@ -716,7 +727,7 @@ static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
     r = k_region(c, h0, e0, r);
   }
   c->rv = r;
-  c->pc = ok ? c->kqret : c->kqfb;
+  c->pc = ok ? c->kqret : (c->kqfb & ~K_KQLIM);
   if (c->err != 0) {
     KU z = 0;
     K_CAS(&A[KA_ERR], z, c->err);
