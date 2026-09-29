@@ -440,7 +440,9 @@ __attribute__((noinline)) void bend_share_slow(V v);
 // above (gc_init); a node already shared says so in its tag word (reading any
 // heap address is safe; writing needs the checks above).
 static inline void bend_share(V v) {
-  if (v < ((V)1 << 32) || (uintptr_t)v - gc_hot.base >= gc_hot.span) return;
+  // A word first, on its own branch (the heap bounds are then not loaded).
+  if (LIKELY(v < ((V)1 << 32))) return;
+  if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
   V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
   if ((w0 & BEND_SH) && w0 < ((V)1 << 22)) return;
   bend_share_slow(v);
@@ -1042,22 +1044,22 @@ static inline V F_Chk_dmemo_dset(V m, V v, V x) {
   return x;
 }
 // x, read out of array a, is the array's and the reader's now.
-static inline void arr_got(V a, V x) {
+BEND_UINL void arr_got(V a, V x) {
   if (gc_hot.rc) rc_dup_in(x, ((V *)a)[0] & RC_TS);
   else bend_share(x);
 }
-static inline V F_Array_dget(V a, V i) {
+BEND_UINL V F_Array_dget(V a, V i) {
   V x = *arr_at(a, i);
   arr_got(a, x);
   return C2(0, a, x);
 }
-static inline V F_Array_dswap(V a, V i, V v) {
+BEND_UINL V F_Array_dswap(V a, V i, V v) {
   V *p = arr_at(a, i);
   V old = *p;
   arr_put(a, p, v);
   return C2(0, a, old);
 }
-static inline V F_Array_dset(V a, V i, V v) {
+BEND_UINL V F_Array_dset(V a, V i, V v) {
   V *p = arr_at(a, i);
   bend_drop(*p);
   arr_put(a, p, v);
