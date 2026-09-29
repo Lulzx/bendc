@@ -715,10 +715,11 @@ Where bendc loses, and why:
 - **terrain.** `bendc -o` links the runtime as a separate object, and there `arr_new` was a call,
   so clang did not know a new array's size and masked every index with a mask loaded from the
   array. `arr_new` is now inline: 57G instructions, now 51G (the official build: 45G). The traced
-  `bend_dead` has since added 19G back (70G). Nested unboxing splits `fill`'s and `hist`'s
-  `Array<U32> & U32` parameter into two, but the unused `U32` field keeps its type variable. So
-  each loop step calls `bend_dead` on it. With those calls removed from the C, terrain takes
-  54G. If the field were known to be a `U32`, the calls would not be generated.
+  `bend_dead` then added 19G back (70G). Unboxing splits `fill`'s and `hist`'s
+  `Array<U32> & U32` parameter into two, and the unused `U32` half had only its field's type
+  variable, so each loop step called `bend_dead` on it. A parameter's type now keeps the heads of
+  its arguments (`&<Array,U32>`), and a field whose type is a parameter of its type gets a scalar
+  argument's type. The half is then a `uint32_t` and needs no `bend_dead`: 53G.
 - **lexer.** The program allocates a mode node (`InId{h}`) and a string cell for every character.
   The official build appears to store a constructor with a single field without allocating a
   node. Either that representation or in-place reuse would remove the allocations.
