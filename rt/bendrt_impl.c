@@ -7,6 +7,11 @@
 #endif
 #define _DARWIN_UNLIMITED_SELECT  // select past FD_SETSIZE (io_wait)
 #define IMM(t) ((((V)(t)) << 3) | 1)
+#define LI_HI 0xFFFF000000000000ull
+#define LI(t, x) (LI_HI | ((V)(uint32_t)(x) << 16) | ((V)(t) << 3) | 3)
+#define IS_LI(v, t) (((v) & 0xFFFF00000000FFFFull) == (LI_HI | ((V)(t) << 3) | 3))
+#define LI_V(v) ((V)(uint32_t)((v) >> 16))
+#define LI_F(v, i) LI_V(v)
 #define BEND_SH ((V)1 << 20)
 #define BEND_DEEP ((V)1 << 21)
 #define BEND_SH_BITS (BEND_SH | BEND_DEEP)
@@ -347,6 +352,7 @@ __attribute__((noinline)) void bend_share_slow(V v) {
   GcBlk *b = gc_slot(v, &i);
   if (b == NULL) {
     uintptr_t off = (uintptr_t)v - (uintptr_t)gc_base;
+    if (off >= (gc_top << GC_BLK_SHIFT)) return;
     uintptr_t bi = off >> GC_BLK_SHIFT;
     uint8_t kd = gc_kind[bi];
     if (kd != 2 && kd != 3) return;
@@ -745,6 +751,8 @@ void thr_register(uintptr_t top) {
   pthread_mutex_unlock(&gc_lock);
 }
 #define RUF(u) do { if (u) rc_free_at(u, 0); } while (0)
+#define RUG(tok, w) ((tok) ? bend_ru_young(tok, w) : halloc(w))
+#define RUFG(u) do { if (u) bend_take((u), gc_meta[((uintptr_t)(u) - gc_hot.base) >> GC_BLK_SHIFT].words); } while (0)
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))
 void rc_let_go_arr(V a) {
@@ -1370,6 +1378,7 @@ Term io_box(Env e, u64 cid, Term v) {
   switch (CID_KIND(cid)) {
     case 1: return IMM(CID_TAG(cid));
     case 2: return v;
+    case 7: return LI(CID_TAG(cid), v);
     default: return C1(CID_TAG(cid), v);
   }
 }
