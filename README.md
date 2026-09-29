@@ -364,7 +364,7 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    always run first, on every def; the passes below come after, and their own case of a known
    constructor or literal resolves what the proven ones leave (literal patterns, nested patterns,
    matches that inlining exposes).
-   `BEND_OPT` names its passes by letter: the default is `i..spf`, and `BEND_OPT=` turns it off.
+   `BEND_OPT` names its passes by letter: the default is `i..spuf`, and `BEND_OPT=` turns it off.
    - `i` inlines small defs: a body of size at most 4 plus 2 per `.` (8 for `i..`) that calls only
      defs declared before it (so inlining ends), and is neither native nor `IO`. Most of the gain
      comes from `Bool.pick`, `Bool.and`, `Bool.or` and `Bool.not`, whose arguments move into the
@@ -382,12 +382,23 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
      a match whose cases all end in constructors goes into those cases (case of case), when the
      copies are small. An applied lambda becomes a let. Parallel lets stay parallel. A comparison
      of literals folds, and a comparison of a match whose cases give literals goes into the cases
-     (`U32.is_zero(b2u(c))` is a match on `c`).
+     (`U32.is_zero(b2u(c))` is a match on `c`). In a match on several values, a value that is a
+     literal or a constructor without fields is dropped from the match, with the cases it cannot
+     match, when every case's pattern for it is known to match it or not. `k+` of a `Nat` literal
+     folds.
    - `p` specializes a higher-order def. A call that passes a closed function (a lambda with no
      free variables, as every `~f` template argument is, or a def's name) for a parameter the
      callee passes unchanged to its own calls calls a copy instead. In the copy the function takes
      the parameter's place and is simplified, and its self-calls drop the argument. Copies are
      shared by the callee's name and a hash of the function's text.
+   - `u` unrolls calls with literal arguments. A call that passes a `Nat` literal up to 64 that the
+     callee's body matches on, or a constructor without fields that the body matches on first,
+     calls a copy with the literal in the parameter's place, simplified. In the copy the match on it is resolved, and its call for
+     the predecessor passes a literal again, so a count of `n` becomes `n + 1` copies, each a
+     straight line. Only small bodies are copied: at most 300, and at most 1100 / (n + 1) for a
+     count of `n`. The copies are shared by name and argument as `p`'s are. raytrace's scan of 9
+     spheres and merkle's 22 rounds unroll, and the constants they read become literals; a loop
+     of 64 does not.
    - `f` fuses a consumer with a producer. Take a call `g(.., p(..), ..)` where `g` is recursive
      and matches on that argument alone, and some result of `p` is a constructor with a field that
      calls `p` (`p` builds a list or tree). It calls a fused def instead: `p`'s body with `g`
@@ -421,6 +432,10 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
      goes through `apply`.
    - A match becomes a first-match `if` chain over tags. A `match` or `let` in expression position
      uses a GNU statement expression.
+   - A `U32` lives in a `uint32_t` C local: a def's `U32` parameters, a let whose value is a
+     `U32`, and a statement expression whose results are. The runtime's `U32` natives take
+     `uint32_t` operands, so clang compares and computes in 32 bits. Passed as 64-bit words, the
+     values were widened, and kmeans's loop vectorized in 64-bit lanes: 77G instructions, now 60G.
 7. **Value printers.** For a non-`IO` main, printers are generated from main's return type and the
    field types of each constructor, specialised per type instance (e.g. `Tree<String>`).
 
@@ -694,8 +709,16 @@ Where bendc loses, and why:
     links the runtime as a separate object, and in that build clang had stopped inlining
     `Array.set` into editdist's loop. A binary from `bendc -o` took 4.3s, where the same C
     compiled as one unit took 2.9s. With the change, both take 2.9s.
-- **kmeans.** The inner loop is vectorized. Most of the remaining time goes to the zip of the
-  chunk lists (`S_szip`, a fifth of the samples) and to boxed intermediate values.
+- **kmeans.** The inner loop is vectorized, in 32-bit lanes as in the official build (see
+  [How it works](#how-it-works), code generation). Most of the remaining time goes to the zip of
+  the chunk lists (`S_szip`, a quarter of the samples).
+- **terrain.** `bendc -o` links the runtime as a separate object, and there `arr_new` was a call,
+  so clang did not know a new array's size and masked every index with a mask loaded from the
+  array. `arr_new` is now inline: 57G instructions, now 51G (the official build: 45G). The traced
+  `bend_dead` has since added 19G back (70G). Nested unboxing splits `fill`'s and `hist`'s
+  `Array<U32> & U32` parameter into two, but the unused `U32` field keeps its type variable. So
+  each loop step calls `bend_dead` on it. With those calls removed from the C, terrain takes
+  54G. If the field were known to be a `U32`, the calls would not be generated.
 - **lexer.** The program allocates a mode node (`InId{h}`) and a string cell for every character.
   The official build appears to store a constructor with a single field without allocating a
   node. Either that representation or in-place reuse would remove the allocations.
