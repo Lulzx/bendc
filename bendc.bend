@@ -5365,13 +5365,78 @@ def RC.tmp.body(rc: Bool, +g: G, +loc: List<&2, String>, e: Core.Expr) -> Core.E
 
 # The buffers of a loop's temporaries, one pair for each parameter it
 # borrows (fl), and which of the two is the last one written.
-def RC.tmp.decl(fl: List<&2, Bool>, +i: U32) -> String:
+def RC.tmp.decl(fl: List<&2, Bool>, +used: List<&2, String>, +i: U32) -> String:
   match fl:
     case Nil{}:
       ""
     case b <> t:
-      Bool.pick(String, b, "V tb" ++ U32.show(i) ++ "[2][9]; unsigned tbi" ++ U32.show(i) ++ " = 0; ", "") ++
-        RC.tmp.decl(t, U32.inc(i))
+      Bool.pick(String, Bool.and(b, Str.has(used, U32.show(i))),
+        "V tb" ++ U32.show(i) ++ "[2][9]; unsigned tbi" ++ U32.show(i) ++ " = 0; ", "") ++
+        RC.tmp.decl(t, used, U32.inc(i))
+
+def RC.tmp.add(hit: Bool, +x: String, acc: List<&2, String>) -> List<&2, String>:
+  match hit:
+    case True{}:
+      x <> acc
+    case False{}:
+      acc
+
+# The (kept) positions of a call to the def itself that get a temporary.
+def RC.tmp.idx(mask: List<&2, Bool>, args: List<&2, Core.Expr>, +k: U32, acc: List<&2, String>) -> List<&2, String>:
+  match mask args:
+    case True{} <> mt a <> at:
+      RC.tmp.idx(mt, at, U32.inc(k), RC.tmp.add(RC.tmp.is(a), U32.show(k), acc))
+    case False{} <> mt a <> at:
+      RC.tmp.idx(mt, at, k, acc)
+    case ml al:
+      acc
+
+def RC.tmp.selfc.go(hit: Bool, +mask: List<&2, Bool>, +args: List<&2, Core.Expr>, acc: List<&2, String>) ->
+  List<&2, String>:
+  match hit:
+    case True{}:
+      RC.tmp.idx(mask, args, 0, acc)
+    case False{}:
+      acc
+
+def RC.tmp.selfc(+self: String, +mask: List<&2, Bool>, f: Core.Expr, +args: List<&2, Core.Expr>,
+  acc: List<&2, String>) -> List<&2, String>:
+  match f:
+    case Core.EVar{+h}:
+      RC.tmp.selfc.go(Str.eq(h, self), mask, args, acc)
+    case other:
+      acc
+
+# The positions whose loop buffers a def's body (its temporaries marked)
+# uses.
+def RC.tmp.used(n: Nat, +self: String, +mask: List<&2, Bool>, e: Core.Expr, acc: List<&2, String>) -> List<&2, String>:
+  match n:
+    case 0n:
+      acc
+    case 1n+ +m:
+      match e:
+        case Core.ECall{+f, +args}:
+          RC.tmp.used(m, self, mask, Core.ECtor{"", args}, RC.tmp.selfc(self, mask, f, args, acc))
+        case Core.ECtor{+c, args}:
+          match args:
+            case Nil{}:
+              acc
+            case a <> t:
+              RC.tmp.used(m, self, mask, Core.ECtor{c, t}, RC.tmp.used(m, self, mask, a, acc))
+        case Core.ELet{p, v, b}:
+          RC.tmp.used(m, self, mask, b, RC.tmp.used(m, self, mask, v, acc))
+        case Core.EMatch{scrs, cases}:
+          RC.tmp.used(m, self, mask, Core.ECtor{"", cases}, RC.tmp.used(m, self, mask, Core.ECtor{"", scrs}, acc))
+        case Core.ECase{ps, b}:
+          RC.tmp.used(m, self, mask, b, acc)
+        case Core.ESucc{k, x}:
+          RC.tmp.used(m, self, mask, x, acc)
+        case Core.EOp{op, a, b}:
+          RC.tmp.used(m, self, mask, b, RC.tmp.used(m, self, mask, a, acc))
+        case Core.EAnn{x, t}:
+          RC.tmp.used(m, self, mask, x, acc)
+        case other:
+          acc
 
 def RC.tmp.tag(m: Maybe<&2, CInfo>) -> U32:
   match m:
@@ -7912,8 +7977,8 @@ def Gen.def.boxed(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
     Gen.proto(DStr{head ++ ";\n"})
     +e : Core.Expr = RC.tmp.body(Gen.rc(g), g, Env.names(env), R.ops(body, "Nat"))
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, e)
-    Gen.code(Doc.list([DStr{head ++ " {\n" ++ Gen.u32.open(us) ++ RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))), 0) ++
-      "top:;\n"}, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
+    Gen.code(Doc.list([DStr{head ++ " {\n" ++ Gen.u32.open(us) ++ RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))),
+      RC.tmp.used(Fuel.max(), name, mask, e, Nil{}), 0) ++ "top:;\n"}, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
     Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
 
@@ -7932,7 +7997,8 @@ def Gen.def.unb(+k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Cor
     +e : Core.Expr = RC.tmp.body(Gen.rc(g), g, Env.names(env), R.ops(body, "Nat"))
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TOut{k, Gen.free(g)}, e)
     Gen.code(Doc.list([DStr{"BEND_UINL" ++ String.drop(uhead, 6n) ++ " {\n" ++ Gen.u32.open(us) ++
-      RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))), 0) ++ "top:;\n"}, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
+      RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))), RC.tmp.used(Fuel.max(), name, mask, e, Nil{}), 0) ++
+      "top:;\n"}, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
     Gen.code(DStr{head ++ " { V o[" ++ U32.show(k) ++ "]; " ++ u ++ "(" ++ String.join(List.append(&2, String, params,
       ["o"]), ", ") ++ "); return CN(0, " ++ U32.show(k) ++ ", o); }\n"})
     Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
