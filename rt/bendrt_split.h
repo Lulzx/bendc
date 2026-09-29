@@ -64,6 +64,14 @@ typedef uint32_t U32;
 typedef uint64_t Term;
 
 #define IMM(t) ((((V)(t)) << 3) | 1)
+// A word leaf (kind 7, G.li in bendc): a constructor whose one field is a
+// word, as that word above its tag. It is odd (no IMM: bit 1 is set) and
+// above every heap address, so no test takes it for an object.
+#define LI_HI 0xFFFF000000000000ull
+#define LI(t, x) (LI_HI | ((V)(uint32_t)(x) << 16) | ((V)(t) << 3) | 3)
+#define IS_LI(v, t) (((v) & 0xFFFF00000000FFFFull) == (LI_HI | ((V)(t) << 3) | 3))
+#define LI_V(v) ((V)(uint32_t)((v) >> 16))
+#define LI_F(v, i) LI_V(v)
 // A node's tag word holds its tag (below 2^20) and two flags (see "Freeing
 // on match"): shared, and its fields marked shared too.
 #define BEND_SH ((V)1 << 20)
@@ -249,6 +257,7 @@ extern int gc_minor;
 extern int gc_rooting;
 extern int gc_all_major;
 extern size_t gc_count;
+extern size_t gc_epoch;
 extern int gc_stats;
 extern Thr *gc_thrs[GC_MAXTHR];
 extern int gc_nthr;
@@ -463,6 +472,7 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w);
 // its block a reuse candidate for its class (gc_refill takes it when a 5th of
 // it is free). Nodes of up to 16 words are in small blocks whose slots are
 // exactly their size; larger ones are never freed.
+static inline void bend_free_slot(V v, unsigned w, unsigned line);
 static inline int bend_take_at(V v, unsigned w, unsigned line) {
   const GcHot *h = &gc_hot;
   V w0 = h->mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
@@ -470,8 +480,15 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
     if (!(w0 & BEND_DEEP)) bend_deep(v, w);
     return 1;
   }
+  if (UNLIKELY((uintptr_t)v - h->base >= h->span || w > 16)) { bend_deep(v, w); return 1; }
+  bend_free_slot(v, w, line);
+  return 0;
+}
+
+// Frees the slot of an unshared node v of w (2 to 16) words in the heap.
+static inline void bend_free_slot(V v, unsigned w, unsigned line) {
+  const GcHot *h = &gc_hot;
   uintptr_t off = (uintptr_t)v - h->base;
-  if (UNLIKELY(off >= h->span || w > 16)) { bend_deep(v, w); return 1; }
   uintptr_t bi = off >> GC_BLK_SHIFT;
   uint32_t i = (uint32_t)(((off & (GC_BLK - 1)) - GC_HDR) / (w * sizeof(V)));
   uint64_t bit = 1ull << (i & 63);
@@ -490,7 +507,7 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
     for (unsigned j = 0; j < w; j++) ((V *)v)[j] = ((V)0xDEAD << 48) | (who << 40) | ((nfreed & 0xfffff) << 20) | line;
     (void)bit; (void)aw;
   }
-  return 0;
+  return;
 #endif
   (void)line;
   uint64_t *cw = &h->cand[(size_t)(w - 2) * GC_CANDW + (bi >> 6)];
@@ -511,7 +528,6 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
     *mw &= ~bit;
     *cw |= 1ull << (bi & 63);
   }
-  return 0;
 }
 
 // With BEND_DEBUG_FREE, a freed node records the generated C line that
@@ -1019,7 +1035,7 @@ static inline V CHN(V t, int n, const V *xs) {
 // Reuse (counted programs): a constructor built where a match freed a node
 // of its size takes that node's slot, tok (rc_take_ru's: 0 when the node was
 // shared, then a new slot). A case that does not build in its token frees
-// it (RUF).
+// it (RUF, with its size in words).
 static inline V CR1(V u, V t, V a) { V *p = RU(u, 2); p[0] = t; p[1] = a; return (V)p; }
 static inline V CR2(V u, V t, V a, V b) { V *p = RU(u, 3); p[0] = t; p[1] = a; p[2] = b; return (V)p; }
 static inline V CR3(V u, V t, V a, V b, V c) {
@@ -1039,7 +1055,62 @@ static inline V CRH2(V u, V t, V a, V b) { return CR2(u, t, a, b); }
 static inline V CRH3(V u, V t, V a, V b, V c) { return CR3(u, t, a, b, c); }
 static inline V CRH4(V u, V t, V a, V b, V c, V d) { return CR4(u, t, a, b, c, d); }
 static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
-#define RUF(u) do { if (u) rc_free_at(u, 0); } while (0)
+#define RUF(u, w) do { if (u) rc_free_at(u, w); } while (0)
+
+// Reuse under the collector (matches free, not counted): bend_take_ru is
+// bend_take, but a node that was not shared keeps its slot, answered as the
+// token (0 when it was shared), where a constructor gets built (CG1 and the
+// like). The build makes the slot young first: its mark is cleared, as a
+// slot handed out again has it cleared (a collection marked the node, or
+// marked it between the match and the build, reached from the stack), so
+// minor collections trace from it. Only this thread holds the slot, so
+// clearing its mark races with no one. Before the first collection no mark
+// is set (gc_epoch is 0), and the build skips it. (A collection that stops
+// this thread between that check and the build's stores marks the values
+// stored too: they are in its registers.)
+// RUFG frees a token no constructor took.
+static inline V bend_take_ru(V v, unsigned w) {
+  const GcHot *h = &gc_hot;
+  V w0 = h->mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  if (w0 & BEND_SH) {
+    if (!(w0 & BEND_DEEP)) bend_deep(v, w);
+    return 0;
+  }
+  if (UNLIKELY((uintptr_t)v - h->base >= h->span || w > 16)) { bend_deep(v, w); return 0; }
+#ifdef BEND_DEBUG_FREE
+  bend_take(v, w);
+  return 0;
+#endif
+  return v;
+}
+static inline V *bend_ru_young(V u, unsigned w) {
+  uintptr_t off = (uintptr_t)u - gc_hot.base;
+  uintptr_t bi = off >> GC_BLK_SHIFT;
+  uint32_t i = (uint32_t)(((off & (GC_BLK - 1)) - GC_HDR) / (w * sizeof(V)));
+  uint64_t bit = 1ull << (i & 63);
+  uint64_t *mw = &gc_mbits[bi * 64 + (i >> 6)];
+  if (UNLIKELY(gc_hot.mt)) {
+    if (__atomic_load_n(mw, __ATOMIC_RELAXED) & bit) __atomic_fetch_and(mw, ~bit, __ATOMIC_RELAXED);
+  } else {
+    *mw &= ~bit;
+  }
+  return (V *)u;
+}
+#define RUG(tok, w) ((tok) ? (UNLIKELY(__atomic_load_n(&gc_epoch, __ATOMIC_RELAXED)) ? bend_ru_young(tok, w) : (V *)(tok)) : halloc(w))
+static inline V CG1(V u, V t, V a) { V *p = RUG(u, 2); p[0] = t; p[1] = a; return (V)p; }
+static inline V CG2(V u, V t, V a, V b) { V *p = RUG(u, 3); p[0] = t; p[1] = a; p[2] = b; return (V)p; }
+static inline V CG3(V u, V t, V a, V b, V c) {
+  V *p = RUG(u, 4); p[0] = t; p[1] = a; p[2] = b; p[3] = c; return (V)p;
+}
+static inline V CG4(V u, V t, V a, V b, V c, V d) {
+  V *p = RUG(u, 5); p[0] = t; p[1] = a; p[2] = b; p[3] = c; p[4] = d; return (V)p;
+}
+static inline V CGN(V u, V t, int n, const V *xs) {
+  V *p = RUG(u, n + 1); p[0] = t;
+  for (int i = 0; i < n; i++) p[i + 1] = xs[i];
+  return (V)p;
+}
+#define RUFG(u, w) do { if (u) bend_free_slot((u), (w), 0); } while (0)
 
 // Arrays
 // ------
@@ -1688,12 +1759,13 @@ static inline Term term_pak(u64 cid, Term v) {
   switch (CID_KIND(cid)) {
     case 1: return IMM(CID_TAG(cid));
     case 2: return v;
+    case 7: return LI(CID_TAG(cid), v);
     default: return C1(CID_TAG(cid), v);
   }
 }
 
 // The CID of a constructor value (a node's or a nullary one's).
-static inline u64 term_aux(Term t) { return (t & 1) ? ((1u << 16) | (u32)(t >> 3)) : (V)(uint32_t)((V *)t)[0] & ~BEND_SH_BITS; }
+static inline u64 term_aux(Term t) { return (t & 1) ? ((t & 2) ? ((7u << 16) | (u32)((t & 0xffff) >> 3)) : ((1u << 16) | (u32)(t >> 3))) : (V)(uint32_t)((V *)t)[0] & ~BEND_SH_BITS; }
 #define term_drop(e, t) ((void)(e), bend_drop(t))
 #define term_sink(e, t) ((void)(e), bend_drop(t))
 #define cls_fit(n) 0

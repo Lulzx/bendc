@@ -4308,8 +4308,11 @@ def Gen.pat.go(
                     case 5n:
                       Gen.pat.leaf(Str.eq(DGrp.id(G.dps(g, "%free")), "2"), path,
                         Gen.pat.go(Core.PCtor{name, [a]}, 0n, g, path, 0, None{}, 0n, Gen.pat.cond("arr_cls(" ++ path ++ ") == 0", r)))
-                    case 6n+q:
+                    case 6n:
                       Gen.pat.cond("arr_cls(" ++ path ++ ") != 0", r)
+                    case 7n+q:
+                      Gen.pat.go(a, 3n, g, "LI_V(" ++ path ++ ")", 0, None{}, 0n,
+                        Gen.pat.tag(single, "IS_LI(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r))
             case 2n:
               match info:
                 case None{}:
@@ -4645,8 +4648,10 @@ def Gen.ctor.kind(+tag: U32, kind: Nat, ds: List<&2, Doc>) -> Doc:
       Doc.list([DStr{"nat_addk("}, Doc.list(ds), DStr{", 1)"}])
     case 5n:
       Doc.list([DStr{"arr_leaf("}, Doc.list(ds), DStr{")"}])
-    case 6n+p:
+    case 6n:
       Doc.list([DStr{"arr_node("}, Gen.commas(ds), DStr{")"}])
+    case 7n+p:
+      Doc.list([DStr{"LI(" ++ U32.show(tag) ++ ", "}, Doc.list(ds), DStr{")"}])
 
 # A node built in token tok's slot (h: "CR", or "CRH" for a D_ node).
 def Gen.ctor.ru(+tok: String, +h: String, +tag: U32, +ds: List<&2, Doc>) -> Doc:
@@ -4657,8 +4662,10 @@ def Gen.ctor.ru(+tok: String, +h: String, +tag: U32, +ds: List<&2, Doc>) -> Doc:
     Doc.list([DStr{h ++ "N(" ++ tok ++ ", " ++ U32.show(tag) ++ ", " ++ U32.show(n) ++ ", "},
       Gen.arr(ds), DStr{")"}]))
 
-def Gen.ctor.kind.ru(+tok: String, +tag: U32, +kind: Nat, +ds: List<&2, Doc>) -> Doc:
-  Bool.pick(Doc, String.is_empty(tok), Gen.ctor.kind(tag, kind, ds), Gen.ctor.ru(tok, "CR", tag, ds))
+# (CG: under the collector, the slot is young again, see bendrt.h)
+def Gen.ctor.kind.ru(rc: Bool, +tok: String, +tag: U32, +kind: Nat, +ds: List<&2, Doc>) -> Doc:
+  Bool.pick(Doc, String.is_empty(tok), Gen.ctor.kind(tag, kind, ds),
+    Gen.ctor.ru(tok, Bool.pick(String, rc, "CR", "CG"), tag, ds))
 
 def Gen.ctor.hnode.ru(+tok: String, +tag: U32, +ds: List<&2, Doc>) -> Doc:
   Bool.pick(Doc, String.is_empty(tok), Gen.ctor.hnode(tag, ds), Gen.ctor.ru(tok, "CRH", tag, ds))
@@ -4676,7 +4683,7 @@ def Gen.konst.kind(m: Maybe<&2, CInfo>) -> Bool:
     case None{}:
       False{}
     case Some{CInfo{tag, ar, +kind, single}}:
-      Bool.or(U32.is_eq(kind, 0), U32.is_eq(kind, 1))
+      Bool.or(Bool.or(U32.is_eq(kind, 0), U32.is_eq(kind, 1)), U32.is_eq(kind, 7))
 
 def Gen.konst.node(m: Maybe<&2, CInfo>) -> Bool:
   match m:
@@ -6164,34 +6171,51 @@ def RU.names(ts: List<&2, RuT>) -> List<&2, String>:
     case RuT{tok, c, w, k} <> t:
       tok <> RU.names(t)
 
-def RU.take(+tok: String, +c: String, +w: String, +k: String, keep: Bool) -> String:
+def RU.take(+pre: String, +tok: String, +c: String, +w: String, +k: String, keep: Bool) -> String:
   +d = Bool.pick(String, String.is_empty(k), "", "_d")
   +m = Bool.pick(String, String.is_empty(k), "", ", ~(0" ++ k ++ ")")
-  Bool.pick(String, keep, "rc_take" ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n",
-    "V " ++ tok ++ " = rc_take_ru" ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n")
+  Bool.pick(String, keep, pre ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n",
+    "V " ++ tok ++ " = " ++ pre ++ "_ru" ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n")
 
 # The takes of a case's nodes: a token used after them is kept (left: the
 # tokens not used).
-def RU.takes(ts: List<&2, RuT>, +left: List<&2, String>) -> Doc:
+def RU.takes(+pre: String, ts: List<&2, RuT>, +left: List<&2, String>) -> Doc:
   match ts:
     case Nil{}:
       DNil{}
     case RuT{+tok, +c, +w, +k} <> t:
-      Doc.list([DStr{RU.take(tok, c, w, k, Str.has(left, tok))}, RU.takes(t, left)])
+      Doc.list([DStr{RU.take(pre, tok, c, w, k, Str.has(left, tok))}, RU.takes(pre, t, left)])
 
-def RU.takes.pick(rc: Bool, ts: List<&2, RuT>, +left: List<&2, String>, old: String) -> Doc:
-  match rc:
+# Counted, the takes are rc_take's; under the collector, when matches free,
+# bend_take's (and its _ru, reuse's).
+def RU.takes.pick(+rc: Bool, ru: Bool, ts: List<&2, RuT>, +left: List<&2, String>, old: String) -> Doc:
+  match ru:
     case True{}:
-      RU.takes(ts, left)
+      RU.takes(Bool.pick(String, rc, "rc_take", "bend_take"), ts, left)
     case False{}:
       DStr{old}
 
-def RU.frees(ts: List<&2, String>) -> Doc:
+# A token's size in words: u<words>_<node>.
+def RU.w.go(s: String) -> String:
+  match s:
+    case SNil{}:
+      ""
+    case SCon{Chr{+c}, t}:
+      Bool.pick(Unit -> String, U32.is_eq(c, 95), u => "", u => SCon{Chr{c}, RU.w.go(t)})(Unit{})
+
+def RU.w(s: String) -> String:
+  match s:
+    case SNil{}:
+      "0"
+    case SCon{c, t}:
+      RU.w.go(t)
+
+def RU.frees(+h: String, ts: List<&2, String>) -> Doc:
   match ts:
     case Nil{}:
       DNil{}
-    case +h <> t:
-      Doc.list([DStr{"RUF(" ++ h ++ ");\n"}, RU.frees(t)])
+    case +x <> t:
+      Doc.list([DStr{h ++ "(" ++ x ++ ", " ++ RU.w(x) ++ ");\n"}, RU.frees(h, t)])
 
 # Whether a pattern opens a node.
 def Gen.opens(binds: Env()) -> Bool:
@@ -7689,8 +7713,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case Some{CInfo{+tag, ar, +kind, single}}:
               do Gen<Doc>:
                 +ds : List<&2, Doc> <- Gen.rec(fu, GSBitsArgs{g, env, P.which(name, ["U32", "F32"]), args})
-                +tok : String <- Gen.ru.take(Bool.and(Gen.rc(g), U32.is_zero(kind)), U32.inc(Gen.len(ds)))
-                return Gen.ctor.kind.ru(tok, tag, U32.to_nat(kind), ds)
+                +tok : String <- Gen.ru.take(Bool.and(Gen.free(g), U32.is_zero(kind)), U32.inc(Gen.len(ds)))
+                return Gen.ctor.kind.ru(Gen.rc(g), tok, tag, U32.to_nat(kind), ds)
         case GSCtor{+g, +env, +name, args}:
           Gen.rec(fu, GSCtorInfo{g, env, name, G.ctor(g, name), args})
         # A marked argument (see RC.tmp.pass): a temporary node (tb: the
@@ -7728,10 +7752,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               # (no reuse in a loop's next arguments: an accumulator built in
               # the nodes it walks scatters them, as a split's halves)
               do Gen<Doc>:
-                +outer : String <- Gen.ru.get(Gen.rc(g))
-                Gen.ru.set(Gen.rc(g), "")
+                +outer : String <- Gen.ru.get(Gen.free(g))
+                Gen.ru.set(Gen.free(g), "")
                 ds : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, RC.tmp.tail(kept, 0)})
-                Gen.ru.set(Gen.rc(g), outer)
+                Gen.ru.set(Gen.free(g), outer)
                 return Doc.list([DStr{"{ "}, Gen.tail.temps(ds, 0), Gen.tail.assign(cps, 0),
                   DStr{"goto top; }\n"}])
         case GSTailSelf{+g, +env, self, args}:
@@ -7882,10 +7906,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             # reach to what follows it: its cases neither take nor free them)
             case Scrs{cs, decls}:
               do Gen<Doc>:
-                +outer : String <- Gen.ru.get(Gen.rc(g))
-                Gen.ru.set(Gen.rc(g), Bool.pick(String, Gen.is_ret(tgt), outer, ""))
+                +outer : String <- Gen.ru.get(Gen.free(g))
+                Gen.ru.set(Gen.free(g), Bool.pick(String, Gen.is_ret(tgt), outer, ""))
                 body : Doc <- Gen.rec(fu, GSCases{g, env, self, tgt, cs, cases, RC.mx.if(Gen.rc(g), g, env, cases)})
-                Gen.ru.set(Gen.rc(g), Bool.pick(String, Gen.is_ret(tgt), "", outer))
+                Gen.ru.set(Gen.free(g), Bool.pick(String, Gen.is_ret(tgt), "", outer))
                 return Doc.list([decls, body])
         case GSMatch{+g, +env, +self, +tgt, scrs, cases}:
           do Gen<Doc>:
@@ -7916,13 +7940,13 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               +dead = RC.dead.if(Gen.rc(g), g, Env.names(List.append(&2, Bind, vars, env)), body, pre, mb)
               +ts = List.append(&2, RuT, RU.toks(pre, mb, "%top", dead), List.reverse(&2, RuT, RU.toks(pre, mb, "%sub", dead)))
               do Gen<Doc>:
-                outer : String <- Gen.ru.get(Gen.rc(g))
-                Gen.ru.set(Gen.rc(g), String.join(List.append(&2, String, RU.names(ts), RU.list(outer)), " "))
+                outer : String <- Gen.ru.get(Gen.free(g))
+                Gen.ru.set(Gen.free(g), String.join(List.append(&2, String, RU.names(ts), RU.list(outer)), " "))
                 b : Doc <- Gen.rec(fu, GSStmt{g, List.append(&2, Bind, vars, env), self, tgt, body})
-                after : String <- Gen.ru.get(Gen.rc(g))
+                after : String <- Gen.ru.get(Gen.free(g))
                 +left : List<&2, String> <- Gen.pure(List<&2, String>, RU.list(after))
-                Gen.ru.set(Gen.rc(g), String.join(RU.minus(left, RU.names(ts)), " "))
-                return Doc.list([loads, RC.arrs(Gen.rc(g), mb), RU.takes.pick(Gen.rc(g), ts, left,
+                Gen.ru.set(Gen.free(g), String.join(RU.minus(left, RU.names(ts)), " "))
+                return Doc.list([loads, RC.arrs(Gen.rc(g), mb), RU.takes.pick(Gen.rc(g), Gen.free(g), ts, left,
                   Gen.takes.stmts(Gen.takes(mb, "%top", "bend_take")) ++
                   Gen.takes.stmts(List.reverse(&2, String, Gen.takes(mb, "%sub", "bend_take")))),
                   Gen.own(g, List.append(&2, Bind, vars, env), RC.alive(pre, mb, RC.hand(pre, dead)), body), b])
@@ -7952,11 +7976,11 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             +binds : Env() <- Gen.pure(Env(), PatR.binds(Gen.pat(g, p, "a[" ++ U32.show(n) ++ "]",
               PatR{Nil{}, Nil{}})))
             +inner : Env() <- Gen.pure(Env(), Gen.caps.inner(caps, 0))
-            +outer : String <- Gen.ru.get(Gen.rc(g))
-            Gen.ru.set(Gen.rc(g), "")
+            +outer : String <- Gen.ru.get(Gen.free(g))
+            Gen.ru.set(Gen.free(g), "")
             b : Doc <- Gen.rec(fu, GSCaseBody{g, inner, Self.none(), TRet{},
               Bool.pick(Env(), Gen.rc(g), List.append(&2, Bind, binds, inner), binds), body})
-            Gen.ru.set(Gen.rc(g), outer)
+            Gen.ru.set(Gen.free(g), outer)
             Gen.code(Doc.list([DStr{"static V " ++ name ++ "(V *a) {\n"}, b, DStr{"}\n"}]))
             return Doc.list([DStr{"mk_clo(" ++ name ++ ", " ++ U32.show(U32.inc(n)) ++ ", " ++
               U32.show(n) ++ ", "}, Gen.arr(Gen.caps.outer(caps)), DStr{")"}])
@@ -8026,10 +8050,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
                 mode : Maybe<&2, String> <- Gen.memo.find("%seqmode")
-                +outer : String <- Gen.ru.get(Gen.rc(g))
-                Gen.ru.set(Gen.rc(g), "")
+                +outer : String <- Gen.ru.get(Gen.free(g))
+                Gen.ru.set(Gen.free(g), "")
                 pre : Doc <- Gen.rec(fu, GSParPick{Gen.par.mode(mode, sn), g, env, sn, k, vs})
-                Gen.ru.set(Gen.rc(g), outer)
+                Gen.ru.set(Gen.free(g), outer)
                 +qs : List<&2, Core.Pat> <- Gen.pure(List<&2, Core.Pat>, RC.unders(Gen.rc(g), ps))
                 b : Doc <- Gen.rec(fu, GSStmt{g, Gen.par.env(qs, k, 0, env), Self{sn, sm, sc}, tgt, body})
                 return Doc.list([pre, Gen.own(g, Gen.par.env(qs, k, 0, env), Gen.par.env(qs, k, 0, Nil{}), body), b])
@@ -8193,12 +8217,12 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               +conds = PatR.conds(pr)
               +binds = PatR.binds(pr)
               do Gen<Doc>:
-                +outer : String <- Gen.ru.get(Gen.rc(g))
+                +outer : String <- Gen.ru.get(Gen.free(g))
                 b : Doc <- Gen.rec(fu, GSCaseBody{g, env, self, tgt, binds, body})
-                after : String <- Gen.ru.get(Gen.rc(g))
-                Gen.ru.set(Gen.rc(g), outer)
+                after : String <- Gen.ru.get(Gen.free(g))
+                Gen.ru.set(Gen.free(g), outer)
                 Gen.rec(fu, GSCasesNext{g, env, self, tgt, cs, t, List.reverse(&2, String, conds),
-                  Doc.list([RC.arm.pick(Gen.rc(g), g, Env.names(env), mx, Core.ECase{ps, body}), RU.frees(RU.list(after)), b]), mx})
+                  Doc.list([RC.arm.pick(Gen.rc(g), g, Env.names(env), mx, Core.ECase{ps, body}), RU.frees(Bool.pick(String, Gen.rc(g), "RUF", "RUFG"), RU.list(after)), b]), mx})
             case other <> t:
               Gen.rec(fu, GSCases{g, env, self, tgt, cs, t, mx})
 
@@ -8927,6 +8951,8 @@ def Gen.cids.line(+name: String, kind: Nat, +tag: U32) -> String:
       Gen.cids.def(Gen.cid(name), "((1u << 16) | " ++ U32.show(tag) ++ "u)")
     case 2n:
       Gen.cids.def(Gen.cid(name), "((2u << 16) | " ++ U32.show(tag) ++ "u)")
+    case 7n:
+      Gen.cids.def(Gen.cid(name), "((7u << 16) | " ++ U32.show(tag) ++ "u)")
     case other:
       ""
 
@@ -11712,8 +11738,8 @@ def Bor.pats(ps: List<&2, Core.Pat>, ts: List<&2, String>, acc: Env()) -> Env():
 
 def Bor.kind.arr(m: Maybe<&2, CInfo>) -> Bool:
   match m:
-    case Some{CInfo{tag, ar, kind, s}}:
-      U32.is_ge(kind, 5)
+    case Some{CInfo{tag, ar, +kind, s}}:
+      Bool.or(U32.is_eq(kind, 5), U32.is_eq(kind, 6))
     case None{}:
       False{}
 
@@ -12584,7 +12610,13 @@ def Ty.norm(+g: G, +ty: Core.Expr, fuel: Nat) -> Core.Expr:
 def Gen.printer.test(+kind: U32, +tag: U32, single: Bool) -> String:
   Bool.pick(String, single, "if (1)",
     Bool.pick(String, U32.is_eq(kind, 1), "if (v == IMM(" ++ U32.show(tag) ++ "))",
-      "if (!(v & 1) && TAG(v) == " ++ U32.show(tag) ++ ")"))
+      Bool.pick(String, U32.is_eq(kind, 7), "if (IS_LI(v, " ++ U32.show(tag) ++ "))",
+        "if (!(v & 1) && TAG(v) == " ++ U32.show(tag) ++ ")")))
+
+# The path of a constructor's fields, for its printer (a word leaf's one
+# field is its payload).
+def Gen.printer.path(+kind: U32) -> String:
+  Bool.pick(String, U32.is_eq(kind, 2), "v", Bool.pick(String, U32.is_eq(kind, 7), "LI_F(v, ", "FLD(v, "))
 
 # A dependent pair prints as a pair.
 def Ty.alias(+h: String) -> String:
@@ -12721,8 +12753,7 @@ def Gen.printer.rec(n: Nat, +g: G, s: PSel) -> Gen(PSel.ty(s)):
               Gen.pure(Doc, DNil{})
             case Some{CInfo{+tag, ar, +kind, +single}}:
               do Gen<Doc>:
-                fs : Doc <- Gen.printer.rec(fu, g, PSFields{sub, fields,
-                  Bool.pick(String, U32.is_eq(kind, 2), "v", "FLD(v, "), 0})
+                fs : Doc <- Gen.printer.rec(fu, g, PSFields{sub, fields, Gen.printer.path(kind), 0})
                 return Doc.list([DStr{Gen.printer.test(kind, tag, single) ++ " { pr_s(\"" ++ name ++
                   "{\");\n"}, fs, DStr{"pr_s(\"}\"); return; }\n"}])
         case PSCtors{+sub, cs}:
@@ -14772,8 +14803,12 @@ def K.ctor.kind(+tag: U32, kind: Nat, +ds: List<&2, Doc>) -> KM(Doc):
       KM.pure(Doc, DStr{"0"})
     case 4n:
       KM.pure(Doc, Doc.list([DStr{"k_nat_add(c, "}, Doc.list(ds), DStr{", 1)"}]))
-    case 5n+p:
+    case 5n:
       KM.pure(Doc, DStr{"k_arr(c)"})
+    case 6n:
+      KM.pure(Doc, DStr{"k_arr(c)"})
+    case 7n+p:
+      KM.pure(Doc, Doc.list([DStr{"KLI(" ++ U32.show(tag) ++ ", "}, Doc.list(ds), DStr{")"}]))
 
 # A string literal, built cell by cell from its end.
 def K.str.cells(cs: List<&2, U32>) -> Doc:
@@ -14874,8 +14909,13 @@ def K.pat.go(n: Nat, k: KPatSel) -> KPatSel.ty(k):
               Gen.pat.cond("(" ++ path ++ ") == 0", r)
             case 4n:
               K.pat.go(fu, KPFields{g, args, "((" ++ path ++ ") - 1)", 99, Gen.pat.cond("k_nz(c, " ++ path ++ ")", r)})
-            case 5n+p:
+            case 5n:
               K.pat.zeros(Pats.vars(args, Nil{}), Gen.pat.cond("k_arr(c)", r))
+            case 6n:
+              K.pat.zeros(Pats.vars(args, Nil{}), Gen.pat.cond("k_arr(c)", r))
+            case 7n+p:
+              K.pat.go(fu, KPFields{g, args, "KLI_V(" ++ path ++ ")", 99,
+                Gen.pat.tag(single, "KIS_LI(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)})
         case KPCtor{+g, info, name, args, +path, r}:
           match info:
             case None{}:
@@ -15126,8 +15166,12 @@ def KX.ctor.kind(+tag: U32, kind: Nat, ds: List<&2, Doc>) -> KM(Doc):
       KM.pure(Doc, DStr{"0"})
     case 4n:
       KM.pure(Doc, Doc.list([DStr{"k_nat_add(c, "}, Doc.list(ds), DStr{", 1)"}]))
-    case 5n+p:
+    case 5n:
       KM.pure(Doc, DStr{"k_arr(c)"})
+    case 6n:
+      KM.pure(Doc, DStr{"k_arr(c)"})
+    case 7n+p:
+      KM.pure(Doc, Doc.list([DStr{"KLI(" ++ U32.show(tag) ++ ", "}, Doc.list(ds), DStr{")"}]))
 
 def KX.ret(t: KTgt, d: Doc) -> Doc:
   match t:
@@ -21182,9 +21226,54 @@ def Gen.program.m(+g: G) -> Gen(String):
     Gen.all(g, ["main"], Set.new())
     Gen.entry(g, G.body(g, "main"))
 
+# Word leaves (kind 7, w in BEND_OPT): in C, a constructor whose one field
+# is a word (U32, F32, Char or Bool), in a type with other constructors, is
+# no node but the word itself beside its tag, LI(tag, x) (see bendrt.h): it
+# takes no allocation to build and no load to match (a tree's leaves).
+def G.li.field(fs: List<&2, Field>) -> Bool:
+  match fs:
+    case Field{n, t} <> Nil{}:
+      Str.has(["U32", "F32", "Char", "Bool"], Ty.head(t))
+    case other:
+      False{}
+
+def G.li.set(c: CInfo, ok: Bool) -> CInfo:
+  CInfo{+tag, +ar, +kind, +single} = c
+  match ok:
+    case True{}:
+      CInfo{tag, ar, 7, single}
+    case False{}:
+      CInfo{tag, ar, kind, single}
+
+def G.li.ctors(+ty: Bool, cs: List<&2, Ctor>, +m: Map<&2, CInfo>) -> Map<&2, CInfo>:
+  match cs:
+    case Nil{}:
+      m
+    case Ctor{+name, fields} <> t:
+      G.li.ctors(ty, t, Map.set(&2, CInfo, m, name, G.li.set(Pair.snd(Map<&2, CInfo>, CInfo,
+        Map.get(CInfo, CInfo{0, 0, 4, False{}}, m, name)), Bool.and(ty, G.li.field(fields)))))
+
+def G.li.decls(ds: List<&2, Decl>, +m: Map<&2, CInfo>) -> Map<&2, CInfo>:
+  match ds:
+    case Nil{}:
+      m
+    case DType{+name, ps, +cs} <> t:
+      G.li.decls(t, G.li.ctors(Bool.and(Nat.is_ge(List.length(&2, Ctor, cs), 2n),
+        Bool.not(Str.has(["Nat", "Array"], name))), cs, m))
+    case d <> t:
+      G.li.decls(t, m)
+
+def G.li(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
+  match on:
+    case True{}:
+      G{ctors, defs, bodies, dps} = g
+      G{G.li.decls(ds, ctors), defs, bodies, dps}
+    case False{}:
+      g
+
 def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
   +ds = Unb.program(unb, Unb.program(unb, Nest.program(unb, Par.auto(par, Lo.program(opt, Arrw.decls(Pick.decls(ds0)))))))
-  +g = Unb.sret(unb, ds, Dps.build(G.new(ds), ds, free, rc))
+  +g = Unb.sret(unb, ds, Dps.build(G.li(Opt.on(opt, 119), G.new(ds), ds), ds, free, rc))
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
 
@@ -25286,7 +25375,7 @@ def Main.opt(r: Result<&1, &1, U32 & String, String>) -> String:
     case Done{v}:
       v
     case Fail{e}:
-      "i..spuf"
+      "i..spufw"
 
 # C for a program: matches free what they open unless BEND_NO_FREE is set
 # (bendc builds itself so: a compiler's heap is mostly shared, short-lived
