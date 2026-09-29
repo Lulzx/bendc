@@ -371,6 +371,8 @@ static int gpu_setup(const GpuProg *prog) {
   gpu_An = ((KA_SEQ + gpu_qcap) * sizeof(KAU) + 0xffff) & ~(size_t)0xffff;
   gpu_A = mmap(NULL, gpu_An, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
   if (gpu_H == MAP_FAILED || gpu_A == MAP_FAILED) return GPU_OFF;
+  bend_arena_lo = (uintptr_t)gpu_H;
+  bend_arena_n = gpu_Hmax;
   gpu_pin_min = (KW)gpu_env("BEND_GPU_PIN_MB", 32) << 20;
   gpu_lanes = (KW)gpu_env("BEND_GPU_LANES", sim ? 64 : 8192);
   // (the simulator runs every call on the device: it tests that code)
@@ -746,6 +748,8 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     gpu_tout = 0;
     gpu_pin = end;
     *out = H[2];
+    // (Its nodes are shared: see bend_share_arena.)
+    bend_share(*out);
     if (gpu_log == 2) fprintf(stderr, "bend gpu: the result stays in the arena (%llu MB)\n", (unsigned long long)(end * 8 >> 20));
     return 1;
   }

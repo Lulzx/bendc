@@ -513,10 +513,21 @@ __attribute__((noinline)) void bend_share_slow(V v);
 // Numbers, characters and nullary constructors are below 2^32, and the heap
 // above (gc_init); a node already shared says so in its tag word (reading any
 // heap address is safe; writing needs the checks above).
+// A node in the device's arena (a result the CPU reads in place, see
+// gpu_pinnable) is shared: marked so when first reached, from its root
+// (gpu_run) or from a shared node (here), as matches do not test the heap
+// bounds (bend_take_at). Nothing else outside the heap is a node (or is even
+// and above 2^32).
+extern uintptr_t bend_arena_lo;
+extern uintptr_t bend_arena_n;
+__attribute__((noinline)) void bend_share_arena(V v);
 static inline void bend_share(V v) {
   // A word first, on its own branch (the heap bounds are then not loaded).
   if (LIKELY(v < ((V)1 << 32))) return;
-  if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
+  if ((uintptr_t)v - gc_hot.base >= gc_hot.span) {
+    if (UNLIKELY((uintptr_t)v - bend_arena_lo < bend_arena_n)) bend_share_arena(v);
+    return;
+  }
   V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
   if ((w0 & BEND_SH) && w0 < ((V)1 << 22)) return;
   bend_share_slow(v);
@@ -531,15 +542,27 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w);
 // its block a reuse candidate for its class (gc_refill takes it when a 5th of
 // it is free). Nodes of up to 16 words are in small blocks whose slots are
 // exactly their size; larger ones are never freed.
+// The tag word is read with acquire, with threads or not (on arm64 a load
+// as cheap as a plain one, where a test of gc_hot.mt was three instructions
+// on each match). A node a match opens under the collector is in the heap:
+// every node is made by halloc (RC_TMP's nodes on the stack are for counted
+// programs, which call rc_take), a constant is made once and shared, and a
+// node in the device's arena is shared (bend_share_arena).
+// So the heap bounds are not tested, but in a debug build (BEND_IN_HEAP).
+#if defined(BEND_DEBUG_POISON) || defined(BEND_DEBUG_FREE)
+#define BEND_IN_HEAP(v) do { if ((uintptr_t)(v) - gc_hot.base >= gc_hot.span) bend_fail("a match took an unshared node outside the heap"); } while (0)
+#else
+#define BEND_IN_HEAP(v) ((void)0)
+#endif
 static inline void bend_free_slot(V v, unsigned w, unsigned line);
 static inline int bend_take_at(V v, unsigned w, unsigned line) {
-  const GcHot *h = &gc_hot;
-  V w0 = h->mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  V w0 = __atomic_load_n((V *)v, __ATOMIC_ACQUIRE);
   if (w0 & BEND_SH) {
     if (!(w0 & BEND_DEEP)) bend_deep(v, w);
     return 1;
   }
-  if (UNLIKELY((uintptr_t)v - h->base >= h->span || w > 16)) { bend_deep(v, w); return 1; }
+  BEND_IN_HEAP(v);
+  if (UNLIKELY(w > 16)) { bend_deep(v, w); return 1; }
   bend_free_slot(v, w, line);
   return 0;
 }
@@ -1141,13 +1164,13 @@ static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
 // it does an old Array.)
 // RUFG frees a token no constructor took.
 static inline V bend_take_ru(V v, unsigned w) {
-  const GcHot *h = &gc_hot;
-  V w0 = h->mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  V w0 = __atomic_load_n((V *)v, __ATOMIC_ACQUIRE);
   if (w0 & BEND_SH) {
     if (!(w0 & BEND_DEEP)) bend_deep(v, w);
     return 0;
   }
-  if (UNLIKELY((uintptr_t)v - h->base >= h->span || w > 16)) { bend_deep(v, w); return 0; }
+  BEND_IN_HEAP(v);
+  if (UNLIKELY(w > 16)) { bend_deep(v, w); return 0; }
 #ifdef BEND_DEBUG_FREE
   bend_take(v, w);
   return 0;

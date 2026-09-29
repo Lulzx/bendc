@@ -400,11 +400,21 @@ __attribute__((noinline)) void bend_share_slow(V v) {
     __atomic_fetch_or(&p[0], BEND_SH, __ATOMIC_RELAXED);
   }
 }
+uintptr_t bend_arena_lo, bend_arena_n;
+__attribute__((noinline)) void bend_share_arena(V v) {
+  V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  if (!(v & 7) && !(w0 & BEND_SH) && w0 < ((V)1 << 22)) __atomic_fetch_or((V *)v, BEND_SH, __ATOMIC_RELAXED);
+}
 __attribute__((noinline)) void bend_deep(V v, unsigned w) {
   V *p = (V *)v;
   for (unsigned j = 1; j < w; j++) bend_share(p[j]);
   __atomic_fetch_or(&p[0], BEND_SH | BEND_DEEP, __ATOMIC_RELEASE);
 }
+#if defined(BEND_DEBUG_POISON) || defined(BEND_DEBUG_FREE)
+#define BEND_IN_HEAP(v) do { if ((uintptr_t)(v) - gc_hot.base >= gc_hot.span) bend_fail("a match took an unshared node outside the heap"); } while (0)
+#else
+#define BEND_IN_HEAP(v) ((void)0)
+#endif
 #ifdef BEND_DEBUG_FREE
 #define bend_take(v, w) bend_take_at(v, w, __LINE__)
 #else
