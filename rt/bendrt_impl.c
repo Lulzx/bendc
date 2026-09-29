@@ -844,21 +844,6 @@ void rc_let_go_arr(V a) {
     rc_drop(a);
   }
 }
-V arr_alloc(unsigned c) {
-  if (c > 31) bend_fail("an array past the deepest block class 31");
-  Thr *t = thr_self;
-  if (t)
-    for (int i = 0; i < ARR_SPARES; i++) {
-      V a = t->spare[i];
-      if (a && arr_cls(a) == c) {
-        t->spare[i] = 0;
-        return a;
-      }
-    }
-  V *p = halloc(1 + ((size_t)1 << c));
-  p[0] = ARR_HDR(c);
-  return (V)p;
-}
 void arr_dead(V a) {
   Thr *t = thr_self;
   if (t) t->spare[t->nspare++ % ARR_SPARES] = a;
@@ -876,22 +861,6 @@ V arr_copy(unsigned c, const V *src, int share, V ts) {
     if (share) { if (gc_hot.rc) rc_dup_in(x, ts); else bend_share(x); }
     d[i] = x;
   }
-  return a;
-}
-V arr_new(V depth, V v) {
-  if (depth > 31) bend_fail("an array past the deepest block class 31");
-  unsigned c = (unsigned)depth;
-  size_t n = (size_t)1 << c;
-  V a = arr_alloc(c);
-  V *d = arr_cells(a);
-  if (c > 0) {
-    if (gc_hot.rc) rc_dupn(v, n - 1);
-    else bend_share(v);
-  }
-  if (v >= ((V)1 << 32)) arr_dirty(a);
-  // (four cells a step: a whole number of steps from 4 cells up)
-  if (n < 4) for (size_t i = 0; i < n; i++) d[i] = v;
-  else for (size_t i = 0; i < n; i += 4) { d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = v; }
   return a;
 }
 V arr_node(V l, V r) {
