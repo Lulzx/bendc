@@ -520,11 +520,18 @@ void gc_drain(void) {
 #define GC_MKCAP ((size_t)1 << 16)
 GcMk gc_mks[GC_MAXTHR + 1];
 int gc_nmks;                   // helpers with a stack (slot 0: the collector)
+#ifdef __TINYC__
+pthread_mutex_t gc_pool_mx = PTHREAD_MUTEX_INITIALIZER;
+#else
 int gc_pool_lock;
+#endif
 size_t gc_active;              // helpers holding work (under gc_pool_lock)
 _Atomic int gc_marking;        // the pool is open to helpers
 _Atomic unsigned gc_mark_gen;  // bumped when it opens
 _Atomic int gc_helpers, gc_in_help;
+#ifdef __TINYC__
+#else
+#endif
 void gc_share(GcMk *m) {
   size_t h = m->sp / 2;
   gc_pool_acquire();

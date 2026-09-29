@@ -1209,18 +1209,29 @@ static void gc_drain(void) {
 // chunk into its own stack, marks with an atomic or (two helpers may reach
 // one object), and gives half its stack back when the pool runs dry. The
 // marking is over when the pool is empty and no helper holds work, both read
-// under the lock. Only locks of our own: a helper runs in a signal handler.
+// under the lock. Only the collector's own lock: a helper runs in a signal
+// handler, and no thread the collector stopped can hold it.
 #define GC_CHUNK 64
 #define GC_MKCAP ((size_t)1 << 16)
 typedef struct { GcItem *stk; size_t sp; } GcMk;
 static GcMk gc_mks[GC_MAXTHR + 1];
 static int gc_nmks;                   // helpers with a stack (slot 0: the collector)
+#ifdef __TINYC__
+// (tcc's compare-and-swap is not atomic on arm64: two threads can both win.
+// The mutex is taken only by the collector and the threads it stopped.)
+static pthread_mutex_t gc_pool_mx = PTHREAD_MUTEX_INITIALIZER;
+#else
 static int gc_pool_lock;
+#endif
 static size_t gc_active;              // helpers holding work (under gc_pool_lock)
 static _Atomic int gc_marking;        // the pool is open to helpers
 static _Atomic unsigned gc_mark_gen;  // bumped when it opens
 static _Atomic int gc_helpers, gc_in_help;
 
+#ifdef __TINYC__
+static inline void gc_pool_acquire(void) { pthread_mutex_lock(&gc_pool_mx); }
+static inline void gc_pool_release(void) { pthread_mutex_unlock(&gc_pool_mx); }
+#else
 static inline void gc_pool_acquire(void) {
   for (int k = 0;; k++) {
     int z = 0;
@@ -1230,6 +1241,7 @@ static inline void gc_pool_acquire(void) {
 }
 
 static inline void gc_pool_release(void) { __atomic_store_n(&gc_pool_lock, 0, __ATOMIC_RELEASE); }
+#endif
 
 // Half of a helper's stack back to the pool.
 static void gc_share(GcMk *m) {
