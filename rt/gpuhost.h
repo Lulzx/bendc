@@ -36,6 +36,7 @@ typedef struct {
 static pthread_mutex_t gpu_lock = PTHREAD_MUTEX_INITIALIZER;
 static int gpu_mode = -1;
 static int gpu_log;
+static double gpu_secs[2];  // the device's time in the two kernels (BEND_GPU_LOG)
 static KW *gpu_H;          // the arena
 static size_t gpu_Hn;      // its bytes
 static size_t gpu_Hmax;    // the most it grows to (BEND_GPU_MB)
@@ -275,6 +276,10 @@ static int g_dispatch(const KParams *P, GId pso) {
   g_msg(cb, "commit");
   g_msg(cb, "waitUntilCompleted");
   unsigned long st = G_SEND(unsigned long (*)(GId, GSel))(cb, g_sel("status"));
+  if (gpu_log) {
+    double (*tm)(GId, GSel) = G_SEND(double (*)(GId, GSel));
+    gpu_secs[pso != g_pso] += tm(cb, g_sel("GPUEndTime")) - tm(cb, g_sel("GPUStartTime"));
+  }
   if (st != 4) gpu_note("a dispatch failed: %s", g_err_text(g_msg(cb, "error")));
   g_pool_pop(pool);
   return st == 4;
@@ -504,8 +509,9 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, V *out) {
     return 0;
   }
   if (gpu_log) {
-    fprintf(stderr, "bend gpu: done in %llu dispatches, %llu MB of arena\n", (unsigned long long)rounds,
-      (unsigned long long)((KW)gpu_A[KA_HEAP] * K_CHUNK * 8 >> 20));
+    fprintf(stderr, "bend gpu: done in %llu dispatches, %llu MB of arena, %.3fs + %.3fs on the device\n",
+      (unsigned long long)rounds, (unsigned long long)((KW)gpu_A[KA_HEAP] * K_CHUNK * 8 >> 20), gpu_secs[0],
+      gpu_secs[1]);
   }
   gpu_nout = 0;
   int ok = gpu_copy_out(prog, &P, H[2], out);
