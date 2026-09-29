@@ -265,7 +265,7 @@ extern _Atomic size_t gc_since;
 // gc_factor times what lived at the last one if that is more. A minor
 // collection finds what died young; what dies old waits for a major one,
 // which comes when what lives grows past gc_minor_k times what lived after
-// the last major one, plus gc_slack times gc_grow.
+// the last major one, plus gc_slack (times gc_grow_max once gc_big is set).
 // gc_grow starts at 1: a program whose young objects mostly die collects
 // often, in a small heap, and its peak memory stays near what lives. It
 // becomes gc_grow_max for good when two minor collections in a row find
@@ -281,6 +281,7 @@ extern size_t gc_limit_min;
 extern double gc_minor_k;
 extern size_t gc_slack;
 extern unsigned gc_grow;
+extern int gc_big;
 extern double gc_t_end;
 extern double gc_t_run;
 extern double gc_t_stop;
