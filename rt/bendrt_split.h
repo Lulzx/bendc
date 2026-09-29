@@ -196,6 +196,7 @@ struct PDeque;
 
 // Classes of up to 16 words (nodes) reuse the slots matches free.
 #define GC_RQCLS 15
+#define ARR_SPARES 8
 
 typedef struct Thr {
   GcCache cache[2][GC_NCLS];
@@ -210,6 +211,10 @@ typedef struct Thr {
   // Claiming a reuse block (gc_refill): a stop signal that comes meanwhile
   // is deferred (deferred is set) until the claim is over.
   volatile sig_atomic_t claiming, deferred;
+  // Arrays the program is done with (arr_dead), for the next Array.new of
+  // their class; a collection forgets them (arr_hook).
+  V spare[ARR_SPARES];
+  uint32_t nspare;
 } Thr;
 
 void gc_park(Thr *t);
@@ -967,7 +972,7 @@ static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
 // one. A shared array's cells are shared as they are copied.
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))
-static inline unsigned arr_cls(V a) { return (unsigned)(((V *)a)[0] & 31); }
+static inline unsigned arr_cls(V a) { return (unsigned)(((const uint32_t *)a)[0] & 31); }
 static inline V *arr_cells(V a) { return (V *)a + 1; }
 static inline int arr_shared(V a) {
   V w0 = __atomic_load_n((V *)a, __ATOMIC_RELAXED);
@@ -994,6 +999,27 @@ static inline void arr_put(V a, V *p, V v) {
 void rc_let_go_arr(V a);
 
 V arr_alloc(unsigned c);
+
+// Traced, an unshared array no path of the program uses any more (see
+// bend_dead) is one of the thread's spares (the oldest goes when all
+// ARR_SPARES are taken), which arr_alloc hands out again (its header is
+// ARR_HDR(c): not shared). The spares are no roots: a
+// collection forgets them before it traces (a thread stopped between
+// taking one and clearing its slot holds it in a register, which the stack
+// scan sees).
+void arr_dead(V a);
+
+void arr_hook(void);
+
+// The program is done with v (traced: a variable that no path of its scope
+// uses, or that a case does not use and another case of its match does). An
+// unshared array goes to arr_dead; anything else is the collector's.
+static inline void bend_dead(V v) {
+  if (LIKELY(v < ((V)1 << 32))) return;
+  if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
+  V w0 = gc_hot.mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  if ((w0 | 31) == (ARR_TAG | 31)) arr_dead(v);
+}
 
 // 2^c cells from src (a shared source's are shared) into a new array.
 // (ts: the source is marked, see RC_TS)
