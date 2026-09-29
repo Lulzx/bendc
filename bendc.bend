@@ -5795,6 +5795,20 @@ def Gen.takes(binds: Env(), +kind: String, +fn: String) -> List<&2, String>:
       Gen.takes.if(Str.eq(Gen.take.kind(x), kind), fn ++ "(" ++ c ++ ", " ++ Gen.take.words(x) ++ ")",
         Gen.takes(t, kind, fn))
 
+def Gen.is_take(x: String) -> Bool:
+  match x:
+    case SCon{Chr{c}, t}:
+      U32.is_eq(c, 37)
+    case SNil{}:
+      False{}
+
+def Gen.vars.if(skip: Bool, b: Bind, rest: Env()) -> Env():
+  match skip:
+    case True{}:
+      rest
+    case False{}:
+      b <> rest
+
 # Reuse (counted programs): a node a case opens, when it had one reference,
 # is not freed but kept as a token, its slot (rc_take_ru), for a constructor
 # of its size built after it (CR2 and the like). The tokens in reach are the
@@ -5802,7 +5816,7 @@ def Gen.takes(binds: Env(), +kind: String, +fn: String) -> List<&2, String>:
 # code straight after its case: a nested match's cases each use or free
 # (RUF) the tokens they get, and closures and parallel lets get none.
 type RuT is Data:
-  RuT{tok: String, c: String, w: String}
+  RuT{tok: String, c: String, w: String, k: String}
 
 def RU.head(memo: List<&2, Bind>) -> String:
   match memo:
@@ -5907,21 +5921,101 @@ def RU.toks.if(keep: Bool, r: RuT, rest: List<&2, RuT>) -> List<&2, RuT>:
     case False{}:
       rest
 
-# The tokens of the nodes a pattern opens (kind "%top" or "%sub").
-def RU.toks(binds: Env(), +kind: String) -> List<&2, RuT>:
-  match binds:
+# Unused fields (counted): a case that leaves fields of a node it opens
+# unused takes the node with them (rc_take_d: dropped with it when it had one
+# reference, not given one when it was shared) instead of dropping each
+# after it gave them one. dead: the paths (FLD(node, i)) of the pattern's
+# variables the body does not use.
+def RC.fld(+q: String, +i: U32) -> String:
+  "FLD(" ++ q ++ ", " ++ U32.show(i) ++ ")"
+
+def RC.dead.one(hit: Bool, +path: String, rest: List<&2, String>) -> List<&2, String>:
+  match hit:
+    case True{}:
+      path <> rest
+    case False{}:
+      rest
+
+def RC.dead(+g: G, +loc: List<&2, String>, +body: Core.Expr, pre: Env(), post: Env()) -> List<&2, String>:
+  match pre post:
+    case Bind{+x, +path} <> pt Bind{y, +c} <> qt:
+      RC.dead.one(Bool.and(Bool.and(Bool.not(Gen.is_take(x)), String.starts_with(path, "FLD(")),
+        Bool.and(Bool.not(RC.bor(c)), U32.is_zero(RC.uses(g, loc, False{}, x, body)))), path,
+        RC.dead(g, loc, body, pt, qt))
+    case pl ql:
+      Nil{}
+
+def RC.dead.if(rc: Bool, +g: G, +loc: List<&2, String>, +body: Core.Expr, +pre: Env(), +post: Env()) -> List<&2, String>:
+  match rc:
+    case True{}:
+      RC.dead(g, loc, body, pre, post)
+    case False{}:
+      Nil{}
+
+# The unused fields of node q among its first n: "|1u<<i" each.
+def RC.dbits(+q: String, +dead: List<&2, String>, n: Nat, +i: U32) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+m:
+      Bool.pick(String, Str.has(dead, RC.fld(q, i)), "|1ull<<" ++ U32.show(i), "") ++ RC.dbits(q, dead, m, U32.inc(i))
+
+# The unused fields of the nodes a pattern opens (which their takes drop).
+def RC.hand.node(+q: String, +dead: List<&2, String>, n: Nat, +i: U32, acc: List<&2, String>) -> List<&2, String>:
+  match n:
+    case 0n:
+      acc
+    case 1n+m:
+      RC.hand.node(q, dead, m, U32.inc(i), RC.dead.one(Str.has(dead, RC.fld(q, i)), RC.fld(q, i), acc))
+
+def RC.hand.one(hit: Bool, +q: String, +dead: List<&2, String>, acc: List<&2, String>) -> List<&2, String>:
+  match hit:
+    case True{}:
+      RC.hand.node(q, dead, 32n, 0, acc)
+    case False{}:
+      acc
+
+def RC.hand.all(pre: Env(), +dead: List<&2, String>) -> List<&2, String>:
+  match pre:
     case Nil{}:
       Nil{}
-    case Bind{+x, +c} <> t:
-      RU.toks.if(Str.eq(Gen.take.kind(x), kind), RuT{"u" ++ Gen.take.words(x) ++ "_" ++ c, c, Gen.take.words(x)},
-        RU.toks(t, kind))
+    case Bind{+x, +path} <> t:
+      RC.hand.one(Gen.is_take(x), path, dead, RC.hand.all(t, dead))
+
+def RC.hand(+pre: Env(), +dead: List<&2, String>) -> List<&2, String>:
+  Bool.pick(Unit -> List<&2, String>, List.is_empty(&2, String, dead), u => Nil{}, u => RC.hand.all(pre, dead))(Unit{})
+
+# The pattern's variables but the fields the takes drop (for Gen.own).
+def RC.alive(pre: Env(), post: Env(), +hand: List<&2, String>) -> Env():
+  match pre post:
+    case Bind{+x, +path} <> pt Bind{+y, +c} <> qt:
+      Gen.vars.if(Bool.or(Gen.is_take(x), Str.has(hand, path)), Bind{y, c}, RC.alive(pt, qt, hand))
+    case pl ql:
+      Nil{}
+
+# The tokens of the nodes a pattern opens (kind "%top" or "%sub"; pre: the
+# paths the bindings were loaded from).
+def RU.toks(pre: Env(), binds: Env(), +kind: String, +dead: List<&2, String>) -> List<&2, RuT>:
+  match pre binds:
+    case Bind{px, +path} <> pt Bind{+x, +c} <> t:
+      RU.toks.if(Str.eq(Gen.take.kind(x), kind), RuT{"u" ++ Gen.take.words(x) ++ "_" ++ c, c, Gen.take.words(x),
+        Bool.pick(Unit -> String, List.is_empty(&2, String, dead), u => "", u => RC.dbits(path, dead, 32n, 0))(Unit{})},
+        RU.toks(pt, t, kind, dead))
+    case pl bl:
+      Nil{}
 
 def RU.names(ts: List<&2, RuT>) -> List<&2, String>:
   match ts:
     case Nil{}:
       Nil{}
-    case RuT{tok, c, w} <> t:
+    case RuT{tok, c, w, k} <> t:
       tok <> RU.names(t)
+
+def RU.take(+tok: String, +c: String, +w: String, +k: String, keep: Bool) -> String:
+  +d = Bool.pick(String, String.is_empty(k), "", "_d")
+  +m = Bool.pick(String, String.is_empty(k), "", ", ~(0" ++ k ++ ")")
+  Bool.pick(String, keep, "rc_take" ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n",
+    "V " ++ tok ++ " = rc_take_ru" ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n")
 
 # The takes of a case's nodes: a token used after them is kept (left: the
 # tokens not used).
@@ -5929,9 +6023,8 @@ def RU.takes(ts: List<&2, RuT>, +left: List<&2, String>) -> Doc:
   match ts:
     case Nil{}:
       DNil{}
-    case RuT{+tok, +c, +w} <> t:
-      Doc.list([DStr{Bool.pick(String, Str.has(left, tok), "rc_take(" ++ c ++ ", " ++ w ++ ");\n",
-        "V " ++ tok ++ " = rc_take_ru(" ++ c ++ ", " ++ w ++ ");\n")}, RU.takes(t, left)])
+    case RuT{+tok, +c, +w, +k} <> t:
+      Doc.list([DStr{RU.take(tok, c, w, k, Str.has(left, tok))}, RU.takes(t, left)])
 
 def RU.takes.pick(rc: Bool, ts: List<&2, RuT>, +left: List<&2, String>, old: String) -> Doc:
   match rc:
@@ -5946,20 +6039,6 @@ def RU.frees(ts: List<&2, String>) -> Doc:
       DNil{}
     case +h <> t:
       Doc.list([DStr{"RUF(" ++ h ++ ");\n"}, RU.frees(t)])
-
-def Gen.is_take(x: String) -> Bool:
-  match x:
-    case SCon{Chr{c}, t}:
-      U32.is_eq(c, 37)
-    case SNil{}:
-      False{}
-
-def Gen.vars.if(skip: Bool, b: Bind, rest: Env()) -> Env():
-  match skip:
-    case True{}:
-      rest
-    case False{}:
-      b <> rest
 
 # Whether a pattern opens a node.
 def Gen.opens(binds: Env()) -> Bool:
@@ -6689,7 +6768,7 @@ type GSel is Data:
   GSMatchGo{g: G, env: Env(), self: Self, tgt: Tgt, cases: List<&2, Core.Expr>, r: Scrs}
   GSMatch{g: G, env: Env(), self: Self, tgt: Tgt, scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>}
   GSStmt{g: G, env: Env(), self: Self, tgt: Tgt, e: Core.Expr}
-  GSCaseBodyMat{g: G, env: Env(), self: Self, tgt: Tgt, body: Core.Expr, r: Loads}
+  GSCaseBodyMat{g: G, env: Env(), self: Self, tgt: Tgt, body: Core.Expr, pre: Env(), r: Loads}
   GSCaseBodyGo{opens: Bool, g: G, env: Env(), self: Self, tgt: Tgt, binds: Env(), body: Core.Expr}
   GSCaseBody{g: G, env: Env(), self: Self, tgt: Tgt, binds: Env(), body: Core.Expr}
   GSLam{g: G, env: Env(), p: Core.Pat, body: Core.Expr}
@@ -6839,7 +6918,7 @@ def GSel.none(k: GSel) -> GSel.ty(k):
       DNil{}
     case GSStmt{g, env, self, tgt, e}:
       DNil{}
-    case GSCaseBodyMat{g, env, self, tgt, body, r}:
+    case GSCaseBodyMat{g, env, self, tgt, body, pre, r}:
       DNil{}
     case GSCaseBodyGo{opens, g, env, self, tgt, binds, body}:
       DNil{}
@@ -7308,11 +7387,12 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
         # The fields and the opened nodes are read, then the nodes taken, each
         # before the nodes inside it: a shared one shares its fields, so the
         # nodes inside it are shared when they are taken, and share theirs.
-        case GSCaseBodyMat{+g, +env, +self, +tgt, +body, r}:
+        case GSCaseBodyMat{+g, +env, +self, +tgt, +body, +pre, r}:
           match r:
             case Loads{+mb, loads}:
               +vars = Gen.vars(mb)
-              +ts = List.append(&2, RuT, RU.toks(mb, "%top"), List.reverse(&2, RuT, RU.toks(mb, "%sub")))
+              +dead = RC.dead.if(Gen.rc(g), g, Env.names(List.append(&2, Bind, vars, env)), body, pre, mb)
+              +ts = List.append(&2, RuT, RU.toks(pre, mb, "%top", dead), List.reverse(&2, RuT, RU.toks(pre, mb, "%sub", dead)))
               do Gen<Doc>:
                 outer : String <- Gen.ru.get(Gen.rc(g))
                 Gen.ru.set(Gen.rc(g), String.join(List.append(&2, String, RU.names(ts), RU.list(outer)), " "))
@@ -7322,7 +7402,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 Gen.ru.set(Gen.rc(g), String.join(RU.minus(left, RU.names(ts)), " "))
                 return Doc.list([loads, RC.arrs(Gen.rc(g), mb), RU.takes.pick(Gen.rc(g), ts, left,
                   Gen.takes.stmts(Gen.takes(mb, "%top", "bend_take")) ++
-                  Gen.takes.stmts(List.reverse(&2, String, Gen.takes(mb, "%sub", "bend_take")))), Gen.own(g, List.append(&2, Bind, vars, env), vars, body), b])
+                  Gen.takes.stmts(List.reverse(&2, String, Gen.takes(mb, "%sub", "bend_take")))),
+                  Gen.own(g, List.append(&2, Bind, vars, env), RC.alive(pre, mb, RC.hand(pre, dead)), body), b])
         case GSCaseBodyGo{opens, +g, +env, +self, +tgt, +binds, +body}:
           match opens:
             case False{}:
@@ -7332,7 +7413,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case True{}:
               do Gen<Doc>:
                 r : Env() & Doc <- Gen.mat(binds)
-                Gen.rec(fu, GSCaseBodyMat{g, env, self, tgt, body, Loads.of(r)})
+                Gen.rec(fu, GSCaseBodyMat{g, env, self, tgt, body, binds, Loads.of(r)})
         # A body after a pattern's bindings: the nodes the pattern opens are
         # freed (see above).
         case GSCaseBody{+g, +env, +self, +tgt, binds0, +body}:

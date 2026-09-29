@@ -734,6 +734,34 @@ static inline V rc_take_ru(V v, unsigned w) {
   return 0;
 }
 
+// As rc_take and rc_take_ru, for a case that uses only the fields in keep
+// (bit i for FLD i): the others are dropped with a node that had one
+// reference, and get none from a shared one (see RC.dead in bendc.bend).
+static inline int rc_kept(V keep, unsigned j) { return j > 64 || ((keep >> (j - 1)) & 1); }
+__attribute__((noinline)) void rc_take_shared_d(V v, unsigned w, V keep);
+static inline void rc_drop_unkept(V v, unsigned w, V keep) {
+  for (unsigned j = 1; j < w; j++)
+    if (!rc_kept(keep, j)) rc_drop(((V *)v)[j]);
+}
+static inline void rc_take_d(V v, unsigned w, V keep) {
+  if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) { rc_drop_unkept(v, w, keep); return; }
+  if (LIKELY(rc_unique(v))) { rc_drop_unkept(v, w, keep); rc_free_at(v, w); }
+  else rc_take_shared_d(v, w, keep);
+}
+static inline V rc_take_ru_d(V v, unsigned w, V keep) {
+  if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) { rc_drop_unkept(v, w, keep); return 0; }
+  if (LIKELY(rc_unique(v))) {
+    rc_drop_unkept(v, w, keep);
+#ifdef BEND_DEBUG_FREE
+    rc_free_at(v, w);
+    return 0;
+#endif
+    return v;
+  }
+  rc_take_shared_d(v, w, keep);
+  return 0;
+}
+
 // The fields of object v, w words, were copied out (a closure applied): as
 // rc_take, for any object.
 static inline void rc_let_go(V v, unsigned w) {

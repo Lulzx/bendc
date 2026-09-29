@@ -444,6 +444,13 @@ __attribute__((noinline)) void rc_take_shared(V v, unsigned w) {
   for (unsigned j = 1; j < w; j++) rc_dup_in(p[j], ts);
   if (rc_release(v)) rc_free_obj(v);
 }
+__attribute__((noinline)) void rc_take_shared_d(V v, unsigned w, V keep) {
+  V *p = (V *)v;
+  V ts = __atomic_load_n(p, __ATOMIC_RELAXED) & RC_TS;
+  for (unsigned j = 1; j < w; j++)
+    if (rc_kept(keep, j)) rc_dup_in(p[j], ts);
+  if (rc_release(v)) rc_free_obj(v);
+}
 #define RU(tok, w) ((tok) ? (V *)(tok) : halloc(w))
 void rc_immortal(V v) {
   while (rc_obj(v) && !(*(V *)v & RC_STICKY)) {
