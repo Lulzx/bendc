@@ -6,6 +6,16 @@
 #define _GNU_SOURCE
 #endif
 #define _DARWIN_UNLIMITED_SELECT  // select past FD_SETSIZE (io_wait)
+#ifdef __TINYC__
+#undef __atomic_store_n
+#define __atomic_store_n(ptr, val, order) __atomic_store((ptr), &(__typeof__(*(ptr))){val}, (order))
+#ifdef __aarch64__
+#undef __atomic_compare_exchange_n
+#define __atomic_compare_exchange_n(ptr, expected, desired, weak, success, failure) ({ __typeof__(*(ptr)) bend_cas_v = (desired); __atomic_compare_exchange((ptr), (expected), &bend_cas_v, 1, (success), (failure)); })
+#undef atomic_compare_exchange_strong_explicit
+#define atomic_compare_exchange_strong_explicit(object, expected, desired, success, failure) ({ __typeof__(object) bend_cas_p = (object); __typeof__(*bend_cas_p) bend_cas_v = (desired); __atomic_compare_exchange(bend_cas_p, (expected), &bend_cas_v, 1, (success), (failure)); })
+#endif
+#endif
 #define IMM(t) ((((V)(t)) << 3) | 1)
 #define LI_HI 0xFFFF000000000000ull
 #define LI(t, x) (LI_HI | ((V)(uint32_t)(x) << 16) | ((V)(t) << 3) | 3)

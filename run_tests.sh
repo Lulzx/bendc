@@ -35,6 +35,19 @@ for src in tests/*.bend; do
     echo "FAIL $name (output)"; diff "$out.txt" "tests/$name.out" | head -10 | sed 's/^/  /'; fail=$((fail+1))
   fi
 done
+# C checks of the runtime (tests/rt/*.c, built whole with $CC): each
+# prints "ok".
+mkdir -p build/tests/rt
+for src in tests/rt/*.c; do
+  name=rt/$(basename "$src" .c)
+  out=build/tests/$name
+  if ${CC:-clang} -O2 -w -I rt "$src" -o "$out" -lm -lpthread $LDL 2> "$out.err" &&
+     [ "$("./$out" 2>&1)" = ok ]; then
+    echo "ok   $name"; pass=$((pass+1))
+  else
+    echo "FAIL $name"; { cat "$out.err"; "./$out" 2>&1; } | head -5 | sed 's/^/  /'; fail=$((fail+1))
+  fi
+done
 # The same programs compiled with BEND_RC=1 (reference counts, no tracing),
 # with the settings of tests/NAME.env. BEND_TEST_RC=0 skips them.
 if [ "${BEND_TEST_RC:-1}" != 0 ]; then
