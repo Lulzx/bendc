@@ -9111,14 +9111,6 @@ def Arrw.scalar(t: Core.Expr) -> Bool:
     case other:
       False{}
 
-def Arrw.hit(+n: String, as: List<&2, Core.Expr>) -> Bool:
-  match as:
-    case t <> r:
-      Bool.pick(Bool, Str.eq(n, "Array.new"), Bool.or(Arrw.scalar(t), Arrw.lit(r)),
-        Bool.and(Str.has(["Array.get", "Array.set", "Array.swap"], n), Arrw.scalar(t)))
-    case Nil{}:
-      False{}
-
 # (the value of Array.new's d, v: annotated with a scalar type)
 def Arrw.lit(as: List<&2, Core.Expr>) -> Bool:
   match as:
@@ -9132,6 +9124,14 @@ def Arrw.lit(as: List<&2, Core.Expr>) -> Bool:
               False{}
         case Nil{}:
           False{}
+    case Nil{}:
+      False{}
+
+def Arrw.hit(+n: String, as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case +t <> r:
+      Bool.pick(Bool, Str.eq(n, "Array.new"), Bool.or(Arrw.scalar(t), Arrw.lit(r)),
+        Bool.and(Str.has(["Array.get", "Array.set", "Array.swap"], n), Arrw.scalar(t)))
     case Nil{}:
       False{}
 
