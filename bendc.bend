@@ -5157,9 +5157,252 @@ def Expr.is_var(e: Core.Expr, +x: String) -> Bool:
     case other:
       False{}
 
+# Temporary nodes
+# ---------------
+#
+# A constructor passed where the callee borrows, whose fields are
+# variables and numbers, is only read by the callee: when its variables are
+# borrowed too (a borrowed parameter, or what a match reads out of one), it
+# is built on the caller's stack (RC_TMP), without references, and a loop's
+# next argument in one of two buffers per parameter (RC_TB; its fields must
+# be read out of nodes, which never point into those buffers). This is the
+# walk that rebuilds the node it opens with one field less, Opt.sz(CCall{f,
+# t2}): the node it walks stays borrowed. RC.tmp.pass marks such arguments
+# (%tmp) where the value cannot outlive the call: not in a lambda or a
+# parallel let's values, and only in a full call. A marked argument whose
+# variables are not all borrowed is built on the heap, each borrowed
+# variable in it getting a reference there (RC.kept does not count them).
+
+def RC.tmp.imm(m: Maybe<&2, CInfo>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{CInfo{tag, ar, +kind, single}}:
+      Bool.not(U32.is_zero(kind))
+
+# A field of a temporary: a variable, a number or a nullary constructor.
+def RC.tmp.field(+g: G, e: Core.Expr) -> Bool:
+  match e:
+    case Core.ECtor{+n, as}:
+      match as:
+        case Nil{}:
+          RC.tmp.imm(G.ctor(g, n))
+        case a <> t:
+          False{}
+    case Core.EVar{x}:
+      True{}
+    case Core.ENum{n}:
+      True{}
+    case Core.ENat{n}:
+      True{}
+    case Core.EFlt{f}:
+      True{}
+    case other:
+      False{}
+
+def RC.tmp.fields(+g: G, as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case Nil{}:
+      True{}
+    case a <> t:
+      Bool.and(RC.tmp.field(g, a), RC.tmp.fields(g, t))
+
+def RC.tmp.node(m: Maybe<&2, CInfo>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{CInfo{tag, ar, +kind, single}}:
+      U32.is_zero(kind)
+
+def RC.tmp.size(+k: Nat) -> Bool:
+  Bool.and(Nat.is_ge(k, 1n), Nat.is_le(k, 8n))
+
+# A constructor that can be a temporary node.
+def RC.tmp.syn(+g: G, e: Core.Expr) -> Bool:
+  match e:
+    case Core.ECtor{+n, +as}:
+      Bool.and(Bool.and(RC.tmp.size(List.length(&2, Core.Expr, as)), RC.tmp.fields(g, as)), RC.tmp.node(G.ctor(g, n)))
+    case other:
+      False{}
+
+def RC.tmp.is(e: Core.Expr) -> Bool:
+  match e:
+    case Core.ECtor{+n, as}:
+      String.starts_with(n, "%tmp")
+    case other:
+      False{}
+
+# A field of a temporary, by its C name (tail: a loop's, read out of a node).
+def RC.tmp.c(tail: Bool, m: Maybe<&2, String>) -> Bool:
+  match m:
+    case Some{+c}:
+      Bool.or(Bool.or(Str.eq(c, "0"), Gen.scalar.c(c)),
+        Bool.and(RC.bor(c), Bool.or(Bool.not(tail), String.starts_with(c, "FLD("))))
+    case None{}:
+      False{}
+
+def RC.tmp.env(+env: Env(), +tail: Bool, as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case Nil{}:
+      True{}
+    case Core.EVar{+x} <> t:
+      Bool.and(RC.tmp.c(tail, Env.find(env, x)), RC.tmp.env(env, tail, t))
+    case a <> t:
+      RC.tmp.env(env, tail, t)
+
+# The inner constructor's fields are all borrowed (a marked argument).
+def RC.tmp.ok(+env: Env(), tail: Bool, as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case Core.ECtor{n, bs} <> Nil{}:
+      RC.tmp.env(env, tail, bs)
+    case other:
+      False{}
+
+# The references a marked argument built on the heap takes.
+def RC.tmp.dup(m: Maybe<&2, String>) -> String:
+  match m:
+    case Some{+c}:
+      Bool.pick(String, RC.bor(c), "rc_bdup(" ++ c ++ "); ", "")
+    case None{}:
+      ""
+
+def RC.tmp.dups(+env: Env(), as: List<&2, Core.Expr>) -> String:
+  match as:
+    case Nil{}:
+      ""
+    case Core.EVar{+x} <> t:
+      RC.tmp.dup(Env.find(env, x)) ++ RC.tmp.dups(env, t)
+    case a <> t:
+      RC.tmp.dups(env, t)
+
+def RC.tmp.mark1(hit: Bool, a: Core.Expr) -> Core.Expr:
+  match hit:
+    case True{}:
+      Core.ECtor{"%tmp", [a]}
+    case False{}:
+      a
+
+# A full call's arguments, marked where the def borrows (fl, by parameter).
+def RC.tmp.mark(+g: G, mask: List<&2, Bool>, +fl: List<&2, Bool>, args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match mask args:
+    case Nil{} xs:
+      xs
+    case m <> mt Nil{}:
+      Nil{}
+    case True{} <> mt +a <> at:
+      RC.tmp.mark1(Bool.and(Bor.head(fl), RC.tmp.syn(g, a)), a) <> RC.tmp.mark(g, mt, Bor.tail(fl), at)
+    case False{} <> mt a <> at:
+      a <> RC.tmp.mark(g, mt, Bor.tail(fl), at)
+
+def RC.tmp.args(e: Core.Expr) -> List<&2, Core.Expr>:
+  match e:
+    case Core.ECtor{n, as}:
+      as
+    case other:
+      Nil{}
+
+def RC.tmp.call.pick(hit: Bool, +g: G, +h: String, args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match hit:
+    case True{}:
+      RC.tmp.mark(g, DInfo.mask(G.def(g, h)), Bor.list(Bor.flags(g, h)), args)
+    case False{}:
+      args
+
+def RC.tmp.call(+g: G, +loc: List<&2, String>, f: Core.Expr, +args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match f:
+    case Core.EVar{+h}:
+      RC.tmp.call.pick(Bool.and(Bool.and(Bool.not(Str.has(loc, h)), Bor.any(Bor.list(Bor.flags(g, h)))),
+        Nat.is_eq(List.length(&2, Bool, DInfo.mask(G.def(g, h))), List.length(&2, Core.Expr, args))), g, h, args)
+    case other:
+      args
+
+def RC.tmp.par(p: Core.Pat) -> Bool:
+  match p:
+    case Core.PCtor{+n, as}:
+      Str.eq(n, "%par")
+    case other:
+      False{}
+
+# e with its temporaries marked (loc: the local names).
+def RC.tmp.pass(n: Nat, +g: G, +loc: List<&2, String>, e: Core.Expr) -> Core.Expr:
+  match n:
+    case 0n:
+      e
+    case 1n+ +m:
+      match e:
+        case Core.ECall{+f, args}:
+          Core.ECall{f, RC.tmp.args(RC.tmp.pass(m, g, loc, Core.ECtor{"", RC.tmp.call(g, loc, f, args)}))}
+        case Core.ECtor{+c, args}:
+          match args:
+            case Nil{}:
+              Core.ECtor{c, Nil{}}
+            case a <> t:
+              Core.ECtor{c, RC.tmp.pass(m, g, loc, a) <> RC.tmp.args(RC.tmp.pass(m, g, loc, Core.ECtor{c, t}))}
+        case Core.ELet{+p, +v, b}:
+          Core.ELet{p, Bool.pick(Core.Expr, RC.tmp.par(p), v, RC.tmp.pass(m, g, loc, v)),
+            RC.tmp.pass(m, g, Pat.vars(p, loc), b)}
+        case Core.EMatch{scrs, cases}:
+          Core.EMatch{RC.tmp.args(RC.tmp.pass(m, g, loc, Core.ECtor{"", scrs})),
+            RC.tmp.args(RC.tmp.pass(m, g, loc, Core.ECtor{"", cases}))}
+        case Core.ECase{+ps, b}:
+          Core.ECase{ps, RC.tmp.pass(m, g, Pats.vars(ps, loc), b)}
+        case Core.ESucc{k, x}:
+          Core.ESucc{k, RC.tmp.pass(m, g, loc, x)}
+        case Core.EOp{op, a, b}:
+          Core.EOp{op, RC.tmp.pass(m, g, loc, a), RC.tmp.pass(m, g, loc, b)}
+        case Core.EAnn{x, t}:
+          Core.EAnn{RC.tmp.pass(m, g, loc, x), t}
+        case other:
+          other
+
+# A def's body, its temporaries marked when it counts references.
+def RC.tmp.body(rc: Bool, +g: G, +loc: List<&2, String>, e: Core.Expr) -> Core.Expr:
+  match rc:
+    case True{}:
+      RC.tmp.pass(Fuel.max(), g, loc, e)
+    case False{}:
+      e
+
+# The buffers of a loop's temporaries, one pair for each parameter it
+# borrows (fl), and which of the two is the last one written.
+def RC.tmp.decl(fl: List<&2, Bool>, +i: U32) -> String:
+  match fl:
+    case Nil{}:
+      ""
+    case b <> t:
+      Bool.pick(String, b, "V tb" ++ U32.show(i) ++ "[2][9]; unsigned tbi" ++ U32.show(i) ++ " = 0; ", "") ++
+        RC.tmp.decl(t, U32.inc(i))
+
+def RC.tmp.tag(m: Maybe<&2, CInfo>) -> U32:
+  match m:
+    case None{}:
+      0
+    case Some{CInfo{tag, ar, kind, single}}:
+      tag
+
+def RC.tmp.doc(+tb: String, +tag: U32, ds: List<&2, Doc>) -> Doc:
+  Doc.list([DStr{Bool.pick(String, String.is_empty(tb), "RC_TMP(", "RC_TB(tb" ++ tb ++ ", tbi" ++ tb ++ ", ") ++
+    U32.show(tag) ++ ", "}, Gen.commas(ds), DStr{")"}])
+
+def RC.tmp.tail1(a: Core.Expr, +i: U32) -> Core.Expr:
+  match a:
+    case Core.ECtor{+n, as}:
+      Core.ECtor{Bool.pick(String, Str.eq(n, "%tmp"), "%tmp" ++ U32.show(i), n), as}
+    case other:
+      other
+
+# A loop's next arguments, a marked one tagged with its parameter.
+def RC.tmp.tail(as: List<&2, Core.Expr>, +i: U32) -> List<&2, Core.Expr>:
+  match as:
+    case Nil{}:
+      Nil{}
+    case a <> t:
+      RC.tmp.tail1(a, i) <> RC.tmp.tail(t, U32.inc(i))
+
 # The arguments of a call to a def that are evaluated: those its mask keeps
 # (and any past it), but for a borrowed x (b), itself where the def borrows
-# it (fl: the def's flags).
+# it (fl: the def's flags), and any temporary (whose variables are borrowed,
+# or get their reference where it is built).
 def RC.kept(mask: List<&2, Bool>, +fl: List<&2, Bool>, +x: String, args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
   match mask args:
     case Nil{} xs:
@@ -5167,7 +5410,7 @@ def RC.kept(mask: List<&2, Bool>, +fl: List<&2, Bool>, +x: String, args: List<&2
     case m <> mt Nil{}:
       Nil{}
     case True{} <> mt +a <> at:
-      RC.kept.one(Bool.and(Bor.head(fl), Expr.is_var(a, x)), a, RC.kept(mt, Bor.tail(fl), x, at))
+      RC.kept.one(Bool.and(Bor.head(fl), Bool.or(Expr.is_var(a, x), RC.tmp.is(a))), a, RC.kept(mt, Bor.tail(fl), x, at))
     case False{} <> mt a <> at:
       RC.kept(mt, Bor.tail(fl), x, at)
 
@@ -5209,6 +5452,8 @@ def RC.owned.arg(+env: Env(), e: Core.Expr) -> Bool:
       False{}
     case Core.ETy{n, a}:
       False{}
+    case Core.ECtor{+n, as}:
+      Bool.not(Bool.and(String.starts_with(n, "%tmp"), RC.tmp.ok(env, False{}, as)))
     case other:
       True{}
 
@@ -5232,7 +5477,7 @@ def RC.wrap.go(kept: List<&2, Core.Expr>, ks: List<&2, Doc>, +fl: List<&2, Bool>
     case al dl:
       r
 
-def RC.wrap.call(+k: U32, call: Doc, any: Bool, pre: Doc, post: Doc) -> Doc:
+def RC.wrap.call(+k: U32, +call: Doc, any: Bool, +pre: Doc, +post: Doc) -> Doc:
   Bool.pick(Doc, any, Doc.list([DStr{"({ "}, pre, DStr{"V r" ++ U32.show(k) ++ " = "}, call, DStr{"; "}, post,
     DStr{"r" ++ U32.show(k) ++ "; })"}]), call)
 
@@ -6416,6 +6661,9 @@ type GSel is Data:
   GSBitsArgs{g: G, env: Env(), w: Nat, args: List<&2, Core.Expr>}
   GSCtorInfo{g: G, env: Env(), name: String, info: Maybe<&2, CInfo>, args: List<&2, Core.Expr>}
   GSCtor{g: G, env: Env(), name: String, args: List<&2, Core.Expr>}
+  GSTmp{g: G, env: Env(), tb: String, args: List<&2, Core.Expr>}
+  GSTmpNode{g: G, env: Env(), tb: String, name: String, args: List<&2, Core.Expr>}
+  GSTmpHeap{g: G, env: Env(), name: String, args: List<&2, Core.Expr>}
   GSScrs{g: G, env: Env(), xs: List<&2, Core.Expr>}
   GSTail{g: G, env: Env(), cps: List<&2, String>, s: Split}
   GSTailSelf{g: G, env: Env(), self: Self, args: List<&2, Core.Expr>}
@@ -6544,6 +6792,12 @@ def GSel.none(k: GSel) -> GSel.ty(k):
     case GSCtorInfo{g, env, name, info, args}:
       DNil{}
     case GSCtor{g, env, name, args}:
+      DNil{}
+    case GSTmp{g, env, tb, args}:
+      DNil{}
+    case GSTmpNode{g, env, tb, name, args}:
+      DNil{}
+    case GSTmpHeap{g, env, name, args}:
       DNil{}
     case GSScrs{g, env, xs}:
       (Nil{}, DNil{})
@@ -6841,6 +7095,23 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 return Gen.ctor.kind.ru(tok, tag, U32.to_nat(kind), ds)
         case GSCtor{+g, +env, +name, args}:
           Gen.rec(fu, GSCtorInfo{g, env, name, G.ctor(g, name), args})
+        # A marked argument (see RC.tmp.pass): a temporary node (tb: the
+        # loop parameter's buffers, or none), or a node on the heap.
+        case GSTmp{+g, +env, +tb, args}:
+          match args:
+            case Core.ECtor{+n, +as} <> Nil{}:
+              Bool.pick(Unit -> Gen(Doc), RC.tmp.env(env, Bool.not(String.is_empty(tb)), as),
+                u => Gen.rec(fu, GSTmpNode{g, env, tb, n, as}), u => Gen.rec(fu, GSTmpHeap{g, env, n, as}))(Unit{})
+            case other:
+              Gen.pure(Doc, DStr{"bend_fail(\"temporary\")"})
+        case GSTmpNode{+g, +env, +tb, +name, args}:
+          do Gen<Doc>:
+            ds : List<&2, Doc> <- Gen.rec(fu, GSBitsArgs{g, env, P.which(name, ["U32", "F32"]), args})
+            return RC.tmp.doc(tb, RC.tmp.tag(G.ctor(g, name)), ds)
+        case GSTmpHeap{+g, +env, +name, +args}:
+          do Gen<Doc>:
+            d : Doc <- Gen.rec(fu, GSCtor{g, env, name, args})
+            return Doc.list([DStr{"({ " ++ RC.tmp.dups(env, args)}, d, DStr{"; })"}])
         # Scrutinees are bound to fresh C variables.
         case GSScrs{+g, +env, xs}:
           match xs:
@@ -6861,7 +7132,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 +outer : String <- Gen.ru.get(Gen.rc(g))
                 Gen.ru.set(Gen.rc(g), "")
-                ds : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, kept})
+                ds : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, RC.tmp.tail(kept, 0)})
                 Gen.ru.set(Gen.rc(g), outer)
                 return Doc.list([DStr{"{ "}, Gen.tail.temps(ds, 0), Gen.tail.assign(cps, 0),
                   DStr{"goto top; }\n"}])
@@ -6956,8 +7227,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case Core.ECall{f, args}:
               Gen.rec(fu, GSCall{g, env, f, args})
             case Core.ECtor{+name, +args}:
-              Bool.pick(Unit -> Gen(Doc), Gen.konst.is(g, name, args), u => Gen.konst(g, name, args),
-                u => Gen.rec(fu, GSCtor{g, env, name, args}))(Unit{})
+              Bool.pick(Unit -> Gen(Doc), String.starts_with(name, "%tmp"),
+                u => Gen.rec(fu, GSTmp{g, env, String.drop(name, 4n), args}),
+                u => Bool.pick(Unit -> Gen(Doc), Gen.konst.is(g, name, args), u2 => Gen.konst(g, name, args),
+                  u2 => Gen.rec(fu, GSCtor{g, env, name, args}))(Unit{}))(Unit{})
             case Core.ELam{p, body}:
               Gen.rec(fu, GSLam{g, env, p, body})
             case Core.ELet{p, v, body}:
@@ -7268,7 +7541,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               Gen.rec(fu, GSLetPat{g, env, self, tgt, Core.PCtor{name, ps}, Core.ECall{Core.EVar{f}, args}, body})
         case GSCallU{+g, +env, +name, s, +o}:
           match s:
-            case Split{kept, all, extra, full}:
+            case Split{+kept, all, extra, full}:
               do Gen<Doc>:
                 Gen.ref(name)
                 ks : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, kept})
@@ -7556,8 +7829,10 @@ def Gen.def.boxed(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n"})
-    b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
-    Gen.code(Doc.list([DStr{head ++ " {\n" ++ Gen.u32.open(us) ++ "top:;\n"}, Gen.own(g, env, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
+    +e : Core.Expr = RC.tmp.body(Gen.rc(g), g, Env.names(env), R.ops(body, "Nat"))
+    b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, e)
+    Gen.code(Doc.list([DStr{head ++ " {\n" ++ Gen.u32.open(us) ++ RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))), 0) ++
+      "top:;\n"}, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
     Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
 
@@ -7573,9 +7848,10 @@ def Gen.def.unb(+k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Cor
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n" ++ uhead ++ ";\n"})
-    b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TOut{k, Gen.free(g)}, R.ops(body, "Nat"))
-    Gen.code(Doc.list([DStr{"BEND_UINL" ++ String.drop(uhead, 6n) ++ " {\n" ++ Gen.u32.open(us) ++ "top:;\n"},
-      Gen.own(g, env, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
+    +e : Core.Expr = RC.tmp.body(Gen.rc(g), g, Env.names(env), R.ops(body, "Nat"))
+    b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TOut{k, Gen.free(g)}, e)
+    Gen.code(Doc.list([DStr{"BEND_UINL" ++ String.drop(uhead, 6n) ++ " {\n" ++ Gen.u32.open(us) ++
+      RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))), 0) ++ "top:;\n"}, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
     Gen.code(DStr{head ++ " { V o[" ++ U32.show(k) ++ "]; " ++ u ++ "(" ++ String.join(List.append(&2, String, params,
       ["o"]), ", ") ++ "); return CN(0, " ++ U32.show(k) ++ ", o); }\n"})
     Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
@@ -9639,14 +9915,19 @@ def Dps.edges(+g: G, ds: List<&2, Decl>, m: Map<&2, List<&2, DEdge>>) -> Map<&2,
 # parameter i (or a name for all of it), f<i> for a value read out of it,
 # and "" for any other.
 type BorC is Data:
-  BorC{g: G, bm: Map<&2, DGrp>, self: String, n: Nat}
+  BorC{g: G, bm: Map<&2, DGrp>, self: String, n: Nat, tmp: Bool}
 
 type BorA is Data:
   BorA{ev: List<&2, String>, xs: List<&2, Core.Expr>}
 
 def BorC.g(c: BorC) -> G:
-  BorC{g, bm, self, n} = c
+  BorC{g, bm, self, n, tmp} = c
   g
+
+# Outside of a parallel let's values, where temporaries are made.
+def BorC.par(c: BorC, +p: Core.Pat) -> BorC:
+  BorC{g, bm, self, n, tmp} = c
+  BorC{g, bm, self, n, Bool.and(tmp, Bool.not(RC.tmp.par(p)))}
 
 def BorA.ev(r: BorA) -> List<&2, String>:
   BorA{ev, xs} = r
@@ -9807,27 +10088,73 @@ def Bor.arg.tag(t: String, st: Bool, +j: U32, r: BorA) -> BorA:
       BorA{ev, ys} = r
       BorA{Bor.t(st, i, ev), ys}
 
+# The variables of a temporary (see RC.tmp) are all read out of a
+# parameter (tag f<i>).
+def Bor.tmp.f(+tags: Env(), as: List<&2, Core.Expr>) -> Bool:
+  match as:
+    case Nil{}:
+      True{}
+    case Core.EVar{+x} <> t:
+      Bool.and(String.starts_with(Bor.tag(tags, x), "f"), Bor.tmp.f(tags, t))
+    case a <> t:
+      Bor.tmp.f(tags, t)
+
+# Each variable of a loop's next temporary is lent on (t).
+def Bor.tmp.t(+tags: Env(), as: List<&2, Core.Expr>, +j: U32, r: BorA) -> BorA:
+  match as:
+    case Nil{}:
+      r
+    case Core.EVar{+x} <> t:
+      Bor.tmp.t(tags, t, j, Bor.arg.tag(Bor.tag(tags, x), True{}, j, r))
+    case a <> t:
+      Bor.tmp.t(tags, t, j, r)
+
+# An argument that is not a variable: a temporary (RC.tmp.syn) is only read
+# by the callee, as its variables are: outside of a loop's next arguments
+# it lends nothing on, and in them, it is kept in a buffer of the loop's
+# (RC_TB), which only holds what is read out of its parameters.
+def Bor.arg.x(a: Core.Expr, st: Bool, +j: U32, r: BorA) -> BorA:
+  BorA{ev, ys} = r
+  BorA{Bor.x(st, j, ev), List.append(&2, Core.Expr, ys, [a])}
+
+def Bor.arg.st(ok: Bool, +a: Core.Expr, +tags: Env(), +j: U32, r: BorA) -> BorA:
+  match ok:
+    case True{}:
+      Bor.tmp.t(tags, RC.tmp.args(a), j, r)
+    case False{}:
+      Bor.arg.x(a, True{}, j, r)
+
+def Bor.arg.o(tmp: Bool, +a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
+  match tmp:
+    case True{}:
+      match st:
+        case True{}:
+          Bor.arg.st(Bor.tmp.f(tags, RC.tmp.args(a)), a, tags, j, r)
+        case False{}:
+          r
+    case False{}:
+      Bor.arg.x(a, st, j, r)
+
 # An argument where the callee borrows (st: in a tail call to the def
 # itself): a tagged variable is lent on.
-def Bor.arg.b(a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
+def Bor.arg.b(+g: G, +rc: Bool, +a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
   match a:
     case Core.EVar{+x}:
       Bor.arg.tag(Bor.tag(tags, x), st, j, r)
     case other:
-      BorA{ev, ys} = r
-      BorA{Bor.x(st, j, ev), List.append(&2, Core.Expr, ys, [other])}
+      Bor.arg.o(Bool.and(rc, RC.tmp.syn(g, other)), other, tags, st, j, r)
 
-def Bor.arg(b: Bool, a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
+def Bor.arg(+g: G, +rc: Bool, b: Bool, a: Core.Expr, +tags: Env(), st: Bool, +j: U32, r: BorA) -> BorA:
   match b:
     case True{}:
-      Bor.arg.b(a, tags, st, j, r)
+      Bor.arg.b(g, rc, a, tags, st, j, r)
     case False{}:
       BorA{ev, ys} = r
       BorA{ev, List.append(&2, Core.Expr, ys, [a])}
 
 # A call's events, and the arguments it owns.
-def Bor.args(mask: List<&2, Bool>, args: List<&2, Core.Expr>, +fl: List<&2, Bool>, +tags: Env(), +st: Bool,
-  +j: U32, r: BorA) -> BorA:
+def Bor.args(+g: G, +rc: Bool, mask: List<&2, Bool>, args: List<&2, Core.Expr>, +fl: List<&2, Bool>, +tags: Env(),
+  +st: Bool, +j: U32, r: BorA) -> BorA:
   match mask args:
     case Nil{} xs:
       BorA{ev, ys} = r
@@ -9835,9 +10162,9 @@ def Bor.args(mask: List<&2, Bool>, args: List<&2, Core.Expr>, +fl: List<&2, Bool
     case m <> mt Nil{}:
       r
     case True{} <> mt a <> at:
-      Bor.args(mt, at, Bor.tail(fl), tags, st, U32.inc(j), Bor.arg(Bor.head(fl), a, tags, st, j, r))
+      Bor.args(g, rc, mt, at, Bor.tail(fl), tags, st, U32.inc(j), Bor.arg(g, rc, Bor.head(fl), a, tags, st, j, r))
     case False{} <> mt a <> at:
-      Bor.args(mt, at, Bor.tail(fl), tags, st, U32.inc(j), r)
+      Bor.args(g, rc, mt, at, Bor.tail(fl), tags, st, U32.inc(j), r)
 
 def Bor.call.name(local: Bool, +cx: BorC, +tags: Env(), +h: String, tail: Bool, +args: List<&2, Core.Expr>,
   acc: List<&2, String>) -> BorA:
@@ -9845,8 +10172,9 @@ def Bor.call.name(local: Bool, +cx: BorC, +tags: Env(), +h: String, tail: Bool, 
     case True{}:
       BorA{acc, Core.EVar{h} <> args}
     case False{}:
-      BorC{+g, +bm, +self, +n} = cx
-      Bor.args(DInfo.mask(G.def(g, h)), args, Bor.list(Bor.get(bm, h)), tags,
+      BorC{+g, +bm, +self, +n, +tmp} = cx
+      +full : Bool = Bool.and(tmp, Nat.is_eq(List.length(&2, Bool, DInfo.mask(G.def(g, h))), List.length(&2, Core.Expr, args)))
+      Bor.args(g, full, DInfo.mask(G.def(g, h)), args, Bor.list(Bor.get(bm, h)), tags,
         Bool.and(tail, Bool.and(Str.eq(self, h), Nat.is_eq(n, List.length(&2, Core.Expr, args)))), 0, BorA{acc, Nil{}})
 
 def Bor.call(+cx: BorC, +tags: Env(), +loc: List<&2, String>, tail: Bool, f: Core.Expr, +args: List<&2, Core.Expr>,
@@ -9881,7 +10209,7 @@ def Bor.ev(n: Nat, +cx: BorC, +tags: Env(), +loc: List<&2, String>, +st: List<&2
           Bor.uses(FV.expr(b, Pat.vars(p, Nil{}), Nil{}), tags, acc)
         case Core.ELet{+p, v, b}:
           Bor.ev(m, cx, Bor.binds(Pat.vars(p, Nil{}), "", tags), Pat.vars(p, loc), st, tail, b,
-            Bor.ev(m, cx, tags, loc, st, False{}, v, acc))
+            Bor.ev(m, BorC.par(cx, p), tags, loc, st, False{}, v, acc))
         case Core.EMatch{scrs, cases}:
           match scrs:
             case Nil{}:
@@ -10031,7 +10359,7 @@ def Bor.next(fl: List<&2, Bool>, +ev: List<&2, String>, +i: U32) -> String:
 # A def's flags, given everyone's (bm) and its own (fl).
 def Bor.def(+g: G, +bm: Map<&2, DGrp>, +name: String, +ps: List<&2, Core.Param>, +body: Core.Expr, +fl: List<&2, Bool>) ->
   String:
-  Bor.next(fl, Bor.ev(Fuel.max(), BorC{g, bm, name, List.length(&2, Bool, DInfo.mask(G.def(g, name)))},
+  Bor.next(fl, Bor.ev(Fuel.max(), BorC{g, bm, name, List.length(&2, Bool, DInfo.mask(G.def(g, name))), True{}},
     Bor.tags(ps, fl, 0, Nil{}), Bor.names(ps), Nil{}, True{}, R.ops(body, "Nat"), Nil{}), 0)
 
 type BorP is Data:

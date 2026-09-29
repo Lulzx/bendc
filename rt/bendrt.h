@@ -850,6 +850,12 @@ static inline void rc_dup_leaf(V a) { rc_dup_in(((V *)a)[1], ((V *)a)[0] & RC_TS
 // mark says whether other threads reach it, as everything a marked object
 // reaches is marked (rc_publish).
 #define rc_bmark() 0
+// A temporary node (see RC.tmp in bendc.bend): a constructor built where
+// its callee only reads it, on the stack (RC_TMP), or for a loop's next
+// argument in the one of its two buffers b not the current one (RC_TB).
+// It is not in the heap, so references to it are not counted.
+#define RC_TMP(...) ((V)(V[]){__VA_ARGS__})
+#define RC_TB(b, i, ...) ((i) ^= 1, (V)memcpy((b)[i], (V[]){__VA_ARGS__}, sizeof((V[]){__VA_ARGS__})))
 #define rc_bdupFLD(p, i) rc_dup_in(FLD(p, i), rc_bmark())
 #define rc_bdup(x) rc_dup_in((x), rc_bmark())
 static inline void rc_dup(V v) { rc_dupn(v, 1); }
