@@ -119,7 +119,6 @@ int gc_minor;       // this collection keeps the marks of old objects
 int gc_rooting;     // marking from roots (not from objects)
 int gc_all_major;   // BEND_GC_MAJOR: every collection is a major one
 size_t gc_count;
-size_t gc_epoch;    // collections so far, bumped while the other threads are stopped
 int gc_stats;
 Thr *gc_thrs[GC_MAXTHR];
 int gc_nthr;
@@ -184,7 +183,7 @@ void gc_init(void) {
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
-  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0};
+  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0, gc_dirty};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -728,10 +727,21 @@ void gc_rescan_dirty(void) {
         gc_stk[gc_sp++] = (GcItem){gc_objs(b), b->words};
       }
     } else if (gc_kind[bi] == 1 && !b->atomic) {
-      for (uint32_t i = 0; i < b->nobj; i++) {
-        if (!(al[i >> 6] & mk[i >> 6] & (1ull << (i & 63)))) continue;
-        if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
-        gc_stk[gc_sp++] = (GcItem){gc_objs(b) + (size_t)i * b->words, b->words};
+      // One item per run of old objects side by side (scanned as one range
+      // of words): most blocks are dirty when reuse tokens are, and an item
+      // per object would touch a mark stack as big as the old objects.
+      uint32_t nw = (b->nobj + 63) >> 6;
+      for (uint32_t j = 0; j < nw; j++) {
+        uint64_t m = al[j] & mk[j];
+        if (j == (b->nobj >> 6)) m &= (1ull << (b->nobj & 63)) - 1;
+        while (m) {
+          unsigned lo = (unsigned)__builtin_ctzll(m);
+          uint64_t r = m >> lo;
+          unsigned len = ~r ? (unsigned)__builtin_ctzll(~r) : 64 - lo;
+          if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
+          gc_stk[gc_sp++] = (GcItem){gc_objs(b) + (size_t)(j * 64 + lo) * b->words, (size_t)len * b->words};
+          m = lo + len >= 64 ? 0 : m & ~(((1ull << len) - 1) << lo);
+        }
       }
     }
   }
@@ -755,7 +765,6 @@ __attribute__((noinline)) void gc_collect_locked(void) {
     }
   }
   while (atomic_load(&gc_acks) < n) sched_yield();
-  __atomic_store_n(&gc_epoch, gc_epoch + 1, __ATOMIC_RELAXED);
   jmp_buf jb;
   setjmp(jb);
   me->sp = (uintptr_t)&jb;
@@ -883,7 +892,7 @@ void thr_register(uintptr_t top) {
   pthread_mutex_unlock(&gc_lock);
 }
 #define RUF(u, w) do { if (u) rc_free_at(u, w); } while (0)
-#define RUG(tok, w) ((tok) ? (UNLIKELY(__atomic_load_n(&gc_epoch, __ATOMIC_RELAXED)) ? bend_ru_young(tok, w) : (V *)(tok)) : halloc(w))
+#define RUG(tok, w) ((tok) ? bend_ru_dirty(tok) : halloc(w))
 #define RUFG(u, w) do { if (u) bend_free_slot((u), (w), 0); } while (0)
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))

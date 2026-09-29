@@ -326,7 +326,6 @@ static int gc_minor;       // this collection keeps the marks of old objects
 static int gc_rooting;     // marking from roots (not from objects)
 static int gc_all_major;   // BEND_GC_MAJOR: every collection is a major one
 static size_t gc_count;
-static size_t gc_epoch;    // collections so far, bumped while the other threads are stopped
 static int gc_stats;
 static Thr *gc_thrs[GC_MAXTHR];
 static int gc_nthr;
@@ -356,6 +355,7 @@ typedef struct GcHot {
   int mt;
   int rc;  // reference counting (a program compiled with BEND_RC=1): no collections
   int rcmt; // rc and mt: a slot's allocation bit is set atomically
+  uint8_t *dirty;  // gc_dirty
 } GcHot;
 static GcHot gc_hot;
 static GcRange *gc_roots;
@@ -404,7 +404,8 @@ static __thread Thr *thr_self;
 typedef struct { V *p; size_t n; } GcItem;
 static GcItem *gc_stk;
 // Per block: an Array in it got a pointer stored since the last collection
-// (see arr_put), so a minor one rescans the block's old objects.
+// (see arr_put), or a node was built in a reuse token (bend_ru_dirty), so a
+// minor one rescans the block's old objects.
 static uint8_t *gc_dirty;
 static size_t gc_sp, gc_cap;
 
@@ -428,7 +429,7 @@ static void gc_init(void) {
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
-  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0};
+  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0, gc_dirty};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -1543,10 +1544,21 @@ static void gc_rescan_dirty(void) {
         gc_stk[gc_sp++] = (GcItem){gc_objs(b), b->words};
       }
     } else if (gc_kind[bi] == 1 && !b->atomic) {
-      for (uint32_t i = 0; i < b->nobj; i++) {
-        if (!(al[i >> 6] & mk[i >> 6] & (1ull << (i & 63)))) continue;
-        if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
-        gc_stk[gc_sp++] = (GcItem){gc_objs(b) + (size_t)i * b->words, b->words};
+      // One item per run of old objects side by side (scanned as one range
+      // of words): most blocks are dirty when reuse tokens are, and an item
+      // per object would touch a mark stack as big as the old objects.
+      uint32_t nw = (b->nobj + 63) >> 6;
+      for (uint32_t j = 0; j < nw; j++) {
+        uint64_t m = al[j] & mk[j];
+        if (j == (b->nobj >> 6)) m &= (1ull << (b->nobj & 63)) - 1;
+        while (m) {
+          unsigned lo = (unsigned)__builtin_ctzll(m);
+          uint64_t r = m >> lo;
+          unsigned len = ~r ? (unsigned)__builtin_ctzll(~r) : 64 - lo;
+          if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
+          gc_stk[gc_sp++] = (GcItem){gc_objs(b) + (size_t)(j * 64 + lo) * b->words, (size_t)len * b->words};
+          m = lo + len >= 64 ? 0 : m & ~(((1ull << len) - 1) << lo);
+        }
       }
     }
   }
@@ -1572,7 +1584,6 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
     }
   }
   while (atomic_load(&gc_acks) < n) sched_yield();
-  __atomic_store_n(&gc_epoch, gc_epoch + 1, __ATOMIC_RELAXED);
   jmp_buf jb;
   setjmp(jb);
   me->sp = (uintptr_t)&jb;
@@ -1780,14 +1791,17 @@ static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
 // Reuse under the collector (matches free, not counted): bend_take_ru is
 // bend_take, but a node that was not shared keeps its slot, answered as the
 // token (0 when it was shared), where a constructor gets built (CG1 and the
-// like). The build makes the slot young first: its mark is cleared, as a
-// slot handed out again has it cleared (a collection marked the node, or
-// marked it between the match and the build, reached from the stack), so
-// minor collections trace from it. Only this thread holds the slot, so
-// clearing its mark races with no one. Before the first collection no mark
-// is set (gc_epoch is 0), and the build skips it. (A collection that stops
-// this thread between that check and the build's stores marks the values
-// stored too: they are in its registers.)
+// like). The slot may be old (a collection marked the node, or marked it
+// between the match and the build, reached from the stack), and a minor
+// collection does not trace from an old object, so the build marks the
+// slot's block dirty first, as an Array store does (arr_dirty): the next
+// minor collection rescans the block's old objects (gc_rescan_dirty). That
+// is one byte to test, where making the slot young (clearing its mark) was
+// the slot's index and a word of the mark bitmap to write, on every build.
+// (A collection that stops this thread between the mark and the build's
+// stores rescans the block, and marks the values stored too: they are in
+// its registers. It keeps a reused old slot until a major collection, as
+// it does an old Array.)
 // RUFG frees a token no constructor took.
 static inline V bend_take_ru(V v, unsigned w) {
   const GcHot *h = &gc_hot;
@@ -1804,20 +1818,14 @@ static inline V bend_take_ru(V v, unsigned w) {
   BEND_POISON_AT(v, w);
   return v;
 }
-static inline V *bend_ru_young(V u, unsigned w) {
-  uintptr_t off = (uintptr_t)u - gc_hot.base;
-  uintptr_t bi = off >> GC_BLK_SHIFT;
-  uint32_t i = (uint32_t)(((off & (GC_BLK - 1)) - GC_HDR) / (w * sizeof(V)));
-  uint64_t bit = 1ull << (i & 63);
-  uint64_t *mw = &gc_mbits[bi * 64 + (i >> 6)];
-  if (UNLIKELY(gc_hot.mt)) {
-    if (__atomic_load_n(mw, __ATOMIC_RELAXED) & bit) __atomic_fetch_and(mw, ~bit, __ATOMIC_RELAXED);
-  } else {
-    *mw &= ~bit;
-  }
+static inline V *bend_ru_dirty(V u) {
+  const GcHot *h = &gc_hot;
+  uint8_t *d = &h->dirty[((uintptr_t)u - h->base) >> GC_BLK_SHIFT];
+  if (!__atomic_load_n(d, __ATOMIC_RELAXED)) __atomic_store_n(d, 1, __ATOMIC_RELAXED);
+  BEND_BARRIER();
   return (V *)u;
 }
-#define RUG(tok, w) ((tok) ? (UNLIKELY(__atomic_load_n(&gc_epoch, __ATOMIC_RELAXED)) ? bend_ru_young(tok, w) : (V *)(tok)) : halloc(w))
+#define RUG(tok, w) ((tok) ? bend_ru_dirty(tok) : halloc(w))
 static inline V CG1(V u, V t, V a) { V *p = RUG(u, 2); p[0] = t; p[1] = a; return (V)p; }
 static inline V CG2(V u, V t, V a, V b) { V *p = RUG(u, 3); p[0] = t; p[1] = a; p[2] = b; return (V)p; }
 static inline V CG3(V u, V t, V a, V b, V c) {
