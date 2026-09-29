@@ -82,6 +82,7 @@ static inline KU k_u_of(float f) { union { uint32_t i; float f; } x; x.f = f; re
 #define KA_QHEAD 3
 #define KA_QTAIL 4
 #define KA_ACTIVE 5
+#define KA_GROW 6    // a KQ_ call ran out of arena (see bend_kq)
 #define KA_SEQ 16
 
 // Where things are, in words of the arena (H) unless said otherwise.
@@ -725,6 +726,15 @@ static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   KW h0 = c->hp, e0 = c->he;
   c->kqlim = (c->kqfb & K_KQLIM) ? K_KQSTEPS : ~(KW)0;
   KW r = k_kq(c, &ok);
+  // A call that ran out of arena waits for the host to grow it, and runs
+  // again (what it allocated is garbage: its result reached none of it).
+  if (c->err == KE_HEAP) {
+    c->hp = h0;
+    c->he = e0;
+    K_STORE(&A[KA_GROW], 1u);
+    k_save(c);
+    return;
+  }
   // A call that gave up (ok false) runs again through the frames.
   if (!ok) {
     if (c->he == e0) c->hp = h0;

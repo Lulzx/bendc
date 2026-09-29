@@ -8542,21 +8542,104 @@ def K.label.name(+name: String) -> String:
   Bool.pick(String, String.starts_with(name, "%wrap "), "KLW_" ++ Gen.mangle(String.drop(name, 6n)),
     "KL_" ++ Gen.mangle(name))
 
-def Gen.gpu.stub.pick(kernel: Bool, head: String, cpu: String, +name: String, +n: Nat) -> String:
+# Whether a value of a type in ts can stay in the device's arena for the
+# CPU to read in place (see gpu_pinnable in rt/gpuhost.h): it reaches no
+# closure (the device's hold labels) and no array, through the fields of
+# the data types named. seen: the types met, and their type parameters
+# (whose arguments are among the types checked).
+def Gen.gpu.pin.fs(fs: List<&2, Field>, rest: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match fs:
+    case Nil{}:
+      rest
+    case Field{n, t} <> fs2:
+      t <> Gen.gpu.pin.fs(fs2, rest)
+
+def Gen.gpu.pin.cs(cs: List<&2, Ctor>, rest: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match cs:
+    case Nil{}:
+      rest
+    case Ctor{n, fs} <> cs2:
+      Gen.gpu.pin.fs(fs, Gen.gpu.pin.cs(cs2, rest))
+
+def Gen.gpu.pin.targs(t: Core.Expr) -> List<&2, Core.Expr>:
+  match t:
+    case Core.ETy{n, args}:
+      args
+    case Core.ECall{f, args}:
+      args
+    case other:
+      Nil{}
+
+def Gen.gpu.pin.head(+t: Core.Expr) -> String:
+  Bool.pick(String, Str.eq(P.head(t), "&"), "Sigma", P.head(t))
+
+# The declaration of t's type: none to look into (an empty one) for a type
+# met or a scalar.
+def Gen.gpu.pin.d(+g: G, +seen: List<&2, String>, +t: Core.Expr) -> Decl:
+  +h = Gen.gpu.pin.head(t)
+  Bool.pick(Decl, Bool.or(Str.has(seen, h), Str.has(["U32", "F32", "I32", "Bool", "Nat", "Char", "Unit"], h)),
+    DType{h, Nil{}, Nil{}}, G.body(g, "%" ++ h))
+
+def Gen.gpu.pin.ok(d: Decl) -> Bool:
+  match d:
+    case DType{n, ps, cs}:
+      True{}
+    case other:
+      False{}
+
+def Gen.gpu.pin.seen(d: Decl, +seen: List<&2, String>) -> List<&2, String>:
+  match d:
+    case DType{n, ps, cs}:
+      n <> List.append(&2, String, ps, seen)
+    case other:
+      seen
+
+def Gen.gpu.pin.next(d: Decl, t: Core.Expr, rest: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match d:
+    case DType{n, ps, cs}:
+      List.append(&2, Core.Expr, Gen.gpu.pin.targs(t), Gen.gpu.pin.cs(cs, rest))
+    case other:
+      rest
+
+def Gen.gpu.pin(fuel: Nat, ok: Bool, ts: List<&2, Core.Expr>, +g: G, +seen: List<&2, String>) -> Bool:
+  match fuel:
+    case 0n:
+      False{}
+    case 1n+f:
+      match ok:
+        case False{}:
+          False{}
+        case True{}:
+          match ts:
+            case Nil{}:
+              True{}
+            case +t <> rest:
+              +d = (Gen.gpu.pin.d(g, seen, t) : Decl)
+              Gen.gpu.pin(f, Gen.gpu.pin.ok(d), Gen.gpu.pin.next(d, t, rest), g, Gen.gpu.pin.seen(d, seen))
+
+def Gen.gpu.pin.def(+g: G, d: Decl) -> Bool:
+  match d:
+    case DDef{n, ps, body, ret}:
+      Gen.gpu.pin(256n, True{}, [ret], g, Nil{})
+    case other:
+      False{}
+
+def Gen.gpu.stub.pick(kernel: Bool, head: String, cpu: String, +name: String, +n: Nat, +pin: Bool) -> String:
   match kernel:
     case True{}:
       head ++ "V ga[] = {" ++ String.join(List.append(&2, String, Gen.gpu.params(n, 0), ["0"]), ", ") ++ "}, r;\nif (gpu_call(&K_PROG, " ++ K.label.name(name) ++ ", ga, " ++
-        U32.show(U32.from_nat(n)) ++ ", &r)) return r;\n" ++ cpu
+        U32.show(U32.from_nat(n)) ++ ", " ++ Bool.pick(String, pin, "1", "0") ++ ", &r)) return r;\n" ++ cpu
     case False{}:
       head ++ cpu
 
-def Gen.gpu.stub.go(+name: String, kernel: Bool, +n: Nat) -> String:
+def Gen.gpu.stub.go(+name: String, kernel: Bool, +n: Nat, +pin: Bool) -> String:
   Gen.gpu.stub.pick(kernel, "static V G_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams(Gen.gpu.params(n, 0)) ++ ") {\n",
-    "return " ++ Gen.f(name) ++ "(" ++ Gen.gpu.args(n) ++ ");\n}\n", name, n)
+    "return " ++ Gen.f(name) ++ "(" ++ Gen.gpu.args(n) ++ ");\n}\n", name, n, pin)
 
-# G_f for a target f: on the device when it compiled, else on the CPU.
+# G_f for a target f: on the device when it compiled, else on the CPU. The
+# result may stay in the arena when its type allows (Gen.gpu.pin).
 def Gen.gpu.stub(+g: G, +name: String, kernel: Bool) -> String:
-  Gen.gpu.stub.go(name, kernel, U32.to_nat(K.kept(DInfo.mask(G.def(g, name)))))
+  Gen.gpu.stub.go(name, kernel, U32.to_nat(K.kept(DInfo.mask(G.def(g, name)))), Gen.gpu.pin.def(g, G.body(g, name)))
 
 def Gen.gpu.stubs(+g: G, ts: List<&2, String>, +kernel: Bool) -> String:
   match ts:
@@ -15365,7 +15448,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                 K.flat.add(Doc.list([DStr{"\nKINLINE KW KQ_" ++ Gen.mangle(name) ++ "(KTHR KCtx *c" ++ KQ.params(n, 0) ++
                   ", KTHR bool *ok) {\nKQ_STACK;\nKW sp = 0, pc = " ++ U32.show(l) ++ ", RV = 0, st = c->kqlim;\n" ++ KQ.init(n, 0) ++
                   KQ.init.rest(Nat.sub(12n, n), U32.from_nat(n)) ++
-                  "for (;;) {\nif (st-- == 0) { *ok = false; return 0; }\nswitch (pc) {\n"}, blocks,
+                  "for (;;) {\nif (st-- == 0 || c->err != 0) { *ok = false; return 0; }\nswitch (pc) {\n"}, blocks,
                   DStr{"default:\n*ok = false;\nreturn 0;\n}\n}\n}\n"}]))
                 K.memo.put("%kqcase", "case " ++ U32.show(e) ++ ": return KQ_" ++ Gen.mangle(name) ++ "(c" ++ KQ.case.args(n, 0) ++
                   ", ok);\n")
