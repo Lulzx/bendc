@@ -80,10 +80,12 @@ size_t gc_nruns;
 pthread_mutex_t gc_lock = PTHREAD_MUTEX_INITIALIZER;
 GcBlk *gc_partial[2][GC_NCLS];
 _Atomic size_t gc_since;         // bytes handed out since the last collection
-size_t gc_limit = (size_t)256 << 20;
-size_t gc_limit_min = (size_t)256 << 20;
-double gc_minor_k = 2.0, gc_factor = 0.0;
-size_t gc_slack = (size_t)64 << 20;
+size_t gc_limit = (size_t)8 << 20;
+size_t gc_limit_min = (size_t)8 << 20;
+double gc_minor_k = 2.0, gc_factor = 0.5;
+size_t gc_slack = (size_t)8 << 20;
+unsigned gc_grow = 1, gc_grow_max = 32, gc_kept_run;
+double gc_t_end, gc_t_run, gc_t_stop;  // seconds (see gc_now)
 size_t gc_live_bytes;
 size_t gc_major_live;
 int gc_minor;       // this collection keeps the marks of old objects
@@ -166,7 +168,9 @@ void gc_init(void) {
   if (getenv("BEND_GC_FACTOR")) gc_factor = atof(getenv("BEND_GC_FACTOR"));
   if (getenv("BEND_GC_SLACK_MB")) gc_slack = (size_t)atol(getenv("BEND_GC_SLACK_MB")) << 20;
   const char *m = getenv("BEND_GC_MIN_MB");
-  if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20;
+  // (a heap size set this way stays: BEND_GC_GROW=n lets it grow n times)
+  if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20, gc_grow_max = 1;
+  if (getenv("BEND_GC_GROW") && atoi(getenv("BEND_GC_GROW")) > 0) gc_grow_max = (unsigned)atoi(getenv("BEND_GC_GROW"));
   // Reference counting frees every object: the collector never runs.
   if (bend_rc_req) gc_limit = gc_limit_min = (size_t)-1;
 }
@@ -621,10 +625,15 @@ void gc_rescan_dirty(void) {
     }
   }
 }
+double gc_now(void) {
+  struct timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (double)t.tv_sec + (double)t.tv_nsec * 1e-9;
+}
 __attribute__((noinline)) void gc_collect_locked(void) {
   Thr *me = thr_self;
-  struct timespec t0, t1;
-  if (gc_stats) clock_gettime(CLOCK_MONOTONIC, &t0);
+  double t0 = gc_now();
+  size_t live0 = gc_live_bytes;
   atomic_store(&gc_acks, 0);
   atomic_store(&gc_stopping, 1);
   int n = 0;
@@ -641,7 +650,7 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   // A major collection forgets every mark; a minor one keeps the old
   // objects' (the heap is written only while an object is built, and the
   // exceptions are reached from roots).
-  gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack;
+  gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack * gc_grow;
   if (!gc_minor) {
     for (uintptr_t bi = 0; bi < gc_top; bi++) {
       if (gc_kind[bi] == 1 || gc_kind[bi] == 2) memset(gc_mbits + bi * 64, 0, 64 * sizeof(uint64_t));
@@ -675,17 +684,29 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   while (atomic_load(&gc_inside) > 0) sched_yield();
   if (!gc_minor) gc_major_live = gc_live_bytes ? gc_live_bytes : 1;
   {
-    size_t want = (size_t)(gc_factor * (double)gc_live_bytes);
-    gc_limit = want > gc_limit_min ? want : gc_limit_min;
+    if (gc_minor) {
+      size_t kept = gc_live_bytes > live0 ? gc_live_bytes - live0 : 0;
+      gc_kept_run = kept * 4 > gc_since * 3 ? gc_kept_run + 1 : 0;
+      if (gc_kept_run >= 2) gc_grow = gc_grow_max;
+    }
+    double t1 = gc_now();
+    if (gc_t_end > 0) gc_t_run += t0 - gc_t_end;
+    gc_t_stop += t1 - t0;
+    gc_t_end = t1;
+    if ((gc_count & 7) == 7) {
+      if (gc_t_stop * 10 > gc_t_run + gc_t_stop && gc_grow < gc_grow_max) gc_grow = gc_grow * 2 < gc_grow_max ? gc_grow * 2 : gc_grow_max;
+      gc_t_run = gc_t_stop = 0;
+    }
+    size_t want = (size_t)(gc_factor * (double)gc_live_bytes), least = gc_limit_min * gc_grow;
+    gc_limit = want > least ? want : least;
   }
   gc_since = 0;
   gc_count++;
   if (gc_stats) {
-    clock_gettime(CLOCK_MONOTONIC, &t1);
     fprintf(stderr, "[gc %zu %s] live %zu MB, heap %zu MB, next at +%zu MB, %zu rescans next, %.1f ms\n",
       gc_count, gc_minor ? "minor" : "major", gc_live_bytes >> 20, (size_t)(gc_top << GC_BLK_SHIFT) >> 20,
       gc_limit >> 20, gc_nrem,
-      (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6);
+      (gc_t_end - t0) * 1e3);
   }
 }
 void gc_collect(void) {
@@ -1078,7 +1099,10 @@ void *par_worker(void *arg) {
 void par_hook(void) {
   for (int i = 0; i < gc_nthr; i++) {
     PDeque *d = gc_thrs[i]->dq;
-    if (d) gc_scan(d->buf, d->buf + d->mask + 1);
+    if (!d) continue;
+    long t = atomic_load(&d->top) - 1, b = atomic_load(&d->bot) + 1;
+    if (b - t > d->mask + 1) t = b - (d->mask + 1);
+    for (long j = t; j < b; j++) gc_mark((V)d->buf[j & d->mask]);
   }
 }
 void par_start(void) {

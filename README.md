@@ -439,9 +439,17 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
 Base implements `U32` as a 32-bit vector of `Bool`s, which proofs can reason about. `bendc` replaces
 those defs, and the `Nat`/`F32`/`Array` primitives, with native C; `Nat` arithmetic stops with an
 error past 2^48 - 1, where the official runtime does. Memory is managed by a conservative mark-sweep collector: the threads that run
-Bend code are stopped with a signal while it marks their stacks. The program runs on a thread with a
-4 GB stack, so deep non-tail recursion is fine: a million-deep recursive list builds and folds in about
-0.1s, where the official runtime overflows its stack at 100,000.
+Bend code are stopped with a signal while it marks their stacks. It runs after every 8 MB allocated,
+or after half of what lived at the last collection if that is more, so a program whose objects die
+young keeps a small heap. A minor collection marks only what was made since the last one. When two
+minor collections in a row find that three quarters of what was made since lives on, the step
+becomes 32 times bigger for the rest of the run: such a program (the compiler building its tables,
+say) would otherwise mark the same objects again and again. The step also doubles when, over 8
+collections, the program was stopped in them for more than a tenth of the time: with many threads,
+or on a busy machine, stopping every thread costs more than the marking, and the heap grows to make
+the stops rarer. `BEND_GC_MIN_MB=n` fixes it at n MB, and `BEND_GC_STATS=1` prints each collection.
+The program runs on a thread with a 4 GB stack, so deep non-tail recursion is fine: a million-deep
+recursive list builds and folds in about 0.1s, where the official runtime overflows its stack at 100,000.
 
 A parallel let forks every value but the last onto a Chase-Lev work-stealing deque and joins them in
 reverse; a fork nobody stole runs inline, so fine-grained recursion stays cheap (`pow2!(26n)` from the

@@ -232,11 +232,29 @@ extern size_t gc_nruns;
 extern pthread_mutex_t gc_lock;
 extern GcBlk *gc_partial[2][GC_NCLS];
 extern _Atomic size_t gc_since;
+// A collection comes after gc_limit bytes: gc_limit_min times gc_grow, or
+// gc_factor times what lived at the last one if that is more. A minor
+// collection finds what died young; what dies old waits for a major one,
+// which comes when what lives grows past gc_minor_k times what lived after
+// the last major one, plus gc_slack times gc_grow.
+// gc_grow starts at 1: a program whose young objects mostly die collects
+// often, in a small heap, and its peak memory stays near what lives. It
+// becomes gc_grow_max for good when two minor collections in a row find
+// that 3/4 of what was made since the one before lives on: such a program
+// (a compiler building its tables, say) would mark the same objects again
+// and again, and more of them die when it waits longer. It also doubles
+// when, over the last 8 collections, the program spent more than a tenth of
+// its time stopped in them (with many threads, or with the machine busy,
+// each stop costs more than the marking).
+// (Read at start: libc's number parsing takes a lock a stopped thread may hold.)
 extern size_t gc_limit;
 extern size_t gc_limit_min;
-// (Read at start: libc's number parsing takes a lock a stopped thread may hold.)
 extern double gc_minor_k;
 extern size_t gc_slack;
+extern unsigned gc_grow;
+extern double gc_t_end;
+extern double gc_t_run;
+extern double gc_t_stop;
 extern size_t gc_live_bytes;
 extern size_t gc_major_live;
 extern int gc_minor;
@@ -870,6 +888,8 @@ void gc_rem_unique(void);
 // in the thread's registers or stack: marked then, and old after.
 void gc_rescan_dirty(void);
 
+double gc_now(void);
+
 __attribute__((noinline)) void gc_collect_locked(void);
 
 // Collects now (from a thread that runs Bend code).
@@ -1464,6 +1484,9 @@ static inline void cpu_relax(void) {
 
 void *par_worker(void *arg);
 
+// The tasks queued in the deques (the slots from top to bot, and one more
+// each side for a pop or a steal the collection stopped halfway; the rest
+// are stale, and a task is held on its forker's stack until it is joined).
 void par_hook(void);
 
 void par_start(void);
