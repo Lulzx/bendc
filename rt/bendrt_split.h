@@ -514,11 +514,14 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
 #define bend_take(v, w) bend_take_at(v, w, 0)
 #endif
 
+static inline void rc_take(V v, unsigned w);
 // A flat result (a def's U_ function): node t's k fields go out through o,
-// then t is taken when matches free (a shared node shares its fields).
+// then t is taken when matches free or counts (a shared node shares its
+// fields, or gives each a reference).
 static inline void bend_open(V t, V *o, unsigned k, int take) {
   for (unsigned i = 0; i < k; i++) o[i] = FLD(t, i);
-  if (take) bend_take(t, k + 1);
+  if (gc_hot.rc) rc_take(t, k + 1);
+  else if (take) bend_take(t, k + 1);
 }
 
 // Reference counting
@@ -1004,10 +1007,14 @@ static inline V F_Chk_dmemo_dset(V m, V v, V x) {
   bend_drop(m);
   return x;
 }
-static inline V F_Array_dget(V a, V i) {
-  V x = *arr_at(a, i);
+// x, read out of array a, is the array's and the reader's now.
+static inline void arr_got(V a, V x) {
   if (gc_hot.rc) rc_dup_in(x, ((V *)a)[0] & RC_TS);
   else bend_share(x);
+}
+static inline V F_Array_dget(V a, V i) {
+  V x = *arr_at(a, i);
+  arr_got(a, x);
   return C2(0, a, x);
 }
 static inline V F_Array_dswap(V a, V i, V v) {

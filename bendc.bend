@@ -5227,11 +5227,19 @@ def RC.wrap.go(kept: List<&2, Core.Expr>, ks: List<&2, Doc>, +fl: List<&2, Bool>
     case al dl:
       r
 
-def RC.wrap(+k: U32, +name: String, xs: List<&2, Doc>, r: RcW) -> Doc:
-  RcW{args, pre, post, any} = r
-  +call = Gen.apply(xs, Doc.list([DStr{Gen.f(name) ++ "("}, Gen.commas(args), DStr{")"}]))
+def RC.wrap.call(+k: U32, call: Doc, any: Bool, pre: Doc, post: Doc) -> Doc:
   Bool.pick(Doc, any, Doc.list([DStr{"({ "}, pre, DStr{"V r" ++ U32.show(k) ++ " = "}, call, DStr{"; "}, post,
     DStr{"r" ++ U32.show(k) ++ "; })"}]), call)
+
+def RC.wrap(+k: U32, +name: String, xs: List<&2, Doc>, r: RcW) -> Doc:
+  RcW{args, pre, post, any} = r
+  RC.wrap.call(k, Gen.apply(xs, Doc.list([DStr{Gen.f(name) ++ "("}, Gen.commas(args), DStr{")"}])), any, pre, post)
+
+# The call of a flat result's U_ function, its fields stored through o.
+def RC.wrap.u(+k: U32, +name: String, +o: String, r: RcW) -> Doc:
+  RcW{args, pre, post, any} = r
+  RC.wrap.call(k, Doc.list([DStr{"U_" ++ Gen.mangle(name) ++ "("}, Gen.commas(List.append(&2, Doc, args, [DStr{o}])),
+    DStr{")"}]), any, pre, post)
 
 def RC.call.args(+g: G, +loc: List<&2, String>, +b: Bool, +x: String, +h: String, +args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
   Bool.pick(List<&2, Core.Expr>, Str.has(loc, h), Core.EVar{h} <> args, RC.global(G.def(g, h), RC.fl(b, g, h), x, args))
@@ -7185,7 +7193,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
                 b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, cx} <> env, self, tgt, body})
                 return Doc.list([DStr{"V " ++ ca ++ " = "}, da, DStr{";\nV " ++ cx ++ " = *arr_at(" ++ ca ++ ", "}, di,
-                  DStr{"); bend_share(" ++ cx ++ ");\n"}, Gen.shares.g(g, [Bind{a, ca}, Bind{x, cx}], body), b])
+                  DStr{"); arr_got(" ++ ca ++ ", " ++ cx ++ ");\n"}, Gen.own(g, Bind{a, ca} <> Bind{x, cx} <> env,
+                  [Bind{a, ca}, Bind{x, cx}], body), b])
             case False{}:
               +qs = {[Core.PVar{a}, Core.PVar{x}] : List<&2, Core.Pat>}
               +as = {[t, arr, idx] : List<&2, Core.Expr>}
@@ -7201,7 +7210,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 +cx : String <- Gen.pure(String, "gx" ++ U32.show(k))
                 sw : Doc <- Gen.rec(fu, GSSwap{g, env, k, arr, idx, v})
                 b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, cx} <> env, self, tgt, body})
-                return Doc.list([sw, Gen.shares.g(g, [Bind{a, ca}, Bind{x, cx}], body), b])
+                return Doc.list([sw, Gen.own(g, Bind{a, ca} <> Bind{x, cx} <> env, [Bind{a, ca}, Bind{x, cx}], body), b])
             case False{}:
               +qs = {[Core.PVar{a}, Core.PVar{x}] : List<&2, Core.Pat>}
               +as = {[t, arr, idx, v] : List<&2, Core.Expr>}
@@ -7227,7 +7236,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
                 di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
                 return Doc.list([DStr{"{\nV ga" ++ ks ++ " = "}, da, DStr{";\nV gx" ++ ks ++ " = *arr_at(ga" ++ ks ++ ", "}, di,
-                  DStr{"); bend_share(gx" ++ ks ++ ");\no[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
+                  DStr{"); arr_got(ga" ++ ks ++ ", gx" ++ ks ++ ");\no[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
             case 2n t <> arr <> idx <> v <> Nil{}:
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
@@ -7249,7 +7258,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 +binds : Env() <- Gen.pure(Env(), Gen.out.binds(Gen.pnames(ps), o, 0))
                 b : Doc <- Gen.rec(fu, GSStmt{g, List.append(&2, Bind, binds, env), self, tgt, body})
                 return Doc.list([DStr{"V " ++ o ++ "[" ++ U32.show(Gen.sret(g, f)) ++ "]; "}, c, DStr{";\n"},
-                  Gen.shares.g(g, binds, body), b])
+                  Gen.own(g, List.append(&2, Bind, binds, env), binds, body), b])
             case False{}:
               Gen.rec(fu, GSLetPat{g, env, self, tgt, Core.PCtor{name, ps}, Core.ECall{Core.EVar{f}, args}, body})
         case GSCallU{+g, +env, +name, s, +o}:
@@ -7258,8 +7267,9 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 Gen.ref(name)
                 ks : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, kept})
-                return Doc.list([DStr{"U_" ++ Gen.mangle(name) ++ "("}, Gen.commas(List.append(&2, Doc, ks, [DStr{o}])),
-                  DStr{")"}])
+                +k : U32 <- Gen.fresh()
+                return RC.wrap.u(k, name, o, RC.wrap.go(kept, ks, Bor.kept(DInfo.mask(G.def(g, name)),
+                  RC.fl(Gen.rc(g), g, name)), env, k, 0, RcW{Nil{}, DNil{}, DNil{}, False{}}))
         # A flat result's constructor stores its fields; a call of a def with
         # a flat result of the same arity passes o on.
         case GSRetCtor{out, +g, +env, +tgt, +name, +args}:
@@ -7560,10 +7570,10 @@ def Gen.def.unb(+k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Cor
     Gen.proto(DStr{head ++ ";\n" ++ uhead ++ ";\n"})
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TOut{k, Gen.free(g)}, R.ops(body, "Nat"))
     Gen.code(Doc.list([DStr{"BEND_UINL" ++ String.drop(uhead, 6n) ++ " {\n" ++ Gen.u32.open(us) ++ "top:;\n"},
-      Gen.shares.g(g, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
+      Gen.own(g, env, env, R.ops(body, "Nat")), b, DStr{"}\n"}]))
     Gen.code(DStr{head ++ " { V o[" ++ U32.show(k) ++ "]; " ++ u ++ "(" ++ String.join(List.append(&2, String, params,
       ["o"]), ", ") ++ "); return CN(0, " ++ U32.show(k) ++ ", o); }\n"})
-    Gen.wrapper(name, wargs)
+    Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
 
 def Gen.def.plain.pick(boxed: Bool, +k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
   +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
@@ -18043,9 +18053,7 @@ def Gen.program.m(+g: G) -> Gen(String):
     Gen.all(g, ["main"], Set.new())
     Gen.entry(g, G.body(g, "main"))
 
-# (Reference counting does not unbox: flat values carry no counts.)
-def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb0: Bool, +rc: Bool) -> COut:
-  +unb = Bool.and(unb0, Bool.not(rc))
+def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
   +ds = Unb.program(unb, Par.auto(par, Lo.program(opt, Pick.decls(ds0))))
   +g = Unb.sret(unb, ds, Dps.build(G.new(ds), ds, free, rc))
   Gen.program.fin(g, Gen.cids(g, ds, 0),
