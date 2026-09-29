@@ -53,6 +53,16 @@ void bend_debug_show(uint64_t n) {
 }
 #define IS_N(v, t) (!((v) & 1) && TAG(v) == (t))
 #else
+#ifdef BEND_DEBUG_POISON
+#define BEND_POISON ((V)0xDEADDEADDEADDEADull)
+__attribute__((noreturn, noinline)) void bend_poison_hit(V v) {
+  fprintf(stderr, "bend: a freed or reused node (%llx) is read\n", (unsigned long long)v);
+  abort();
+}
+#define BEND_POISON_AT(v, w) do { for (unsigned j_ = 0; j_ < (w); j_++) __atomic_store_n(&((V *)(v))[j_], BEND_POISON, __ATOMIC_RELAXED); } while (0)
+#else
+#define BEND_POISON_AT(v, w) ((void)0)
+#endif
 #endif
 __attribute__((noreturn)) void bend_fail(const char *msg) {
   fflush(stdout);

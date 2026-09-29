@@ -18,8 +18,12 @@ for src in tests/*.bend; do
   fi
   # Against the runtime compiled once (build/bendrt.o), but hello, which
   # compiles it whole.
+  # tests/NAME.cflags: C flags for the program and a runtime of its own
+  # (BEND_DEBUG_POISON, say).
   if [ "$name" = hello ]; then split=""; obj=""; else split="-DBEND_RT_SPLIT"; obj=$RTO; fi
-  if ! ${CC:-clang} -O2 -w $split -I rt "$out.c" $obj -o "$out" -lm -lpthread $LDL 2> "$out.err"; then
+  cflags=$(cat "tests/$name.cflags" 2>/dev/null)
+  [ -n "$cflags" ] && { split=""; obj=""; }
+  if ! ${CC:-clang} -O2 -w $split $cflags -I rt "$out.c" $obj -o "$out" -lm -lpthread $LDL 2> "$out.err"; then
     echo "FAIL $name (clang)"; sed 's/^/  /' "$out.err" | head -5; fail=$((fail+1)); continue
   fi
   # tests/NAME.env: environment settings for the run (BEND_GC_MIN_MB=1, say).
