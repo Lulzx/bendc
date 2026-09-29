@@ -1362,10 +1362,14 @@ static void gc_scan(const void *lo, const void *hi) {
 // the scan of the objects before it hides the fetch (the marked heap is
 // mostly out of the caches, and scanning is mostly waiting for memory).
 #define GC_PF 8
+#ifdef __TINYC__
+static inline void gc_fetch(GcItem it) { (void)it; }  // tcc has no prefetch
+#else
 static inline void gc_fetch(GcItem it) {
   __builtin_prefetch(it.p);
   if (it.n > 8) __builtin_prefetch(it.p + 8);
 }
+#endif
 
 static void gc_drain(void) {
   GcItem q[GC_PF];

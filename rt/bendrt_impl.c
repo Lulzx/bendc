@@ -584,6 +584,9 @@ void gc_scan(const void *lo, const void *hi) {
   for (const V *p = (const V *)a; (const void *)p < hi; p++) gc_mark(*p);
 }
 #define GC_PF 8
+#ifdef __TINYC__
+#else
+#endif
 void gc_drain(void) {
   GcItem q[GC_PF];
   unsigned h = 0, n = 0;
