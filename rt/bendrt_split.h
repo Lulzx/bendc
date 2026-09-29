@@ -131,6 +131,20 @@ typedef uint64_t Term;
 #else
 #define BEND_UINL static inline
 #endif
+// A program's own functions go without a stack protector. Their only local
+// arrays hold a flat result's fields or a call's arguments, written at the
+// indices the code generator fixes; with a protector, each call of a
+// recursive def with a flat result loaded and checked the guard.
+#if defined(__clang__) && defined(__has_attribute)
+#if __has_attribute(no_stack_protector)
+#define BEND_NSP_BEGIN _Pragma("clang attribute push (__attribute__((no_stack_protector)), apply_to = function)")
+#define BEND_NSP_END _Pragma("clang attribute pop")
+#endif
+#endif
+#ifndef BEND_NSP_BEGIN
+#define BEND_NSP_BEGIN
+#define BEND_NSP_END
+#endif
 
 #ifdef BEND_DEBUG_FREE
 #include <execinfo.h>

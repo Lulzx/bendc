@@ -48,6 +48,16 @@
 #else
 #define BEND_UINL static inline
 #endif
+#if defined(__clang__) && defined(__has_attribute)
+#if __has_attribute(no_stack_protector)
+#define BEND_NSP_BEGIN _Pragma("clang attribute push (__attribute__((no_stack_protector)), apply_to = function)")
+#define BEND_NSP_END _Pragma("clang attribute pop")
+#endif
+#endif
+#ifndef BEND_NSP_BEGIN
+#define BEND_NSP_BEGIN
+#define BEND_NSP_END
+#endif
 #ifdef BEND_DEBUG_FREE
 void *bend_debug_stk[1 << 20][12];
 void bend_debug_record(uint64_t n) {

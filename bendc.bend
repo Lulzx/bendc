@@ -3616,6 +3616,14 @@ def Expr.push.case(c: Core.Expr, e: Core.Expr) -> Core.Expr:
     case other:
       other
 
+# p with a in front of its fields (see Expr.push).
+def Pat.push(a: Core.Pat, p: Core.Pat) -> Core.Pat:
+  match p:
+    case Core.PCtor{n, xs}:
+      Core.PCtor{n, a <> xs}
+    case other:
+      other
+
 def R.ops(e: Core.Expr, +ty: String) -> Core.Expr:
   match e:
     case Core.EOp{op, a, b}:
@@ -11146,6 +11154,238 @@ def Unb.program(on: Bool, +ds: List<&2, Decl>) -> List<&2, Decl>:
     case False{}:
       ds
 
+# Scalar sums. A type with no parameters and two or more constructors,
+# whose fields are all U32 and one of which has two to seven of them
+# (queens' Stats: Stat0{} | Stats{sols, nodes}), becomes a record T._s of
+# its widest constructor's fields and a tag. A constructor is the record
+# of its fields, zeros for the rest, and its place among the type's
+# constructors (the tag); a pattern of it matches its fields, anything for
+# the rest, and its tag. The record is then a flat type like any other:
+# the unboxing passes and returns it as its fields, so a def that takes or
+# returns a Stats allocates nothing. A type whose constructors have at most
+# one field each is left alone (a word leaf holds it without a node).
+
+# A constructor of a scalar sum: its record, the zeros after its fields,
+# and its tag ("" for any other constructor).
+type UnbS is Data:
+  UnbS{rec: String, pad: Nat, tag: U32}
+
+def UnbS.rec(s: UnbS) -> String:
+  UnbS{r, p, t} = s
+  r
+
+def Unb.sum.u32s(fs: List<&2, Field>) -> Bool:
+  match fs:
+    case Nil{}:
+      True{}
+    case Field{n, t} <> r:
+      Bool.and(Str.eq(P.phead(t), "U32"), Unb.sum.u32s(r))
+
+def Unb.sum.all(cs: List<&2, Ctor>) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case Ctor{k, fs} <> r:
+      Bool.and(Unb.sum.u32s(fs), Unb.sum.all(r))
+
+# The widest constructor's fields.
+def Unb.sum.wide(cs: List<&2, Ctor>, +acc: List<&2, Field>) -> List<&2, Field>:
+  match cs:
+    case Nil{}:
+      acc
+    case Ctor{k, +fs} <> r:
+      Unb.sum.wide(r, Bool.pick(List<&2, Field>, Nat.is_gt(List.length(&2, Field, fs), List.length(&2, Field, acc)), fs, acc))
+
+def Unb.sum.cnames(cs: List<&2, Ctor>, s: Set()) -> Set():
+  match cs:
+    case Nil{}:
+      s
+    case Ctor{k, fs} <> r:
+      Unb.sum.cnames(r, Set.add(s, k))
+
+def Unb.sum.names(ds: List<&2, Decl>, s: Set()) -> Set():
+  match ds:
+    case Nil{}:
+      s
+    case DType{n, ps, cs} <> t:
+      Unb.sum.names(t, Unb.sum.cnames(cs, s))
+    case d <> t:
+      Unb.sum.names(t, s)
+
+def Unb.sum.ok(+names: Set(), +rec: String, +ps: List<&2, String>, +cs: List<&2, Ctor>) -> Bool:
+  +w = List.length(&2, Field, Unb.sum.wide(cs, Nil{}))
+  Bool.and(Bool.and(List.is_empty(&2, String, ps), Nat.is_ge(List.length(&2, Ctor, cs), 2n)),
+    Bool.and(Bool.and(Nat.is_ge(w, 2n), Nat.is_le(w, 7n)),
+      Bool.and(Unb.sum.all(cs), Bool.not(Pair.snd(Set(), Bool, Set.has(names, rec))))))
+
+def Unb.sum.put(cs: List<&2, Ctor>, +rec: String, +w: Nat, +i: U32, m: Map<&2, UnbS>) -> Map<&2, UnbS>:
+  match cs:
+    case Nil{}:
+      m
+    case Ctor{k, fs} <> r:
+      Unb.sum.put(r, rec, w, U32.inc(i), Map.set(&2, UnbS, m, k, UnbS{rec, Nat.sub(w, List.length(&2, Field, fs)), i}))
+
+def Unb.sum.put.if(ok: Bool, +cs: List<&2, Ctor>, +rec: String, m: Map<&2, UnbS>) -> Map<&2, UnbS>:
+  match ok:
+    case True{}:
+      Unb.sum.put(cs, rec, List.length(&2, Field, Unb.sum.wide(cs, Nil{})), 0, m)
+    case False{}:
+      m
+
+# The scalar sums' constructors.
+def Unb.sum.map(ds: List<&2, Decl>, +names: Set(), m: Map<&2, UnbS>) -> Map<&2, UnbS>:
+  match ds:
+    case Nil{}:
+      m
+    case DType{+n, +ps, +cs} <> t:
+      +rec = n ++ "._s"
+      Unb.sum.map(t, names, Unb.sum.put.if(Unb.sum.ok(names, rec, ps, cs), cs, rec, m))
+    case d <> t:
+      Unb.sum.map(t, names, m)
+
+def Unb.sum.get(+m: Map<&2, UnbS>, +k: String) -> UnbS:
+  G.get(UnbS, UnbS{"", 0n, 0}, m, k)
+
+def Unb.sum.zeros(n: Nat) -> List<&2, Core.Expr>:
+  match n:
+    case 0n:
+      Nil{}
+    case 1n+p:
+      Core.ENum{0} <> Unb.sum.zeros(p)
+
+def Unb.sum.wilds(n: Nat) -> List<&2, Core.Pat>:
+  match n:
+    case 0n:
+      Nil{}
+    case 1n+p:
+      Core.PVar{"_"} <> Unb.sum.wilds(p)
+
+# A constructor with no fields (the rest go in front, see Expr.push).
+def Unb.sum.ctor.go(none: Bool, +k: String, +rec: String, pad: Nat, tag: U32) -> Core.Expr:
+  match none:
+    case True{}:
+      Core.ECtor{k, Nil{}}
+    case False{}:
+      Core.ECtor{rec, List.append(&2, Core.Expr, Unb.sum.zeros(pad), [Core.ENum{tag}])}
+
+def Unb.sum.ctor(s: UnbS, +k: String) -> Core.Expr:
+  UnbS{+rec, pad, tag} = s
+  Unb.sum.ctor.go(String.is_empty(rec), k, rec, pad, tag)
+
+def Unb.sum.pctor.go(none: Bool, +k: String, +rec: String, pad: Nat, tag: U32) -> Core.Pat:
+  match none:
+    case True{}:
+      Core.PCtor{k, Nil{}}
+    case False{}:
+      Core.PCtor{rec, List.append(&2, Core.Pat, Unb.sum.wilds(pad), [Core.PNum{tag}])}
+
+def Unb.sum.pctor(s: UnbS, +k: String) -> Core.Pat:
+  UnbS{+rec, pad, tag} = s
+  Unb.sum.pctor.go(String.is_empty(rec), k, rec, pad, tag)
+
+def Unb.sum.p(+m: Map<&2, UnbS>, p: Core.Pat) -> Core.Pat:
+  match p:
+    case Core.PCtor{+n, args}:
+      match args:
+        case Nil{}:
+          Unb.sum.pctor(Unb.sum.get(m, n), n)
+        case a <> t:
+          Pat.push(Unb.sum.p(m, a), Unb.sum.p(m, Core.PCtor{n, t}))
+    case Core.PSucc{k, x}:
+      Core.PSucc{k, Unb.sum.p(m, x)}
+    case other:
+      other
+
+def Unb.sum.ps(+m: Map<&2, UnbS>, ps: List<&2, Core.Pat>) -> List<&2, Core.Pat>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      Unb.sum.p(m, p) <> Unb.sum.ps(m, t)
+
+def Unb.sum.e(+m: Map<&2, UnbS>, e: Core.Expr) -> Core.Expr:
+  match e:
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Core.ECall{Unb.sum.e(m, f), Nil{}}
+        case a <> t:
+          Expr.push(Unb.sum.e(m, a), Unb.sum.e(m, Core.ECall{f, t}))
+    case Core.ECtor{+n, args}:
+      match args:
+        case Nil{}:
+          Unb.sum.ctor(Unb.sum.get(m, n), n)
+        case a <> t:
+          Expr.push(Unb.sum.e(m, a), Unb.sum.e(m, Core.ECtor{n, t}))
+    case Core.ELam{pt, b}:
+      Core.ELam{Unb.sum.p(m, pt), Unb.sum.e(m, b)}
+    case Core.ELet{pt, v, b}:
+      Core.ELet{Unb.sum.p(m, pt), Unb.sum.e(m, v), Unb.sum.e(m, b)}
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.push(Unb.sum.e(m, a), Unb.sum.e(m, Core.EMatch{t, cases}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.EMatch{Nil{}, Nil{}}
+            case c <> t:
+              Expr.push.case(Unb.sum.e(m, c), Unb.sum.e(m, Core.EMatch{Nil{}, t}))
+    case Core.ECase{ps, b}:
+      Core.ECase{Unb.sum.ps(m, ps), Unb.sum.e(m, b)}
+    case Core.ESucc{k, x}:
+      Core.ESucc{k, Unb.sum.e(m, x)}
+    case Core.EOp{op, a, b}:
+      Core.EOp{op, Unb.sum.e(m, a), Unb.sum.e(m, b)}
+    case Core.EAnn{x, ty}:
+      Core.EAnn{Unb.sum.e(m, x), ty}
+    case other:
+      other
+
+# A scalar sum's declaration: its record, the widest constructor's fields
+# and the tag.
+def Unb.sum.rec(w: List<&2, Field>) -> List<&2, Field>:
+  match w:
+    case Nil{}:
+      Nil{}
+    case Field{fk, +ft} <> wt:
+      List.append(&2, Field, Field{fk, ft} <> wt, [Field{"_s_tag", ft}])
+
+def Unb.sum.first(cs: List<&2, Ctor>) -> String:
+  match cs:
+    case Nil{}:
+      ""
+    case Ctor{k, fs} <> r:
+      k
+
+def Unb.sum.type.go(keep: Bool, +n: String, ps: List<&2, String>, +cs: List<&2, Ctor>) -> Decl:
+  match keep:
+    case True{}:
+      DType{n, ps, cs}
+    case False{}:
+      DType{n, ps, [Ctor{n ++ "._s", Unb.sum.rec(Unb.sum.wide(cs, Nil{}))}]}
+
+def Unb.sum.type(+m: Map<&2, UnbS>, +n: String, ps: List<&2, String>, +cs: List<&2, Ctor>) -> Decl:
+  Unb.sum.type.go(String.is_empty(UnbS.rec(Unb.sum.get(m, Unb.sum.first(cs)))), n, ps, cs)
+
+def Unb.sum.decls(+m: Map<&2, UnbS>, ds: List<&2, Decl>) -> List<&2, Decl>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case DType{n, ps, cs} <> t:
+      Unb.sum.type(m, n, ps, cs) <> Unb.sum.decls(m, t)
+    case DDef{n, ps, b, r} <> t:
+      DDef{n, ps, Unb.sum.e(m, b), r} <> Unb.sum.decls(m, t)
+    case d <> t:
+      d <> Unb.sum.decls(m, t)
+
+def Unb.sum.program(on: Bool, +ds: List<&2, Decl>) -> List<&2, Decl>:
+  match on:
+    case True{}:
+      Unb.sum.decls(Unb.sum.map(ds, Unb.sum.names(ds, Set.new()), MTip{}), ds)
+    case False{}:
+      ds
+
 # Nested results. A def whose result is a pair with a record in it (a type
 # of one constructor of two to eight fields and no parameters, like bfs's
 # pop: St & Bool) gets a worker, f%n, that returns the pair's leaves as a
@@ -13000,14 +13240,6 @@ def Mod.param_names(ps: List<&2, Core.Param>) -> List<&2, String>:
 
 def Mod.var(+q: Qual, +bound: List<&2, String>, +x: String) -> String:
   Bool.pick(String, Str.has(bound, x), x, Mod.q(q, x))
-
-# p with a in front of its fields (see Expr.push).
-def Pat.push(a: Core.Pat, p: Core.Pat) -> Core.Pat:
-  match p:
-    case Core.PCtor{n, xs}:
-      Core.PCtor{n, a <> xs}
-    case other:
-      other
 
 def Mod.pat(+q: Qual, p: Core.Pat) -> Core.Pat:
   match p:
@@ -21457,7 +21689,7 @@ def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
   COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#define BEND_NATIVE_STR 1\n#define BEND_NATIVE_MAP 1\n#ifdef BEND_RT_SPLIT\n#include \"bendrt_split.h\"\n#else\n#include \"bendrt.h\"\n#endif\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
-    Doc.flat(Doc.list([protos, DStr{"\n"}, code, DStr{Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
+    Doc.flat(Doc.list([DStr{"BEND_NSP_BEGIN\n"}, protos, DStr{"\n"}, code, DStr{"BEND_NSP_END\n" ++ Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
     Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
     DStr{"\n" ++ entry}])), errs}
 
@@ -21540,7 +21772,8 @@ def G.li(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
       g
 
 def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
-  +ds = Unb.program(unb, Unb.program(unb, Nest.program(unb, Par.auto(par, Lo.program(opt, Arrw.decls(Pick.decls(ds0)))))))
+  +ds = Unb.program(unb, Unb.program(unb, Nest.program(unb, Unb.sum.program(unb, Par.auto(par, Lo.program(opt,
+    Arrw.decls(Pick.decls(ds0))))))))
   +g = Unb.sret(unb, ds, Dps.build(G.li(Opt.on(opt, 119), G.new(ds), ds), ds, free, rc))
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
