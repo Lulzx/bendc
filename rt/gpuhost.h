@@ -10,7 +10,7 @@
 // the caller runs the call on the CPU.
 //
 // On Apple the kernel runs on Metal, reached through the Objective-C
-// runtime (no extra link flags: this file asks the linker for Metal).
+// runtime, loaded at start (see g_preload): no extra link flags.
 // BEND_GPU=sim runs it in a simulator on the CPU instead (the same code as
 // C, lanes interleaved); BEND_GPU=off, or --gpu off, runs !-calls on the
 // CPU. BEND_GPU_LOG=1 says what happened.
@@ -27,6 +27,7 @@ typedef struct {
   void (*sim)(KW *, KAU *, const KParams *, KW *, uint32_t);
   void (*sim_kq)(KW *, KAU *, const KParams *, KW *, uint32_t);
   const GpuFn *fns;
+  const GpuFn *kqh;      // the KQ_ calls the host may run on the CPU (see gpu_kq_host)
 } GpuProg;
 
 #define GPU_OFF 0
@@ -34,6 +35,7 @@ typedef struct {
 #define GPU_SIM 2
 
 static pthread_mutex_t gpu_lock = PTHREAD_MUTEX_INITIALIZER;
+static KW gpu_kq_cpu;       // (see gpu_kq_host)
 static int gpu_mode = -1;
 static int gpu_log;         // BEND_GPU_LOG: 1 for a line a call, 2 for more
 static double gpu_tout;     // the last copy out's time (BEND_GPU_LOG)
@@ -87,11 +89,39 @@ static long gpu_env(const char *name, long dflt) {
 #endif
 
 #if BEND_METAL
-// Metal is linked (weakly, so a Mac without it still runs the program): the
-// loader maps it with the program for less memory than dlopen at the first
-// call (15 MB against 18).
-__asm__(".linker_option \"-framework\", \"Metal\"");
-extern void *MTLCreateSystemDefaultDevice(void) __attribute__((weak_import));
+// Metal is not linked: loading it costs about 4 MB of resident memory, which a
+// run on the CPU would pay too. A run that may use the GPU loads it at start,
+// by running the program again with Metal inserted
+// (DYLD_INSERT_LIBRARIES): the loader then maps it as it maps linked
+// libraries, for about 3 MB less than dlopen at the first call. Where the
+// insertion is refused (a restricted process, say), g_open opens it.
+#include <mach-o/dyld.h>
+#define G_METAL "/System/Library/Frameworks/Metal.framework/Metal"
+static void *(*MTLCreateSystemDefaultDevice)(void);
+__attribute__((constructor)) static void g_preload(int argc, char **argv) {
+  const char *m = getenv("BEND_GPU");
+  if (getenv("BEND_METAL_PRELOAD")) {
+    // (the second run: what programs it starts get neither variable)
+    unsetenv("BEND_METAL_PRELOAD");
+    unsetenv("DYLD_INSERT_LIBRARIES");
+    return;
+  }
+  if ((m && (strcmp(m, "off") == 0 || strcmp(m, "sim") == 0)) || getenv("DYLD_INSERT_LIBRARIES")) return;
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "--") == 0) break;
+    if (strcmp(argv[i], "--gpu") == 0 && i + 1 < argc && strcmp(argv[i + 1], "off") == 0) return;
+    if (strcmp(argv[i], "--bend-help") == 0) return;
+  }
+  if (dlsym(RTLD_DEFAULT, "MTLCreateSystemDefaultDevice")) return;
+  char path[PATH_MAX];
+  uint32_t n = sizeof path;
+  if (_NSGetExecutablePath(path, &n) != 0) return;
+  setenv("DYLD_INSERT_LIBRARIES", G_METAL, 1);
+  setenv("BEND_METAL_PRELOAD", "1", 1);
+  execv(path, argv);
+  unsetenv("DYLD_INSERT_LIBRARIES");
+  unsetenv("BEND_METAL_PRELOAD");
+}
 typedef void *GId;
 typedef void *GSel;
 typedef struct { unsigned long w, h, d; } GSize;
@@ -229,6 +259,11 @@ static void g_save(unsigned long long h, GId d, GId d_kq) {
 }
 
 static int g_open(void) {
+  MTLCreateSystemDefaultDevice = (void *(*)(void))dlsym(RTLD_DEFAULT, "MTLCreateSystemDefaultDevice");
+  if (!MTLCreateSystemDefaultDevice) {
+    void *mtl = dlopen(G_METAL, RTLD_LAZY);
+    if (mtl) MTLCreateSystemDefaultDevice = (void *(*)(void))dlsym(mtl, "MTLCreateSystemDefaultDevice");
+  }
   void *objc = dlopen("/usr/lib/libobjc.A.dylib", RTLD_LAZY);
   if (!objc || !MTLCreateSystemDefaultDevice) { gpu_note("%s", "no Metal"); return 0; }
   g_class = (GId (*)(const char *))dlsym(objc, "objc_getClass");
@@ -337,6 +372,8 @@ static int gpu_setup(const GpuProg *prog) {
   if (gpu_H == MAP_FAILED || gpu_A == MAP_FAILED) return GPU_OFF;
   gpu_pin_min = (KW)gpu_env("BEND_GPU_PIN_MB", 32) << 20;
   gpu_lanes = (KW)gpu_env("BEND_GPU_LANES", sim ? 64 : 8192);
+  // (the simulator runs every call on the device: it tests that code)
+  gpu_kq_cpu = (KW)gpu_env("BEND_GPU_KQCPU", sim ? 0 : 4);
   gpu_budget = (KW)gpu_env("BEND_GPU_STEPS", sim ? 37 : 16384);
   KW f = 0;
   while (((KW)1 << f) < gpu_lanes) f++;
@@ -365,7 +402,9 @@ static void gpu_keep(V v) {
 
 // Copies the arena objects reachable from v into the CPU heap, children
 // first (a parent is never older than its children), and answers the copy
-// of v. 0 when an object has no CPU form (a closure of a lambda).
+// of v. 0 when an object has no CPU form (a closure of a lambda). A narrow
+// array (K_ARR_NW in rt/gpu.h: 32-bit scalar cells) becomes a CPU one.
+#define GPU_NARROW(w) (((w) | 0x3f) == (ARR_TAG | 0x3f) && ((w) & K_ARR_NW))
 static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
   KW lo = P->ab + ((P->heap0 + 1) << 3), hi = P->ab + ((P->heap0 + P->heapw) << 3);
 #define GPU_OBJ(w) ((w) >= lo && (w) < hi && ((w) & 7) == 0)
@@ -384,6 +423,7 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
     if (!(h & GPU_SEEN)) {
       // First visit: push the children.
       gpu_H[i - 1] = h | GPU_SEEN;
+      if (GPU_NARROW(gpu_H[i])) continue;
       for (KW k = 0; k < h; k++) {
         KW w = gpu_H[i + k];
         if (GPU_OBJ(w) && !(gpu_H[KIX_H(P, w) - 1] & (GPU_FWD | GPU_SEEN))) {
@@ -395,6 +435,17 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
     }
     // Second visit: the children are copied.
     KW n = h & ~GPU_SEEN;
+    if (GPU_NARROW(gpu_H[i])) {
+      unsigned d = (unsigned)(gpu_H[i] & 31);
+      V *p = halloc(1 + ((size_t)1 << d));
+      p[0] = ARR_HDR(d);
+      const uint32_t *q = (const uint32_t *)&gpu_H[i + 1];
+      for (size_t k = 0; k < (size_t)1 << d; k++) p[1 + k] = q[k];
+      gpu_keep((V)p);
+      gpu_H[i - 1] = GPU_FWD | (KW)p;
+      sp--;
+      continue;
+    }
     V *p = halloc(n);
     for (KW k = 0; k < n; k++) {
       KW w = gpu_H[i + k];
@@ -424,6 +475,7 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
   if (ok) *out = (V)(gpu_H[KIX_H(P, v) - 1] & ~GPU_FWD);
   return ok;
 #undef GPU_OBJ
+#undef GPU_NARROW
 }
 
 // A bigger arena (by f, a power of 2), for a call that filled this one: the
@@ -459,6 +511,44 @@ static int gpu_pinnable(int pin, V *args, int n) {
 
 // Runs target entry on args; 0 when the caller must run it on the CPU, 2 when
 // the arena filled up (and may grow).
+// Set while the host runs device calls on the CPU (gpu_kq_host): a !-call
+// they make runs on the CPU too.
+static int gpu_nest;
+
+// When at most gpu_kq_cpu lanes wait for a KQ_ call (a serial tail: symreg's
+// climb is 32 rounds of one chain, 0.17s on one lane) and each is one bendc
+// lists in prog->kqh (scalar arguments and result), the host runs them on
+// the CPU, where a serial chain runs far faster, and hands each lane its
+// result as bend_kq would. 1 when it did.
+static int gpu_kq_host(const GpuProg *prog, KW *H, const KParams *P, KW waiting) {
+  if (waiting > gpu_kq_cpu || prog->kqh == NULL) return 0;
+  KW n = P->nlanes;
+  Fn fs[64];
+  KW ls[64], k = 0;
+  for (KW l = 0; l < gpu_lanes; l++) {
+    if (H[P->lane0 + l] != PC_KQ) continue;
+    KW kq = H[P->lane0 + 7 * n + l];
+    Fn f = NULL;
+    for (const GpuFn *e = prog->kqh; e->f; e++) {
+      if (e->l == kq) f = e->f;
+    }
+    if (f == NULL || k == 64) return 0;
+    fs[k] = f;
+    ls[k++] = l;
+  }
+  gpu_nest = 1;
+  for (KW i = 0; i < k; i++) {
+    KW l = ls[i];
+    V a[KQ_ARGS];
+    for (int j = 0; j < KQ_ARGS; j++) a[j] = H[P->lane0 + (10 + j) * n + l];
+    H[P->lane0 + 2 * n + l] = fs[i](a);
+    H[P->lane0 + l] = H[P->lane0 + 8 * n + l];
+  }
+  gpu_nest = 0;
+  if (gpu_log == 2) fprintf(stderr, "bend gpu: kq ran %llu calls on the CPU\n", (unsigned long long)k);
+  return 1;
+}
+
 static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
   KParams P;
   memset(&P, 0, sizeof P);
@@ -537,10 +627,12 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) break;
     if (__atomic_load_n(&gpu_A[KA_DONE], __ATOMIC_SEQ_CST) != 0) break;
     for (KW l = 0; l < gpu_lanes; l++) waiting += H[P.lane0 + l] == PC_KQ;
+    if (waiting > 0 && gpu_kq_host(prog, H, &P, waiting)) waiting = 0;
     if (waiting > 0) {
       // (again, after the arena grows, while a call runs out of it)
       for (;;) {
         gpu_A[KA_GROW] = 0;
+        KAU used = gpu_A[KA_HEAP];
         if (gpu_mode == GPU_SIM) {
           for (KW l = 0; l < gpu_lanes; l++) prog->sim_kq(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
         }
@@ -551,9 +643,11 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
 #endif
         if (gpu_A[KA_GROW] == 0 || gpu_A[KA_ERR] != 0) break;
         // (by as much as the calls that ran out would take: they took the
-        // arena too, and as many calls again as the ones that did not)
+        // arena too, and as many calls again as the ones that did not; when
+        // every call ran out, what they took is free again)
         KW left = 0;
         for (KW l = 0; l < gpu_lanes; l++) left += H[P.lane0 + l] == PC_KQ;
+        if (left == waiting) gpu_A[KA_HEAP] = used;
         size_t f = 4;
         while (f < 16 && f * (waiting - left) < 2 * waiting) f *= 2;
         if (!gpu_grow(f)) {
@@ -610,6 +704,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
 }
 
 static int gpu_call(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
+  if (gpu_nest) return 0;
   pthread_mutex_lock(&gpu_lock);
   double t0 = gpu_now();
   if (gpu_mode < 0) gpu_mode = gpu_setup(prog);

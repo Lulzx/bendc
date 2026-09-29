@@ -136,7 +136,22 @@ static inline V TAG(V v) { return (v & 1) ? (v >> 3) : (V)(uint32_t)((V *)v)[0] 
 // A match's test for a constructor with fields: an immediate (a nullary
 // constructor) never is one, and a node's tag word is loaded without a
 // select, so a match's cases share one load.
+#ifdef BEND_DEBUG_POISON
+// Debugging, the slots reused as usual: a freed node and a reuse token are
+// poisoned when this thread lets them go, and a match that meets one stops.
+#define BEND_POISON ((V)0xDEADDEADDEADDEADull)
+__attribute__((noreturn, noinline)) void bend_poison_hit(V v);
+static inline int IS_N(V v, V t) {
+  if (v & 1) return 0;
+  V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  if (UNLIKELY(w0 == BEND_POISON)) bend_poison_hit(v);
+  return ((V)(uint32_t)w0 & ~BEND_SH_BITS) == t;
+}
+#define BEND_POISON_AT(v, w) do { for (unsigned j_ = 0; j_ < (w); j_++) __atomic_store_n(&((V *)(v))[j_], BEND_POISON, __ATOMIC_RELAXED); } while (0)
+#else
 static inline int IS_N(V v, V t) { return !(v & 1) && ((V)(uint32_t)((V *)v)[0] & ~BEND_SH_BITS) == t; }
+#define BEND_POISON_AT(v, w) ((void)0)
+#endif
 #endif
 
 __attribute__((noreturn)) void bend_fail(const char *msg);
@@ -246,11 +261,29 @@ extern size_t gc_nruns;
 extern pthread_mutex_t gc_lock;
 extern GcBlk *gc_partial[2][GC_NCLS];
 extern _Atomic size_t gc_since;
+// A collection comes after gc_limit bytes: gc_limit_min times gc_grow, or
+// gc_factor times what lived at the last one if that is more. A minor
+// collection finds what died young; what dies old waits for a major one,
+// which comes when what lives grows past gc_minor_k times what lived after
+// the last major one, plus gc_slack times gc_grow.
+// gc_grow starts at 1: a program whose young objects mostly die collects
+// often, in a small heap, and its peak memory stays near what lives. It
+// becomes gc_grow_max for good when two minor collections in a row find
+// that 3/4 of what was made since the one before lives on: such a program
+// (a compiler building its tables, say) would mark the same objects again
+// and again, and more of them die when it waits longer. It also doubles
+// when, over the last 8 collections, the program spent more than a tenth of
+// its time stopped in them (with many threads, or with the machine busy,
+// each stop costs more than the marking).
+// (Read at start: libc's number parsing takes a lock a stopped thread may hold.)
 extern size_t gc_limit;
 extern size_t gc_limit_min;
-// (Read at start: libc's number parsing takes a lock a stopped thread may hold.)
 extern double gc_minor_k;
 extern size_t gc_slack;
+extern unsigned gc_grow;
+extern double gc_t_end;
+extern double gc_t_run;
+extern double gc_t_stop;
 extern size_t gc_live_bytes;
 extern size_t gc_major_live;
 extern int gc_minor;
@@ -367,10 +400,13 @@ static inline void gc_setbit(uint64_t *w, uint64_t bit) {
 // The free slots' marks go here too: a slot handed out is young (bend_take_at
 // leaves a freed slot's mark when other threads run), or a minor collection
 // would take the new object for an old one and not trace what it holds.
+// The load acquires: it pairs with the release of the free that cleared a
+// bit (bend_free_slot, rc_free_slot), so the freeing thread's last reads of
+// the slot come before this thread's writes to it.
 static inline uint64_t gc_next_bits(GcCache *k) {
   GcBlk *b = k->blk;
   while (++k->j < k->nj) {
-    uint64_t f = ~__atomic_load_n(&GC_ALLOC(b)[k->j], __ATOMIC_RELAXED);
+    uint64_t f = ~__atomic_load_n(&GC_ALLOC(b)[k->j], __ATOMIC_ACQUIRE);
     if (k->j == (b->nobj >> 6)) f &= (1ull << (b->nobj & 63)) - 1;
     if (f) {
       uint64_t *m = &GC_MARK(b)[k->j];
@@ -510,6 +546,7 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   return;
 #endif
   (void)line;
+  BEND_POISON_AT(v, w);
   uint64_t *cw = &h->cand[(size_t)(w - 2) * GC_CANDW + (bi >> 6)];
   // A freed slot is young when it is handed out again. On one thread its
   // mark goes here; when other threads run, the thread that hands the slot
@@ -517,9 +554,15 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   // could be the mark of the object another thread made in the slot since
   // and a collection marked old, which the next minor collection would then
   // not trace from (tests/par_reuse.bend).
+  // With threads the bit is cleared with release: the match's reads of the
+  // node's fields, just before, must be done before another thread can take
+  // the slot and write it. Relaxed, a weakly ordered CPU (arm64) could
+  // finish those reads late and get the fields of that thread's new node:
+  // this thread then owned nodes the other one still used, and freed or
+  // rebuilt them under it (tests/par_free.bend).
   uint64_t *mw = &gc_mbits[bi * 64 + (i >> 6)];
   if (UNLIKELY(h->mt)) {
-    __atomic_fetch_and(aw, ~bit, __ATOMIC_RELAXED);
+    __atomic_fetch_and(aw, ~bit, __ATOMIC_RELEASE);
     // (a sample of the frees keeps the shared candidate words cool)
     if ((i & 15) == 0 && !(*cw & (1ull << (bi & 63))))
       __atomic_fetch_or(cw, 1ull << (bi & 63), __ATOMIC_RELAXED);
@@ -971,6 +1014,8 @@ void gc_rem_unique(void);
 // in the thread's registers or stack: marked then, and old after.
 void gc_rescan_dirty(void);
 
+double gc_now(void);
+
 __attribute__((noinline)) void gc_collect_locked(void);
 
 // Collects now (from a thread that runs Bend code).
@@ -1081,6 +1126,7 @@ static inline V bend_take_ru(V v, unsigned w) {
   bend_take(v, w);
   return 0;
 #endif
+  BEND_POISON_AT(v, w);
   return v;
 }
 static inline V *bend_ru_young(V u, unsigned w) {
@@ -1285,6 +1331,8 @@ BEND_UINL V F_Array_dswap_x37w(V a, V i, V v) {
   return C2(0, a, old);
 }
 static inline V F_Array_dnew(V d, V v) { return arr_new(d, v); }
+// (an array of scalars, see Arrw in bendc.bend: narrow on the device only)
+#define F_Array_dnew_x37w F_Array_dnew
 static inline V F_Array_dclone(V a) { return C2(0, a, arr_copy(arr_cls(a), arr_cells(a), 1, ((V *)a)[0] & RC_TS)); }
 
 // The atomics, on a cell's U32 (its low half: the cell is a U32 below 2^32).
@@ -1677,6 +1725,9 @@ static inline void cpu_relax(void) {
 
 void *par_worker(void *arg);
 
+// The tasks queued in the deques (the slots from top to bot, and one more
+// each side for a pop or a steal the collection stopped halfway; the rest
+// are stale, and a task is held on its forker's stack until it is joined).
 void par_hook(void);
 
 void par_start(void);
