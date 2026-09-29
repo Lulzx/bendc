@@ -1175,7 +1175,23 @@ static inline void arr_put(V a, V *p, V v) {
 // cells) when it had one, else its cells get one each.
 void rc_let_go_arr(V a);
 
-V arr_alloc(unsigned c);
+// Inline, as is arr_new: in a split build (bendc -o) clang then still knows
+// a new array's size, and a loop over it does not reload the mask.
+static inline V arr_alloc(unsigned c) {
+  if (c > 31) bend_fail("an array past the deepest block class 31");
+  Thr *t = thr_self;
+  if (t)
+    for (int i = 0; i < ARR_SPARES; i++) {
+      V a = t->spare[i];
+      if (a && arr_cls(a) == c) {
+        t->spare[i] = 0;
+        return a;
+      }
+    }
+  V *p = halloc(1 + ((size_t)1 << c));
+  p[0] = ARR_HDR(c);
+  return (V)p;
+}
 
 // Traced, an unshared array no path of the program uses any more (see
 // bend_dead) is one of the thread's spares (the oldest goes when all
@@ -1202,7 +1218,22 @@ static inline void bend_dead(V v) {
 // (ts: the source is marked, see RC_TS)
 V arr_copy(unsigned c, const V *src, int share, V ts);
 
-V arr_new(V depth, V v);
+static inline V arr_new(V depth, V v) {
+  if (depth > 31) bend_fail("an array past the deepest block class 31");
+  unsigned c = (unsigned)depth;
+  size_t n = (size_t)1 << c;
+  V a = arr_alloc(c);
+  V *d = arr_cells(a);
+  if (c > 0) {
+    if (gc_hot.rc) rc_dupn(v, n - 1);
+    else bend_share(v);
+  }
+  if (v >= ((V)1 << 32)) arr_dirty(a);
+  // (four cells a step: a whole number of steps from 4 cells up)
+  if (n < 4) for (size_t i = 0; i < n; i++) d[i] = v;
+  else for (size_t i = 0; i < n; i += 4) { d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = v; }
+  return a;
+}
 
 static inline V arr_leaf(V x) { return arr_new(0, x); }
 
@@ -1494,30 +1525,35 @@ static inline V F_Map_dhas(V m, V key) {
 // ------------
 
 #define U(x) ((uint32_t)(x))
+// The operands are uint32_t, not V: a U32 local passed as a V would be
+// widened and the operation done in 64 bits (a compare of two widened
+// values stays 64-bit, and a loop over it vectorizes in 64-bit lanes).
+// U32.xor keeps V ones: with uint32_t ones clang packed nbody's float loop
+// worse.
 static inline V nat_low32(V n) { return U(n); }
-static inline uint32_t F_U32_dinc(V a) { return U(U(a) + 1u); }
-static inline uint32_t F_U32_dadd(V a, V b) { return U(U(a) + U(b)); }
-static inline uint32_t F_U32_dsub(V a, V b) { return U(U(a) - U(b)); }
-static inline uint32_t F_U32_dmul(V a, V b) { return U(U(a) * U(b)); }
-static inline uint32_t F_U32_ddiv(V a, V b) { return b == 0 ? 0 : U(a) / U(b); }
-static inline uint32_t F_U32_dmod(V a, V b) { return b == 0 ? a : U(a) % U(b); }
-static inline uint32_t F_U32_dnot(V a) { return U(~U(a)); }
-static inline uint32_t F_U32_dand(V a, V b) { return U(a) & U(b); }
-static inline uint32_t F_U32_dor(V a, V b) { return U(a) | U(b); }
+static inline uint32_t F_U32_dinc(uint32_t a) { return U(U(a) + 1u); }
+static inline uint32_t F_U32_dadd(uint32_t a, uint32_t b) { return U(U(a) + U(b)); }
+static inline uint32_t F_U32_dsub(uint32_t a, uint32_t b) { return U(U(a) - U(b)); }
+static inline uint32_t F_U32_dmul(uint32_t a, uint32_t b) { return U(U(a) * U(b)); }
+static inline uint32_t F_U32_ddiv(uint32_t a, uint32_t b) { return b == 0 ? 0 : U(a) / U(b); }
+static inline uint32_t F_U32_dmod(uint32_t a, uint32_t b) { return b == 0 ? a : U(a) % U(b); }
+static inline uint32_t F_U32_dnot(uint32_t a) { return U(~U(a)); }
+static inline uint32_t F_U32_dand(uint32_t a, uint32_t b) { return U(a) & U(b); }
+static inline uint32_t F_U32_dor(uint32_t a, uint32_t b) { return U(a) | U(b); }
 static inline uint32_t F_U32_dxor(V a, V b) { return U(a) ^ U(b); }
-static inline uint32_t F_U32_dshl(V a) { return U(U(a) << 1); }
-static inline uint32_t F_U32_dshr(V a) { return U(a) >> 1; }
-static inline uint32_t F_U32_dshln(V a, V n) { return n >= 32 ? 0 : U(U(a) << U(n)); }
-static inline uint32_t F_U32_dshrn(V a, V n) { return n >= 32 ? 0 : U(a) >> U(n); }
+static inline uint32_t F_U32_dshl(uint32_t a) { return U(U(a) << 1); }
+static inline uint32_t F_U32_dshr(uint32_t a) { return U(a) >> 1; }
+static inline uint32_t F_U32_dshln(uint32_t a, V n) { return n >= 32 ? 0 : U(U(a) << U(n)); }
+static inline uint32_t F_U32_dshrn(uint32_t a, V n) { return n >= 32 ? 0 : U(a) >> U(n); }
 static inline V F_U32_dcmp(V a, V b) { return a < b ? IMM(0) : a == b ? IMM(1) : IMM(2); }
-static inline uint32_t F_U32_dis__eq(V a, V b) { return BOOL(U(a) == U(b)); }
-static inline uint32_t F_U32_dis__ne(V a, V b) { return BOOL(U(a) != U(b)); }
-static inline uint32_t F_U32_dis__lt(V a, V b) { return BOOL(U(a) < U(b)); }
-static inline uint32_t F_U32_dis__le(V a, V b) { return BOOL(U(a) <= U(b)); }
-static inline uint32_t F_U32_dis__gt(V a, V b) { return BOOL(U(a) > U(b)); }
-static inline uint32_t F_U32_dis__ge(V a, V b) { return BOOL(U(a) >= U(b)); }
-static inline uint32_t F_U32_dis__zero(V a) { return BOOL(U(a) == 0); }
-static inline uint32_t F_U32_dis__even(V a) { return BOOL((a & 1) == 0); }
+static inline uint32_t F_U32_dis__eq(uint32_t a, uint32_t b) { return BOOL(U(a) == U(b)); }
+static inline uint32_t F_U32_dis__ne(uint32_t a, uint32_t b) { return BOOL(U(a) != U(b)); }
+static inline uint32_t F_U32_dis__lt(uint32_t a, uint32_t b) { return BOOL(U(a) < U(b)); }
+static inline uint32_t F_U32_dis__le(uint32_t a, uint32_t b) { return BOOL(U(a) <= U(b)); }
+static inline uint32_t F_U32_dis__gt(uint32_t a, uint32_t b) { return BOOL(U(a) > U(b)); }
+static inline uint32_t F_U32_dis__ge(uint32_t a, uint32_t b) { return BOOL(U(a) >= U(b)); }
+static inline uint32_t F_U32_dis__zero(uint32_t a) { return BOOL(U(a) == 0); }
+static inline uint32_t F_U32_dis__even(uint32_t a) { return BOOL((a & 1) == 0); }
 static inline V F_U32_dto__nat(V a) { return a; }
 static inline uint32_t F_U32_dfrom__nat(V n) { return nat_low32(n); }
 static inline uint32_t F_U32_dmin(V a, V b) { return U(a) < U(b) ? U(a) : U(b); }
