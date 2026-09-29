@@ -527,26 +527,23 @@ What it does not do, against the C backend:
 With tcc (`tools/tcc.sh`), the chain has no clang or GCC in it: tcc builds the runtime and
 `natives.o`, and bendc writes the program's machine code.
 
-Against the C backend (clang `-O2`), interleaved runs, best of 7, on an Apple M4 Pro that was
-running other heavy jobs at the time (load average between 60 and 150), so only the ratios mean
-much, and those move by about 0.2 from run to run:
+Against the C backend (clang `-O2`), interleaved runs, best of 9 (5 for the check), on an Apple
+M4 Pro that was running other jobs at the time (load average between 8 and 21), so only the ratios
+mean much, and those move by about 0.1 from run to run:
 
 | program | C backend | native | native / C |
 |---|---|---|---|
-| `forks 24` | 0.014s | 0.016s | 1.14 |
-| `forks 24` (1 thread) | 0.034s | 0.054s | 1.59 |
-| `leaves 12` | 2.75s | 3.19s | 1.16 |
-| `leaves 12` (1 thread) | 10.07s | 11.79s | 1.17 |
-| `sort 1000000` | 0.748s | 0.765s | 1.02 |
-| `sort 1000000` (1 thread) | 1.77s | 1.41s | 0.80 |
-| bendc compiling `bendc.bend` to C | 3.31s | 5.02s | 1.51 |
-| bendc checking `bendc.bend` | 3.65s | 4.39s | 1.20 |
+| `forks 24` | 0.0079s | 0.0077s | 0.99 |
+| `forks 24` (1 thread) | 0.0286s | 0.0297s | 1.04 |
+| `leaves 12` | 0.936s | 1.078s | 1.15 |
+| `leaves 12` (1 thread) | 6.27s | 7.23s | 1.15 |
+| `sort 1000000` | 0.163s | 0.191s | 1.17 |
+| `sort 1000000` (1 thread) | 0.460s | 0.495s | 1.08 |
+| bendc compiling `bendc.bend` to C | 2.13s | 2.55s | 1.20 |
+| bendc checking `bendc.bend` | 1.95s | 2.54s | 1.30 |
 
-`sort` and `leaves` are within 1.2 of the C backend on one thread and on all threads. `forks` on
-one thread is 1.6: each call saves and restores callee-saved pairs that clang's inlined code does
-not need. bendc itself is 1.2 to 1.5; with less load, compiling `bendc.bend` measured 2.20s
-against 1.70s (1.30). Most of what is left there is allocation, which native reaches through a
-call into the runtime. Building is where it wins: `bendc --native` builds bendc (check, code
+On one thread, `forks`, `leaves` and `sort` are within 1.2 of the C backend, and bendc compiling
+itself is 1.2. Building is where it wins: `bendc --native` builds bendc (check, code
 generation, assembly, link) in 3.5s, where `bendc -o` takes 20s, most of it clang compiling
 59,000 lines of C.
 
