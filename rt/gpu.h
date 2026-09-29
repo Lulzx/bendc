@@ -65,7 +65,12 @@ static inline KU k_u_of(float f) { union { uint32_t i; float f; } x; x.f = f; re
 #define KMF(n) n##f
 #define KINLINE static inline
 #define KNOINLINE static
+#ifdef __TINYC__
+// (tcc has no __auto_type: a word holds a KU as well, the natives truncate)
+#define KAUTO KW
+#else
 #define KAUTO __auto_type
+#endif
 #define K_ATW(p) ((KAU *)(p))
 #define K_SIMD_ALL(b) (b)
 #endif
