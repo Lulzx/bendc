@@ -31,6 +31,26 @@ for src in tests/*.bend; do
     echo "FAIL $name (output)"; diff "$out.txt" "tests/$name.out" | head -10 | sed 's/^/  /'; fail=$((fail+1))
   fi
 done
+# The same programs compiled with BEND_RC=1 (reference counts, no tracing),
+# with the settings of tests/NAME.env. BEND_TEST_RC=0 skips them.
+if [ "${BEND_TEST_RC:-1}" != 0 ]; then
+  mkdir -p build/tests/rc
+  for src in tests/*.bend; do
+    name=$(basename "$src" .bend)
+    out=build/tests/rc/$name
+    if ! BEND_RC=1 "$BENDC" "$BASE" "$src" > "$out.c" 2> "$out.err" ||
+       ! ${CC:-clang} -O2 -w -DBEND_RT_SPLIT -I rt "$out.c" "$RTO" -o "$out" -lm -lpthread $LDL 2> "$out.err"; then
+      echo "FAIL rc/$name (build)"; sed 's/^/  /' "$out.err" | head -5; fail=$((fail+1)); continue
+    fi
+    env $(cat "tests/$name.env" 2>/dev/null) "./$out" > "$out.txt" 2> "$out.stderr"
+    echo "exit $?" >> "$out.txt"
+    if cmp -s "$out.txt" "tests/$name.out"; then
+      echo "ok   rc/$name"; pass=$((pass+1))
+    else
+      echo "FAIL rc/$name (output)"; diff "$out.txt" "tests/$name.out" | head -10 | sed 's/^/  /'; fail=$((fail+1))
+    fi
+  done
+fi
 # !-calls on the device: the simulator everywhere, Metal on a Mac with a GPU.
 # A run passes when its output matches and no !-call fell back to the CPU
 # but the ones tests/NAME.fallbacks counts. A GPU

@@ -12,6 +12,8 @@
 // bendrt.o (as natives.o: see Cc.link in rt/cc.c).
 
 #define BEND_NATIVE_MAP_BIT 1
+#define BEND_NATIVE_STR 1
+#define BEND_NATIVE_MAP 1
 #include "bendrt_split.h"
 
 V *bn_alloc(V words) { return halloc((size_t)words); }
@@ -62,7 +64,7 @@ N1(F32_dlog10) N1(F32_dsin) N1(F32_dcos) N1(F32_dtan) N1(F32_dasin) N1(F32_dacos
 N1(F32_datan) N1(F32_dsinh) N1(F32_dcosh) N1(F32_dtanh) N1(F32_dfloor) N1(F32_dceil)
 N1(F32_dtrunc) N1(F32_dbits) N1(F32_dto__u32) N1(F32_dshow) N1(F32_dread)
 
-N2(Map_dbit)
+N2(Map_dbit) N3(Map_dget) N2(Map_dhas) N2(String_dcmp) N2(String_deq)
 
 N1(Array_dsize) N2(Array_dget) N3(Array_dswap) N3(Array_dset) N2(Array_dnew) N1(Array_dclone)
 N3(Array_datomic_dadd) N3(Array_datomic_dmin) N3(Array_datomic_dmax) N3(Array_datomic_dand)

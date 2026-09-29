@@ -100,6 +100,7 @@ size_t gc_nprev, gc_capprev;
 #define GC_CANDW (GC_MAXBLK / 64)
 uint64_t *gc_cand;
 int gc_mt;
+int bend_rc_req;
 GcHot gc_hot;
 GcRange *gc_roots;
 size_t gc_nroots, gc_caproots;
@@ -152,8 +153,8 @@ void gc_init(void) {
   gc_abits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
-  gc_cand = gc_reserve(GC_RQCLS * GC_CANDW * sizeof(uint64_t), NULL);
-  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0};
+  gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
+  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -166,6 +167,8 @@ void gc_init(void) {
   if (getenv("BEND_GC_SLACK_MB")) gc_slack = (size_t)atol(getenv("BEND_GC_SLACK_MB")) << 20;
   const char *m = getenv("BEND_GC_MIN_MB");
   if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20;
+  // Reference counting frees every object: the collector never runs.
+  if (bend_rc_req) gc_limit = gc_limit_min = (size_t)-1;
 }
 #define GC_ALLOC(b) (gc_abits + gc_bi(b) * 64)
 #define GC_MARK(b) (gc_mbits + gc_bi(b) * 64)
@@ -194,7 +197,7 @@ GcBlk *gc_new_small(int atomic, unsigned c) {
   memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
   b->words = gc_cls_w[c];
   b->nobj = (uint32_t)((GC_BLK - GC_HDR) / (b->words * 8));
-  *GC_META(b) = (GcMeta){(uint32_t)(((uint64_t)1 << 32) / (b->words * 8)) + 1, 0, {0}};
+  *GC_META(b) = (GcMeta){(uint32_t)(((uint64_t)1 << 32) / (b->words * 8)) + 1, 0, (uint8_t)c, (uint16_t)b->words};
   b->nblk = 1;
   b->atomic = (uint8_t)atomic;
   b->cls = (uint8_t)c;
@@ -211,11 +214,25 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
     V *p = k->objs + (size_t)i * sw;
     p[0] = BEND_HOLE;
     BEND_BARRIER();
-    GC_ALLOC(k->blk)[i >> 6] |= 1ull << (i & 63);
+    gc_setbit(&GC_ALLOC(k->blk)[i >> 6], 1ull << (i & 63));
     if (!k->reuse)
       atomic_fetch_add_explicit(&gc_since, ((size_t)__builtin_popcountll(k->bits) + 1) * sw * sizeof(V),
         memory_order_relaxed);
     return p;
+  }
+  // Counted, the thread's own frees go back to the block it allocates from:
+  // while a 5th of it is free again, it goes on handing out those slots (no
+  // lock, and the memory stays warm). Only its owner sets its bits.
+  if (gc_hot.rc && k->blk) {
+    GcBlk *q = k->blk;
+    uint32_t used = 0;
+    for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(__atomic_load_n(&GC_ALLOC(q)[j], __ATOMIC_RELAXED));
+    if (q->nobj - used >= q->nobj / 5) {
+      k->bump = k->end = NULL;
+      k->j = (uint32_t)-1;
+      k->bits = 0;
+      return gc_refill(k, atomic, c);
+    }
   }
   if (k->blk) { __atomic_store_n(&k->blk->owned, 0, __ATOMIC_RELEASE); k->blk = NULL; }
   // First the next block, in address order, where matches freed slots and a
@@ -226,7 +243,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   // that is a small one stays one, and a new one is owned before it is one.
   GcBlk *b = NULL;
   k->reuse = 0;
-  if (!atomic && c < GC_RQCLS) {
+  if (!atomic && c < (gc_hot.rc ? GC_NCLS : GC_RQCLS)) {
     Thr *t = thr_self;
     t->claiming = 1;
     atomic_signal_fence(memory_order_seq_cst);
@@ -308,7 +325,7 @@ __attribute__((noinline)) V *gc_alloc_large(size_t w, int atomic) {
   memset(b, 0, sizeof(GcBlk));
   memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
   memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
-  *GC_META(b) = (GcMeta){0, 1, {0}};
+  *GC_META(b) = (GcMeta){0, 1, 0, 0};
   b->words = (uint32_t)w;
   b->nobj = 1;
   b->nblk = (uint32_t)n;
@@ -360,6 +377,105 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w) {
 #else
 #define bend_take(v, w) bend_take_at(v, w, 0)
 #endif
+#define RC_ONE ((V)1 << 48)
+#define RC_STICKY ((V)1 << 62)
+#define RC_TS ((V)1 << 63)
+#define RC_ADDR (RC_ONE - 1)
+#define RC_REFS(w0) (((w0) >> 48) & 0x7fff)
+#define rc_bmark() 0
+#define rc_bdupFLD(p, i) rc_dup_in(FLD(p, i), rc_bmark())
+#define rc_bdup(x) rc_dup_in((x), rc_bmark())
+__attribute__((noinline)) void rc_free_large(uintptr_t bi) {
+  pthread_mutex_lock(&gc_lock);
+  GcBlk *b = gc_blk(bi);
+  size_t n = b->nblk;
+  GC_ALLOC(b)[0] = 0;
+  for (size_t j = 0; j < n; j++) gc_kind[bi + j] = 0;
+  gc_runs[gc_nruns++] = (GcRun){(uint32_t)bi, (uint32_t)n};
+  pthread_mutex_unlock(&gc_lock);
+}
+#ifdef BEND_DEBUG_FREE
+void rc_poison(V v, unsigned w) {
+  static uint64_t nfreed;
+  static long stop = -2;
+  if (stop == -2) stop = getenv("BEND_DEBUG_FREE_AT") ? atol(getenv("BEND_DEBUG_FREE_AT")) : -1;
+  uint64_t k = __atomic_add_fetch(&nfreed, 1, __ATOMIC_RELAXED);
+  if ((long)k == stop) abort();
+  V who = (V)(((uintptr_t)pthread_self() >> 12) & 0xff);
+  bend_debug_record(k & 0xfffff);
+  for (unsigned j = 0; j < w; j++) ((V *)v)[j] = ((V)0xDEAD << 48) | (who << 40) | ((k & 0xfffff) << 20);
+}
+#endif
+void rc_push(Thr *t, V v) {
+  if (t->rcn == t->rccap) {
+    t->rccap = t->rccap ? t->rccap * 2 : 1024;
+    t->rcs = realloc(t->rcs, t->rccap * sizeof(V));
+    if (!t->rcs) bend_fail("out of memory");
+  }
+  t->rcs[t->rcn++] = v;
+}
+__attribute__((noinline)) void rc_free_obj(V v) {
+  Thr *t = thr_self;
+  size_t base = t->rcn;
+  for (;;) {
+    uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
+    size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
+    V *p = (V *)v;
+    V next = 0;
+    for (size_t j = 1; j < w; j++) {
+      V x = p[j];
+      if (rc_obj(x) && rc_release(x)) {
+        if (next) rc_push(t, x);
+        else next = x;
+      }
+    }
+    rc_free_at(v, 0);
+    if (next) { v = next; continue; }
+    if (t->rcn == base) return;
+    v = t->rcs[--t->rcn];
+  }
+}
+__attribute__((noinline)) void rc_take_shared(V v, unsigned w) {
+  V *p = (V *)v;
+  V ts = __atomic_load_n(p, __ATOMIC_RELAXED) & RC_TS;
+  for (unsigned j = 1; j < w; j++) rc_dup_in(p[j], ts);
+  if (rc_release(v)) rc_free_obj(v);
+}
+#define RU(tok, w) ((tok) ? (V *)(tok) : halloc(w))
+void rc_immortal(V v) {
+  while (rc_obj(v) && !(*(V *)v & RC_STICKY)) {
+    V *p = (V *)v;
+    p[0] |= RC_STICKY;
+    uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
+    size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
+    for (size_t j = 1; j + 1 < w; j++) rc_immortal(p[j]);
+    v = w > 1 ? p[w - 1] : 0;
+  }
+}
+__attribute__((noinline)) void rc_publish(V v) {
+  Thr *t = thr_self;
+  size_t base = t->rcn;
+  for (;;) {
+    V w0;
+    if (rc_obj(v) && !((w0 = *(V *)v) & (RC_TS | RC_STICKY))) {
+      V *p = (V *)v;
+      p[0] = w0 | RC_TS;
+      uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
+      size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
+      for (size_t j = 1; j < w; j++)
+        if (p[j] >= ((V)1 << 32)) rc_push(t, p[j]);
+    }
+    if (t->rcn == base) return;
+    v = t->rcs[--t->rcn];
+  }
+}
+size_t rc_live(void) {
+  size_t n = 0;
+  for (uintptr_t bi = 0; bi < gc_top; bi++)
+    if (gc_kind[bi] == 1 || gc_kind[bi] == 2)
+      for (int j = 0; j < 64; j++) n += (size_t)__builtin_popcountll(gc_abits[bi * 64 + j]);
+  return n;
+}
 void gc_root_add_locked(V *p, size_t n) {
   if (gc_nroots == gc_caproots) {
     gc_caproots = gc_caproots ? gc_caproots * 2 : 256;
@@ -606,22 +722,32 @@ void thr_register(uintptr_t top) {
   __atomic_store_n(&gc_nthr, n1, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&gc_lock);
 }
+#define RUF(u) do { if (u) rc_free_at(u, 0); } while (0)
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))
+void rc_let_go_arr(V a) {
+  if (rc_unique(a)) rc_free_at(a, 0);
+  else {
+    size_t n = (size_t)1 << arr_cls(a);
+    V ts = ((V *)a)[0] & RC_TS;
+    for (size_t i = 0; i < n; i++) rc_dup_in(arr_cells(a)[i], ts);
+    rc_drop(a);
+  }
+}
 V arr_alloc(unsigned c) {
   if (c > 31) bend_fail("an array past the deepest block class 31");
   V *p = halloc(1 + ((size_t)1 << c));
   p[0] = ARR_HDR(c);
   return (V)p;
 }
-V arr_copy(unsigned c, const V *src, int share) {
+V arr_copy(unsigned c, const V *src, int share, V ts) {
   size_t n = (size_t)1 << c;
   V a = arr_alloc(c);
   V *d = arr_cells(a);
   arr_dirty(a);
   for (size_t i = 0; i < n; i++) {
     V x = src[i];
-    if (share) bend_share(x);
+    if (share) { if (gc_hot.rc) rc_dup_in(x, ts); else bend_share(x); }
     d[i] = x;
   }
   return a;
@@ -632,7 +758,10 @@ V arr_new(V depth, V v) {
   size_t n = (size_t)1 << c;
   V a = arr_alloc(c);
   V *d = arr_cells(a);
-  if (c > 0) bend_share(v);
+  if (c > 0) {
+    if (gc_hot.rc) rc_dupn(v, n - 1);
+    else bend_share(v);
+  }
   if (v >= ((V)1 << 32)) arr_dirty(a);
   for (size_t i = 0; i < n; i++) d[i] = v;
   return a;
@@ -643,16 +772,18 @@ V arr_node(V l, V r) {
   size_t n = (size_t)1 << c;
   V a = arr_alloc(c + 1);
   V *d = arr_cells(a);
-  int sl = arr_shared(l), sr = arr_shared(r);
+  int sl = !gc_hot.rc && arr_shared(l), sr = !gc_hot.rc && arr_shared(r);
   arr_dirty(a);
-  for (size_t i = 0; i < n; i++) { V x = arr_cells(l)[i]; if (sl) bend_share(x); d[i] = x; }
-  for (size_t i = 0; i < n; i++) { V x = arr_cells(r)[i]; if (sr) bend_share(x); d[n + i] = x; }
+  for (size_t i = 0; i < n; i++) { V x = arr_cells(l)[i]; if (sl) bend_dup(x); d[i] = x; }
+  for (size_t i = 0; i < n; i++) { V x = arr_cells(r)[i]; if (sr) bend_dup(x); d[n + i] = x; }
+  // (counted, the halves' cells moved here, or got a reference each)
+  if (gc_hot.rc) { rc_let_go_arr(l); rc_let_go_arr(r); }
   return a;
 }
 V arr_half(V a, unsigned hi) {
   unsigned c = arr_cls(a);
   if (c == 0) bend_fail("runtime fail-stop");
-  return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), arr_shared(a));
+  return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), gc_hot.rc || arr_shared(a), ((V *)a)[0] & RC_TS);
 }
 #define ARR_ATOMIC(name, op) static inline V F_Array_datomic_d##name(V a, V i, V v) { return C2(0, a, (V)__atomic_##op(arr_word(a, i), (uint32_t)v, __ATOMIC_SEQ_CST)); }
 #ifdef __TINYC__
@@ -661,16 +792,19 @@ V arr_half(V a, unsigned hi) {
 V apply(V f, V x) {
   V *c = (V *)f;
   V ar = c[1], n = c[2];
+  Fn fn = (Fn)(uintptr_t)(c[0] & RC_ADDR);
   if (n + 1 == ar) {
     V a[n + 1];
     for (V i = 0; i < n; i++) a[i] = c[3 + i];
     a[n] = x;
-    return ((Fn)c[0])(a);
+    if (gc_hot.rc) rc_let_go(f, (unsigned)(3 + n));
+    return fn(a);
   }
   V *p = halloc(4 + n);
-  p[0] = c[0]; p[1] = ar; p[2] = n + 1;
+  p[0] = (V)(uintptr_t)fn; p[1] = ar; p[2] = n + 1;
   for (V i = 0; i < n; i++) p[3 + i] = c[3 + i];
   p[3 + n] = x;
+  if (gc_hot.rc) rc_let_go(f, (unsigned)(3 + n));
   return (V)p;
 }
 #define SNIL IMM(0)
@@ -703,7 +837,8 @@ V mk_str(const char *s, size_t n) {
 #define mk_str_heap mk_str
 __attribute__((noinline)) V str_cache(V *slot, const char *s, size_t n) {
   V v = mk_str(s, n);
-  bend_share(v);  // before another thread can see it
+  if (gc_hot.rc) rc_immortal(v);
+  else bend_share(v);  // before another thread can see it
   pthread_mutex_lock(&gc_lock);
   if (*slot == 0) {
     __atomic_store_n(slot, v, __ATOMIC_RELEASE);
@@ -713,6 +848,19 @@ __attribute__((noinline)) V str_cache(V *slot, const char *s, size_t n) {
   pthread_mutex_unlock(&gc_lock);
   return v;
 }
+__attribute__((noinline)) V konst_cache(V *slot, V v) {
+  if (gc_hot.rc) rc_immortal(v);
+  else bend_share(v);
+  pthread_mutex_lock(&gc_lock);
+  if (*slot == 0) {
+    __atomic_store_n(slot, v, __ATOMIC_RELEASE);
+    gc_root_add_locked(slot, 1);
+  }
+  v = *slot;
+  pthread_mutex_unlock(&gc_lock);
+  return v;
+}
+#define KONST(c, e) (__atomic_load_n(&(c), __ATOMIC_ACQUIRE) ? (c) : konst_cache(&(c), (e)))
 char *str_to_c(V s, size_t *len) {
   size_t cap = 64, n = 0;
   char *buf = malloc(cap);
@@ -757,6 +905,10 @@ V F_Nat_dshow(V a) {
 }
 #ifdef BEND_NATIVE_MAP_BIT
 #endif
+#ifdef BEND_NATIVE_STR
+#endif
+#ifdef BEND_NATIVE_MAP
+#endif
 #define U(x) ((uint32_t)(x))
 #define F2(name, expr) static inline V F_F32_d##name(V a, V b) { float x = FV(a), y = FV(b); return expr; }
 #define F1(name, expr) static inline V F_F32_d##name(V a) { float x = FV(a); return expr; }
@@ -794,6 +946,7 @@ V F_F32_dshow(V a) {
 }
 V F_F32_dread(V s) {
   char *c = str_to_c(s, NULL);
+  bend_drop(s);
   char *end;
   float f = strtof(c, &end);
   int ok = *c && !*end;
@@ -803,6 +956,7 @@ V F_F32_dread(V s) {
 #define P_LOCAL 0
 #define P_QUEUED 1
 #define P_DONE 2
+#define P_HELD 3
 #ifndef __TINYC__
 __thread int par_depth;
 #endif
@@ -843,6 +997,13 @@ PTask *pdq_steal(PDeque *d) {
   long b = atomic_load_explicit(&d->bot, memory_order_acquire);
   if (t < b) {
     PTask *x = __atomic_load_n(&d->buf[t & d->mask], __ATOMIC_RELAXED);
+    // (x may be gone, when the CAS fails; a task is held only before it
+    // is let go)
+    if (__atomic_load_n(&x->state, __ATOMIC_ACQUIRE) == P_HELD) {
+      if (!atomic_load_explicit(&d->want, memory_order_relaxed))
+        atomic_store_explicit(&d->want, 1, memory_order_relaxed);
+      return NULL;
+    }
     if (!atomic_compare_exchange_strong_explicit(&d->top, &t, t + 1, memory_order_seq_cst,
           memory_order_relaxed))
       return NULL;
@@ -903,6 +1064,7 @@ void par_start(void) {
   if (!atomic_load(&par_started)) {
     gc_mt = 1;
     gc_hot.mt = 1;
+    gc_hot.rcmt = gc_hot.rc;
     for (int i = 1; i < par_nthreads; i++) {
       pthread_attr_t attr;
       pthread_attr_init(&attr);
@@ -914,6 +1076,18 @@ void par_start(void) {
     atomic_store(&par_started, 1);
   }
   pthread_mutex_unlock(&par_mu);
+}
+__attribute__((noinline)) void par_serve(PDeque *d) {
+  atomic_store_explicit(&d->want, 0, memory_order_relaxed);
+  long b = atomic_load_explicit(&d->bot, memory_order_relaxed);
+  for (long i = atomic_load_explicit(&d->top, memory_order_acquire); i < b; i++) {
+    PTask *x = __atomic_load_n(&d->buf[i & d->mask], __ATOMIC_RELAXED);
+    if (__atomic_load_n(&x->state, __ATOMIC_RELAXED) == P_HELD) {
+      rc_publish(x->clo);
+      __atomic_store_n(&x->state, P_QUEUED, __ATOMIC_RELEASE);
+      return;
+    }
+  }
 }
 V par_fork(V clo) {
 #ifdef BEND_DEBUG_FREE
@@ -927,6 +1101,7 @@ V par_fork(V clo) {
 #endif
   if (par_nthreads <= 1) return clo | 2;
   PDeque *d = thr_self->dq;
+  par_serve_if(d);
   long b = atomic_load_explicit(&d->bot, memory_order_relaxed);
   long tp = atomic_load_explicit(&d->top, memory_order_relaxed);
   if (b - tp >= 4) return clo | 2;
@@ -934,7 +1109,7 @@ V par_fork(V clo) {
   PTask *t = (PTask *)halloc(4);
   t->clo = clo;
   t->depth = (V)par_depth;
-  t->state = P_QUEUED;
+  t->state = gc_hot.rc ? P_HELD : P_QUEUED;
   __atomic_store_n(&d->buf[b & d->mask], t, __ATOMIC_RELAXED);
   atomic_thread_fence(memory_order_release);
   atomic_store_explicit(&d->bot, b + 1, memory_order_relaxed);
@@ -945,20 +1120,29 @@ V par_join(V tv) {
   if (tv & 4) return ((V *)(tv & ~(V)4))[0];
   if (tv & 2) return apply(tv & ~(V)2, 0);
   PTask *t = (PTask *)tv;
-  PTask *p = pdq_pop(thr_self->dq);
-  if (p == t) return apply(t->clo, 0);
+  PDeque *d = thr_self->dq;
+  par_serve_if(d);
+  PTask *p = pdq_pop(d);
+  if (p == t) {
+    V clo = t->clo;
+    if (gc_hot.rc) rc_free_at((V)t, 4);
+    return apply(clo, 0);
+  }
   if (p) par_exec(p);
   // With nothing to steal, a joiner spins a little, then yields its core,
   // then naps (the task it waits for may be running on a thread that has no
   // core of its own when there are more threads than cores).
   for (int spins = 0; __atomic_load_n(&t->state, __ATOMIC_ACQUIRE) != P_DONE;) {
+    par_serve_if(d);
     PTask *o = par_steal();
     if (o) { par_exec(o); spins = 0; continue; }
     if (++spins < 64) cpu_relax();
     else if (spins < 256) sched_yield();
     else { struct timespec ts = {0, 20000}; nanosleep(&ts, NULL); }
   }
-  return t->res;
+  V r = t->res;
+  if (gc_hot.rc) rc_free_at((V)t, 4);
+  return r;
 }
 int cpu_count(void) {
   long n = sysconf(_SC_NPROCESSORS_ONLN);
@@ -1000,8 +1184,8 @@ V io_hole_cell;
 #define CID_KIND(c) ((u32)(c) >> 16)
 #define CID_TAG(c) ((u32)(c) & 0xffff)
 __attribute__((noreturn)) void err_fail(const char *msg) { bend_fail(msg); }
-#define term_drop(e, t) ((void)(e), (void)(t))
-#define term_sink(e, t) ((void)(e), (void)(t))
+#define term_drop(e, t) ((void)(e), bend_drop(t))
+#define term_sink(e, t) ((void)(e), bend_drop(t))
 #define cls_fit(n) 0
 #define spare_free(e, c, x) ((void)(e), (void)(c), (void)(x))
 #define f32_unbox(t) FV(t)
@@ -1100,22 +1284,35 @@ u64 io_utf8(char *buf, u64 c) {
 }
 OUTLINE char *io_cstr(Env e, Term s, u64 *len) {
   (void)e;
+  Term s0 = s;
   u64 cap = 64, n = 0;
   char *buf = io_mem(malloc(cap));
+  // (Counted: the cons cells this holds the only reference to are freed
+  // as they are read, while in cache; the rest, from the first shared
+  // one, is dropped at the end.)
+  int own = gc_hot.rc;
   while (!(s & 1) && TAG(s) == 1) {
     if (n + 5 > cap) {
       cap *= 2;
       buf = io_mem(realloc(buf, cap));
     }
     n += io_utf8(buf + n, FLD(s, 0));
-    s = FLD(s, 1);
+    Term t = FLD(s, 1);
+    if (own) {
+      if ((uintptr_t)s - gc_hot.base < gc_hot.span && rc_unique(s)) rc_free_at(s, 0);
+      else { own = 0; s0 = s; }
+    }
+    s = t;
   }
   buf[n] = 0;
   *len = n;
+  if (own) bend_drop(s);
+  else bend_drop(s0);
   return buf;
 }
 OUTLINE char *io_cbuf(Env e, Term s, u64 *len, u64 cons) {
   (void)e;
+  Term s0 = s;
   (void)cons;
   u64 cap = 64, n = 0, bad = 0;
   char *buf = io_mem(malloc(cap + 1));
@@ -1130,6 +1327,7 @@ OUTLINE char *io_cbuf(Env e, Term s, u64 *len, u64 cons) {
   }
   buf[n] = 0;
   *len = n;
+  bend_drop(s0);
   if (bad) {
     free(buf);
     return NULL;
@@ -1256,6 +1454,8 @@ Term io_exec(Env e, IoWork *w) {
   u64 tg = TAG(a->cont);
   u32 n = (u32)(tg >> 24);
   for (u32 i = 0; i < n; i++) fs[i] = FLD(a->cont, i);
+  // (counted, the effect owns its arguments: the request node goes)
+  if (gc_hot.rc) rc_let_go(a->cont, n + 1);
   a->cont = fs[n - 1];
   return io_eff_rows[CID_TAG(tg)].run(e, fs, w);
 }
@@ -1310,6 +1510,7 @@ int io_step(Env e, IoAct *a) {
     Term req = apply(a->cont, a->item);
     u64 tg = TAG(req);
     if (tg == 0) {
+      bend_drop(req);
       io_act_free(a);
       io_live -= 1;
       return -1;
@@ -1565,6 +1766,7 @@ int bend_start(int argc, char **argv, V (*m)(void), int value) {
   }
   pthread_join(th, NULL);
   fflush(stdout);
+  if (gc_hot.rc && getenv("BEND_RC_STATS")) fprintf(stderr, "bend rc: %zu objects live at exit\n", rc_live());
   return bend_exit;
 }
 int bend_run_value(int argc, char **argv, V (*m)(void), void (*p)(V)) {

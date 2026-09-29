@@ -611,6 +611,115 @@ bendc builds itself with `BEND_NO_FREE=1`, which compiles matches without it (as
 selfcheck`, `tools/reseed.sh` and `bootstrap.sh`). `-DBEND_DEBUG_FREE` builds a program whose
 freed nodes are poisoned and kept, so a use after free stops with the C line that freed it.
 
+**Reference counting (`BEND_RC=1`).** A program compiled with `BEND_RC=1` counts references
+instead, in the manner of Perceus (Reinking et al., PLDI 2021), and the tracing collector never
+runs: there are no pauses, and memory goes back as soon as the last reference to it is dropped.
+The mode is off by default: see below for where it wins and where it loses. `bendc --native`
+does not implement it: native programs are traced whatever `BEND_RC` says.
+
+- The count sits in bits 48 to 61 of an object's first word, above the tag, the closure's
+  function or the array's header. The count is of the references past the first, so a new
+  object, whose first word is written whole, has one reference. Bit 62 makes an object immortal,
+  and its count is never changed again: a cached string literal, or an object whose count
+  reached 2^14.
+- The code generator relies on Bend's affine types. Each use of a variable consumes a
+  reference. A variable that a path uses n times gets n - 1 more references where it is bound
+  (`rc_dupn`). A variable that path does not use is dropped there (`rc_drop`). A `match` arm
+  drops what it uses less than the arm that uses it most. `_` patterns, lambda captures,
+  parallel-let values and array leaves follow the same rule. Arguments that a call erases
+  (types and `~` parameters) are not counted.
+- A match that opens a node hands it to `rc_take`. A node with one reference is freed, and its
+  fields move to the pattern's variables. A shared node gives each field a reference and then
+  loses one.
+- **Reuse.** When an arm builds a constructor of the same size as a node it opened, the node's
+  slot is kept (`rc_take_ru`) and the constructor is written into it (`CR1`..`CRN`). If the node
+  was shared there is no slot, and the constructor allocates. An arm that builds nothing frees
+  the slot. Reuse is not applied to the arguments of a def's call to itself in tail position
+  (a loop): an accumulator built in the nodes the loop walks ends up scattered, as a sort's
+  halves do.
+- **Borrowing.** A def may borrow a parameter: the caller keeps its reference (and drops it
+  after the call if it owned it), and the def neither takes the nodes it opens in it nor drops
+  it. A parameter is borrowed when the def only matches it and passes it, or what it reads out
+  of it, to defs that borrow there; a value read out of it and used otherwise gets a reference
+  where it is bound. A def that does that stays borrowing only when it walks down the value in a
+  tail call to itself (a search); any other owns the parameter, so that its nodes can be reused
+  (`List.map`). Parameters of defs with parallel lets, destination-passing groups, `main` and
+  `!`-called defs are never borrowed. `String.eq`, `String.cmp`, `Map.get` and `Map.has` are
+  native and borrow too: they walk the value and hand it back unchanged.
+- **Constants.** A constructor whose fields are all literals is built once, on first use, and
+  kept as an immortal object (`KONST`).
+- **Threads.** Bit 63 marks an object that other threads may reach, and only a marked object's
+  count changes atomically. A count of one is read plainly, because whoever holds the only
+  reference is the only thread that can see it. A task that another thread takes has its
+  closure marked first, along with everything the closure reaches (`rc_publish`). That
+  includes what sits below nodes with one reference, since the forking thread may hold those
+  objects too. Marking stops at objects that are already marked, because everything a marked
+  object reaches is marked. A forked task waits in its deque unmarked (`P_HELD`). A thief that
+  finds one asks the owner, which marks the task and lets it go at its next fork or join, so
+  only the tasks that are actually stolen pay for marking. Allocation bits are set with an
+  atomic OR, since another thread may free a slot of the same block. Values are acyclic, so dropping the last reference frees everything the value reaches;
+  `rc_free_obj` does this iteratively, on a per-thread stack.
+- **The runtime.** Closures, arrays (`Array.get` gives the cell a reference), string literals,
+  IO requests, channels (a sent value's reference moves to the receiver, and a send to a closed
+  channel drops the value), parallel lets (a fork's closure owns its captures) and GPU copy-back
+  (the result takes references to the CPU objects it reaches, and a device run drops its
+  arguments) all follow the same counts.
+- **The collector.** The minor collector, the rescans for destination-passing holes and the
+  signal that stops threads for a collection are not used. The block allocator and its bitmaps
+  are shared with the traced mode: a freed slot clears its bit, and the block becomes a reuse
+  candidate.
+- **Deciding what is a reference.** A word is a reference when it is above 2^32, 8-aligned,
+  inside the heap, at the start of a slot, and that slot's allocation bit is set. The one mistake
+  this allows is a `Nat` whose value equals the address of a live object.
+- **Checking it.** `BEND_RC_STATS=1` prints the number of objects still live at exit.
+  `-DBEND_DEBUG_FREE` poisons freed objects and never reuses them, so a use after free is
+  caught. `run_tests.sh` builds every test a second time in this mode (`rc/NAME`).
+  `tests/rcstress.bend` runs 320 rounds of parallel lets that share a string and a list, with a
+  1 MB heap. `tools/rcstress.sh [runs]` runs the multithreaded tests (`rcstress`, `par`,
+  `fork`, `chan`, `stress`, `dps`, `gc`) 300 times each with a 1 MB heap.
+
+Measured on the same machine while other jobs were running on it. Each figure is the best of 3
+runs (5 for the builds, 9 for `sort` on one thread), with the runs of the variants interleaved;
+peak memory is shown in parentheses. `default` is this compiler's usual output, which uses the
+collector; `rc` is the same compiler with `BEND_RC=1`. The four `bench/runtime` programs are
+the official repository's; `official` is `bend -o`, version 2.0.32.
+
+| program | threads | default | `rc` | official | longest pause, default |
+|---|---|---|---|---|---|
+| `sort 1000000` | 1 | **0.31s** (61 MB) | 0.32s (**30 MB**) | 0.83s (32 MB) | none |
+| `sort 1000000` | all | **0.12s** (73 MB) | 0.13s (**31 MB**) | 0.74s (32 MB) | none |
+| merkle | 1 | 5.22s (229 MB) | 5.28s (201 MB) | **4.77s** (**134 MB**) | none |
+| merkle | 12 | 0.96s (272 MB) | 0.86s (202 MB) | **0.84s** (**134 MB**) | 105 ms |
+| tree-radix | 1 | 4.90s (682 MB) | **4.12s** (**565 MB**) | 4.84s (655 MB) | 451 ms |
+| tree-radix | 12 | 4.82s (1223 MB) | 1.18s (1001 MB) | **0.86s** (**583 MB**) | 883 ms |
+| tree-bitonic | 1 | 47.6s (662 MB) | 32.4s (404 MB) | **7.0s** (**151 MB**) | 627 ms |
+| tree-bitonic | 8 | 51.5s (1155 MB) | 17.4s (411 MB) | **1.45s** (**157 MB**) | |
+| hashmap | 1 | **2.66s** (266 MB) | 3.10s (**6 MB**) | 3.52s (**6 MB**) | 2 ms |
+| hashmap | 12 | 0.60s (295 MB) | **0.55s** (13 MB) | 0.56s (**11 MB**) | 10 ms |
+| bendc building itself | 1 | **0.81s** (387 MB) | 1.11s (**236 MB**) | | 22 ms |
+| `bendc --check-only bendc.bend` | 1 | **1.39s** (523 MB) | 2.06s (**205 MB**) | | 26 ms |
+
+The tree-bitonic, hashmap and bendc rows were measured again after borrowing, with the load
+between 18 and 36. bendc itself is larger now than when the other rows were measured. The pause
+column was not measured again.
+
+In `rc` mode the collector never runs, so there are no pauses at all. The mode wins where the
+collector has a lot of live data to trace: tree-radix and tree-bitonic, and parallel tree-radix
+most of all. It loses where a program walks shared data without keeping it. Opening a shared
+node costs a reference for each of its fields, plus the release of the node itself. `hashmap`
+spends its time in `rc_take_shared` walking chains that `Array.get` shares, and the compiler
+does the same with its maps and environments. Borrowed parameters remove part of this cost:
+what remains is mostly in the checker's own maps and in nodes that are opened and rebuilt, which
+cannot be borrowed.
+
+On 8 threads, `rc` runs tree-bitonic in a third of `default`'s time, but still 12 times slower
+than the official build: most of what remains is allocating and freeing each node. The
+`default` column is no slower than the compiler
+before reference counting went in, within the noise of these runs. `String.cmp` and
+`String.eq` are native: they walk both strings and return them unchanged, where Base's
+versions rebuild both. This change applies to both modes, and it cut bendc's own build from
+0.78s to 0.51s.
+
 On the GPU, most of the memory is Metal's: making the device alone costs about 6 MB. The rest is
 kept down three ways:
 
@@ -670,13 +779,14 @@ fixpoint meaningful.
 
 `tests/` holds programs covering the features above: closures, trees, maps, sorting, strings and
 UTF-8, file IO, concurrent fork/join, TCP, user-defined C effects, modules, string patterns, arrays,
-proofs, value printing, exit codes, deep recursion, parallel lets, the collector, destination-passing,
+proofs, value printing, exit codes, deep recursion, parallel lets, the collector, reference counting under threads, destination-passing,
 and the `Nat` bound.
 Each `.out` file is the stdout and exit code of the **official** `bend` running the same program.
 `run_tests.sh` compiles each program with a given `bendc`, runs it, and diffs the result; programs
 with `!`-calls run again on the GPU simulator and, on a Mac, on Metal, and must not fall back to the
-CPU. On arm64 (macOS or Linux) every program runs again through `bendc --native`. A
-`tests/NAME.env` file sets environment variables for a run (`dps` collects every megabyte, so
+CPU. On arm64 (macOS or Linux) every program runs again through `bendc --native`. Every program
+is also built with `BEND_RC=1` and run again (`rc/NAME`; set `BEND_TEST_RC=0` to skip these
+runs). A `tests/NAME.env` file sets environment variables for a run (`dps` collects every megabyte, so
 collections happen while holes are open);
 `tests/hub/run.sh` serves a package from a local hub and imports it by hash.
 `tests/check/` holds programs the checker rejects; each `.out` is the official
