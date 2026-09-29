@@ -142,7 +142,25 @@ static inline V TAG(V v) { return (v & 1) ? (v >> 3) : (V)(uint32_t)((V *)v)[0] 
 // A match's test for a constructor with fields: an immediate (a nullary
 // constructor) never is one, and a node's tag word is loaded without a
 // select, so a match's cases share one load.
+#ifdef BEND_DEBUG_POISON
+// Debugging, the slots reused as usual: a freed node and a reuse token are
+// poisoned when this thread lets them go, and a match that meets one stops.
+#define BEND_POISON ((V)0xDEADDEADDEADDEADull)
+__attribute__((noreturn, noinline)) static void bend_poison_hit(V v) {
+  fprintf(stderr, "bend: a freed or reused node (%llx) is read\n", (unsigned long long)v);
+  abort();
+}
+static inline int IS_N(V v, V t) {
+  if (v & 1) return 0;
+  V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+  if (UNLIKELY(w0 == BEND_POISON)) bend_poison_hit(v);
+  return ((V)(uint32_t)w0 & ~BEND_SH_BITS) == t;
+}
+#define BEND_POISON_AT(v, w) do { for (unsigned j_ = 0; j_ < (w); j_++) __atomic_store_n(&((V *)(v))[j_], BEND_POISON, __ATOMIC_RELAXED); } while (0)
+#else
 static inline int IS_N(V v, V t) { return !(v & 1) && ((V)(uint32_t)((V *)v)[0] & ~BEND_SH_BITS) == t; }
+#define BEND_POISON_AT(v, w) ((void)0)
+#endif
 #endif
 
 __attribute__((noreturn)) static void bend_fail(const char *msg) {
@@ -445,10 +463,13 @@ static inline void gc_setbit(uint64_t *w, uint64_t bit) {
 // The free slots' marks go here too: a slot handed out is young (bend_take_at
 // leaves a freed slot's mark when other threads run), or a minor collection
 // would take the new object for an old one and not trace what it holds.
+// The load acquires: it pairs with the release of the free that cleared a
+// bit (bend_free_slot, rc_free_slot), so the freeing thread's last reads of
+// the slot come before this thread's writes to it.
 static inline uint64_t gc_next_bits(GcCache *k) {
   GcBlk *b = k->blk;
   while (++k->j < k->nj) {
-    uint64_t f = ~__atomic_load_n(&GC_ALLOC(b)[k->j], __ATOMIC_RELAXED);
+    uint64_t f = ~__atomic_load_n(&GC_ALLOC(b)[k->j], __ATOMIC_ACQUIRE);
     if (k->j == (b->nobj >> 6)) f &= (1ull << (b->nobj & 63)) - 1;
     if (f) {
       uint64_t *m = &GC_MARK(b)[k->j];
@@ -753,6 +774,7 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   return;
 #endif
   (void)line;
+  BEND_POISON_AT(v, w);
   uint64_t *cw = &h->cand[(size_t)(w - 2) * GC_CANDW + (bi >> 6)];
   // A freed slot is young when it is handed out again. On one thread its
   // mark goes here; when other threads run, the thread that hands the slot
@@ -760,9 +782,15 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   // could be the mark of the object another thread made in the slot since
   // and a collection marked old, which the next minor collection would then
   // not trace from (tests/par_reuse.bend).
+  // With threads the bit is cleared with release: the match's reads of the
+  // node's fields, just before, must be done before another thread can take
+  // the slot and write it. Relaxed, a weakly ordered CPU (arm64) could
+  // finish those reads late and get the fields of that thread's new node:
+  // this thread then owned nodes the other one still used, and freed or
+  // rebuilt them under it (tests/par_free.bend).
   uint64_t *mw = &gc_mbits[bi * 64 + (i >> 6)];
   if (UNLIKELY(h->mt)) {
-    __atomic_fetch_and(aw, ~bit, __ATOMIC_RELAXED);
+    __atomic_fetch_and(aw, ~bit, __ATOMIC_RELEASE);
     // (a sample of the frees keeps the shared candidate words cool)
     if ((i & 15) == 0 && !(*cw & (1ull << (bi & 63))))
       __atomic_fetch_or(cw, 1ull << (bi & 63), __ATOMIC_RELAXED);
@@ -1715,6 +1743,7 @@ static inline V bend_take_ru(V v, unsigned w) {
   bend_take(v, w);
   return 0;
 #endif
+  BEND_POISON_AT(v, w);
   return v;
 }
 static inline V *bend_ru_young(V u, unsigned w) {
