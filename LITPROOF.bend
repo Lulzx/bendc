@@ -684,20 +684,22 @@ def Cat(as: List<&2, Core.Val>, as2: List<&2, Core.Val>, +bs: List<&2, Core.Val>
             case (a, b):
               (a, Cat(r, s, bs, bs2, b, rb))
 
-# A def's parameters bound to related values: related scopes.
-def Bind(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, vs2: List<&2, Core.Val>, vr: Law.VRels(vs, vs2))
-    -> Law.VRels(Core.Scope.bind(ps, vs), Core.Scope.bind(ps, vs2)):
+# A def's parameters bound to related values in front of related scopes:
+# related scopes.
+def Bind.push(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, vs2: List<&2, Core.Val>, vr: Law.VRels(vs, vs2),
+    acc: List<&2, Core.Val>, acc2: List<&2, Core.Val>, ha: Law.VRels(acc, acc2))
+    -> Law.VRels(Core.Scope.push(ps, vs, acc), Core.Scope.push(ps, vs2, acc2)):
   match ps:
     case Nil{}:
-      Unit{}
+      ha
     case q <> pr:
       match q:
-        case Core.Par{x, rel, mode, ty}:
+        case Core.Par{+x, rel, mode, ty}:
           match vs:
             case Nil{}:
               match vs2:
                 case Nil{}:
-                  Unit{}
+                  ha
                 case w <> s:
                   match vr:
             case v <> r:
@@ -707,7 +709,12 @@ def Bind(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, vs2: List<&2, Core.Val>
                 case w <> s:
                   match vr:
                     case (a, b):
-                      (({==}, a), Bind(pr, r, s, b))
+                      Bind.push(pr, r, s, b, Core.VBnd{x, v} <> acc, Core.VBnd{x, w} <> acc2, (({==}, a), ha))
+
+# A def's parameters bound to related values: related scopes.
+def Bind(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, vs2: List<&2, Core.Val>, vr: Law.VRels(vs, vs2))
+    -> Law.VRels(Core.Scope.bind(ps, vs), Core.Scope.bind(ps, vs2)):
+  Bind.push(ps, vs, vs2, vr, Nil{}, Nil{}, Unit{})
 
 # Natives
 # =======
@@ -1535,8 +1542,8 @@ def L.lit(~prim: String -> List<&2, Core.Val> -> Core.Res,
                           match rel:
                             case (+e2, +sg, eq, +vr, +mir):
                               %eq : Law.RRel(Core.run(~prim, 1n+p, ds, Core.SArgs{e1, Core.Arg{Core.Era{}, e} <> r}), S, Core.run(~prim, 1n+q, Core.Defs.lit(ds), _))
-                              L.lit(~prim, ~ok, p, q, le, ds, Core.SThen{Core.run(~prim, p, ds, Core.SArgs{e1, r}), Core.KCons{Core.VTrm{e}}}, Core.SThen{Core.run(~prim, q, Core.Defs.lit(ds), Core.SArgs{e2, Core.Args.lits(r, sg)}), Core.KCons{Core.VTrm{e}}}, S, Inl{(Core.run(~prim, q, Core.Defs.lit(ds), Core.SArgs{e2, Core.Args.lits(r, sg)}), Core.KCons{Core.VTrm{e}}, Nil{}, {==}, (Core.VTrm{e}, {==}, {==}),
-                                L.lit(~prim, ~ok, p, q, le, ds, Core.SArgs{e1, r}, Core.SArgs{e2, Core.Args.lits(r, sg)}, Nil{}, (e2, sg, {==}, vr, mir)))})
+                              L.lit(~prim, ~ok, p, q, le, ds, Core.SThen{Core.run(~prim, p, ds, Core.SEval{e1, Core.CBox{}}), Core.KATail{e1, r}}, Core.SThen{Core.run(~prim, q, Core.Defs.lit(ds), Core.SEval{e2, Core.CBox{}}), Core.KATail{e2, Core.Args.lits(r, sg)}}, S, Inl{(Core.run(~prim, q, Core.Defs.lit(ds), Core.SEval{e2, Core.CBox{}}), Core.KATail{e2, Core.Args.lits(r, sg)}, Nil{}, {==}, (e2, sg, {==}, vr, mir),
+                                L.lit(~prim, ~ok, p, q, le, ds, Core.SEval{e1, Core.CBox{}}, Core.SEval{e2, Core.CBox{}}, Nil{}, (e2, sg, {==}, vr, mir)))})
             case Core.SThen{+r1, +k1}:
               match r1:
                 case Core.ROk{+ov1}:

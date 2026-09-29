@@ -78,6 +78,11 @@ jobs:
           BEND_NO_TELEMETRY=1 bend LITPROOF.bend --check-only
           ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" LITPROOF.bend
 
+      - name: Inlining calls of global defs preserves it (INLINEPROOF.bend, both checkers)
+        run: |
+          BEND_NO_TELEMETRY=1 bend INLINEPROOF.bend --check-only
+          ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" INLINEPROOF.bend
+
       - name: Lowering and raising round-trip, and lowered defs never fail a lookup (LOPROOF.bend, both checkers)
         run: |
           BEND_NO_TELEMETRY=1 bend LOPROOF.bend --check-only

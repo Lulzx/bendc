@@ -140,7 +140,7 @@ def Scoped.args(as: List<&2, Core.Arg>, -L: List<&2, String>) -> Data:
         case Core.Arg{rel, e}:
           Sigma<&2, &2, Scoped(e, L), _ => Scoped.args(r, L)>
 
-# A def's body is scoped by its parameters.
+# A def's body is scoped by its parameters (bound as a call binds them).
 def Good.defs(ds: List<&2, Core.Def>) -> Data:
   match ds:
     case Nil{}:
@@ -148,7 +148,7 @@ def Good.defs(ds: List<&2, Core.Def>) -> Data:
     case d <> r:
       match d:
         case Core.Def{name, ps, b, ret}:
-          Sigma<&2, &2, Scoped(b, Pars.names(ps)), _ => Good.defs(r)>
+          Sigma<&2, &2, Scoped(b, Core.Lo.bind(Pars.names(ps), Nil{})), _ => Good.defs(r)>
 
 # A closure's body is scoped by its scope and its pattern (Goods, a value's
 # fields, is defined after Good: a reference to it sits under a binder).
@@ -270,9 +270,9 @@ def Good.sel(s: Core.Sel, -F: List<&2, String>) -> Data:
     case Core.SFind{ds, f, vs}:
       Sigma<&2, &2, Goods(vs), _ => Good.defs(ds)>
     case Core.SFound{hit, ps, b, ds, f, vs}:
-      Sigma<&2, &2, Goods(vs), _ => Sigma<&2, &2, Good.defs(ds), _ => Scoped(b, Pars.names(ps))>>
+      Sigma<&2, &2, Goods(vs), _ => Sigma<&2, &2, Good.defs(ds), _ => Scoped(b, Core.Lo.bind(Pars.names(ps), Nil{}))>>
     case Core.SEnter{short, f, ps, b, vs}:
-      Sigma<&2, &2, Goods(vs), _ => Sigma<&2, &2, Scoped(b, Pars.names(ps)), _ => Enter.ok(short, vs, ps)>>
+      Sigma<&2, &2, Goods(vs), _ => Sigma<&2, &2, Scoped(b, Core.Lo.bind(Pars.names(ps), Nil{})), _ => Enter.ok(short, vs, ps)>>
     case Core.SApply{vs, fv}:
       Sigma<&2, &2, Goods(vs), _ => Good(fv)>
     case Core.SMatch{env, vs, cases}:

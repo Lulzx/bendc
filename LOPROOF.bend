@@ -753,24 +753,30 @@ def Drop.goods(n: Nat, vs: List<&2, Core.Val>, g: Law.Goods(vs)) -> Law.Goods(Co
             case (gv, gr):
               Drop.goods(m, r, gr)
 
-def Bind.goods(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, g: Law.Goods(vs)) -> Law.Goods(Core.Scope.bind(ps, vs)):
+def Bind.goods.push(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, acc: List<&2, Core.Val>, g: Law.Goods(vs), ga: Law.Goods(acc))
+    -> Law.Goods(Core.Scope.push(ps, vs, acc)):
   match ps:
     case Nil{}:
-      Unit{}
+      ga
     case p <> pr:
       match p:
         case Core.Par{x, rel, m, ty}:
           match vs:
             case Nil{}:
-              Unit{}
+              ga
             case v <> vr:
               match g:
                 case (gv, gr):
-                  (gv, Bind.goods(pr, vr, gr))
+                  Bind.goods.push(pr, vr, Core.VBnd{x, v} <> acc, gr, (gv, ga))
 
-# With no fewer values than parameters, the scope binds the parameters.
-def Bind.names(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, lt: {False{} == Nat.is_lt(Core.Vals.len(vs), Core.Pars.len(ps)) : Bool})
-    -> {Law.Env.names(Core.Scope.bind(ps, vs)) == Law.Pars.names(ps) : List<&2, String>}:
+def Bind.goods(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, g: Law.Goods(vs)) -> Law.Goods(Core.Scope.bind(ps, vs)):
+  Bind.goods.push(ps, vs, Nil{}, g, Unit{})
+
+# With no fewer values than parameters, the scope binds the parameters, each
+# in front of the ones before it.
+def Bind.names.push(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, acc: List<&2, Core.Val>,
+    lt: {False{} == Nat.is_lt(Core.Vals.len(vs), Core.Pars.len(ps)) : Bool})
+    -> {Law.Env.names(Core.Scope.push(ps, vs, acc)) == Core.Lo.bind(Law.Pars.names(ps), Law.Env.names(acc)) : List<&2, String>}:
   match ps:
     case Nil{}:
       {==}
@@ -779,10 +785,13 @@ def Bind.names(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, lt: {False{} == N
         case Core.Par{+x, rel, m, ty}:
           match vs:
             case Nil{}:
-              Absurd({Nil{} == x <> Law.Pars.names(pr) : List<&2, String>}, Tru.of(False{}, DP.Bool.sym(False{}, True{}, lt)))
+              Absurd({Law.Env.names(acc) == Core.Lo.bind(Law.Pars.names(pr), x <> Law.Env.names(acc)) : List<&2, String>}, Tru.of(False{}, DP.Bool.sym(False{}, True{}, lt)))
             case v <> vr:
-              %Bind.names(pr, vr, lt) : {x <> Law.Env.names(Core.Scope.bind(pr, vr)) == x <> _ : List<&2, String>}
-              {==}
+              Bind.names.push(pr, vr, Core.VBnd{x, v} <> acc, lt)
+
+def Bind.names(ps: List<&2, Core.Par>, vs: List<&2, Core.Val>, lt: {False{} == Nat.is_lt(Core.Vals.len(vs), Core.Pars.len(ps)) : Bool})
+    -> {Law.Env.names(Core.Scope.bind(ps, vs)) == Core.Lo.bind(Law.Pars.names(ps), Nil{}) : List<&2, String>}:
+  Bind.names.push(ps, vs, Nil{}, lt)
 
 # What a native gives, as a result.
 def Prim.lift(r: Core.Res, -F: List<&2, String>, g: Law.Good.prim(r)) -> Law.Good.res(r, F):
@@ -1018,11 +1027,11 @@ def L.scope(~prim: String -> List<&2, Core.Val> -> Core.Res,
                                 (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEval{env, e}, Nil{}, (ge, se)), (ge, sr))))
                     case Core.Era{}:
                       match g:
-                        case (ge, sc):
+                        case (+ge, sc):
                           match sc:
                             case (se, sr):
-                              L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SArgs{env, r}), Core.KCons{Core.VTrm{e}}}, F,
-                                (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SArgs{env, r}, Nil{}, (ge, sr)), Unit{})))
+                              L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEval{env, Core.CBox{}}), Core.KATail{env, r}}, F,
+                                (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEval{env, Core.CBox{}}, Nil{}, (ge, Unit{})), (ge, sr))))
         case Core.SThen{r, k}:
           match r:
             case Core.RFail{m}:
@@ -1341,7 +1350,7 @@ def L.scope(~prim: String -> List<&2, Core.Val> -> Core.Res,
                     case (sb, en):
                       L.scope(~prim, ~ok, p, ds, gd, Core.SThen{Core.run(~prim, p, ds, Core.SEval{Core.Scope.bind(ps, vs), b}), Core.KApply{Core.Vals.drop(Core.Pars.len(ps), vs)}}, F,
                         (Nil{}, (L.scope(~prim, ~ok, p, ds, gd, Core.SEval{Core.Scope.bind(ps, vs), b}, Nil{},
-                          (Bind.goods(ps, vs, gvs), Sc.back(b, Law.Env.names(Core.Scope.bind(ps, vs)), Law.Pars.names(ps), Bind.names(ps, vs, en), sb))),
+                          (Bind.goods(ps, vs, gvs), Sc.back(b, Law.Env.names(Core.Scope.bind(ps, vs)), Core.Lo.bind(Law.Pars.names(ps), Nil{}), Bind.names(ps, vs, en), sb))),
                           Drop.goods(Core.Pars.len(ps), vs, gvs))))
         case Core.SApply{vs, fv}:
           match vs:
@@ -1465,6 +1474,11 @@ def Names.params(ps: List<&2, Core.Param>, +m: List<&2, Bool>) -> {Law.Pars.name
           %Names.params(r, Core.Lo.tail(m)) : {x <> Law.Pars.names(Core.Lo.params(r, Core.Lo.tail(m))) == x <> _ : List<&2, String>}
           {==}
 
+def Names.bind(ps: List<&2, Core.Param>, +m: List<&2, Bool>)
+    -> {Core.Lo.bind(Law.Pars.names(Core.Lo.params(ps, m)), Nil{}) == Core.Lo.bind(Core.Lo.names(ps), Nil{}) : List<&2, String>}:
+  %Names.params(ps, m) : {Core.Lo.bind(Law.Pars.names(Core.Lo.params(ps, m)), Nil{}) == Core.Lo.bind(_, Nil{}) : List<&2, String>}
+  {==}
+
 def Src.defs(+ms: Map<&2, List<&2, Bool>>, xs: List<&2, Law.Src>, sok: Law.Src.ok(xs)) -> Law.Good.defs(Law.Src.lo(ms, xs)):
   match xs:
     case Nil{}:
@@ -1474,10 +1488,11 @@ def Src.defs(+ms: Map<&2, List<&2, Bool>>, xs: List<&2, Law.Src>, sok: Law.Src.o
         case Law.Src{+name, +ps, +body, ret}:
           match sok:
             case (ob, sr):
-              (Sc.back(Core.Lo.go(body, ms, Core.Lo.names(ps), True{}, Nil{}),
-                  Law.Pars.names(Core.Lo.params(ps, Pair.snd(Map<&2, List<&2, Bool>>, List<&2, Bool>, Map.get(List<&2, Bool>, Nil{}, ms, name)))), Core.Lo.names(ps),
-                  Names.params(ps, Pair.snd(Map<&2, List<&2, Bool>>, List<&2, Bool>, Map.get(List<&2, Bool>, Nil{}, ms, name))),
-                  Lo.sc(body, ms, Core.Lo.names(ps), True{}, Nil{}, ob)),
+              (Sc.back(Core.Lo.go(body, ms, Core.Lo.bind(Core.Lo.names(ps), Nil{}), True{}, Nil{}),
+                  Core.Lo.bind(Law.Pars.names(Core.Lo.params(ps, Pair.snd(Map<&2, List<&2, Bool>>, List<&2, Bool>, Map.get(List<&2, Bool>, Nil{}, ms, name)))), Nil{}),
+                  Core.Lo.bind(Core.Lo.names(ps), Nil{}),
+                  Names.bind(ps, Pair.snd(Map<&2, List<&2, Bool>>, List<&2, Bool>, Map.get(List<&2, Bool>, Nil{}, ms, name))),
+                  Lo.sc(body, ms, Core.Lo.bind(Core.Lo.names(ps), Nil{}), True{}, Nil{}, ob)),
                 Src.defs(ms, r, sr))
 
 def NoU(r: Core.Res, -F: List<&2, String>, g: Law.Good.res(r, F)) -> Law.NoUnbound(r):
