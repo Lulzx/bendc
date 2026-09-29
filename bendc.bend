@@ -15182,6 +15182,15 @@ def KQ.gcall(+g: G, +env: Env(), +self: KSelf, v: Core.Expr) -> KM(Bool):
     case other:
       KM.pure(Bool, False{})
 
+# Whether a def returns a scalar: a call of it that recurses (eval in
+# symreg, hot) does not give back what it allocated (see KQSCallGo).
+def KQ.scalret(d: Decl) -> Bool:
+  match d:
+    case DDef{n, ps, body, ret}:
+      Str.has(["U32", "F32", "Bool", "Nat", "Char"], P.head(ret))
+    case other:
+      False{}
+
 def KQ.split(+g: G, +f: String, args: List<&2, Core.Expr>) -> Split:
   Gen.split(DInfo.mask(G.def(g, f)), args, Split{Nil{}, Nil{}, Nil{}, False{}})
 
@@ -15189,7 +15198,7 @@ def KQ.split(+g: G, +f: String, args: List<&2, Core.Expr>) -> Split:
 # KQSel picks the step.
 type KQSel is Type:
   KQSDef{sq: Bool, g: G, name: String, e: U32, mask: List<&2, Bool>, ps: List<&2, Core.Param>, body: Core.Expr}
-  KQSCallGo{g: G, env: Env(), self: KSelf, x: String, s: Split, e: U32, body: Core.Expr}
+  KQSCallGo{reg: Bool, g: G, env: Env(), self: KSelf, x: String, s: Split, e: U32, body: Core.Expr}
   KQSCall{g: G, env: Env(), self: KSelf, x: String, f: String, args: List<&2, Core.Expr>, body: Core.Expr}
   KQSEntryMemo{g: G, f: String, key: String, m: Maybe<&2, String>}
   KQSEntry{g: G, f: String}
@@ -15209,7 +15218,7 @@ def KQSel.ty(k: KQSel) -> Type:
   match k:
     case KQSDef{sq, g, name, e, mask, ps, body}:
       KM(Unit)
-    case KQSCallGo{g, env, self, x, s, e, body}:
+    case KQSCallGo{reg, g, env, self, x, s, e, body}:
       KM(Unit)
     case KQSCall{g, env, self, x, f, args, body}:
       KM(Unit)
@@ -15246,7 +15255,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
       match k:
         case KQSDef{sq, g, name, e, mask, ps, body}:
           K.out(Unit, Unit{})
-        case KQSCallGo{g, env, self, x, s, e, body}:
+        case KQSCallGo{reg, g, env, self, x, s, e, body}:
           K.out(Unit, Unit{})
         case KQSCall{g, env, self, x, f, args, body}:
           K.out(Unit, Unit{})
@@ -15304,25 +15313,32 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                   ", ok);\n")
             case False{}:
               KM.pure(Unit, Unit{})
-        case KQSCallGo{+g, +env, +self, +x, s, +e, +body}:
+        # A call of another def keeps the lane's hp and he under its return pc:
+        # at the resume what the call allocated is given back (k_region: the
+        # call is flat, so only its result can reach it; symreg's candidate
+        # trees). A call of the def itself does not (eval, a hot recursion).
+        case KQSCallGo{+reg, +g, +env, +self, +x, s, +e, +body}:
           Split{kept, all, extra, full} = s
           # Saved: the variables the rest of the code uses.
           +live = KQ.live(KQ.used(env, FV.expr(body, [x], Nil{})), Nil{})
           +m = Gen.len(K.docs.of(live))
+          +w = Bool.pick(U32, reg, U32.add(m, 2), m)
           do KM<Unit>:
             +k : U32 <- K.fresh()
             +ds : List<&2, Doc> <- KX.exprs(g, env, kept)
             +r : U32 <- K.fresh()
-            K.put(Doc.list([DStr{"{ "}, KX.temps(ds, k, 0), DStr{"if (sp + " ++ U32.show(U32.inc(m)) ++
-              " > KR_WORDS) { *ok = false; return 0; }\n" ++ KQ.save(live, 0) ++ "KQ_ST(sp + " ++ U32.show(m) ++ ") = " ++
-              U32.show(r) ++ "; sp += " ++ U32.show(U32.inc(m)) ++ ";\n" ++ KQ.pass(k, U32.to_nat(Gen.len(ds)), 0) ++ "pc = " ++
-              U32.show(e) ++ "; break; }\n"}]))
+            K.put(Doc.list([DStr{"{ "}, KX.temps(ds, k, 0), DStr{"if (sp + " ++ U32.show(U32.inc(w)) ++
+              " > KR_WORDS) { *ok = false; return 0; }\n" ++ KQ.save(live, 0) ++ Bool.pick(String, reg, "KQ_ST(sp + " ++
+              U32.show(m) ++ ") = c->hp; KQ_ST(sp + " ++ U32.show(U32.inc(m)) ++ ") = c->he; ", "") ++ "KQ_ST(sp + " ++
+              U32.show(w) ++ ") = " ++ U32.show(r) ++ "; sp += " ++ U32.show(U32.inc(w)) ++ ";\n" ++
+              KQ.pass(k, U32.to_nat(Gen.len(ds)), 0) ++ "pc = " ++ U32.show(e) ++ "; break; }\n"}]))
             # The resume block is made aside, so the code around the call (an arm
             # of a match, say) stays whole in this block.
             saved : U32 & Doc <- K.save()
             K.start(r)
             +j : U32 <- K.fresh()
-            K.putS("sp -= " ++ U32.show(m) ++ "; " ++ KQ.load(live, j, 0) ++ "KW " ++ KX.v(j) ++ " = RV;\n")
+            K.putS("sp -= " ++ U32.show(w) ++ "; " ++ KQ.load(live, j, 0) ++ "KW " ++ KX.v(j) ++ " = " ++ Bool.pick(String, reg,
+              "k_region(c, KQ_ST(sp + " ++ U32.show(m) ++ "), KQ_ST(sp + " ++ U32.show(U32.inc(m)) ++ "), RV)", "RV") ++ ";\n")
             KQ.go(fu, KQSStmt{g, Bool.pick(Env(), Str.eq(x, "_"), KQ.reenv(live, j, 0), Bind{x, KX.v(j)} <> KQ.reenv(live, j, 0)), self,
               body})
             K.restore(saved)
@@ -15331,7 +15347,8 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
         case KQSCall{+g, +env, +self, +x, +f, args, body}:
           do KM<Unit>:
             +e : U32 <- KQ.go(fu, KQSEntry{g, f})
-            KQ.go(fu, KQSCallGo{g, env, self, x, KQ.split(g, f, args), e, body})
+            KQ.go(fu, KQSCallGo{Bool.not(Bool.and(Str.eq(f, KSelf.name(self)), KQ.scalret(G.body(g, f)))), g, env, self, x,
+              KQ.split(g, f, args), e, body})
         # The entry of seq def f in the KQ_ function being made: its blocks are
         # made (aside) the first time.
         case KQSEntryMemo{+g, +f, +key, m}:
