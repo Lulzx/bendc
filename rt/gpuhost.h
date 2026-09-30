@@ -695,7 +695,18 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   H[P.lane0 + gpu_lanes] = rf;
   __atomic_thread_fence(__ATOMIC_SEQ_CST);
   KW rounds = 0;
+  size_t grow_tried = 0;
   for (;;) {
+    // Keep completed frames and tasks instead of replaying a main dispatch
+    // that fills the arena. Leave headroom for its next allocation burst.
+    if ((KW)gpu_A[KA_HEAP] * K_CHUNK > P.heapw - P.heapw / 4 &&
+        gpu_Hn < gpu_Hmax && grow_tried != gpu_Hn) {
+      grow_tried = gpu_Hn;
+      if (gpu_grow(2)) {
+        P.an = gpu_Hn;
+        P.heapw = gpu_Hn / 8 - P.heap0;
+      }
+    }
     // The lanes running (not idle, not waiting for bend_kq): idle lanes stay
     // in the dispatch while one does.
     KW active = 0, waiting = 0;

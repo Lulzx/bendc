@@ -89,7 +89,7 @@ for src in $(grep -l '[a-z0-9_]!(' tests/*.bend); do
     want=$(cat "tests/$name.fallbacks" 2>/dev/null || echo 0)
     got=$(grep -c "running on the CPU" "$out.$mode.log")
     if cmp -s "$out.$mode.txt" "tests/$name.out" && [ "$got" -eq "$want" ] &&
-       ! grep -v "^bend gpu: done\|does not load.*: compiling" "$out.$mode.log" | grep -qv "running on the CPU"; then
+       ! grep -v "^bend gpu: done\|^bend gpu: arena grows to [0-9][0-9]* MB$\|does not load.*: compiling" "$out.$mode.log" | grep -qv "running on the CPU"; then
       echo "ok   $mode/$name"; pass=$((pass+1))
     else
       echo "FAIL $mode/$name"; diff "$out.$mode.txt" "tests/$name.out" | head -10 | sed 's/^/  /'
