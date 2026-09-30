@@ -15614,6 +15614,73 @@ def K.loops(g: G, name: String) -> KM(Bool):
 # chain far slower than a CPU core): its kept parameters are scalars (a Nat
 # too) and so is its result (not a Nat, which may be a CPU object). KH_name
 # calls the CPU's F_name; K_KQH_LIST lists them with the call's label.
+# The presence of a parallel let is independent of flat/seq codegen
+# eligibility. Serial interpreters with non-tail calls must remain eligible.
+# Free references include callbacks/global values and respect local binders.
+# Preserve the lowered bodies before implicit parallelization. The serial
+# host policy may run an implicitly parallelized interpreter cheaply on the
+# CPU, but must not swallow the program's explicit parallel reductions.
+def KQ.host.original(ds: List<&2, Decl>, m: Map<&2, Decl>) -> Map<&2, Decl>:
+  match ds:
+    case Nil{}:
+      m
+    case DDef{+name, ps, body, ret} <> rest:
+      KQ.host.original(rest, Map.set(&2, Decl, m, "%hostserial " ++ name, DDef{name, ps, body, ret}))
+    case d <> rest:
+      KQ.host.original(rest, m)
+
+def KQ.host.book(g: G, ds: List<&2, Decl>) -> G:
+  G{ctors, defs, bodies, dps} = g
+  G{ctors, defs, KQ.host.original(ds, bodies), dps}
+
+def KQ.host.body(+g: G, +name: String) -> Decl:
+  G{ctors, defs, +bodies, dps} = g
+  G.get(Decl, G.body(g, name), bodies, "%hostserial " ++ name)
+
+type KHostSerial is Data:
+  KHWalk{names: List<&2, String>, seen: List<&2, String>}
+  KHNext{f: String, rest: List<&2, String>, seen: List<&2, String>, skip: Bool}
+  KHDef{f: String, rest: List<&2, String>, seen: List<&2, String>, kind: U32, d: Decl}
+  KHBody{f: String, rest: List<&2, String>, seen: List<&2, String>, ps: List<&2, Core.Param>, body: Core.Expr, par: Bool}
+
+def KQ.host.serial.go(fuel: Nat, +g: G, k: KHostSerial) -> Bool:
+  match fuel:
+    case 0n:
+      False{}
+    case 1n+fu:
+      match k:
+        case KHWalk{names, +seen}:
+          match names:
+            case Nil{}:
+              True{}
+            case +f <> rest:
+              KQ.host.serial.go(fu, g, KHNext{f, rest, seen, Str.has(seen, f)})
+        case KHNext{+f, rest, seen, skip}:
+          match skip:
+            case True{}:
+              KQ.host.serial.go(fu, g, KHWalk{rest, seen})
+            case False{}:
+              KQ.host.serial.go(fu, g, KHDef{f, rest, seen, DInfo.kind(G.def(g, f)), KQ.host.body(g, f)})
+        case KHDef{f, rest, seen, kind, d}:
+          match kind d:
+            case 0 DDef{n, ps, +body, ret}:
+              KQ.host.serial.go(fu, g, KHBody{f, rest, seen, ps, body, Par.forks.e(body)})
+            case 2 other:
+              KQ.host.serial.go(fu, g, KHWalk{rest, f <> seen})
+            case 3 other:
+              KQ.host.serial.go(fu, g, KHWalk{rest, f <> seen})
+            case other other2:
+              False{}
+        case KHBody{f, rest, seen, ps, body, par}:
+          match par:
+            case True{}:
+              False{}
+            case False{}:
+              KQ.host.serial.go(fu, g, KHWalk{List.append(&2, String, FV.expr(body, Ty.pnames(ps), Nil{}), rest), f <> seen})
+
+def KQ.host.serial(+g: G, f: String) -> Bool:
+  KQ.host.serial.go(4096n, g, KHWalk{[f], Nil{}})
+
 def KQ.host.ps(ps: List<&2, Core.Param>, mask: List<&2, Bool>) -> Bool:
   match ps mask:
     case Core.Param{x, m, +t} <> pt True{} <> mt:
@@ -17663,7 +17730,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                   DStr{"default:\n*ok = false;\nreturn 0;\n}\n}\n}\n"}]))
                 K.memo.put("%kqcase", "case " ++ U32.show(e) ++ ": return KQ_" ++ Gen.mangle(name) ++ "(c" ++ KQ.case.args(n, 0) ++
                   ", ok);\n")
-                KQ.host.add(Bool.and(KQ.host.ps(ps, mask), KQ.host.ret(G.body(g, name))), name, e, n)
+                KQ.host.add(Bool.and(KQ.host.serial(g, name), Bool.and(KQ.host.ps(ps, mask), KQ.host.ret(G.body(g, name)))), name, e, n)
             case False{}:
               KM.pure(Unit, Unit{})
         # A call that gives back what it allocated (KQ.reg) keeps the lane's hp
@@ -22647,13 +22714,14 @@ def G.hless(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
       g
 
 def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
-  +lowered = Unb.program(unb, Unb.program(unb, Nest.program(unb, Unb.sum.program(unb, Par.auto(par, Lo.program(opt,
-    Arrw.decls(Pick.decls(ds0))))))))
+  +beforepar = Lo.program(opt, Arrw.decls(Pick.decls(ds0)))
+  +lowered = Unb.program(unb, Unb.program(unb, Nest.program(unb, Unb.sum.program(unb, Par.auto(par, beforepar)))))
   +ds = RO.program(rc, lowered)
   +g = Unb.sret(unb, ds, Dps.build(G.hless(Bool.and(Opt.on(opt, 104), Bool.not(rc)),
     G.li(Opt.on(opt, 119), G.new(ds), ds), ds), ds, free, rc))
-  Gen.program.fin(g, Gen.cids(g, ds, 0),
-    Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
+  +hostg = KQ.host.book(g, beforepar)
+  Gen.program.fin(hostg, Gen.cids(hostg, ds, 0),
+    Gen.program.m(hostg)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
 
 # Native code generation
 # ======================

@@ -37,6 +37,11 @@ for src in tests/*.bend; do
 done
 # C checks of the runtime (tests/rt/*.c, built whole with $CC): each
 # prints "ok".
+if sh tools/gpu-host-check.sh "$BENDC" "$BASE" > build/tests/gpu_host_codegen.log 2>&1; then
+  echo "ok   gpu_host_codegen"; pass=$((pass+1))
+else
+  echo "FAIL gpu_host_codegen"; cat build/tests/gpu_host_codegen.log; fail=$((fail+1))
+fi
 mkdir -p build/tests/rt
 for src in tests/rt/*.c; do
   name=rt/$(basename "$src" .c)
