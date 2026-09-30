@@ -65,7 +65,19 @@ def bsum(t: Blue) -> U32:
     case BFork{x, l, r}:
       U32.add(x, U32.add(bsum(l), bsum(r)))
 
+# Pure scalar tail calls may reclaim trees after their values are consumed.
+def rounds(n: Nat, acc: U32) -> U32:
+  match n:
+    case 0n:
+      acc
+    case 1n+p:
+      +q = p
+      level = U32.to_nat(U32.mod(U32.from_nat(q), 4))
+      value = rsum(reduce(level))
+      rounds(q, U32.add(acc, value))
+
 def main() -> IO(Unit):
   do IO<Unit>:
     IO.print(U32.show(rsum(reduce!(8n))))
     IO.print(U32.show(bsum(blue!(8n, 3))))
+    IO.print(U32.show(rounds!(20n, 0)))

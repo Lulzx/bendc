@@ -17267,11 +17267,67 @@ def KQ.tree.entry.go(+name: String, +shape: String, empty: Bool) -> KM(Unit):
         +id : String <- KQ.tree.schema(name, shape)
         K.putS("K_TREE_MARK(" ++ id ++ ");\n")
 
+# Closed return types alone do not prove that temporaries cannot escape:
+# a global mutable object might receive one. Reject effects, foreign calls,
+# unknown functions and every native except the scalar arithmetic whitelist.
+type KTreeClean is Data:
+  KTWalk{names: List<&2, String>, seen: List<&2, String>}
+  KTNext{f: String, rest: List<&2, String>, seen: List<&2, String>, skip: Bool}
+  KTDecl{f: String, rest: List<&2, String>, seen: List<&2, String>, kind: U32, d: Decl}
+
+# Free references include callbacks and global values and respect local
+# binders; a local callable must not be mistaken for a same-named global.
+def KQ.tree.names(ps: List<&2, Core.Param>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Param{x, mode, ty} <> rest:
+      x <> KQ.tree.names(rest)
+
+def KQ.tree.clean.native(+f: String) -> Bool:
+  Bool.or(Str.has(Gen.scalar.u32s(), f), Bool.or(Str.has(Gen.scalar.others(), f),
+    Str.has(["Nat.double", "Nat.add", "Nat.sub", "Nat.mul", "Nat.div", "Nat.mod", "Nat.divmod", "Nat.pow", "Nat.cmp",
+      "Nat.is_eq", "Nat.is_ne", "Nat.is_lt", "Nat.is_le", "Nat.is_gt", "Nat.is_ge", "Nat.min", "Nat.max"], f)))
+
+def KQ.tree.clean.go(fuel: Nat, +g: G, k: KTreeClean) -> Bool:
+  match fuel:
+    case 0n:
+      False{}
+    case 1n+fu:
+      match k:
+        case KTWalk{names, +seen}:
+          match names:
+            case Nil{}:
+              True{}
+            case +f <> rest:
+              KQ.tree.clean.go(fu, g, KTNext{f, rest, seen, Bool.or(Str.has(seen, f),
+                KQ.tree.clean.native(f))})
+        case KTNext{+f, rest, seen, skip}:
+          match skip:
+            case True{}:
+              KQ.tree.clean.go(fu, g, KTWalk{rest, seen})
+            case False{}:
+              KQ.tree.clean.go(fu, g, KTDecl{f, rest, seen, DInfo.kind(G.def(g, f)), G.body(g, f)})
+        case KTDecl{f, rest, seen, kind, d}:
+          match kind:
+            case 0:
+              match d:
+                case DDef{n, ps, body, ret}:
+                  KQ.tree.clean.go(fu, g, KTWalk{List.append(&2, String, FV.expr(body, KQ.tree.names(ps), Nil{}), rest), f <> seen})
+                case other:
+                  False{}
+            case other:
+              False{}
+
+def KQ.tree.clean(+g: G, f: String) -> Bool:
+  KQ.tree.clean.go(4096n, g, KTWalk{[f], Nil{}})
+
 def KQ.tree.entry(+g: G, d: Decl) -> KM(Unit):
   match d:
     case DDef{n, ps, body, ret}:
       +name = P.head(ret)
-      +shape = Bool.pick(String, KQ.tree.ps(name, ps), KQ.tree.type(g, name, G.body(g, "%" ++ name)), "")
+      +shape = Bool.pick(String, Bool.and(KQ.tree.ps(name, ps), KQ.tree.clean(g, n)),
+        Bool.pick(String, Gen.scalar.ty(name), "0", KQ.tree.type(g, name, G.body(g, "%" ++ name))), "")
       KQ.tree.entry.go(name, shape, String.is_empty(shape))
     case other:
       KM.pure(Unit, Unit{})

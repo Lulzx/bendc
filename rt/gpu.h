@@ -305,7 +305,7 @@ KINLINE void k_rewind(KTHR KCtx *c, KW h0, KW e0, KW b0) {
 #define KSCAL(e) ({ KW kh0_ = c->hp, ke0_ = c->he, kb0_ = c->blocks; KU kr_ = (e); if (c->err == 0) k_rewind(c, kh0_, ke0_, kb0_); kr_; })
 
 
-// Prototype for a closed, headered recursive Data. Masks name self-typed
+// Reclamation for a closed, headered recursive Data. Masks name self-typed
 // fields by payload position (bit zero is the constructor header).
 KINLINE bool k_tree_new(KTHR KCtx *c, KW h0, KW e0, KW b0, KW v) {
   if (!k_in(c,v)) return false;
@@ -353,6 +353,26 @@ KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
     if(out.err) k_fail(c,out.err);
     return r;
   }
+  // A small closed graph fits back in the starting span. The private copy
+  // is complete, so the old temporary prefix can now be overwritten. Trace
+  // fields by their schema when relocating; scalar address-shaped words stay.
+  if(out.blocks!=b0 && out.H[out.blocks]==b0 && out.hp-out.hs<=e0-h0) {
+    KW lo=out.hs,words=out.hp-lo,base=KPTR(&out,lo),bytes=words<<3;
+    for(KW at=lo;at<out.hp;) {
+      KW n=out.H[at],tag=out.H[at+1]&0xffcfffff,mask=masks[tag];
+      c->H[h0+at-lo]=n;
+      for(KW i=0;i<n;i++) {
+        KW v=out.H[at+1+i];
+        if((mask&((KW)1<<i)) && v-base<bytes) v=KPTR(c,h0)+(v-base);
+        c->H[h0+at+1+i-lo]=v;
+      }
+      at+=n+1;
+    }
+    KW relocated=KPTR(c,h0)+(root-base);
+    k_rewind(&out,0,0,b0);c->spare=out.spare;
+    k_rewind(c,h0,e0,b0);c->hp=h0+words;
+    return relocated;
+  }
   while(c->blocks!=b0) {
     KW at=c->blocks;c->blocks=c->H[at];c->H[at]=out.spare;out.spare=at;
   }
@@ -363,6 +383,8 @@ KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
 
 #define K_TREE_STACK KW kt_birth[32][5], kt_nb=0
 #define K_TREE_MARK(id) do { \
+  if(kt_nb && kt_birth[kt_nb-1][3]==sp && k_tree_schema(id)[0]==0 && k_tree_schema(kt_birth[kt_nb-1][4])[0]==0) \
+    k_rewind(c,kt_birth[kt_nb-1][0],kt_birth[kt_nb-1][1],kt_birth[kt_nb-1][2]); \
   if(kt_nb==0 || kt_birth[kt_nb-1][3]!=sp) { \
     if(kt_nb==32){*ok=false;return 0;} \
     kt_birth[kt_nb][0]=c->hp;kt_birth[kt_nb][1]=c->he; \
@@ -373,7 +395,8 @@ KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
 #define K_TREE_RET do { \
   while(kt_nb && kt_birth[kt_nb-1][3]==sp) { \
     kt_nb--;KCP KW *kt_schema=k_tree_schema(kt_birth[kt_nb][4]); \
-    RV=k_tree_compact(c,kt_birth[kt_nb][0],kt_birth[kt_nb][1],kt_birth[kt_nb][2],RV,kt_schema+1,kt_schema[0]); \
+    if(kt_schema[0]==0) k_rewind(c,kt_birth[kt_nb][0],kt_birth[kt_nb][1],kt_birth[kt_nb][2]); \
+    else RV=k_tree_compact(c,kt_birth[kt_nb][0],kt_birth[kt_nb][1],kt_birth[kt_nb][2],RV,kt_schema+1,kt_schema[0]); \
     if(c->err){*ok=false;return 0;} \
   } \
 } while(0)

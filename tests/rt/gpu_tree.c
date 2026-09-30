@@ -22,6 +22,17 @@ static KW fold(KCtx*c,int depth,int compact) {
   else {KW l=fold(c,depth-1,compact);if(c->err)return 0;KW right=fold(c,depth-1,compact);if(c->err)return 0;r=merge(c,l,right);}
   return compact?k_tree_compact(c,h0,e0,b0,r,masks,2):r;
 }
+KCONST KW empty_schema[]={0};
+KINLINE KCP KW *k_tree_schema(KW id) {(void)id;return empty_schema;}
+static KW scalar_rounds(KCtx *c,bool *ok) {
+  KW sp=0,RV=0;K_TREE_STACK;
+  for(int i=0;i<200;i++) {
+    K_TREE_MARK(0);
+    KW t=make(c,7,1);if(c->err){*ok=false;return 0;}
+    RV+=sum(c,t);
+  }
+  K_TREE_RET;return RV;
+}
 static void init(KCtx*c,KParams*p,KW*h,KAU*a,KW words) {memset(c,0,sizeof(*c));memset(p,0,sizeof(*p));memset(h,0,words*8);memset(a,0,32*4);p->ab=(KW)h;p->an=words*8;p->heap0=256;p->heapw=words-256;c->H=h;c->A=a;c->ab=p->ab;c->an=p->an;c->P=p;K_STORE(a+KA_HEAP,1);}
 int main(void) {
   KW words=65536;KW*h=calloc(words,8);KAU a[32];KCtx c;KParams p;
@@ -47,6 +58,20 @@ int main(void) {
   r=k_tree_compact(&c,h0,e0,b0,r,masks,2);
   assert(k_word(&c,r,1)==older && sum(&c,r)==16 && sum(&c,older)==7);
   assert(k_tree_compact(&c,c.hp,c.he,c.blocks,older,masks,2)==older);
+  // A copied DAG can pack into the old prefix without changing its older
+  // neighbor. All copied child pointers must follow the relocated graph.
+  init(&c,&p,h,a,words);older=leaf(&c,17);h0=c.hp;e0=c.he;b0=c.blocks;
+  l=leaf(&c,7);r=pair(&c,l,l);
+  r=k_tree_compact(&c,h0,e0,b0,r,masks,2);
+  assert(c.blocks==b0 && r==KPTR(&c,h0+1) && sum(&c,r)==14 && sum(&c,older)==17);
+  // If the live graph does not fit the starting tail, abandon the private
+  // staging copy and use output spans, preserving all older objects.
+  init(&c,&p,h,a,words);older=leaf(&c,7);KW padding=k_alloc(&c,243);
+  c.H[KIX(&c,padding)]=123;h0=c.hp;e0=c.he;b0=c.blocks;
+  assert(e0-h0==5);r=pair(&c,older,leaf(&c,9));
+  r=k_tree_compact(&c,h0,e0,b0,r,masks,2);
+  assert(c.blocks!=b0 && sum(&c,r)==16 && sum(&c,older)==7);
+  assert(c.H[KIX(&c,padding)]==123);
   // Depth guard aborts without modifying the source graph.
   init(&c,&p,h,a,words);r=leaf(&c,1);for(int i=0;i<70;i++)r=pair(&c,r,leaf(&c,0));
   KW old=r,check=sum(&c,r);r=k_tree_compact(&c,0,0,0,r,masks,2);assert(r==old && c.err==0 && sum(&c,r)==check);
@@ -54,5 +79,11 @@ int main(void) {
   init(&c,&p,h,a,words);r=make(&c,7,9);old=r;check=sum(&c,r);
   p.heapw=a[KA_HEAP]*K_CHUNK;
   r=k_tree_compact(&c,0,0,0,r,masks,2);assert(r==old && c.err==KE_HEAP && sum(&c,r)==check);
+  // Reentry at the same stack depth discards only a pure scalar call's
+  // dead temporary graphs; its older caller objects remain valid.
+  init(&c,&p,h,a,words);older=leaf(&c,17);h0=c.hp;e0=c.he;b0=c.blocks;
+  bool ok=true;assert(scalar_rounds(&c,&ok)==25600 && ok && c.err==0);
+  assert(c.hp==h0 && c.he==e0 && c.blocks==b0 && sum(&c,older)==17);
+  assert(a[KA_HEAP]<20);
   free(h);puts("ok");
 }
