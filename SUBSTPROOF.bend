@@ -208,7 +208,7 @@ def Str.sound(a: String, b: String, e: {EQ{} == Cmp.of(String.cmp(a, b)) : Cmp})
                   Str.fin(x, y, t1, t2, U32.cmp(x, y), {==}, e, h => Str.sound(t1, t2, h))
 
 
-def Eq.fin(r: (String & String) & Cmp, e: {True{} == String.eq.fin(r) : Bool}) -> {EQ{} == Cmp.of(r) : Cmp}:
+def Eq.fin(r: (String & String) & Cmp, e: {True{} == Cmp.is_eq(Pair.snd(String & String, Cmp, r)) : Bool}) -> {EQ{} == Cmp.of(r) : Cmp}:
   match r:
     case (ab, c):
       match ab:
@@ -265,7 +265,7 @@ def Str.refl.c(a: String) -> {EQ{} == Cmp.of(String.cmp(a, a)) : Cmp}:
           Cmp.tr(Cmp.of(String.cmp(t, t)), Cmp.of(String.cmp.rec(Chr{x}, Chr{x}, String.cmp(t, t))),
             Rec.to(Chr{x}, Chr{x}, String.cmp(t, t)), Str.refl.c(t))
 
-def Fin.true(r: (String & String) & Cmp, e: {EQ{} == Cmp.of(r) : Cmp}) -> {True{} == String.eq.fin(r) : Bool}:
+def Fin.true(r: (String & String) & Cmp, e: {EQ{} == Cmp.of(r) : Cmp}) -> {True{} == Cmp.is_eq(Pair.snd(String & String, Cmp, r)) : Bool}:
   match r:
     case (ab, c):
       match ab:

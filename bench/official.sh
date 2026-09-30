@@ -9,7 +9,7 @@
 # With --rc, bendc's reference-counting build (BEND_RC=1) runs too, in its
 # own column per mode; the fastest of the row's three is in bold.
 # Usage: bench/official.sh [-r R] [-t THREADS] [--rc] [bendc-binary] [bench...]
-#   BEND_UP: the Bend repo (default /tmp/bendup32); BEND: the official bend.
+#   BEND_UP: the Bend repo (default /tmp/bendup34); BEND: the official bend.
 set -e
 cd "$(dirname "$0")/.."
 R=3
@@ -26,7 +26,7 @@ done
 BENDC=${1:-build/bendc}
 [ $# -gt 0 ] && shift
 BASE=${BEND_BASE:-$HOME/.bend/bend2/base.bend}
-UP=${BEND_UP:-/tmp/bendup32}
+UP=${BEND_UP:-/tmp/bendup34}
 BEND=${BEND:-bend}
 export BEND_NO_TELEMETRY=1
 python3 - "$BENDC" "$BASE" "$UP" "$BEND" "$R" "$NT" "$RC" "$@" <<'PY'

@@ -1824,6 +1824,7 @@ Term io_fail(Env e, u32 code, const char *text) {
   Term t = io_tup(e, code, io_str(e, s, strlen(s)));
   return io_box(e, CID_FAIL, t);
 }
+#define io_res(e, w, v) ((w)->code ? io_fail(e, (w)->code, NULL) : io_done(e, v))
 pthread_mutex_t io_gate = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t io_bell = PTHREAD_COND_INITIALIZER;
 u32 io_busy;

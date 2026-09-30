@@ -90,13 +90,6 @@ def Tm.push.case(c: Tm, e: Tm) -> Tm:
     case other:
       other
 
-def Tm.push.fn(f: Tm, e: Tm) -> Tm:
-  match e:
-    case CApp{g, as}:
-      CApp{f, as}
-    case other:
-      other
-
 # t with each erased argument of a call replaced by a box (a list field is
 # walked as its head and the node rebuilt with the rest).
 def Tm.erase(t: Tm) -> Tm:
