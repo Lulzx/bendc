@@ -7408,7 +7408,7 @@ type GSel is Data:
   GSLetSwap{hit: Bool, g: G, env: Env(), self: Self, tgt: Tgt, name: String, f: String, a: String,
     x: String, t: Core.Expr, arr: Core.Expr, idx: Core.Expr, v: Core.Expr, body: Core.Expr}
   GSRetArr{hit: Nat, g: G, env: Env(), tgt: Tgt, name: String, args: List<&2, Core.Expr>}
-  GSSwap{g: G, env: Env(), k: U32, arr: Core.Expr, idx: Core.Expr, v: Core.Expr}
+  GSSwap{g: G, env: Env(), k: U32, w: Bool, arr: Core.Expr, idx: Core.Expr, v: Core.Expr}
   GSCallU{g: G, env: Env(), name: String, s: Split, o: String}
   GSRetCtor{out: Bool, g: G, env: Env(), tgt: Tgt, name: String, args: List<&2, Core.Expr>}
   GSRetCall{out: Bool, g: G, env: Env(), tgt: Tgt, name: String, args: List<&2, Core.Expr>}
@@ -7571,7 +7571,7 @@ def GSel.none(k: GSel) -> GSel.ty(k):
       DNil{}
     case GSRetArr{hit, g, env, tgt, name, args}:
       DNil{}
-    case GSSwap{g, env, k, arr, idx, v}:
+    case GSSwap{g, env, k, w, arr, idx, v}:
       DNil{}
     case GSCallU{g, env, name, s, o}:
       DNil{}
@@ -8174,7 +8174,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
                 di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
                 b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, bx} <> env, self, tgt, body})
-                return Doc.list([DStr{"V " ++ ca ++ " = "}, da, DStr{";\nV " ++ cx ++ " = *arr_at(" ++ ca ++ ", "}, di,
+                return Doc.list([DStr{"V " ++ ca ++ " = "}, da, DStr{";\nV " ++ cx ++ Bool.pick(String, sc, " = arr_rdw(", " = arr_rd(") ++ ca ++ ", "}, di,
                   DStr{Bool.pick(String, sc, ");\n", "); arr_got(" ++ ca ++ ", " ++ cx ++ ");\n")},
                   Gen.own(g, Bind{a, ca} <> Bind{x, bx} <> env, [Bind{a, ca}, Bind{x, bx}], body), b])
             case False{}:
@@ -8191,23 +8191,23 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 +ca : String <- Gen.pure(String, "ga" ++ U32.show(k))
                 +cx : String <- Gen.pure(String, "gx" ++ U32.show(k))
                 +bx : String <- Gen.pure(String, Gen.scalar.wrap(Str.eq(f, "Array.swap%w"), cx))
-                sw : Doc <- Gen.rec(fu, GSSwap{g, env, k, arr, idx, v})
+                sw : Doc <- Gen.rec(fu, GSSwap{g, env, k, Str.eq(f, "Array.swap%w"), arr, idx, v})
                 b : Doc <- Gen.rec(fu, GSStmt{g, Bind{a, ca} <> Bind{x, bx} <> env, self, tgt, body})
                 return Doc.list([sw, Gen.own(g, Bind{a, ca} <> Bind{x, bx} <> env, [Bind{a, ca}, Bind{x, bx}], body), b])
             case False{}:
               +qs = {[Core.PVar{a}, Core.PVar{x}] : List<&2, Core.Pat>}
               +as = {[t, arr, idx, v] : List<&2, Core.Expr>}
               Gen.rec(fu, GSLetOut{Gen.out.let(g, env, f, qs, as), g, env, self, tgt, name, qs, f, as, body})
-        # V gaK = arr; V gxK = old cell, with v stored in it.
-        case GSSwap{+g, +env, +k, arr, idx, v}:
+        # V gaK = arr; V gxK = old cell, with v stored in it (w: a scalar,
+        # Array.swap%w).
+        case GSSwap{+g, +env, +k, w, arr, idx, v}:
           +ks = U32.show(k)
           do Gen<Doc>:
             da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
             di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
             dv : Doc <- Gen.rec(fu, GSExpr{g, env, v})
             return Doc.list([DStr{"V ga" ++ ks ++ " = "}, da, DStr{";\nV gi" ++ ks ++ " = "}, di, DStr{";\nV gv" ++ ks ++ " = "},
-              dv, DStr{";\nV *gp" ++ ks ++ " = arr_at(ga" ++ ks ++ ", gi" ++ ks ++ ");\nV gx" ++ ks ++ " = *gp" ++ ks ++
-              ";\narr_put(ga" ++ ks ++ ", gp" ++ ks ++ ", gv" ++ ks ++ ");\n"}])
+              dv, DStr{";\nV gx" ++ ks ++ " = " ++ Bool.pick(String, w, "arr_xchgw", "arr_xchg") ++ "(ga" ++ ks ++ ", gi" ++ ks ++ ", gv" ++ ks ++ ");\n"}])
         # A flat result of two fields returned from Array.get (1) or
         # Array.swap (2): the array and the cell go straight out.
         case GSRetArr{hit, +g, +env, +tgt, +name, +args}:
@@ -8218,14 +8218,14 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 +ks : String <- Gen.pure(String, U32.show(k))
                 da : Doc <- Gen.rec(fu, GSExpr{g, env, arr})
                 di : Doc <- Gen.rec(fu, GSExpr{g, env, idx})
-                return Doc.list([DStr{"{\nV ga" ++ ks ++ " = "}, da, DStr{";\nV gx" ++ ks ++ " = *arr_at(ga" ++ ks ++ ", "}, di,
+                return Doc.list([DStr{"{\nV ga" ++ ks ++ " = "}, da, DStr{";\nV gx" ++ ks ++ Bool.pick(String, Str.eq(name, "Array.get%w"), " = arr_rdw(ga", " = arr_rd(ga") ++ ks ++ ", "}, di,
                   DStr{Bool.pick(String, Str.eq(name, "Array.get%w"), ");", "); arr_got(ga" ++ ks ++ ", gx" ++ ks ++ ");") ++
                   "\no[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
             case 2n t <> arr <> idx <> v <> Nil{}:
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
                 +ks : String <- Gen.pure(String, U32.show(k))
-                sw : Doc <- Gen.rec(fu, GSSwap{g, env, k, arr, idx, v})
+                sw : Doc <- Gen.rec(fu, GSSwap{g, env, k, Str.eq(name, "Array.swap%w"), arr, idx, v})
                 return Doc.list([DStr{"{\n"}, sw, DStr{"o[0] = ga" ++ ks ++ "; o[1] = gx" ++ ks ++ ";\nreturn 0;\n}\n"}])
             case h as:
               do Gen<Doc>:
@@ -9310,13 +9310,13 @@ def Pick.decls(ds: List<&2, Decl>) -> List<&2, Decl>:
 
 # Scalar cells (C back end). Array.get, Array.set and Array.swap on an
 # array of U32, F32, Bool or Char become Array.get%w, Array.set%w and
-# Array.swap%w: natives of the same type whose cells are words, so a read
+# Array.swap%w: natives of the same type whose cells are scalars, so a read
 # takes no reference and a write drops none (reference counted), and the
 # cell a read or a swap gives is a scalar (see GSLetGet). The type argument
 # says which; the core IR erases it, so this runs before (Lo.program).
 # Array.new of scalars (its type argument, or for a literal [v : T*n] the
-# annotation on v) becomes Array.new%w: the CPU's Array.new, and on the
-# device an array of 32-bit cells (see K_ARR_NW in rt/gpu.h).
+# annotation on v) becomes Array.new%w: an array of 32-bit cells, on the CPU
+# (ARR_NW in rt/bendrt.h) and on the device (K_ARR_NW in rt/gpu.h).
 def Arrw.scalar(t: Core.Expr) -> Bool:
   match t:
     case Core.ETy{+n, a}:
@@ -13144,7 +13144,7 @@ def Gen.printer.arr(+e: String, leaf: Maybe<&2, CInfo>) -> String:
   match leaf:
     case Some{CInfo{+tag, ar, +kind, +single}}:
       "pr_s(\"[\");\nfor (size_t i = 0, n = (size_t)1 << arr_cls(v); i < n; i++) { if (i) pr_s(\", \"); " ++
-        e ++ "(arr_cells(v)[i]); }\npr_s(\"]\");\n"
+        e ++ "(arr_cell(v, i)); }\npr_s(\"]\");\n"
     case None{}:
       "(void)v; pr_s(\"[]\");\n"
 
