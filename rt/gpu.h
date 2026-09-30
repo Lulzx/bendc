@@ -198,6 +198,10 @@ KINLINE KW k_word(KTHR KCtx *c, KW v, KW i) {
 KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : (k_word(c, v, 0) & (KW)0xffcfffff); }
 #define KTAG(v) k_tag(c, v)
 #define KFLD(v, i) k_word(c, v, 1 + (i))
+// A headerless node's fields start at it (kind 8, see "Bare nodes" in
+// bendrt.h); K_BARE in its size word says so (for k_region and the copy out).
+#define KFLB(v, i) k_word(c, v, (i))
+#define K_BARE ((KW)1 << 61)
 
 // n words from the lane's heap chunk; the word before an object holds its
 // size (the host copies results out with it). Chunk 0 is scratch: a lane
@@ -272,8 +276,8 @@ KINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
     c->hp = lo;
     return r;
   }
-  KW p = (r - c->ab) >> 3, m = c->H[p - 1];
-  for (KW i = 1; i < m; i++) {
+  KW p = (r - c->ab) >> 3, m = c->H[p - 1] & ~K_BARE;
+  for (KW i = (c->H[p - 1] & K_BARE) ? 0 : 1; i < m; i++) {
     if (c->H[p + i] - b < n) return r;
   }
   for (KW i = 0; i <= m; i++) c->H[lo + i] = c->H[p - 1 + i];
@@ -309,6 +313,11 @@ KINLINE void k_rewind(KTHR KCtx *c, KW h0, KW e0, KW b0) {
 KINLINE KW k_node(KTHR KCtx *c, KW tag, KW n) {
   KW p = k_alloc(c, n + 1);
   c->H[KIX(c, p)] = tag;
+  return p;
+}
+KINLINE KW k_bnode(KTHR KCtx *c, KW n) {
+  KW p = k_alloc(c, n);
+  c->H[KIX(c, p) - 1] = n | K_BARE;
   return p;
 }
 
