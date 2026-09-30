@@ -383,13 +383,12 @@ extern uint64_t *gc_cand;
 // Bare nodes (see "Bare nodes"): gc_bk, a byte per 64 KB of the address
 // space (the heap's blocks, and the device's arena): BK_BARE for a block of
 // bare nodes, BK_SH when one of them may be shared (the device's arena is
-// all BK_SH). gc_sbits and gc_dbits, per block like gc_abits: a bare node's
+// all BK_SH). gc_bflags has one byte per heap word: a bare node's
 // shared bit, and its fields', once they are marked (bend_deep's BEND_DEEP).
 #define BK_BARE 1
 #define BK_SH 2
 extern uint8_t *gc_bk;
-extern uint64_t *gc_sbits;
-extern uint64_t *gc_dbits;
+extern uint8_t *gc_bflags;
 // More than one thread runs Bend code (frees must then be atomic).
 extern int gc_mt;
 // Set by a program compiled with BEND_RC=1 before it starts (see "Reference
@@ -413,6 +412,7 @@ typedef struct GcHot {
   // dirty in a tree-bitonic run; the subtraction was 10G instructions)
   uintptr_t dirty;
   uint8_t *bk;  // gc_bk
+  uintptr_t bflags;  // gc_bflags less the heap's first word index
 } GcHot;
 extern GcHot gc_hot;
 extern GcRange *gc_roots;
@@ -495,11 +495,6 @@ static inline uint64_t gc_next_bits(GcCache *k) {
     if (f) {
       uint64_t *m = &GC_MARK(b)[k->j];
       if (__atomic_load_n(m, __ATOMIC_RELAXED) & f) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
-      if (b->pool == 2) {
-        size_t x = gc_bi(b) * 64 + k->j;
-        if (__atomic_load_n(&gc_sbits[x], __ATOMIC_RELAXED) & f) __atomic_fetch_and(&gc_sbits[x], ~f, __ATOMIC_RELAXED);
-        if (__atomic_load_n(&gc_dbits[x], __ATOMIC_RELAXED) & f) __atomic_fetch_and(&gc_dbits[x], ~f, __ATOMIC_RELAXED);
-      }
       return f;
     }
   }
@@ -563,6 +558,7 @@ static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
   } else {
     p = gc_refill(k, atomic, c);
   }
+  if (atomic == 2) *(uint8_t *)(gc_hot.bflags + ((uintptr_t)p >> 3)) = 0;
   if (!hole) p[0] = 0;
   p[1] = 0;
   if (!(w >= 2 && w <= 16))
@@ -623,9 +619,12 @@ static inline void bend_share(V v) {
   // A word first, on its own branch (the heap bounds are then not loaded).
   if (LIKELY(v < ((V)1 << 32))) return;
   if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
-  V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
-  // (a bare node's first word is a field: see "Bare nodes")
-  if ((w0 & BEND_SH) && w0 < ((V)1 << 22) && !(gc_hot.bk[v >> GC_BLK_SHIFT] & BK_BARE)) return;
+  if (gc_hot.bk[v >> GC_BLK_SHIFT] & BK_BARE) {
+    if (__atomic_load_n((uint8_t *)(gc_hot.bflags + (v >> 3)), __ATOMIC_RELAXED) & 1) return;
+  } else {
+    V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
+    if ((w0 & BEND_SH) && w0 < ((V)1 << 22)) return;
+  }
   bend_share_slow(v);
 }
 
@@ -733,7 +732,7 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
 // them (kind 8, h in BEND_OPT) for types the runtime does not read itself,
 // under the collector, in C and on the device. They are in blocks of their
 // own (pool 2, BK_BARE in gc_bk), and a bare node's shared flags are bits
-// beside its allocation bit (gc_sbits, gc_dbits), set by bend_share_slow.
+// in gc_bflags (bit 0 shared, bit 1 deep), set by bend_share_slow.
 // A take reads its block's byte only: a block none of whose nodes is shared
 // (no BK_SH) frees it with no more tests, and a take of a reuse token is a
 // load of the byte. A take's words are 256 + its fields (bend_take, RUFG).
@@ -742,7 +741,17 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
 // v's block has shared nodes, or v is in the device's arena (all shared):
 // 1 when v is shared, its fields then marked shared as bend_deep does.
 void bend_share_arena(V v);
-__attribute__((noinline)) int bend_shared_bare(V v, unsigned n);
+__attribute__((noinline)) int bend_deep_bare(V v, unsigned n, uint8_t *f);
+__attribute__((always_inline)) static inline int bend_shared_bare(V v, unsigned n) {
+  uint8_t *f = NULL;
+  if ((uintptr_t)v - gc_hot.base < gc_hot.span) {
+    f = (uint8_t *)(gc_hot.bflags + (v >> 3));
+    uint8_t flags = __atomic_load_n(f, __ATOMIC_ACQUIRE);
+    if (!(flags & 1)) return 0;
+    if (flags & 2) return 1;
+  }
+  return bend_deep_bare(v, n, f);
+}
 static inline int bend_take_bare(V v, unsigned n) {
   if (UNLIKELY(gc_hot.bk[v >> GC_BLK_SHIFT] & BK_SH) && bend_shared_bare(v, n)) return 1;
   bend_free_slot(v, 256 + n, 0);

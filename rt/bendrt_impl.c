@@ -145,8 +145,7 @@ uint64_t *gc_cand;
 #define BK_BARE 1
 #define BK_SH 2
 uint8_t *gc_bk;
-uint64_t *gc_sbits;
-uint64_t *gc_dbits;
+uint8_t *gc_bflags;
 int gc_mt;
 int bend_rc_req;
 GcHot gc_hot;
@@ -205,14 +204,13 @@ void gc_init(void) {
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
-  gc_sbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
-  gc_dbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
+  gc_bflags = gc_reserve((GC_MAXBLK << GC_BLK_SHIFT) / sizeof(V), NULL);
   // (2^32 bytes of address space, all but the pages the heap's blocks and
   // the device's arena index never touched)
   gc_bk = gc_reserve((size_t)1 << (48 - GC_BLK_SHIFT), NULL);
   gc_hot = (GcHot){(uintptr_t)gc_base, 0,
     (uintptr_t)gc_abits - ((uintptr_t)gc_base >> GC_BLK_SHIFT) * 64 * sizeof(uint64_t), 0, 0, bend_rc_req, 0,
-    (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT), gc_bk};
+    (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT), gc_bk, (uintptr_t)gc_bflags - ((uintptr_t)gc_base >> 3)};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -256,8 +254,7 @@ GcBlk *gc_new_small(int atomic, unsigned c) {
   memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
   memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
   if (atomic == 2) {
-    memset(&gc_sbits[at * 64], 0, 64 * sizeof(uint64_t));
-    memset(&gc_dbits[at * 64], 0, 64 * sizeof(uint64_t));
+    memset(gc_bflags + at * (GC_BLK / sizeof(V)), 0, GC_BLK / sizeof(V));
   }
   __atomic_store_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], atomic == 2 ? BK_BARE : 0, __ATOMIC_RELAXED);
   b->pool = (uint8_t)atomic;
@@ -452,9 +449,8 @@ __attribute__((noinline)) void bend_share_slow(V v) {
   if (!(GC_ALLOC(b)[i >> 6] & (1ull << (i & 63)))) return;
   if (b->pool == 2) {
     // A bare node: its shared bit, and its block's BK_SH.
-    size_t x = gc_bi(b) * 64 + (i >> 6);
-    uint64_t bit = 1ull << (i & 63);
-    if (!(__atomic_load_n(&gc_sbits[x], __ATOMIC_RELAXED) & bit)) __atomic_fetch_or(&gc_sbits[x], bit, __ATOMIC_RELAXED);
+    uint8_t *f = (uint8_t *)(gc_hot.bflags + (v >> 3));
+    if (!(__atomic_load_n(f, __ATOMIC_RELAXED) & 1)) __atomic_fetch_or(f, 1, __ATOMIC_RELAXED);
     uint8_t *k = &gc_bk[v >> GC_BLK_SHIFT];
     if (!(__atomic_load_n(k, __ATOMIC_RELAXED) & BK_SH)) __atomic_store_n(k, BK_BARE | BK_SH, __ATOMIC_RELAXED);
     return;
@@ -503,24 +499,13 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w) {
 #define BEND_TAG_WORD(v) (((V *)(v))[0])
 #define FLB(v, i) (((V *)(v))[i])
 #define IS_B(v) (!((v) & 1))
-__attribute__((noinline)) int bend_shared_bare(V v, unsigned n) {
+__attribute__((noinline)) int bend_deep_bare(V v, unsigned n, uint8_t *f) {
   V *p = (V *)v;
-  size_t x = 0;
-  uint64_t bit = 0;
-  if ((uintptr_t)v - gc_hot.base < gc_hot.span) {
-    uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
-    unsigned sw = n < 2 ? 2 : n;
-    uint32_t i = (uint32_t)((((uintptr_t)v & (GC_BLK - 1)) - GC_HDR) / (sw * sizeof(V)));
-    x = bi * 64 + (i >> 6);
-    bit = 1ull << (i & 63);
-    if (!(__atomic_load_n(&gc_sbits[x], __ATOMIC_RELAXED) & bit)) return 0;
-    if (__atomic_load_n(&gc_dbits[x], __ATOMIC_ACQUIRE) & bit) return 1;
-  }
   for (unsigned j = 0; j < n; j++) {
     if (UNLIKELY((uintptr_t)p[j] - bend_arena_lo < bend_arena_n)) bend_share_arena(p[j]);
     else bend_share(p[j]);
   }
-  if (bit) __atomic_fetch_or(&gc_dbits[x], bit, __ATOMIC_RELEASE);
+  if (f) __atomic_fetch_or(f, 2, __ATOMIC_RELEASE);
   return 1;
 }
 #ifdef BEND_DEBUG_FREE
@@ -829,17 +814,6 @@ void gc_sweep(void) {
       for (int j = 0; j < words; j++) {
         GC_ALLOC(b)[j] &= GC_MARK(b)[j];
         used += (size_t)__builtin_popcountll(GC_ALLOC(b)[j]);
-      }
-      if (b->pool == 2) {
-        // (a dead node's shared bits go with it; the block keeps BK_SH while
-        // a live one is shared)
-        uint64_t sh = 0;
-        for (int j = 0; j < words; j++) {
-          gc_sbits[bi * 64 + j] &= GC_ALLOC(b)[j];
-          gc_dbits[bi * 64 + j] &= GC_ALLOC(b)[j];
-          sh |= gc_sbits[bi * 64 + j];
-        }
-        gc_bk[(uintptr_t)b >> GC_BLK_SHIFT] = BK_BARE | (sh ? BK_SH : 0);
       }
       if (used == 0) {
         gc_kind[bi] = 0;

@@ -22257,26 +22257,46 @@ def G.hless.ctors(cs: List<&2, Ctor>, +m: Map<&2, CInfo>) -> Map<&2, CInfo>:
       G.hless.ctors(t, Map.set(&2, CInfo, m, name, G.hless.set(Pair.snd(Map<&2, CInfo>, CInfo,
         Map.get(CInfo, CInfo{0, 0, 4, False{}}, m, name)))))
 
-def G.hless.type(+name: String, ps: List<&2, String>, +cs: List<&2, Ctor>, +m: Map<&2, CInfo>) -> Map<&2, CInfo>:
-  Bool.pick(Map<&2, CInfo>, Bool.and(Bool.and(Nat.is_eq(List.length(&2, String, ps), 0n),
-    Bool.not(Str.has(["String", "Image", "Event", "IO.OP", "App", "Word", "U32", "F32", "Char",
-      "Nat", "Array", "Bool", "Unit", "Cmp", "Empty"], name))),
-    Bool.and(Nat.is_ge(List.length(&2, Ctor, cs), 2n), Nat.is_eq(G.hless.cnt(cs, m, 0n), 1n))), G.hless.ctors(cs, m), m)
+# Shared inputs need side metadata on every take. Keep their header word;
+# the smaller linear representation is profitable for exclusively owned trees.
+def G.hless.shared.ps(ps: List<&2, Core.Param>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Param{x, +mode, +ty} <> rest:
+      +tail = G.hless.shared.ps(rest)
+      Bool.pick(List<&2, String>, U32.is_eq(mode, 2), ty <> tail, tail)
 
-def G.hless.decls(ds: List<&2, Decl>, +m: Map<&2, CInfo>) -> Map<&2, CInfo>:
+def G.hless.shared(ds: List<&2, Decl>) -> List<&2, String>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case DDef{name, ps, body, ret} <> rest:
+      List.append(&2, String, G.hless.shared.ps(ps), G.hless.shared(rest))
+    case d <> rest:
+      G.hless.shared(rest)
+
+def G.hless.type(+name: String, ps: List<&2, String>, +cs: List<&2, Ctor>, +m: Map<&2, CInfo>, +shared: List<&2, String>) -> Map<&2, CInfo>:
+  +plain = Bool.and(Nat.is_eq(List.length(&2, String, ps), 0n), Bool.not(Str.has(shared, name)))
+  +allowed = Bool.not(Str.has(["String", "Image", "Event", "IO.OP", "App", "Word", "U32", "F32", "Char",
+    "Nat", "Array", "Bool", "Unit", "Cmp", "Empty"], name))
+  +shape = Bool.and(Nat.is_ge(List.length(&2, Ctor, cs), 2n), Nat.is_eq(G.hless.cnt(cs, m, 0n), 1n))
+  Bool.pick(Map<&2, CInfo>, Bool.and(plain, Bool.and(allowed, shape)), G.hless.ctors(cs, m), m)
+
+def G.hless.decls(ds: List<&2, Decl>, +m: Map<&2, CInfo>, +shared: List<&2, String>) -> Map<&2, CInfo>:
   match ds:
     case Nil{}:
       m
     case DType{+name, ps, +cs} <> t:
-      G.hless.decls(t, G.hless.type(name, ps, cs, m))
+      G.hless.decls(t, G.hless.type(name, ps, cs, m, shared), shared)
     case d <> t:
-      G.hless.decls(t, m)
+      G.hless.decls(t, m, shared)
 
 def G.hless(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
   match on:
     case True{}:
       G{ctors, defs, bodies, dps} = g
-      G{G.hless.decls(ds, ctors), defs, bodies, dps}
+      G{G.hless.decls(ds, ctors, G.hless.shared(ds)), defs, bodies, dps}
     case False{}:
       g
 
