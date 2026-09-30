@@ -612,6 +612,7 @@ static int gpu_kq_host(const GpuProg *prog, KW *H, const KParams *P, KW waiting)
 // A lane's saved state names no lane (its frames and heap chunk are the
 // arena's), so the calls can trade lanes; the lanes that wait stay the same.
 static KW *gpu_ks_H, gpu_ks_n;
+#include "gpu_sort.h"
 static int gpu_ks_cmp(const void *x, const void *y) {
   KW a = *(const KW *)x, b = *(const KW *)y;
   for (int j = 7; j < K_LANE; j++) {
@@ -623,27 +624,18 @@ static int gpu_ks_cmp(const void *x, const void *y) {
 }
 static void gpu_kq_sort(KW *H, const KParams *P, KW waiting) {
   KW n = P->nlanes, k = 0;
-  KW *ix = malloc(waiting * sizeof(KW)), *st = malloc(waiting * K_LANE * sizeof(KW));
-  if (!ix || !st) { free(ix); free(st); return; }
+  KW *ix = malloc(waiting * sizeof(KW)), *dst = malloc(waiting * sizeof(KW));
+  if (!ix || !dst) { free(ix); free(dst); return; }
   KW *L = H + P->lane0;
   for (KW l = 0; l < n && k < waiting; l++) {
-    if (L[l] == PC_KQ) ix[k++] = l;
+    if (L[l] == PC_KQ) { ix[k] = dst[k] = l; k++; }
   }
   gpu_ks_H = L;
   gpu_ks_n = n;
   qsort(ix, k, sizeof(KW), gpu_ks_cmp);
-  for (KW i = 0; i < k; i++) {
-    for (int j = 0; j < K_LANE; j++) st[i * K_LANE + j] = L[j * n + ix[i]];
-  }
-  // (the lanes that wait, in lane order, take the calls in sorted order)
-  KW i = 0;
-  for (KW l = 0; l < n && i < k; l++) {
-    if (L[l] != PC_KQ) continue;
-    for (int j = 0; j < K_LANE; j++) L[j * n + l] = st[i * K_LANE + j];
-    i++;
-  }
+  gpu_sort_permute(L, n, ix, dst, k);
   free(ix);
-  free(st);
+  free(dst);
 }
 
 static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
