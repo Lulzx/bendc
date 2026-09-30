@@ -10426,6 +10426,62 @@ def Unb.infer(e: Core.Expr, +x: String, +cm: Map<&2, Unb>) -> Unb:
     case other:
       Unb.none()
 
+# Whether e opens x (followed as Unb.infer follows it) with a constructor
+# other than k: then x is of no one flat type (a family's, say, whose
+# indices pick its constructor).
+def Unb.clash.v(v: Core.Expr, +x: String) -> Bool:
+  match v:
+    case Core.EVar{+y}:
+      Str.eq(x, y)
+    case other:
+      False{}
+
+def Unb.clash.let(p: Core.Pat, +v: Core.Expr, +x: String, +k: String) -> Bool:
+  match p:
+    case Core.PCtor{+k2, qs}:
+      Bool.and(Unb.clash.v(v, x), Bool.not(Str.eq(k2, k)))
+    case other:
+      False{}
+
+def Unb.clash(e: Core.Expr, +x: String, +k: String) -> Bool:
+  match e:
+    case Core.ELet{+pt, +v, b}:
+      +y = Unb.infer.next(pt, v, x)
+      Bool.or(Bool.or(Unb.clash.let(pt, v, x, k), Unb.clash(v, x, k)),
+        Bool.pick(Unit -> Bool, String.is_empty(y), u => False{}, u => Unb.clash(b, y, k))(Unit{}))
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          False{}
+        case a <> t:
+          Bool.or(Unb.clash(a, x, k), Unb.clash(Core.ECall{f, t}, x, k))
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          False{}
+        case a <> t:
+          Bool.or(Unb.clash(a, x, k), Unb.clash(Core.ECtor{n, t}, x, k))
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Bool.or(Unb.clash(a, x, k), Unb.clash(Core.EMatch{t, cases}, x, k))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case c <> t:
+              Bool.or(Unb.clash(c, x, k), Unb.clash(Core.EMatch{Nil{}, t}, x, k))
+    case Core.ECase{+ps, b}:
+      Bool.and(Bool.not(Str.has(Pats.vars(ps, Nil{}), x)), Unb.clash(b, x, k))
+    case Core.EAnn{y, ty}:
+      Unb.clash(y, x, k)
+    case other:
+      False{}
+
+def Unb.infer.one(+body: Core.Expr, +x: String, +cm: Map<&2, Unb>) -> Unb:
+  +u = Unb.infer(body, x, cm)
+  Bool.pick(Unit -> Unb, Bool.and(Unb.is(u), Unb.clash(body, x, Unb.ctor.of(u))), w => Unb.none(), w => u)(Unit{})
+
 # Whether e answers the variable x itself (in a tail position, x not
 # rebound on the way): then x is of the def's result type.
 def Unb.tail(e: Core.Expr, +x: String) -> Bool:
@@ -10451,7 +10507,7 @@ def Unb.cand.two(+u: Unb, +x: String, +ts: Map<&2, Unb>, +rt: String, +body: Cor
   Bool.pick(Unit -> Unb, Bool.or(Unb.is(u), Bool.not(Unb.tail(body, x))), w => u, w => Unb.find(ts, rt))(Unit{})
 
 def Unb.cand.one(+u: Unb, +x: String, +ts: Map<&2, Unb>, +cm: Map<&2, Unb>, +rt: String, +body: Core.Expr) -> Unb:
-  Bool.pick(Unit -> Unb, Unb.is(u), w => u, w => Unb.cand.two(Unb.infer(body, x, cm), x, ts, rt, body))(Unit{})
+  Bool.pick(Unit -> Unb, Unb.is(u), w => u, w => Unb.cand.two(Unb.infer.one(body, x, cm), x, ts, rt, body))(Unit{})
 
 # A def's parameters that may go unboxed: plain or shared, of a flat type
 # (or of one Unb.infer finds).
