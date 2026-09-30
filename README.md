@@ -26,8 +26,8 @@ tests with stage2: 80 passed, 0 failed
 
 `bendc.bend` (the compiler) and `check.bend` (the type checker) are Bend: about 22,000 lines that
 `bend --check-only` accepts: `check.bend` outright, and `bendc.bend` with exit status 1 since Bend
-2.0.32, which lists the 18 defs that rely on foreign code (the package fetcher `Hub.ensure`, which
-imports C, and its callers); bendc's checker prints the same report. bendc type-checks
+2.0.32, which lists the 24 defs that rely on foreign code (the package fetcher `Hub.ensure` and
+the C compiler hooks `Cc.*`, which import C, and their callers); bendc's checker prints the same report. bendc type-checks
 a program the way the official checker does (a port of it, with the same error reports), then lexes, parses, erases, and code-generates it, including the
 parts of Bend's standard library (`Base`) that the program uses. The result is a single C file that
 clang builds against the runtime (`rt/bendrt.h`): a garbage collector, native `Nat` and arrays, a
@@ -209,7 +209,7 @@ flowchart LR
 CI runs the whole chain on Linux (arm64) and macOS: seed build, tests, selfcheck, full bootstrap,
 `make ddc` (on macOS, with Homebrew's GCC), and `make tcc` and `make boot` (on Linux, with tinycc
 built from a pinned commit; `make boot` also with GCC). It
-pins the official Bend it tests against (`tools/install-bend.sh`, Bend 2.0.32),
+pins the official Bend it tests against (`tools/install-bend.sh`, Bend 2.0.34),
 and a weekly run tries the latest release, so a new Bend shows up there before it breaks a push.
 
 ## Language support
@@ -1128,7 +1128,7 @@ tools/threadstress.sh 100      # threaded builds used by the tcc merge gate
 The official repository's own tests are a second, larger suite. `tools/upstream.py` runs every one
 that imports Base, has a `main` and expects output (not an error) through a given `bendc`, and
 compares the result with the test's `#|` lines as the official gate does. The failures go to
-`build/upstream/fails.txt`. Against Bend 2.0.32, all 799 pass in C and 818 of 820 in JavaScript;
+`build/upstream/fails.txt`. Against Bend 2.0.34, all 809 pass in C and 828 of 830 in JavaScript;
 the rest are the limitations below. With `--check`, the tests whose check fails
 (`#|SOME PROOFS FAIL`) run through `bendc --check-only` instead, which must print the same error
 report: all 493 do.
@@ -1139,12 +1139,12 @@ must print what `bend --check-only` prints, with the same exit code. In the pars
 `bendc --parse-only` (load the file and its imports, stop before checking) must answer what the
 checkout's own `bend2/bend.ts` answers from `book_load`, run under Bun by `tools/frontend_ref.ts`:
 nothing, or the same error report. The parse lane tells whether a program is refused while loading
-or while checking. Against Bend 2.0.32, all 1,497 tests agree in both lanes (2,994 of 2,994). 956
-are accepted, 194 are refused while loading, and 347 load but fail checking. The official
+or while checking. Against Bend 2.0.34, all 1,510 tests agree in both lanes (3,020 of 3,020). 966
+are accepted, 194 are refused while loading, and 350 load but fail checking. The official
 answers are cached in `build/frontend/ref/`.
 
 ```sh
-git clone --depth 1 -b v2.0.32 https://github.com/bendlang/bend /tmp/bendup
+git clone --depth 1 -b v2.0.34 https://github.com/bendlang/bend /tmp/bendup
 python3 tools/upstream.py build/bendc /tmp/bendup           # C
 python3 tools/upstream.py build/bendc /tmp/bendup --js io_  # JavaScript, tests whose name has io_
 python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's error reports
