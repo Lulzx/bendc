@@ -8687,7 +8687,7 @@ def Gen.leaf.args(cs: List<&2, String>, +paths: List<&2, String>, +env: Env()) -
     case Nil{}:
       True{}
     case +c <> t:
-      Bool.and(Bool.or(Str.has(paths, c), Gen.leaf.scalar(env, c)), Gen.leaf.args(t, paths, env))
+      Bool.and(Bool.or(Bool.or(Str.has(paths, c), Str.has(paths, c ++ "/*b*/")), Gen.leaf.scalar(env, c)), Gen.leaf.args(t, paths, env))
 
 def Gen.leaf.fn(info: DInfo) -> Bool:
   DInfo{+kind, mask} = info
@@ -8783,6 +8783,39 @@ def Gen.leaf.wrapper(+g: G, +env: Env(), +self: Self, +params: List<&2, String>,
     case other:
       Gen.pure(Unit, Unit{})
 
+# A counted def may have a read-only clone for its sequential frontier.
+# Calls use the normal borrowing generator: the caller owns and drops the
+# borrowed arguments after the clone returns. The clone keeps leaf wrappers.
+def Gen.ro.name(+name: String) -> String:
+  name ++ "%bseq"
+
+def Gen.ro.args(ps: List<&2, Core.Param>) -> List<&2, Core.Expr>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Param{x, m, t} <> rest:
+      Core.EVar{x} <> Gen.ro.args(rest)
+
+def Gen.ro.decl.args(d: Decl) -> List<&2, Core.Expr>:
+  match d:
+    case DDef{n, ps, b, r}:
+      Gen.ro.args(ps)
+    case other:
+      Nil{}
+
+def Gen.ro.enabled(+g: G, +name: String) -> Bool:
+  Bool.and(Gen.rc(g), Bool.and(Bool.not(String.ends_with(name, "%bseq")),
+    Bor.any(Bor.list(Bor.flags(g, Gen.ro.name(name))))))
+
+def Gen.ro.call(on: Bool, +g: G, +name: String, env: Env()) -> Gen(Doc):
+  match on:
+    case False{}:
+      Gen.pure(Doc, DNil{})
+    case True{}:
+      do Gen<Doc>:
+        d : Doc <- Gen.rec(Fuel.max(), GSCall{g, env, Core.EVar{Gen.ro.name(name)}, Gen.ro.decl.args(G.body(g, name))})
+        return Doc.list([DStr{"if (par_depth >= par_front) return "}, d, DStr{";\n"}])
+
 # S_name, a seq def's sequential clone: its parallel lets run in order and
 # its calls to itself stay in S_name (F_name is renamed to it inside).
 def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr, +env: Env(),
@@ -8820,9 +8853,10 @@ def Gen.def.boxed(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
   do Gen<Unit>:
     Gen.proto(Doc.list([DStr{head ++ ";\n"}, Gen.leaf.proto(leaf, slowhead)]))
     +e : Core.Expr = RC.tmp.body(Gen.rc(g), g, Env.names(env), R.ops(body, "Nat"))
+    fast : Doc <- Gen.ro.call(Gen.ro.enabled(g, name), g, name, env)
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, e)
     Gen.code(Doc.list([DStr{dhead ++ " {\n" ++ Gen.u32.open(us) ++ RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))),
-      RC.tmp.used(Fuel.max(), name, mask, e, Nil{}), 0) ++ "top:;\n"}, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
+      RC.tmp.used(Fuel.max(), name, mask, e, Nil{}), 0) ++ "top:;\n"}, fast, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
     Gen.leaf.wrapper(g, env, Self{name, mask, params}, params, head, slow, us, leaf)
     Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
@@ -12705,11 +12739,22 @@ def Bor.ok(+g: G, +name: String, +gpus: List<&2, String>, +body: Core.Expr) -> B
   Bool.and(Bool.and(U32.is_eq(DInfo.kind(G.def(g, name)), 0), String.is_empty(DGrp.id(G.dps(g, name)))),
     Bool.and(Bool.not(Str.eq(name, "main")), Bool.and(Bool.not(Str.has(gpus, name)), Bool.not(Expr.has_par(body)))))
 
-def Bor.init.one(ok: Bool, +name: String, ps: List<&2, Core.Param>, mask: List<&2, Bool>, m: Map<&2, DGrp>) ->
+# Read-only clones start only from explicitly shared, non-scalar parameters.
+# Ordinary linear parameters retain their owned, reusable nodes.
+def Bor.ro.cand(ps: List<&2, Core.Param>, mask: List<&2, Bool>) -> String:
+  match ps mask:
+    case Core.Param{x, +m, t} <> pt True{} <> mt:
+      Bool.pick(String, Bool.and(U32.is_eq(m, 2), Bool.not(Gen.scalar.ty(t))), "1", "0") ++ Bor.ro.cand(pt, mt)
+    case p <> pt False{} <> mt:
+      "0" ++ Bor.ro.cand(pt, mt)
+    case pl ml:
+      ""
+
+def Bor.init.one(ok: Bool, +name: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, m: Map<&2, DGrp>) ->
   Map<&2, DGrp>:
   match ok:
     case True{}:
-      Map.set(&2, DGrp, m, Bor.key(name), DGrp{Bor.cand(ps, mask), 0})
+      Map.set(&2, DGrp, m, Bor.key(name), DGrp{Bool.pick(String, String.ends_with(name, "%bseq"), Bor.ro.cand(ps, mask), Bor.cand(ps, mask)), 0})
     case False{}:
       m
 
@@ -22015,9 +22060,106 @@ def G.li(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
     case False{}:
       g
 
+# Serialize only the current def's parallel lets. Nested lambdas keep their
+# own parallelism; only full, unshadowed self calls select the clone.
+type ROSel is Type:
+  ROExpr{name: String, argc: Nat, e: Core.Expr, bound: List<&2, String>}
+  ROList{name: String, argc: Nat, es: List<&2, Core.Expr>, bound: List<&2, String>}
+
+def ROSel.ty(sel: ROSel) -> Type:
+  match sel:
+    case ROExpr{name, argc, e, bound}:
+      Core.Expr
+    case ROList{name, argc, es, bound}:
+      List<&2, Core.Expr>
+
+def RO.go(fuel: Nat, sel: ROSel) -> ROSel.ty(sel):
+  match fuel:
+    case 0n:
+      match sel:
+        case ROExpr{name, argc, e, bound}:
+          e
+        case ROList{name, argc, es, bound}:
+          es
+    case Succ{+fuel}:
+      match sel:
+        case ROExpr{+name, +argc, e, +bound}:
+          match e:
+            case Core.ELet{+p, v, b}:
+              +x : Core.Expr = RO.go(fuel, ROExpr{name, argc, v, bound})
+              +y : Core.Expr = RO.go(fuel, ROExpr{name, argc, b, Pat.vars(p, bound)})
+              Bool.pick(Core.Expr, Pat.is_par(p), Anf.par(p, x, y), Core.ELet{p, x, y})
+            case Core.ECall{Core.EVar{+f}, +args}:
+              +target = Bool.pick(String, Bool.and(Bool.and(Str.eq(f, name), Bool.not(Str.has(bound, f))),
+                Nat.is_eq(argc, List.length(&2, Core.Expr, args))), Gen.ro.name(f), f)
+              Core.ECall{Core.EVar{target}, RO.go(fuel, ROList{name, argc, args, bound})}
+            case Core.ECall{f, args}:
+              Core.ECall{RO.go(fuel, ROExpr{name, argc, f, bound}), RO.go(fuel, ROList{name, argc, args, bound})}
+            case Core.ECtor{ctor, args}:
+              Core.ECtor{ctor, RO.go(fuel, ROList{name, argc, args, bound})}
+            case Core.EMatch{scrs, cases}:
+              Core.EMatch{RO.go(fuel, ROList{name, argc, scrs, bound}), RO.go(fuel, ROList{name, argc, cases, bound})}
+            case Core.ECase{+ps, b}:
+              Core.ECase{ps, RO.go(fuel, ROExpr{name, argc, b, Pats.vars(ps, bound)})}
+            case Core.ELam{p, b}:
+              Core.ELam{p, b}
+            case Core.ESucc{k, x}:
+              Core.ESucc{k, RO.go(fuel, ROExpr{name, argc, x, bound})}
+            case Core.EOp{op, a, b}:
+              Core.EOp{op, RO.go(fuel, ROExpr{name, argc, a, bound}), RO.go(fuel, ROExpr{name, argc, b, bound})}
+            case Core.EAnn{x, t}:
+              Core.EAnn{RO.go(fuel, ROExpr{name, argc, x, bound}), t}
+            case other:
+              other
+        case ROList{+name, +argc, es, +bound}:
+          match es:
+            case Nil{}:
+              Nil{}
+            case e <> rest:
+              RO.go(fuel, ROExpr{name, argc, e, bound}) <> RO.go(fuel, ROList{name, argc, rest, bound})
+
+def RO.expr(name: String, argc: Nat, e: Core.Expr, bound: List<&2, String>) -> Core.Expr:
+  RO.go(1000000n, ROExpr{name, argc, e, bound})
+
+def RO.cand(ps: List<&2, Core.Param>) -> Bool:
+  match ps:
+    case Nil{}:
+      False{}
+    case Core.Param{x, +m, +t} <> rest:
+      Bool.or(Bool.and(U32.is_eq(m, 2), Bool.not(Gen.scalar.ty(t))), RO.cand(rest))
+
+def RO.ordinary(info: DInfo) -> Bool:
+  DInfo{+kind, mask} = info
+  U32.is_zero(kind)
+
+def RO.one(+g: G, d: Decl) -> List<&2, Decl>:
+  match d:
+    case DDef{+name, +ps, +body, +ret}:
+      Bool.pick(List<&2, Decl>, Bool.and(RO.ordinary(G.def(g, name)), Bool.and(RO.cand(ps), Expr.has_par(body))),
+        [DDef{name, ps, body, ret}, DDef{Gen.ro.name(name), ps,
+          RO.expr(name, List.length(&2, Core.Param, ps), body, Bor.names(ps)), ret}],
+        [DDef{name, ps, body, ret}])
+    case other:
+      [other]
+
+def RO.decls(+g: G, ds: List<&2, Decl>) -> List<&2, Decl>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> rest:
+      List.append(&2, Decl, RO.one(g, d), RO.decls(g, rest))
+
+def RO.program(on: Bool, +ds: List<&2, Decl>) -> List<&2, Decl>:
+  match on:
+    case True{}:
+      RO.decls(G.new(ds), ds)
+    case False{}:
+      ds
+
 def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
-  +ds = Unb.program(unb, Unb.program(unb, Nest.program(unb, Unb.sum.program(unb, Par.auto(par, Lo.program(opt,
+  +lowered = Unb.program(unb, Unb.program(unb, Nest.program(unb, Unb.sum.program(unb, Par.auto(par, Lo.program(opt,
     Arrw.decls(Pick.decls(ds0))))))))
+  +ds = RO.program(rc, lowered)
   +g = Unb.sret(unb, ds, Dps.build(G.li(Opt.on(opt, 119), G.new(ds), ds), ds, free, rc))
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))

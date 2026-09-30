@@ -955,6 +955,13 @@ does not implement it: native programs are traced whatever `BEND_RC` says.
   (`List.map`). Parameters of defs with parallel lets, destination-passing groups, `main` and
   `!`-called defs are never borrowed. `String.eq`, `String.cmp`, `Map.get` and `Map.has` are
   native and borrow too: they walk the value and hand it back unchanged.
+- **Sequential frontiers.** A parallel def with explicit shared (`+`) non-scalar
+  parameters may also have a serial clone. At the fork-depth frontier, the normal
+  entry calls that clone using the same borrowing rules: its caller keeps and
+  drops borrowed arguments, while escaping arguments remain owned. The clone's
+  recursive calls stay serial; nested lambdas and partial function values retain
+  their original entries. Ordinary linear parameters stay owned so their nodes
+  can be reused. Immediate-leaf wrappers also apply to borrowed clones.
 - **Constants.** A constructor whose fields are all literals is built once, on first use, and
   kept as an immortal object (`KONST`).
 - **Threads.** Bit 63 marks an object that other threads may reach, and only a marked object's
