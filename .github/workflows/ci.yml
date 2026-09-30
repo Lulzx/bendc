@@ -53,6 +53,12 @@ jobs:
           ./build/bendc --check-only "$HOME/.bend/bend2/base.bend" check.bend
           BEND_NO_TELEMETRY=1 bend check.bend --check-only
 
+      - name: Frontend fidelity (every official test, parse and check lanes, identical answers)
+        run: |
+          ver=$(bend version | grep -o '[0-9][0-9.]*' | head -1)
+          git clone -q --depth 1 -b "v$ver" https://github.com/bendlang/bend /tmp/bendup
+          BEND_NO_TELEMETRY=1 python3 tools/frontend.py build/bendc "$(command -v bend)" /tmp/bendup -j 4
+
       - name: Erasure preserves the core IR's semantics (PROOF.bend, both checkers)
         run: |
           BEND_NO_TELEMETRY=1 bend PROOF.bend --check-only

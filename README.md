@@ -69,7 +69,7 @@ clang -O2 -I rt hello.c -o hello -lm && ./hello
 ```
 
 `bendc --js <base.bend> file.bend > file.js` emits JavaScript instead (run it with `bun file.js`; see
-[The JavaScript target](#the-javascript-target)). `bendc --check-only <base.bend> file.bend` only type-checks, printing what `bend --check-only` prints.
+[The JavaScript target](#the-javascript-target)). `bendc --check-only <base.bend> file.bend` only type-checks, printing what `bend --check-only` prints; `bendc --parse-only <base.bend> file.bend` only loads the file and its imports.
 `bendc --no-check ...` compiles without checking. Debugging aids: `bendc --tokens file.bend` prints the
 token stream after layout, and `bendc --ast file.bend` prints the parsed declarations.
 
@@ -1133,11 +1133,22 @@ the rest are the limitations below. With `--check`, the tests whose check fails
 (`#|SOME PROOFS FAIL`) run through `bendc --check-only` instead, which must print the same error
 report: all 493 do.
 
+`tools/frontend.py` compares the frontend on every official test (`tests/<namespace>/*.bend`),
+positive or negative, with or without `main`, in two lanes. In the check lane, `bendc --check-only`
+must print what `bend --check-only` prints, with the same exit code. In the parse lane,
+`bendc --parse-only` (load the file and its imports, stop before checking) must answer what the
+checkout's own `bend2/bend.ts` answers from `book_load`, run under Bun by `tools/frontend_ref.ts`:
+nothing, or the same error report. The parse lane tells whether a program is refused while loading
+or while checking. Against Bend 2.0.32, all 1,497 tests agree in both lanes (2,994 of 2,994). 956
+are accepted, 194 are refused while loading, and 347 load but fail checking. The official
+answers are cached in `build/frontend/ref/`.
+
 ```sh
 git clone --depth 1 -b v2.0.32 https://github.com/bendlang/bend /tmp/bendup
 python3 tools/upstream.py build/bendc /tmp/bendup           # C
 python3 tools/upstream.py build/bendc /tmp/bendup --js io_  # JavaScript, tests whose name has io_
 python3 tools/upstream.py build/bendc /tmp/bendup --check   # the checker's error reports
+python3 tools/frontend.py build/bendc "$(command -v bend)" /tmp/bendup   # both frontend lanes
 ```
 
 ## Limitations

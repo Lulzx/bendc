@@ -14764,14 +14764,15 @@ def Main.emit_value(js: Bool, v: String) -> IO(Unit):
         "\\n\", stdout);\n  return 0;\n}\n")
 
 def Main.usage() -> IO(Unit):
-  IO.die(Unit, 1, "usage: bendc [--check-only | --no-check | --js | -o <binary> | --native -o <binary>] <base.bend> <input.bend> | --tokens <file> | --ast <file>")
+  IO.die(Unit, 1, "usage: bendc [--check-only | --parse-only | --no-check | --js | -o <binary> | --native -o <binary>] <base.bend> <input.bend> | --tokens <file> | --ast <file>")
 
 # The option an argument names (0: none). The driver matches on this number,
 # not on string patterns, which the official compiler expands char by char.
 def Main.code(+s: String) -> Nat:
   Bool.pick(Nat, Str.eq(s, "--tokens"), 1n, Bool.pick(Nat, Str.eq(s, "--ast"), 2n, Bool.pick(Nat,
     Str.eq(s, "--check-only"), 3n, Bool.pick(Nat, Str.eq(s, "--no-check"), 4n, Bool.pick(Nat, Str.eq(s, "--js"), 5n,
-    Bool.pick(Nat, Str.eq(s, "-o"), 6n, Bool.pick(Nat, Str.eq(s, "--native"), 7n, 0n)))))))
+    Bool.pick(Nat, Str.eq(s, "-o"), 6n, Bool.pick(Nat, Str.eq(s, "--native"), 7n,
+    Bool.pick(Nat, Str.eq(s, "--parse-only"), 8n, 0n))))))))
 
 # bendc -o: what bendc writes goes to a C file (Cc.begin), which Cc.end
 # compiles into the binary out against the runtime compiled once (rt/cc.c).
@@ -26379,6 +26380,10 @@ def Main.run3(code: Nat, +base_path: String, +user_path: String) -> IO(Unit):
       do IO<Unit>:
         r : Chk.Book & Nat <- Main.check(base_path, user_path)
         Main.checked(True{}, base_path, user_path, r)
+    case 8n:
+      do IO<Unit>:
+        st : CS <- Main.chk.load(64n, base_path, user_path, "", Chk.NoSp{}, CS{Chk.book_nil(), Nil{}, 0n})
+        return Unit{}
     case other:
       Main.usage()
 
