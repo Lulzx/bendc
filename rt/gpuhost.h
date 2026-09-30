@@ -642,6 +642,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   memset(H, 0, P.qd * 8);
   // A lane's other words are set before they are read.
   if (gpu_used) memset(H + P.lane0, 0, 10 * gpu_lanes * 8);
+  memset(H + P.lane0 + (10 + KQ_ARGS) * gpu_lanes, 0, 2 * gpu_lanes * 8);
   gpu_used = 1;
   for (KW i = 0; i < nfn; i++) {
     H[P.fn0 + 2 * i] = (KW)(uintptr_t)prog->fns[i].f;
@@ -688,7 +689,6 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
       // (again, after the arena grows, while a call runs out of it)
       for (;;) {
         gpu_A[KA_GROW] = 0;
-        KAU used = gpu_A[KA_HEAP];
         if (gpu_mode == GPU_SIM) {
           for (KW l = 0; l < gpu_lanes; l++) prog->sim_kq(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
         }
@@ -698,14 +698,11 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
         }
 #endif
         if (gpu_A[KA_GROW] == 0 || gpu_A[KA_ERR] != 0) break;
-        // (by as much as the calls that ran out would take: they took the
-        // arena too, and as many calls again as the ones that did not; when
-        // every call ran out, what they took is free again, and nothing says
-        // how much they take: 8 times, as the first use of a buffer costs with
-        // its size (merkle takes 338 MB, and 1 GB cost 25 ms more than 512 MB))
+        // Grow for the calls still waiting. Their discarded spans stay in
+        // each lane's free list, so the global bump must remain monotonic.
         KW left = 0;
         for (KW l = 0; l < gpu_lanes; l++) left += H[P.lane0 + l] == PC_KQ;
-        if (left == waiting) gpu_A[KA_HEAP] = used;
+        // Reusable lane chunks keep their indices; do not rewind the global bump.
         size_t f = 4;
         while (f < (left == waiting ? 8 : 16) && f * (waiting - left) < 2 * waiting) f *= 2;
         if (!gpu_grow(f)) {
