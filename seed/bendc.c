@@ -15146,6 +15146,94 @@ static V W_Unb_dsret_dput(V *a);
 static V F_G_dhless_x37u(V a0, V a1, V a2, V a3, V a4, V a5);
 static V U_G_dhless_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o);
 static V W_G_dhless_x37u(V *a);
+static V F_G_dhless_dforeign(V a0);
+static V W_G_dhless_dforeign(V *a);
+static V F_G_dhless_dlaws(V a0, V a1);
+static V W_G_dhless_dlaws(V *a);
+static V F_G_dhless_dtnames_x37s2491568216x8239786(V a0);
+static V W_G_dhless_dtnames_x37s2491568216x8239786(V *a);
+static V F_G_dhless_dsubs(V a0);
+static V H_F_G_dhless_dsubs(V a0);
+static V W_G_dhless_dsubs(V *a);
+static V F_G_dhless_dtnames_x37s1291691603x8209995(V a0);
+static V W_G_dhless_dtnames_x37s1291691603x8209995(V *a);
+static V F_G_dhless_dtnames_x37s32637286x8180204(V a0);
+static V W_G_dhless_dtnames_x37s32637286x8180204(V *a);
+static V F_G_dhless_dtnames_x37s3239606481x8150413(V a0);
+static V W_G_dhless_dtnames_x37s3239606481x8150413(V *a);
+static V F_G_dhless_dtnames_x37s2405009636x8120622(V a0);
+static V W_G_dhless_dtnames_x37s2405009636x8120622(V *a);
+static V F_G_dhless_dtnames_x37s1586577935x8090831(V a0);
+static V W_G_dhless_dtnames_x37s1586577935x8090831(V *a);
+static V F_G_dhless_dtnames_x37s3867092194x8061040(V a0);
+static V W_G_dhless_dtnames_x37s3867092194x8061040(V *a);
+static V F_G_dhless_dtnames_x37s1860454509x8031249(V a0);
+static V W_G_dhless_dtnames_x37s1860454509x8031249(V *a);
+static V F_G_dhless_dtnames_x37s509762208x8001458(V a0);
+static V W_G_dhless_dtnames_x37s509762208x8001458(V *a);
+static V F_List_dappend_x37f845870545x3232893703(V a0, V a2, V a3);
+static V W_List_dappend_x37f845870545x3232893703(V *a);
+static V F_G_dhless_dheads(V a0);
+static V D_G_dhless_dheads(V *dst, V a0);
+static V W_G_dhless_dheads(V *a);
+static V F_G_dhless_dpexprs(V a0);
+static V H_F_G_dhless_dpexprs(V a0);
+static V S36541(void);
+static V W_G_dhless_dpexprs(V *a);
+static V F_List_dappend_x37f2065690091x3962538397(V a0, V a2, V a3, V a4);
+static V S36551(void);
+static V W_List_dappend_x37f2065690091x3962538397(V *a);
+static V F_G_dhless_dwords(V a0, V a1);
+static V D_G_dhless_dwords(V *dst, V a0, V a1);
+static V S36561(void);
+static V W_G_dhless_dwords(V *a);
+static V F_G_dhless_dreach_x37s4117685691x247372143(V a0, V a1);
+static V W_G_dhless_dreach_x37s4117685691x247372143(V *a);
+static V F_G_dhless_dfields(V a0, V a1);
+static V W_G_dhless_dfields(V *a);
+static V F_G_dhless_dctys(V a0);
+static V H_F_G_dhless_dctys(V a0);
+static V W_G_dhless_dctys(V *a);
+static V F_List_dappend_x37f137127934x3248196978(V a0, V a2, V a3);
+static V W_List_dappend_x37f137127934x3248196978(V *a);
+static V F_G_dhless_dftys(V a0);
+static V D_G_dhless_dftys(V *dst, V a0);
+static V W_G_dhless_dftys(V *a);
+static V F_G_dhless_dreach_x37s399152620x247342352(V a0, V a1);
+static V W_G_dhless_dreach_x37s399152620x247342352(V *a);
+static V F_G_dhless_dreach_x37s3795296409x247312561(V a0, V a1);
+static V W_G_dhless_dreach_x37s3795296409x247312561(V *a);
+static V F_G_dhless_dreach_x37s675041226x247282770(V a0, V a1);
+static V W_G_dhless_dreach_x37s675041226x247282770(V *a);
+static V F_G_dhless_dreach_x37s2689494263x247252979(V a0, V a1);
+static V W_G_dhless_dreach_x37s2689494263x247252979(V *a);
+static V F_G_dhless_dreach_x37s4233607528x247223188(V a0, V a1);
+static V W_G_dhless_dreach_x37s4233607528x247223188(V *a);
+static V F_G_dhless_dreach_x37s1953093269x247193397(V a0, V a1);
+static V W_G_dhless_dreach_x37s1953093269x247193397(V *a);
+static V F_G_dhless_dreach_x37s3305376709x8269577(V a0, V a1);
+static V W_G_dhless_dreach_x37s3305376709x8269577(V *a);
+static V F_G_dhless_dreach_x37s2491568216x8239786(V a0, V a1);
+static V W_G_dhless_dreach_x37s2491568216x8239786(V *a);
+static V F_G_dhless_dreach_x37s1291691603x8209995(V a0, V a1);
+static V W_G_dhless_dreach_x37s1291691603x8209995(V *a);
+static V F_G_dhless_dreach_x37s32637286x8180204(V a0, V a1);
+static V W_G_dhless_dreach_x37s32637286x8180204(V *a);
+static V F_G_dhless_dreach_x37s3239606481x8150413(V a0, V a1);
+static V W_G_dhless_dreach_x37s3239606481x8150413(V *a);
+static V F_G_dhless_dreach_x37s2405009636x8120622(V a0, V a1);
+static V W_G_dhless_dreach_x37s2405009636x8120622(V *a);
+static V F_G_dhless_dreach_x37s1586577935x8090831(V a0, V a1);
+static V W_G_dhless_dreach_x37s1586577935x8090831(V *a);
+static V F_G_dhless_dreach_x37s3867092194x8061040(V a0, V a1);
+static V W_G_dhless_dreach_x37s3867092194x8061040(V *a);
+static V F_G_dhless_dreach_x37s1860454509x8031249(V a0, V a1);
+static V W_G_dhless_dreach_x37s1860454509x8031249(V *a);
+static V F_G_dhless_dreach_x37s509762208x8001458(V a0, V a1);
+static V W_G_dhless_dreach_x37s509762208x8001458(V *a);
+static V F_G_dhless_deffs(V a0);
+static V H_F_G_dhless_deffs(V a0);
+static V W_G_dhless_deffs(V *a);
 static V F_G_dhless_dshared(V a0);
 static V H_F_G_dhless_dshared(V a0);
 static V W_G_dhless_dshared(V *a);
@@ -15157,16 +15245,16 @@ static V W_G_dhless_dshared_dps(V *a);
 static V F_G_dhless_ddecls(V a0, V a1, V a2);
 static V W_G_dhless_ddecls(V *a);
 static V F_G_dhless_dtype(V a0, V a1, V a2, V a3, V a4);
-static V K36511(void);
+static V K36682(void);
 static V W_G_dhless_dtype(V *a);
 static V F_G_dhless_dctors(V a0, V a1);
-static V K36522(void);
+static V K36693(void);
 static V W_G_dhless_dctors(V *a);
 static V F_G_dhless_dset_x37u(V a0, V a1, V a2, V a3);
 static V U_G_dhless_dset_x37u(V a0_, V a1_, V a2_, V a3, V *o);
 static V W_G_dhless_dset_x37u(V *a);
 static V F_G_dhless_dcnt(V a0, V a1, V a2);
-static V K36535(void);
+static V K36706(void);
 static V W_G_dhless_dcnt(V *a);
 static V F_G_dhless_dw_x37u(V a0_, V a1_, V a2_, V a3);
 static V W_G_dhless_dw_x37u(V *a);
@@ -15174,43 +15262,43 @@ static V F_G_dli_x37u(V a0, V a1, V a2, V a3, V a4, V a5);
 static V U_G_dli_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o);
 static V W_G_dli_x37u(V *a);
 static V F_G_dli_ddecls(V a0, V a1);
-static V K36567(void);
+static V K36738(void);
 static V W_G_dli_ddecls(V *a);
 static V F_G_dli_dctors(V a0, V a1, V a2);
-static V K36573(void);
+static V K36744(void);
 static V W_G_dli_dctors(V *a);
 static V F_G_dli_dfield(V a0);
-static V K36582(void);
+static V K36753(void);
 static V W_G_dli_dfield(V *a);
 static V F_Arrw_ddecls_x37f2739175496x1984684048(V a0);
 static V H_F_Arrw_ddecls_x37f2739175496x1984684048(V a0);
-static V K36591(void);
-static V S36594(void);
+static V K36762(void);
+static V S36765(void);
 static V W_Arrw_ddecls_x37f2739175496x1984684048(V *a);
 static V F_Arrw_ddecls(V a0);
 static V D_Arrw_ddecls(V *dst, V a0);
-static V K36602(void);
-static V S36605(void);
+static V K36773(void);
+static V S36776(void);
 static V W_Arrw_ddecls(V *a);
 static V F_Arrw_dgo(V a0, V a1);
 static V D_Arrw_dgo(V *dst, V a0, V a1);
-static V K36628(void);
+static V K36799(void);
 static V W_Arrw_dgo(V *a);
 static V F_Arrw_dtop(V a0, V a1);
 static V W_Arrw_dtop(V *a);
 static V F_Arrw_dname(V a0, V a1);
-static V S36640(void);
+static V S36811(void);
 static V W_Arrw_dname(V *a);
 static V F_Arrw_dhit(V a0, V a1);
-static V S36644(void);
-static V K36647(void);
+static V S36815(void);
+static V K36818(void);
 static V W_Arrw_dhit(V *a);
 static V F_Arrw_dlit(V a0);
-static V K36657(void);
+static V K36828(void);
 static V W_Arrw_dlit(V *a);
 static V F_Arrw_dscalar(V a0);
-static V K36664(void);
-static V K36666(void);
+static V K36835(void);
+static V K36837(void);
 static V W_Arrw_dscalar(V *a);
 static V F_Unb_dsum_dprogram(V a0, V a1);
 static V W_Unb_dsum_dprogram(V *a);
@@ -15219,7 +15307,7 @@ static V W_Unb_dsum_dnames(V *a);
 static V F_Unb_dsum_dcnames(V a0, V a1);
 static V W_Unb_dsum_dcnames(V *a);
 static V F_Unb_dsum_dmap(V a0, V a1, V a2);
-static V S36678(void);
+static V S36849(void);
 static V W_Unb_dsum_dmap(V *a);
 static V F_Unb_dsum_dok(V a0, V a1, V a2, V a3);
 static V W_Unb_dsum_dok(V *a);
@@ -15228,7 +15316,7 @@ static V H_F_Unb_dsum_dall(V a0);
 static V W_Unb_dsum_dall(V *a);
 static V F_Unb_dsum_du32s(V a0);
 static V H_F_Unb_dsum_du32s(V a0);
-static V S36708(void);
+static V S36879(void);
 static V W_Unb_dsum_du32s(V *a);
 static V F_Unb_dsum_dwide(V a0, V a1);
 static V W_Unb_dsum_dwide(V *a);
@@ -15241,26 +15329,26 @@ static V D_Unb_dsum_ddecls(V *dst, V a0, V a1);
 static V W_Unb_dsum_ddecls(V *a);
 static V F_Unb_dsum_de(V a0, V a1);
 static V D_Unb_dsum_de(V *dst, V a0, V a1);
-static V K36735(void);
-static V K36750(void);
+static V K36906(void);
+static V K36921(void);
 static V W_Unb_dsum_de(V *a);
 static V F_Unb_dsum_dps(V a0, V a1);
 static V D_Unb_dsum_dps(V *dst, V a0, V a1);
 static V W_Unb_dsum_dps(V *a);
 static V F_Unb_dsum_dp(V a0, V a1);
 static V D_Unb_dsum_dp(V *dst, V a0, V a1);
-static V K36762(void);
+static V K36933(void);
 static V W_Unb_dsum_dp(V *a);
 static V F_Unb_dsum_dpctor_x37u(V a0, V a1, V a2_, V a3);
 static V W_Unb_dsum_dpctor_x37u(V *a);
 static V F_Unb_dsum_dpctor_dgo(V a0, V a1, V a2, V a3, V a4_);
 static V W_Unb_dsum_dpctor_dgo(V *a);
 static V F_List_dappend_x37f4024406551x1651636969(V a0, V a2, V a3);
-static V K36777(void);
+static V K36948(void);
 static V W_List_dappend_x37f4024406551x1651636969(V *a);
 static V F_Unb_dsum_dwilds(V a0);
 static V D_Unb_dsum_dwilds(V *dst, V a0);
-static V K36781(void);
+static V K36952(void);
 static V W_Unb_dsum_dwilds(V *a);
 static V F_Unb_dsum_dctor_x37u(V a0, V a1, V a2_, V a3);
 static V W_Unb_dsum_dctor_x37u(V *a);
@@ -15272,15 +15360,15 @@ static V F_Unb_dsum_dzeros(V a0);
 static V D_Unb_dsum_dzeros(V *dst, V a0);
 static V W_Unb_dsum_dzeros(V *a);
 static V F_Unb_dsum_dtype(V a0, V a1, V a2, V a3);
-static V K36794(void);
-static V S36797(void);
+static V K36965(void);
+static V S36968(void);
 static V W_Unb_dsum_dtype(V *a);
 static V F_Unb_dsum_dtype_dgo(V a0, V a1, V a2, V a3);
-static V S36803(void);
+static V S36974(void);
 static V W_Unb_dsum_dtype_dgo(V *a);
 static V F_Unb_dsum_drec(V a0);
 static V H_F_Unb_dsum_drec(V a0);
-static V S36808(void);
+static V S36979(void);
 static V W_Unb_dsum_drec(V *a);
 static V F_Nest_dprogram(V a0, V a1);
 static V W_Nest_dprogram(V *a);
@@ -15298,11 +15386,11 @@ static V F_Nest_dcand(V a0, V a1, V a2, V a3, V a4);
 static V U_Nest_dcand(V a0, V a1, V a2, V a3, V a4, V *o);
 static V W_Nest_dcand(V *a);
 static V F_Unb_dok_ddef(V a0, V a1, V a2);
-static V S36844(void);
+static V S37015(void);
 static V W_Unb_dok_ddef(V *a);
 static V F_Nest_dcomps(V a0);
-static V S36856(void);
-static V S36858(void);
+static V S37027(void);
+static V S37029(void);
 static V W_Nest_dcomps(V *a);
 static V F_Nest_dsigma(V a0, V a1, V a2);
 static V W_Nest_dsigma(V *a);
@@ -15311,12 +15399,12 @@ static V D_Nest_dcomps_dof(V *dst, V a0, V a1);
 static V W_Nest_dcomps_dof(V *a);
 static V F_Nest_dcomp(V a0, V a1);
 static V U_Nest_dcomp(V a0, V a1, V *o);
-static V K36866(void);
+static V K37037(void);
 static V W_Nest_dcomp(V *a);
 static V F_Nest_dcomp_dgo_x37u(V a0, V a1, V a2);
 static V U_Nest_dcomp_dgo_x37u(V a0, V a1, V a2, V *o);
-static V S36874(void);
-static V S36875(void);
+static V S37045(void);
+static V S37046(void);
 static V W_Nest_dcomp_dgo_x37u(V *a);
 static V F_Nest_dcand_dgo(V a0, V a1, V a2);
 static V U_Nest_dcand_dgo(V a0, V a1, V a2, V *o);
@@ -15330,34 +15418,34 @@ static V W_Nest_dnested(V *a);
 static V F_Nest_ddecls(V a0, V a1);
 static V W_Nest_ddecls(V *a);
 static V F_Nest_ddecl(V a0, V a1);
-static V K36896(void);
+static V K37067(void);
 static V W_Nest_ddecl(V *a);
 static V F_Nest_ddecl_dgo_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6);
-static V S36903(void);
-static V S36905(void);
-static V S36907(void);
-static V S36910(void);
-static V S36912(void);
-static V S36915(void);
-static V S36917(void);
-static V S36920(void);
+static V S37074(void);
+static V S37076(void);
+static V S37078(void);
+static V S37081(void);
+static V S37083(void);
+static V S37086(void);
+static V S37088(void);
+static V S37091(void);
 static V W_Nest_ddecl_dgo_x37u(V *a);
 static V F_Nest_dargs(V a0);
 static V D_Nest_dargs(V *dst, V a0);
 static V W_Nest_dargs(V *a);
 static V F_Nest_drebuild(V a0, V a1, V a2, V a3);
-static V S36924(void);
-static V S36925(void);
-static V S36928(void);
-static V S36932(void);
-static V S36934(void);
+static V S37095(void);
+static V S37096(void);
+static V S37099(void);
+static V S37103(void);
+static V S37105(void);
 static V W_Nest_drebuild(V *a);
 static V F_Nest_dout(V a0, V a1, V a2);
 static V D_Nest_dout(V *dst, V a0, V a1, V a2);
-static V S36941(void);
+static V S37112(void);
 static V W_Nest_dout(V *a);
 static V F_Nest_done(V a0, V a1, V a2, V a3);
-static V S36947(void);
+static V S37118(void);
 static V W_Nest_done(V *a);
 static V F_Unb_dvars_x37f2766552586x3837610142(V a0, V a1, V a2_);
 static V W_Unb_dvars_x37f2766552586x3837610142(V *a);
@@ -15365,7 +15453,7 @@ static V F_Nest_dfnames(V a0, V a1, V a2);
 static V D_Nest_dfnames(V *dst, V a0, V a1, V a2);
 static V W_Nest_dfnames(V *a);
 static V F_Nest_dnames(V a0, V a1, V a2_);
-static V S36967(void);
+static V S37138(void);
 static V W_Nest_dnames(V *a);
 static V F_List_dappend_x37f2732997348x3837610144(V a0, V a2, V a3, V a4, V a5_);
 static V W_List_dappend_x37f2732997348x3837610144(V *a);
@@ -15374,15 +15462,15 @@ static V D_Unb_dpvars(V *dst, V a0);
 static V W_Unb_dpvars(V *a);
 static V F_Nest_dtail(V a0, V a1, V a2, V a3, V a4);
 static V D_Nest_dtail(V *dst, V a0, V a1, V a2, V a3, V a4);
-static V K36985(void);
-static V S36995(void);
+static V K37156(void);
+static V S37166(void);
 static V W_Nest_dtail(V *a);
 static V F_Nest_dopen(V a0, V a1, V a2, V a3_);
-static V S37004(void);
-static V S37007(void);
-static V S37011(void);
-static V S37016(void);
-static V S37019(void);
+static V S37175(void);
+static V S37178(void);
+static V S37182(void);
+static V S37187(void);
+static V S37190(void);
 static V W_Nest_dopen(V *a);
 static V F_Unb_dwrap(V a0, V a1);
 static V W_Unb_dwrap(V *a);
@@ -15393,7 +15481,7 @@ static V F_Unb_dfree_dnone(V a0, V a1);
 static V W_Unb_dfree_dnone(V *a);
 static V F_Nest_dleaves(V a0, V a1, V a2, V a3);
 static V U_Nest_dleaves(V a0, V a1, V a2, V a3_, V *o);
-static V S37042(void);
+static V S37213(void);
 static V W_Nest_dleaves(V *a);
 static V F_Nest_dleaf_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6);
 static V U_Nest_dleaf_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V *o);
@@ -15408,15 +15496,15 @@ static V F_List_dappend_x37f3458268597x4169482151(V a0, V a2, V a3);
 static V W_List_dappend_x37f3458268597x4169482151(V *a);
 static V F_Unb_dnc(V a0);
 static V H_F_Unb_dnc(V a0);
-static V S37077(void);
-static V S37080(void);
-static V S37085(void);
-static V S37087(void);
+static V S37248(void);
+static V S37251(void);
+static V S37256(void);
+static V S37258(void);
 static V W_Unb_dnc(V *a);
 static V F_Unb_darg_dctor_x37u(V a0, V a1, V a2, V a3, V a4, V a5);
 static V U_Unb_darg_dctor_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o);
-static V S37092(void);
-static V S37093(void);
+static V S37263(void);
+static V S37264(void);
 static V W_Unb_darg_dctor_x37u(V *a);
 static V F_Unb_darg_dkeeps_x37u(V a0, V a1, V a2, V a3, V a4);
 static V U_Unb_darg_dkeeps_x37u(V a0, V a1, V a2_, V a3, V a4, V *o);
@@ -15430,44 +15518,44 @@ static V F_Nest_dpnames(V a0, V a1, V a2);
 static V D_Nest_dpnames(V *dst, V a0, V a1, V a2);
 static V W_Nest_dpnames(V *a);
 static V F_Nest_dtcall(V a0, V a1, V a2, V a3, V a4, V a5_);
-static V K37127(void);
+static V K37298(void);
 static V W_Nest_dtcall(V *a);
 static V F_Nest_dtcall_dgo_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6_);
-static V S37143(void);
+static V S37314(void);
 static V W_Nest_dtcall_dgo_x37u(V *a);
 static V F_Nest_dsame(V a0, V a1);
 static V W_Nest_dsame(V *a);
 static V F_Nest_dctor(V a0, V a1, V a2, V a3, V a4, V a5_);
-static V S37157(void);
-static V S37160(void);
+static V S37328(void);
+static V S37331(void);
 static V W_Nest_dctor(V *a);
 static V F_Nest_dcalls(V a0, V a1, V a2, V a3, V a4);
 static V D_Nest_dcalls(V *dst, V a0, V a1, V a2, V a3, V a4);
-static V S37168(void);
-static V S37172(void);
-static V S37175(void);
-static V S37181(void);
-static V S37185(void);
-static V S37188(void);
-static V S37193(void);
-static V S37195(void);
-static V S37199(void);
-static V S37202(void);
-static V S37205(void);
-static V K37210(void);
-static V S37212(void);
-static V S37216(void);
-static V S37219(void);
-static V S37221(void);
-static V S37223(void);
-static V S37225(void);
-static V S37228(void);
-static V S37230(void);
+static V S37339(void);
+static V S37343(void);
+static V S37346(void);
+static V S37352(void);
+static V S37356(void);
+static V S37359(void);
+static V S37364(void);
+static V S37366(void);
+static V S37370(void);
+static V S37373(void);
+static V S37376(void);
+static V K37381(void);
+static V S37383(void);
+static V S37387(void);
+static V S37390(void);
+static V S37392(void);
+static V S37394(void);
+static V S37396(void);
+static V S37399(void);
+static V S37401(void);
 static V W_Nest_dcalls(V *a);
 static V F_Nest_dcall_dtop(V a0, V a1, V a2, V a3, V a4);
 static V W_Nest_dcall_dtop(V *a);
 static V F_Nest_dcall(V a0, V a1, V a2, V a3);
-static V K37236(void);
+static V K37407(void);
 static V W_Nest_dcall(V *a);
 static V F_Nest_dcall_dgo_x37u(V a0, V a1, V a2, V a3, V a4, V a5);
 static V W_Nest_dcall_dgo_x37u(V *a);
@@ -15476,16 +15564,16 @@ static V W_Unb_dprogram(V *a);
 static V F_Unb_dtypes(V a0, V a1, V a2);
 static V W_Unb_dtypes(V *a);
 static V F_Unb_dtype(V a0, V a1, V a2, V a3, V a4);
-static V S37263(void);
-static V S37265(void);
-static V S37266(void);
+static V S37434(void);
+static V S37436(void);
+static V S37437(void);
 static V W_Unb_dtype(V *a);
 static V F_Unb_dtys(V a0, V a1, V a2, V a3);
 static V D_Unb_dtys(V *dst, V a0, V a1, V a2, V a3);
 static V W_Unb_dtys(V *a);
 static V F_Unb_dty_dmk(V a0_, V a1);
-static V S37282(void);
-static V S37284(void);
+static V S37453(void);
+static V S37455(void);
 static V W_Unb_dty_dmk(V *a);
 static V F_Unb_dty_dix(V a0, V a1, V a2_);
 static V W_Unb_dty_dix(V *a);
@@ -15494,67 +15582,67 @@ static V W_Unb_dtype_dput(V *a);
 static V F_Unb_dprogram_dgo(V a0, V a1);
 static V W_Unb_dprogram_dgo(V *a);
 static V F_Unb_ddone(V a0, V a1);
-static V S37303(void);
+static V S37474(void);
 static V W_Unb_ddone(V *a);
 static V F_Unb_ddone_dput(V a0, V a1, V a2);
-static V K37310(void);
+static V K37481(void);
 static V W_Unb_ddone_dput(V *a);
 static V F_Unb_dcands_dall(V a0, V a1, V a2, V a3, V a4);
 static V W_Unb_dcands_dall(V *a);
 static V F_Unb_dcands(V a0, V a1, V a2, V a3, V a4);
 static V D_Unb_dcands(V *dst, V a0, V a1, V a2, V a3, V a4);
-static V K37323(void);
-static V K37325(void);
+static V K37494(void);
+static V K37496(void);
 static V W_Unb_dcands(V *a);
 static V F_Unb_dcand_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6);
 static V U_Unb_dcand_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V *o);
 static V W_Unb_dcand_done_x37u(V *a);
 static V F_Unb_dcand_dtwo_x37u(V a0, V a1, V a2, V a3, V a4, V a5);
 static V U_Unb_dcand_dtwo_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o);
-static V K37342(void);
+static V K37513(void);
 static V W_Unb_dcand_dtwo_x37u(V *a);
 static V F_Unb_dtail(V a0, V a1);
-static V S37359(void);
+static V S37530(void);
 static V W_Unb_dtail(V *a);
 static V F_Unb_dinfer_done(V a0, V a1, V a2);
 static V U_Unb_dinfer_done(V a0, V a1, V a2, V *o);
-static V S37371(void);
+static V S37542(void);
 static V W_Unb_dinfer_done(V *a);
 static V F_Unb_dclash(V a0, V a1, V a2);
-static V S37399(void);
+static V S37570(void);
 static V W_Unb_dclash(V *a);
 static V F_Unb_dinfer_dnext(V a0, V a1, V a2);
-static V S37408(void);
+static V S37579(void);
 static V W_Unb_dinfer_dnext(V *a);
 static V F_Unb_dinfer_dalias_dv(V a0, V a1, V a2);
-static V S37414(void);
-static V S37417(void);
+static V S37585(void);
+static V S37588(void);
 static V W_Unb_dinfer_dalias_dv(V *a);
 static V F_Unb_dclash_dlet(V a0, V a1, V a2, V a3);
 static V W_Unb_dclash_dlet(V *a);
 static V F_Unb_dinfer(V a0, V a1, V a2);
 static V U_Unb_dinfer(V a0, V a1, V a2, V *o);
-static V K37435(void);
-static V S37449(void);
-static V S37456(void);
-static V S37469(void);
-static V S37481(void);
-static V S37484(void);
-static V S37485(void);
+static V K37606(void);
+static V S37620(void);
+static V S37627(void);
+static V S37640(void);
+static V S37652(void);
+static V S37655(void);
+static V S37656(void);
 static V W_Unb_dinfer(V *a);
 static V F_Unb_dinfer_dlet(V a0, V a1, V a2, V a3);
 static V U_Unb_dinfer_dlet(V a0, V a1, V a2, V a3, V *o);
-static V S37489(void);
+static V S37660(void);
 static V W_Unb_dinfer_dlet(V *a);
 static V F_Unb_dinfer_dv(V a0, V a1, V a2, V a3, V a4);
 static V U_Unb_dinfer_dv(V a0, V a1, V a2, V a3, V a4, V *o);
-static V S37493(void);
-static V K37495(void);
-static V S37500(void);
+static V S37664(void);
+static V K37666(void);
+static V S37671(void);
 static V W_Unb_dinfer_dv(V *a);
 static V F_Unb_dinfer_dn_x37u(V a0, V a1, V a2);
 static V U_Unb_dinfer_dn_x37u(V a0, V a1, V a2, V *o);
-static V S37508(void);
+static V S37679(void);
 static V W_Unb_dinfer_dn_x37u(V *a);
 static V F_Unb_dcand(V a0, V a1, V a2, V a3, V a4);
 static V W_Unb_dcand(V *a);
@@ -15564,12 +15652,12 @@ static V W_Unb_dany(V *a);
 static V F_Unb_dput(V a0, V a1, V a2, V a3);
 static V W_Unb_dput(V *a);
 static V F_Unb_drets(V a0, V a1, V a2);
-static V K37526(void);
+static V K37697(void);
 static V W_Unb_drets(V *a);
 static V F_Unb_drun(V a0, V a1, V a2);
 static V W_Unb_drun(V *a);
 static V F_Unb_dprune(V a0, V a1, V a2, V a3);
-static V K37542(void);
+static V K37713(void);
 static V W_Unb_dprune(V *a);
 static V F_Unb_dprune_dput(V a0, V a1, V a2, V a3, V a4, V a5, V a6);
 static V W_Unb_dprune_dput(V *a);
@@ -15578,10 +15666,10 @@ static V D_Unb_dprune_dps(V *dst, V a0, V a1, V a2, V a3, V a4);
 static V W_Unb_dprune_dps(V *a);
 static V F_Unb_dprune_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5);
 static V U_Unb_dprune_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o);
-static V S37560(void);
+static V S37731(void);
 static V W_Unb_dprune_done_x37u(V *a);
 static V F_Unb_duse(V a0, V a1, V a2, V a3, V a4, V a5);
-static V S37618(void);
+static V S37789(void);
 static V W_Unb_duse(V *a);
 static V F_Unb_dwk(V a0, V a1, V a2);
 static V W_Unb_dwk(V *a);
@@ -15594,20 +15682,20 @@ static V W_Unb_ddecl(V *a);
 static V F_Unb_ddecl_dgo(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7);
 static V W_Unb_ddecl_dgo(V *a);
 static V F_Unb_ddecl_dpick(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V a8);
-static V K37648(void);
-static V S37654(void);
-static V K37664(void);
+static V K37819(void);
+static V S37825(void);
+static V K37835(void);
 static V W_Unb_ddecl_dpick(V *a);
 static V F_Unb_dfix(V a0, V a1, V a2, V a3, V a4);
 static V W_Unb_dfix(V *a);
 static V F_Unb_dflet(V a0, V a1, V a2);
 static V D_Unb_dflet(V *dst, V a0, V a1, V a2);
-static V S37679(void);
-static V S37684(void);
-static V K37707(void);
+static V S37850(void);
+static V S37855(void);
+static V K37878(void);
 static V W_Unb_dflet(V *a);
 static V F_Unb_dflat_dtail(V a0, V a1);
-static V K37716(void);
+static V K37887(void);
 static V W_Unb_dflat_dtail(V *a);
 static V F_Unb_dpull_done(V a0, V a1, V a2, V a3);
 static V W_Unb_dpull_done(V *a);
@@ -15616,30 +15704,30 @@ static V D_Unb_dpush_ddeep(V *dst, V a0, V a1);
 static V W_Unb_dpush_ddeep(V *a);
 static V F_Unb_dlvars(V a0, V a1, V a2, V a3, V a4, V a5);
 static V D_Unb_dlvars(V *dst, V a0, V a1, V a2, V a3, V a4, V a5);
-static V K37767(void);
-static V S37772(void);
+static V K37938(void);
+static V S37943(void);
 static V W_Unb_dlvars(V *a);
 static V F_Unb_dlvar(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7);
 static V W_Unb_dlvar(V *a);
 static V F_Unb_dlvar_dcall(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7);
-static V K37781(void);
+static V K37952(void);
 static V W_Unb_dlvar_dcall(V *a);
 static V F_Unb_dlvar_dgo_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6);
-static V S37817(void);
-static V S37818(void);
-static V S37820(void);
+static V S37988(void);
+static V S37989(void);
+static V S37991(void);
 static V W_Unb_dlvar_dgo_x37u(V *a);
 static V F_Unb_dsub(V a0, V a1, V a2);
 static V D_Unb_dsub(V *dst, V a0, V a1, V a2);
-static V K37855(void);
-static V S37862(void);
+static V K38026(void);
+static V S38033(void);
 static V W_Unb_dsub(V *a);
 static V F_Unb_dnames(V a0, V a1, V a2);
 static V D_Unb_dnames(V *dst, V a0, V a1, V a2);
 static V W_Unb_dnames(V *a);
 static V F_Unb_dknown(V a0, V a1, V a2);
 static V D_Unb_dknown(V *dst, V a0, V a1, V a2);
-static V K37896(void);
+static V K38067(void);
 static V W_Unb_dknown(V *a);
 static V F_Unb_dmat(V a0, V a1);
 static V W_Unb_dmat(V *a);
@@ -15654,8 +15742,8 @@ static V U_Unb_dpat_done_x37u(V a0, V a1, V a2, V a3, V a4_, V a5, V a6, V *o);
 static V W_Unb_dpat_done_x37u(V *a);
 static V F_Unb_dpat_x37u(V a0, V a1, V a2, V a3, V a4, V a5);
 static V U_Unb_dpat_x37u(V a0, V a1, V a2, V a3_, V a4, V a5, V *o);
-static V S37927(void);
-static V S37930(void);
+static V S38098(void);
+static V S38101(void);
 static V W_Unb_dpat_x37u(V *a);
 static V F_Unb_dpat_dbind_x37s2959766054x2142777092_x37u(V a0, V a1, V a2, V a3, V a4, V a5);
 static V U_Unb_dpat_dbind_x37s2959766054x2142777092_x37u(V a0, V a1, V a2, V a3_, V a4, V a5, V *o);
@@ -15664,16 +15752,16 @@ static V F_Unb_dpat_dwild_x37u(V a0, V a1, V a2);
 static V U_Unb_dpat_dwild_x37u(V a0, V a1, V a2, V *o);
 static V W_Unb_dpat_dwild_x37u(V *a);
 static V F_List_dappend_x37f223258139x4205306309(V a0, V a2, V a3);
-static V K37935(void);
+static V K38106(void);
 static V W_List_dappend_x37f223258139x4205306309(V *a);
 static V F_Unb_dwild(V a0);
 static V D_Unb_dwild(V *dst, V a0);
-static V K37939(void);
+static V K38110(void);
 static V W_Unb_dwild(V *a);
 static V F_Unb_dpat_dbind_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6);
 static V U_Unb_dpat_dbind_x37u(V a0, V a1, V a2, V a3, V a4_, V a5, V a6, V *o);
-static V S37942(void);
-static V S37945(void);
+static V S38113(void);
+static V S38116(void);
 static V W_Unb_dpat_dbind_x37u(V *a);
 static V F_Unb_dpat_drebox_x37u(V a0, V a1, V a2, V a3, V a4);
 static V U_Unb_dpat_drebox_x37u(V a0, V a1, V a2, V a3, V a4, V *o);
@@ -15686,22 +15774,22 @@ static V F_Unb_dscrs_done(V a0, V a1, V a2);
 static V W_Unb_dscrs_done(V *a);
 static V F_Unb_dshape(V a0, V a1);
 static V D_Unb_dshape(V *dst, V a0, V a1);
-static V K37971(void);
-static V K37976(void);
+static V K38142(void);
+static V K38147(void);
 static V W_Unb_dshape(V *a);
 static V F_Unb_dshape_done_x37u(V a0, V a1, V a2);
 static V U_Unb_dshape_done_x37u(V a0, V a1, V a2, V *o);
-static V S37985(void);
+static V S38156(void);
 static V W_Unb_dshape_done_x37u(V *a);
 static V F_Unb_dlet(V a0, V a1, V a2, V a3);
 static V W_Unb_dlet(V *a);
 static V F_Unb_dlet_dctor(V a0, V a1, V a2, V a3, V a4);
-static V K37995(void);
+static V K38166(void);
 static V W_Unb_dlet_dctor(V *a);
 static V F_Unb_dlet_dgo(V a0, V a1, V a2, V a3, V a4);
 static V W_Unb_dlet_dgo(V *a);
 static V F_Unb_dalias_dok(V a0, V a1);
-static V S38015(void);
+static V S38186(void);
 static V W_Unb_dalias_dok(V *a);
 static V F_Unb_dlet_dhit(V a0, V a1, V a2, V a3);
 static V W_Unb_dlet_dhit(V *a);
@@ -15709,12 +15797,12 @@ static V F_Unb_dalias_dsub(V a0, V a1, V a2);
 static V W_Unb_dalias_dsub(V *a);
 static V F_Unb_dcalls(V a0, V a1, V a2, V a3, V a4);
 static V D_Unb_dcalls(V *dst, V a0, V a1, V a2, V a3, V a4);
-static V K38050(void);
-static V S38056(void);
+static V K38221(void);
+static V S38227(void);
 static V W_Unb_dcalls(V *a);
 static V F_Unb_dfloat_x37f3185338815x716553847(V a0, V a1, V a2, V a3, V a4, V a5_, V a6);
-static V K38098(void);
-static V S38105(void);
+static V K38269(void);
+static V S38276(void);
 static V W_Unb_dfloat_x37f3185338815x716553847(V *a);
 static V F_Unb_dcall_dtop(V a0, V a1, V a2, V a3_, V a4);
 static V W_Unb_dcall_dtop(V *a);
@@ -15725,17 +15813,17 @@ static V W_Unb_dcall_dus(V *a);
 static V F_Unb_dcall_dpick(V a0, V a1, V a2, V a3, V a4_);
 static V W_Unb_dcall_dpick(V *a);
 static V F_Unb_dcall_dfin_x37u(V a0, V a1, V a2);
-static V S38140(void);
+static V S38311(void);
 static V W_Unb_dcall_dfin_x37u(V *a);
 static V F_Unb_dcargs(V a0, V a1, V a2, V a3);
 static V U_Unb_dcargs(V a0, V a1, V a2_, V a3_, V *o);
-static V S38146(void);
-static V S38151(void);
-static V S38156(void);
+static V S38317(void);
+static V S38322(void);
+static V S38327(void);
 static V W_Unb_dcargs(V *a);
 static V F_Unb_darg_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7);
 static V U_Unb_darg_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V *o);
-static V S38177(void);
+static V S38348(void);
 static V W_Unb_darg_x37u(V *a);
 static V F_Unb_dwrapper(V a0, V a1);
 static V U_Unb_dwrapper(V a0, V a1, V *o);
@@ -15744,8 +15832,8 @@ static V F_Unb_dwrapper_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5);
 static V U_Unb_dwrapper_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o);
 static V W_Unb_dwrapper_done_x37u(V *a);
 static V F_Unb_dfields_x37u(V a0, V a1, V a2);
-static V S38193(void);
-static V S38194(void);
+static V S38364(void);
+static V S38365(void);
 static V W_Unb_dfields_x37u(V *a);
 static V F_Unb_dparams(V a0, V a1);
 static V W_Unb_dparams(V *a);
@@ -15754,12 +15842,12 @@ static V W_Unb_dparam_x37u(V *a);
 static V F_P_dtargs(V a0);
 static V W_P_dtargs(V *a);
 static V F_P_dtargs_dgo(V a0);
-static V S38221(void);
+static V S38392(void);
 static V W_P_dtargs_dgo(V *a);
 static V F_P_dtargs_dinit(V a0);
 static V D_P_dtargs_dinit(V *dst, V a0);
-static V S38229(void);
-static V S38230(void);
+static V S38400(void);
+static V S38401(void);
 static V W_P_dtargs_dinit(V *a);
 static V F_Unb_dtys_dsub(V a0, V a1);
 static V D_Unb_dtys_dsub(V *dst, V a0, V a1);
@@ -15773,21 +15861,21 @@ static V D_Unb_dparams_dof(V *dst, V a0, V a1, V a2);
 static V W_Unb_dparams_dof(V *a);
 static V F_Unb_dtyped(V a0, V a1);
 static V D_Unb_dtyped(V *dst, V a0, V a1);
-static V S38254(void);
+static V S38425(void);
 static V W_Unb_dtyped(V *a);
 static V F_Unb_du32(V a0, V a1, V a2);
-static V S38298(void);
+static V S38469(void);
 static V W_Unb_du32(V *a);
 static V F_Unb_du32_dcall(V a0, V a1, V a2);
 static V W_Unb_du32_dcall(V *a);
 static V F_Unb_du32_darg(V a0, V a1, V a2);
-static V K38320(void);
-static V K38329(void);
+static V K38491(void);
+static V K38500(void);
 static V W_Unb_du32_darg(V *a);
 static V F_Unb_du32_dargs(V a0, V a1);
 static V W_Unb_du32_dargs(V *a);
 static V F_Unb_du32_dfs(void);
-static V K38346(void);
+static V K38517(void);
 static V W_Unb_du32_dfs(V *a);
 static V F_Unb_dsubs(V a0, V a1, V a2);
 static V W_Unb_dsubs(V *a);
@@ -15798,159 +15886,52 @@ static V W_RO_dprogram(V *a);
 static V F_RO_ddecls_x37u(V a0, V a1, V a2, V a3, V a4);
 static V W_RO_ddecls_x37u(V *a);
 static V F_RO_done_x37u(V a0, V a1, V a2, V a3, V a4);
-static V S38378(void);
+static V S38549(void);
 static V W_RO_done_x37u(V *a);
 static V F_RO_dgo(V a0, V a1);
 static V D_RO_dgo(V *dst, V a0, V a1);
-static V S38391(void);
-static V S38411(void);
-static V S38415(void);
+static V S38562(void);
+static V S38582(void);
+static V S38586(void);
 static V W_RO_dgo(V *a);
 static V F_RO_dcand(V a0);
 static V H_F_RO_dcand(V a0);
 static V W_RO_dcand(V *a);
 static V F_Main_demit_djs_x37u(V a0, V a1, V a2, V a3, V a4);
-static V S38430(void);
-static V L38433(V *a);
-static V S38434(void);
+static V S38601(void);
+static V L38604(V *a);
+static V S38605(void);
 static V W_Main_demit_djs_x37u(V *a);
 static V F_Main_demit_djs_dok(V a0, V a1, V a2, V a3);
-static V S38441(void);
-static V L38443(V *a);
-static V S38444(void);
-static V S38445(void);
+static V S38612(void);
+static V L38614(V *a);
+static V S38615(void);
+static V S38616(void);
 static V W_Main_demit_djs_dok(V *a);
 static V F_Main_djs_dpaths_dgo(V a0);
 static V D_Main_djs_dpaths_dgo(V *dst, V a0);
 static V W_Main_djs_dpaths_dgo(V *a);
 static V F_Str_dsplit__tab(V a0);
 static V U_Str_dsplit__tab(V a0, V *o);
-static V S38457(void);
-static V S38458(void);
-static V S38461(void);
+static V S38628(void);
+static V S38629(void);
+static V S38632(void);
 static V W_Str_dsplit__tab(V *a);
 static V F_Main_djs_deffs(V a0, V a1, V a2, V a3, V a4);
-static V L38467(V *a);
+static V L38638(V *a);
 static V W_Main_djs_deffs(V *a);
 static V F_Main_djs_dhosts(V a0, V a1);
 static V W_Main_djs_dhosts(V *a);
 static V F_Main_djs_dwrap(V a0, V a1);
-static V S38481(void);
-static V S38482(void);
-static V S38483(void);
-static V S38485(void);
-static V W_Main_djs_dwrap(V *a);
-static V F_Main_djs_dentries(V a0);
-static V S38492(void);
-static V W_Main_djs_dentries(V *a);
-static V F_Main_djs_dentry(V a0);
-static V S38496(void);
-static V S38497(void);
-static V S38498(void);
-static V S38499(void);
-static V S38500(void);
-static V S38501(void);
-static V S38502(void);
-static V W_Main_djs_dentry(V *a);
-static V F_J_dprogram_dgo(V a0);
-static V U_J_dprogram_dgo(V a0, V *o);
-static V K38519(void);
-static V W_J_dprogram_dgo(V *a);
-static V F_J_dprogram_dfin_x37u_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7);
-static V U_J_dprogram_dfin_x37u_x37u(V a0, V a1_, V a2, V a3, V a4, V a5, V a6, V a7, V *o);
-static V S38525(void);
-static V W_J_dprogram_dfin_x37u_x37u(V *a);
-static V F_RtJs_dsrc(void);
-static V W_RtJs_dsrc(V *a);
-static V F_RtJs_dsrc_dp9(void);
-static V S38547(void);
-static V S38548(void);
-static V S38549(void);
-static V S38550(void);
-static V S38551(void);
-static V S38552(void);
-static V S38553(void);
-static V S38554(void);
-static V S38555(void);
-static V S38556(void);
-static V S38557(void);
-static V S38558(void);
-static V S38559(void);
-static V S38560(void);
-static V S38561(void);
-static V S38562(void);
-static V S38563(void);
-static V S38564(void);
-static V S38565(void);
-static V S38566(void);
-static V S38567(void);
-static V S38568(void);
-static V S38569(void);
-static V S38570(void);
-static V S38571(void);
-static V S38572(void);
-static V S38573(void);
-static V S38574(void);
-static V S38575(void);
-static V S38576(void);
-static V S38577(void);
-static V S38578(void);
-static V S38579(void);
-static V S38580(void);
-static V S38581(void);
-static V W_RtJs_dsrc_dp9(V *a);
-static V F_RtJs_dsrc_dp8(void);
-static V S38616(void);
-static V S38617(void);
-static V S38618(void);
-static V S38619(void);
-static V S38620(void);
-static V S38621(void);
-static V S38622(void);
-static V S38623(void);
-static V S38624(void);
-static V S38625(void);
-static V S38626(void);
-static V S38627(void);
-static V S38628(void);
-static V S38629(void);
-static V S38630(void);
-static V S38631(void);
-static V S38632(void);
-static V S38633(void);
-static V S38634(void);
-static V S38635(void);
-static V S38636(void);
-static V S38637(void);
-static V S38638(void);
-static V S38639(void);
-static V S38640(void);
-static V S38641(void);
-static V S38642(void);
-static V S38643(void);
-static V S38644(void);
-static V S38645(void);
-static V S38646(void);
-static V S38647(void);
-static V S38648(void);
-static V S38649(void);
-static V S38650(void);
-static V S38651(void);
 static V S38652(void);
 static V S38653(void);
 static V S38654(void);
-static V S38655(void);
 static V S38656(void);
-static V S38657(void);
-static V S38658(void);
-static V S38659(void);
-static V S38660(void);
-static V S38661(void);
-static V S38662(void);
+static V W_Main_djs_dwrap(V *a);
+static V F_Main_djs_dentries(V a0);
 static V S38663(void);
-static V S38664(void);
-static V S38665(void);
-static V S38666(void);
+static V W_Main_djs_dentries(V *a);
+static V F_Main_djs_dentry(V a0);
 static V S38667(void);
 static V S38668(void);
 static V S38669(void);
@@ -15958,10 +15939,35 @@ static V S38670(void);
 static V S38671(void);
 static V S38672(void);
 static V S38673(void);
-static V S38674(void);
-static V S38675(void);
-static V W_RtJs_dsrc_dp8(V *a);
-static V F_RtJs_dsrc_dp7(void);
+static V W_Main_djs_dentry(V *a);
+static V F_J_dprogram_dgo(V a0);
+static V U_J_dprogram_dgo(V a0, V *o);
+static V K38690(void);
+static V W_J_dprogram_dgo(V *a);
+static V F_J_dprogram_dfin_x37u_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7);
+static V U_J_dprogram_dfin_x37u_x37u(V a0, V a1_, V a2, V a3, V a4, V a5, V a6, V a7, V *o);
+static V S38696(void);
+static V W_J_dprogram_dfin_x37u_x37u(V *a);
+static V F_RtJs_dsrc(void);
+static V W_RtJs_dsrc(V *a);
+static V F_RtJs_dsrc_dp9(void);
+static V S38718(void);
+static V S38719(void);
+static V S38720(void);
+static V S38721(void);
+static V S38722(void);
+static V S38723(void);
+static V S38724(void);
+static V S38725(void);
+static V S38726(void);
+static V S38727(void);
+static V S38728(void);
+static V S38729(void);
+static V S38730(void);
+static V S38731(void);
+static V S38732(void);
+static V S38733(void);
+static V S38734(void);
 static V S38735(void);
 static V S38736(void);
 static V S38737(void);
@@ -15980,40 +15986,8 @@ static V S38749(void);
 static V S38750(void);
 static V S38751(void);
 static V S38752(void);
-static V S38753(void);
-static V S38754(void);
-static V S38755(void);
-static V S38756(void);
-static V S38757(void);
-static V S38758(void);
-static V S38759(void);
-static V S38760(void);
-static V S38761(void);
-static V S38762(void);
-static V S38763(void);
-static V S38764(void);
-static V S38765(void);
-static V S38766(void);
-static V S38767(void);
-static V S38768(void);
-static V S38769(void);
-static V S38770(void);
-static V S38771(void);
-static V S38772(void);
-static V S38773(void);
-static V S38774(void);
-static V S38775(void);
-static V S38776(void);
-static V S38777(void);
-static V S38778(void);
-static V S38779(void);
-static V S38780(void);
-static V S38781(void);
-static V S38782(void);
-static V S38783(void);
-static V S38784(void);
-static V S38785(void);
-static V S38786(void);
+static V W_RtJs_dsrc_dp9(V *a);
+static V F_RtJs_dsrc_dp8(void);
 static V S38787(void);
 static V S38788(void);
 static V S38789(void);
@@ -16022,60 +15996,60 @@ static V S38791(void);
 static V S38792(void);
 static V S38793(void);
 static V S38794(void);
-static V W_RtJs_dsrc_dp7(V *a);
-static V F_RtJs_dsrc_dp6(void);
-static V S38854(void);
-static V S38855(void);
-static V S38856(void);
-static V S38857(void);
-static V S38858(void);
-static V S38859(void);
-static V S38860(void);
-static V S38861(void);
-static V S38862(void);
-static V S38863(void);
-static V S38864(void);
-static V S38865(void);
-static V S38866(void);
-static V S38867(void);
-static V S38868(void);
-static V S38869(void);
-static V S38870(void);
-static V S38871(void);
-static V S38872(void);
-static V S38873(void);
-static V S38874(void);
-static V S38875(void);
-static V S38876(void);
-static V S38877(void);
-static V S38878(void);
-static V S38879(void);
-static V S38880(void);
-static V S38881(void);
-static V S38882(void);
-static V S38883(void);
-static V S38884(void);
-static V S38885(void);
-static V S38886(void);
-static V S38887(void);
-static V S38888(void);
-static V S38889(void);
-static V S38890(void);
-static V S38891(void);
-static V S38892(void);
-static V S38893(void);
-static V S38894(void);
-static V S38895(void);
-static V S38896(void);
-static V S38897(void);
-static V S38898(void);
-static V S38899(void);
-static V S38900(void);
-static V S38901(void);
-static V S38902(void);
-static V S38903(void);
-static V S38904(void);
-static V S38905(void);
+static V S38795(void);
+static V S38796(void);
+static V S38797(void);
+static V S38798(void);
+static V S38799(void);
+static V S38800(void);
+static V S38801(void);
+static V S38802(void);
+static V S38803(void);
+static V S38804(void);
+static V S38805(void);
+static V S38806(void);
+static V S38807(void);
+static V S38808(void);
+static V S38809(void);
+static V S38810(void);
+static V S38811(void);
+static V S38812(void);
+static V S38813(void);
+static V S38814(void);
+static V S38815(void);
+static V S38816(void);
+static V S38817(void);
+static V S38818(void);
+static V S38819(void);
+static V S38820(void);
+static V S38821(void);
+static V S38822(void);
+static V S38823(void);
+static V S38824(void);
+static V S38825(void);
+static V S38826(void);
+static V S38827(void);
+static V S38828(void);
+static V S38829(void);
+static V S38830(void);
+static V S38831(void);
+static V S38832(void);
+static V S38833(void);
+static V S38834(void);
+static V S38835(void);
+static V S38836(void);
+static V S38837(void);
+static V S38838(void);
+static V S38839(void);
+static V S38840(void);
+static V S38841(void);
+static V S38842(void);
+static V S38843(void);
+static V S38844(void);
+static V S38845(void);
+static V S38846(void);
+static V W_RtJs_dsrc_dp8(V *a);
+static V F_RtJs_dsrc_dp7(void);
 static V S38906(void);
 static V S38907(void);
 static V S38908(void);
@@ -16084,60 +16058,60 @@ static V S38910(void);
 static V S38911(void);
 static V S38912(void);
 static V S38913(void);
-static V W_RtJs_dsrc_dp6(V *a);
-static V F_RtJs_dsrc_dp5(void);
-static V S38973(void);
-static V S38974(void);
-static V S38975(void);
-static V S38976(void);
-static V S38977(void);
-static V S38978(void);
-static V S38979(void);
-static V S38980(void);
-static V S38981(void);
-static V S38982(void);
-static V S38983(void);
-static V S38984(void);
-static V S38985(void);
-static V S38986(void);
-static V S38987(void);
-static V S38988(void);
-static V S38989(void);
-static V S38990(void);
-static V S38991(void);
-static V S38992(void);
-static V S38993(void);
-static V S38994(void);
-static V S38995(void);
-static V S38996(void);
-static V S38997(void);
-static V S38998(void);
-static V S38999(void);
-static V S39000(void);
-static V S39001(void);
-static V S39002(void);
-static V S39003(void);
-static V S39004(void);
-static V S39005(void);
-static V S39006(void);
-static V S39007(void);
-static V S39008(void);
-static V S39009(void);
-static V S39010(void);
-static V S39011(void);
-static V S39012(void);
-static V S39013(void);
-static V S39014(void);
-static V S39015(void);
-static V S39016(void);
-static V S39017(void);
-static V S39018(void);
-static V S39019(void);
-static V S39020(void);
-static V S39021(void);
-static V S39022(void);
-static V S39023(void);
-static V S39024(void);
+static V S38914(void);
+static V S38915(void);
+static V S38916(void);
+static V S38917(void);
+static V S38918(void);
+static V S38919(void);
+static V S38920(void);
+static V S38921(void);
+static V S38922(void);
+static V S38923(void);
+static V S38924(void);
+static V S38925(void);
+static V S38926(void);
+static V S38927(void);
+static V S38928(void);
+static V S38929(void);
+static V S38930(void);
+static V S38931(void);
+static V S38932(void);
+static V S38933(void);
+static V S38934(void);
+static V S38935(void);
+static V S38936(void);
+static V S38937(void);
+static V S38938(void);
+static V S38939(void);
+static V S38940(void);
+static V S38941(void);
+static V S38942(void);
+static V S38943(void);
+static V S38944(void);
+static V S38945(void);
+static V S38946(void);
+static V S38947(void);
+static V S38948(void);
+static V S38949(void);
+static V S38950(void);
+static V S38951(void);
+static V S38952(void);
+static V S38953(void);
+static V S38954(void);
+static V S38955(void);
+static V S38956(void);
+static V S38957(void);
+static V S38958(void);
+static V S38959(void);
+static V S38960(void);
+static V S38961(void);
+static V S38962(void);
+static V S38963(void);
+static V S38964(void);
+static V S38965(void);
+static V W_RtJs_dsrc_dp7(V *a);
+static V F_RtJs_dsrc_dp6(void);
 static V S39025(void);
 static V S39026(void);
 static V S39027(void);
@@ -16146,60 +16120,60 @@ static V S39029(void);
 static V S39030(void);
 static V S39031(void);
 static V S39032(void);
-static V W_RtJs_dsrc_dp5(V *a);
-static V F_RtJs_dsrc_dp4(void);
-static V S39092(void);
-static V S39093(void);
-static V S39094(void);
-static V S39095(void);
-static V S39096(void);
-static V S39097(void);
-static V S39098(void);
-static V S39099(void);
-static V S39100(void);
-static V S39101(void);
-static V S39102(void);
-static V S39103(void);
-static V S39104(void);
-static V S39105(void);
-static V S39106(void);
-static V S39107(void);
-static V S39108(void);
-static V S39109(void);
-static V S39110(void);
-static V S39111(void);
-static V S39112(void);
-static V S39113(void);
-static V S39114(void);
-static V S39115(void);
-static V S39116(void);
-static V S39117(void);
-static V S39118(void);
-static V S39119(void);
-static V S39120(void);
-static V S39121(void);
-static V S39122(void);
-static V S39123(void);
-static V S39124(void);
-static V S39125(void);
-static V S39126(void);
-static V S39127(void);
-static V S39128(void);
-static V S39129(void);
-static V S39130(void);
-static V S39131(void);
-static V S39132(void);
-static V S39133(void);
-static V S39134(void);
-static V S39135(void);
-static V S39136(void);
-static V S39137(void);
-static V S39138(void);
-static V S39139(void);
-static V S39140(void);
-static V S39141(void);
-static V S39142(void);
-static V S39143(void);
+static V S39033(void);
+static V S39034(void);
+static V S39035(void);
+static V S39036(void);
+static V S39037(void);
+static V S39038(void);
+static V S39039(void);
+static V S39040(void);
+static V S39041(void);
+static V S39042(void);
+static V S39043(void);
+static V S39044(void);
+static V S39045(void);
+static V S39046(void);
+static V S39047(void);
+static V S39048(void);
+static V S39049(void);
+static V S39050(void);
+static V S39051(void);
+static V S39052(void);
+static V S39053(void);
+static V S39054(void);
+static V S39055(void);
+static V S39056(void);
+static V S39057(void);
+static V S39058(void);
+static V S39059(void);
+static V S39060(void);
+static V S39061(void);
+static V S39062(void);
+static V S39063(void);
+static V S39064(void);
+static V S39065(void);
+static V S39066(void);
+static V S39067(void);
+static V S39068(void);
+static V S39069(void);
+static V S39070(void);
+static V S39071(void);
+static V S39072(void);
+static V S39073(void);
+static V S39074(void);
+static V S39075(void);
+static V S39076(void);
+static V S39077(void);
+static V S39078(void);
+static V S39079(void);
+static V S39080(void);
+static V S39081(void);
+static V S39082(void);
+static V S39083(void);
+static V S39084(void);
+static V W_RtJs_dsrc_dp6(V *a);
+static V F_RtJs_dsrc_dp5(void);
 static V S39144(void);
 static V S39145(void);
 static V S39146(void);
@@ -16208,60 +16182,60 @@ static V S39148(void);
 static V S39149(void);
 static V S39150(void);
 static V S39151(void);
-static V W_RtJs_dsrc_dp4(V *a);
-static V F_RtJs_dsrc_dp3(void);
-static V S39211(void);
-static V S39212(void);
-static V S39213(void);
-static V S39214(void);
-static V S39215(void);
-static V S39216(void);
-static V S39217(void);
-static V S39218(void);
-static V S39219(void);
-static V S39220(void);
-static V S39221(void);
-static V S39222(void);
-static V S39223(void);
-static V S39224(void);
-static V S39225(void);
-static V S39226(void);
-static V S39227(void);
-static V S39228(void);
-static V S39229(void);
-static V S39230(void);
-static V S39231(void);
-static V S39232(void);
-static V S39233(void);
-static V S39234(void);
-static V S39235(void);
-static V S39236(void);
-static V S39237(void);
-static V S39238(void);
-static V S39239(void);
-static V S39240(void);
-static V S39241(void);
-static V S39242(void);
-static V S39243(void);
-static V S39244(void);
-static V S39245(void);
-static V S39246(void);
-static V S39247(void);
-static V S39248(void);
-static V S39249(void);
-static V S39250(void);
-static V S39251(void);
-static V S39252(void);
-static V S39253(void);
-static V S39254(void);
-static V S39255(void);
-static V S39256(void);
-static V S39257(void);
-static V S39258(void);
-static V S39259(void);
-static V S39260(void);
-static V S39261(void);
-static V S39262(void);
+static V S39152(void);
+static V S39153(void);
+static V S39154(void);
+static V S39155(void);
+static V S39156(void);
+static V S39157(void);
+static V S39158(void);
+static V S39159(void);
+static V S39160(void);
+static V S39161(void);
+static V S39162(void);
+static V S39163(void);
+static V S39164(void);
+static V S39165(void);
+static V S39166(void);
+static V S39167(void);
+static V S39168(void);
+static V S39169(void);
+static V S39170(void);
+static V S39171(void);
+static V S39172(void);
+static V S39173(void);
+static V S39174(void);
+static V S39175(void);
+static V S39176(void);
+static V S39177(void);
+static V S39178(void);
+static V S39179(void);
+static V S39180(void);
+static V S39181(void);
+static V S39182(void);
+static V S39183(void);
+static V S39184(void);
+static V S39185(void);
+static V S39186(void);
+static V S39187(void);
+static V S39188(void);
+static V S39189(void);
+static V S39190(void);
+static V S39191(void);
+static V S39192(void);
+static V S39193(void);
+static V S39194(void);
+static V S39195(void);
+static V S39196(void);
+static V S39197(void);
+static V S39198(void);
+static V S39199(void);
+static V S39200(void);
+static V S39201(void);
+static V S39202(void);
+static V S39203(void);
+static V W_RtJs_dsrc_dp5(V *a);
+static V F_RtJs_dsrc_dp4(void);
 static V S39263(void);
 static V S39264(void);
 static V S39265(void);
@@ -16272,56 +16246,58 @@ static V S39269(void);
 static V S39270(void);
 static V S39271(void);
 static V S39272(void);
-static V W_RtJs_dsrc_dp3(V *a);
-static V F_RtJs_dsrc_dp2(void);
-static V S39334(void);
-static V S39335(void);
-static V S39336(void);
-static V S39337(void);
-static V S39338(void);
-static V S39339(void);
-static V S39340(void);
-static V S39341(void);
-static V S39342(void);
-static V S39343(void);
-static V S39344(void);
-static V S39345(void);
-static V S39346(void);
-static V S39347(void);
-static V S39348(void);
-static V S39349(void);
-static V S39350(void);
-static V S39351(void);
-static V S39352(void);
-static V S39353(void);
-static V S39354(void);
-static V S39355(void);
-static V S39356(void);
-static V S39357(void);
-static V S39358(void);
-static V S39359(void);
-static V S39360(void);
-static V S39361(void);
-static V S39362(void);
-static V S39363(void);
-static V S39364(void);
-static V S39365(void);
-static V S39366(void);
-static V S39367(void);
-static V S39368(void);
-static V S39369(void);
-static V S39370(void);
-static V S39371(void);
-static V S39372(void);
-static V S39373(void);
-static V S39374(void);
-static V S39375(void);
-static V S39376(void);
-static V S39377(void);
-static V S39378(void);
-static V S39379(void);
-static V S39380(void);
-static V S39381(void);
+static V S39273(void);
+static V S39274(void);
+static V S39275(void);
+static V S39276(void);
+static V S39277(void);
+static V S39278(void);
+static V S39279(void);
+static V S39280(void);
+static V S39281(void);
+static V S39282(void);
+static V S39283(void);
+static V S39284(void);
+static V S39285(void);
+static V S39286(void);
+static V S39287(void);
+static V S39288(void);
+static V S39289(void);
+static V S39290(void);
+static V S39291(void);
+static V S39292(void);
+static V S39293(void);
+static V S39294(void);
+static V S39295(void);
+static V S39296(void);
+static V S39297(void);
+static V S39298(void);
+static V S39299(void);
+static V S39300(void);
+static V S39301(void);
+static V S39302(void);
+static V S39303(void);
+static V S39304(void);
+static V S39305(void);
+static V S39306(void);
+static V S39307(void);
+static V S39308(void);
+static V S39309(void);
+static V S39310(void);
+static V S39311(void);
+static V S39312(void);
+static V S39313(void);
+static V S39314(void);
+static V S39315(void);
+static V S39316(void);
+static V S39317(void);
+static V S39318(void);
+static V S39319(void);
+static V S39320(void);
+static V S39321(void);
+static V S39322(void);
+static V W_RtJs_dsrc_dp4(V *a);
+static V F_RtJs_dsrc_dp3(void);
 static V S39382(void);
 static V S39383(void);
 static V S39384(void);
@@ -16334,60 +16310,58 @@ static V S39390(void);
 static V S39391(void);
 static V S39392(void);
 static V S39393(void);
-static V W_RtJs_dsrc_dp2(V *a);
-static V F_RtJs_dsrc_dp1(void);
-static V S39453(void);
-static V S39454(void);
-static V S39455(void);
-static V S39456(void);
-static V S39457(void);
-static V S39458(void);
-static V S39459(void);
-static V S39460(void);
-static V S39461(void);
-static V S39462(void);
-static V S39463(void);
-static V S39464(void);
-static V S39465(void);
-static V S39466(void);
-static V S39467(void);
-static V S39468(void);
-static V S39469(void);
-static V S39470(void);
-static V S39471(void);
-static V S39472(void);
-static V S39473(void);
-static V S39474(void);
-static V S39475(void);
-static V S39476(void);
-static V S39477(void);
-static V S39478(void);
-static V S39479(void);
-static V S39480(void);
-static V S39481(void);
-static V S39482(void);
-static V S39483(void);
-static V S39484(void);
-static V S39485(void);
-static V S39486(void);
-static V S39487(void);
-static V S39488(void);
-static V S39489(void);
-static V S39490(void);
-static V S39491(void);
-static V S39492(void);
-static V S39493(void);
-static V S39494(void);
-static V S39495(void);
-static V S39496(void);
-static V S39497(void);
-static V S39498(void);
-static V S39499(void);
-static V S39500(void);
-static V S39501(void);
-static V S39502(void);
-static V S39503(void);
-static V S39504(void);
+static V S39394(void);
+static V S39395(void);
+static V S39396(void);
+static V S39397(void);
+static V S39398(void);
+static V S39399(void);
+static V S39400(void);
+static V S39401(void);
+static V S39402(void);
+static V S39403(void);
+static V S39404(void);
+static V S39405(void);
+static V S39406(void);
+static V S39407(void);
+static V S39408(void);
+static V S39409(void);
+static V S39410(void);
+static V S39411(void);
+static V S39412(void);
+static V S39413(void);
+static V S39414(void);
+static V S39415(void);
+static V S39416(void);
+static V S39417(void);
+static V S39418(void);
+static V S39419(void);
+static V S39420(void);
+static V S39421(void);
+static V S39422(void);
+static V S39423(void);
+static V S39424(void);
+static V S39425(void);
+static V S39426(void);
+static V S39427(void);
+static V S39428(void);
+static V S39429(void);
+static V S39430(void);
+static V S39431(void);
+static V S39432(void);
+static V S39433(void);
+static V S39434(void);
+static V S39435(void);
+static V S39436(void);
+static V S39437(void);
+static V S39438(void);
+static V S39439(void);
+static V S39440(void);
+static V S39441(void);
+static V S39442(void);
+static V S39443(void);
+static V W_RtJs_dsrc_dp3(V *a);
+static V F_RtJs_dsrc_dp2(void);
 static V S39505(void);
 static V S39506(void);
 static V S39507(void);
@@ -16396,60 +16370,60 @@ static V S39509(void);
 static V S39510(void);
 static V S39511(void);
 static V S39512(void);
-static V W_RtJs_dsrc_dp1(V *a);
-static V F_RtJs_dsrc_dp0(void);
-static V S39572(void);
-static V S39573(void);
-static V S39574(void);
-static V S39575(void);
-static V S39576(void);
-static V S39577(void);
-static V S39578(void);
-static V S39579(void);
-static V S39580(void);
-static V S39581(void);
-static V S39582(void);
-static V S39583(void);
-static V S39584(void);
-static V S39585(void);
-static V S39586(void);
-static V S39587(void);
-static V S39588(void);
-static V S39589(void);
-static V S39590(void);
-static V S39591(void);
-static V S39592(void);
-static V S39593(void);
-static V S39594(void);
-static V S39595(void);
-static V S39596(void);
-static V S39597(void);
-static V S39598(void);
-static V S39599(void);
-static V S39600(void);
-static V S39601(void);
-static V S39602(void);
-static V S39603(void);
-static V S39604(void);
-static V S39605(void);
-static V S39606(void);
-static V S39607(void);
-static V S39608(void);
-static V S39609(void);
-static V S39610(void);
-static V S39611(void);
-static V S39612(void);
-static V S39613(void);
-static V S39614(void);
-static V S39615(void);
-static V S39616(void);
-static V S39617(void);
-static V S39618(void);
-static V S39619(void);
-static V S39620(void);
-static V S39621(void);
-static V S39622(void);
-static V S39623(void);
+static V S39513(void);
+static V S39514(void);
+static V S39515(void);
+static V S39516(void);
+static V S39517(void);
+static V S39518(void);
+static V S39519(void);
+static V S39520(void);
+static V S39521(void);
+static V S39522(void);
+static V S39523(void);
+static V S39524(void);
+static V S39525(void);
+static V S39526(void);
+static V S39527(void);
+static V S39528(void);
+static V S39529(void);
+static V S39530(void);
+static V S39531(void);
+static V S39532(void);
+static V S39533(void);
+static V S39534(void);
+static V S39535(void);
+static V S39536(void);
+static V S39537(void);
+static V S39538(void);
+static V S39539(void);
+static V S39540(void);
+static V S39541(void);
+static V S39542(void);
+static V S39543(void);
+static V S39544(void);
+static V S39545(void);
+static V S39546(void);
+static V S39547(void);
+static V S39548(void);
+static V S39549(void);
+static V S39550(void);
+static V S39551(void);
+static V S39552(void);
+static V S39553(void);
+static V S39554(void);
+static V S39555(void);
+static V S39556(void);
+static V S39557(void);
+static V S39558(void);
+static V S39559(void);
+static V S39560(void);
+static V S39561(void);
+static V S39562(void);
+static V S39563(void);
+static V S39564(void);
+static V W_RtJs_dsrc_dp2(V *a);
+static V F_RtJs_dsrc_dp1(void);
 static V S39624(void);
 static V S39625(void);
 static V S39626(void);
@@ -16458,6 +16432,120 @@ static V S39628(void);
 static V S39629(void);
 static V S39630(void);
 static V S39631(void);
+static V S39632(void);
+static V S39633(void);
+static V S39634(void);
+static V S39635(void);
+static V S39636(void);
+static V S39637(void);
+static V S39638(void);
+static V S39639(void);
+static V S39640(void);
+static V S39641(void);
+static V S39642(void);
+static V S39643(void);
+static V S39644(void);
+static V S39645(void);
+static V S39646(void);
+static V S39647(void);
+static V S39648(void);
+static V S39649(void);
+static V S39650(void);
+static V S39651(void);
+static V S39652(void);
+static V S39653(void);
+static V S39654(void);
+static V S39655(void);
+static V S39656(void);
+static V S39657(void);
+static V S39658(void);
+static V S39659(void);
+static V S39660(void);
+static V S39661(void);
+static V S39662(void);
+static V S39663(void);
+static V S39664(void);
+static V S39665(void);
+static V S39666(void);
+static V S39667(void);
+static V S39668(void);
+static V S39669(void);
+static V S39670(void);
+static V S39671(void);
+static V S39672(void);
+static V S39673(void);
+static V S39674(void);
+static V S39675(void);
+static V S39676(void);
+static V S39677(void);
+static V S39678(void);
+static V S39679(void);
+static V S39680(void);
+static V S39681(void);
+static V S39682(void);
+static V S39683(void);
+static V W_RtJs_dsrc_dp1(V *a);
+static V F_RtJs_dsrc_dp0(void);
+static V S39743(void);
+static V S39744(void);
+static V S39745(void);
+static V S39746(void);
+static V S39747(void);
+static V S39748(void);
+static V S39749(void);
+static V S39750(void);
+static V S39751(void);
+static V S39752(void);
+static V S39753(void);
+static V S39754(void);
+static V S39755(void);
+static V S39756(void);
+static V S39757(void);
+static V S39758(void);
+static V S39759(void);
+static V S39760(void);
+static V S39761(void);
+static V S39762(void);
+static V S39763(void);
+static V S39764(void);
+static V S39765(void);
+static V S39766(void);
+static V S39767(void);
+static V S39768(void);
+static V S39769(void);
+static V S39770(void);
+static V S39771(void);
+static V S39772(void);
+static V S39773(void);
+static V S39774(void);
+static V S39775(void);
+static V S39776(void);
+static V S39777(void);
+static V S39778(void);
+static V S39779(void);
+static V S39780(void);
+static V S39781(void);
+static V S39782(void);
+static V S39783(void);
+static V S39784(void);
+static V S39785(void);
+static V S39786(void);
+static V S39787(void);
+static V S39788(void);
+static V S39789(void);
+static V S39790(void);
+static V S39791(void);
+static V S39792(void);
+static V S39793(void);
+static V S39794(void);
+static V S39795(void);
+static V S39796(void);
+static V S39797(void);
+static V S39798(void);
+static V S39799(void);
+static V S39800(void);
+static V S39801(void);
+static V S39802(void);
 static V W_RtJs_dsrc_dp0(V *a);
 static V F_J_dinfo(V a0, V a1);
 static V W_J_dinfo(V *a);
@@ -16467,221 +16555,221 @@ static V F_Field_dnames(V a0);
 static V D_Field_dnames(V *dst, V a0);
 static V W_Field_dnames(V *a);
 static V F_J_dprogram_dm(V a0);
-static V K39701(void);
-static V L39703(V *a);
-static V S39708(void);
+static V K39872(void);
+static V L39874(V *a);
+static V S39879(void);
 static V W_J_dprogram_dm(V *a);
 static V F_J_dentry(V a0, V a1);
-static V S39720(void);
-static V L39724(V *a);
-static V S39726(void);
-static V S39727(void);
-static V W_J_dentry(V *a);
-static V F_J_dentry_dty(V a0, V a1, V a2);
-static V L39729(V *a);
-static V S39730(void);
-static V L39734(V *a);
-static V S39736(void);
-static V S39737(void);
-static V W_J_dentry_dty(V *a);
-static V F_J_dprinter_dgo(V a0, V a1);
-static V S39749(void);
-static V S39751(void);
-static V L39755(V *a);
-static V L39758(V *a);
-static V S39760(void);
-static V S39761(void);
-static V S39762(void);
-static V L39769(V *a);
-static V S39772(void);
-static V S39773(void);
-static V S39777(void);
-static V S39778(void);
-static V S39779(void);
-static V L39786(V *a);
-static V L39790(V *a);
-static V S39798(void);
-static V S39799(void);
-static V S39800(void);
-static V S39801(void);
-static V S39802(void);
-static V S39804(void);
-static V S39814(void);
-static V L39816(V *a);
-static V S39820(void);
-static V S39821(void);
-static V S39824(void);
-static V S39825(void);
-static V S39826(void);
-static V K39830(void);
-static V L39833(V *a);
-static V L39836(V *a);
-static V L39849(V *a);
-static V K39851(void);
-static V L39853(V *a);
-static V K39854(void);
-static V L39856(V *a);
-static V K39857(void);
-static V L39858(V *a);
-static V K39859(void);
-static V L39860(V *a);
-static V K39861(void);
-static V L39862(V *a);
-static V K39863(void);
-static V L39864(V *a);
-static V K39865(void);
-static V L39871(V *a);
-static V S39873(void);
-static V S39874(void);
-static V S39879(void);
-static V L39881(V *a);
-static V K39883(void);
-static V K39884(void);
-static V L39886(V *a);
-static V K39887(void);
-static V L39888(V *a);
-static V K39889(void);
+static V S39891(void);
 static V L39895(V *a);
 static V S39897(void);
 static V S39898(void);
-static V L39901(V *a);
-static V K39902(void);
-static V S39906(void);
-static V S39912(void);
-static V S39914(void);
-static V K39915(void);
-static V L39918(V *a);
-static V L39919(V *a);
-static V S39926(void);
-static V S39937(void);
-static V S39938(void);
-static V K39941(void);
+static V W_J_dentry(V *a);
+static V F_J_dentry_dty(V a0, V a1, V a2);
+static V L39900(V *a);
+static V S39901(void);
+static V L39905(V *a);
+static V S39907(void);
+static V S39908(void);
+static V W_J_dentry_dty(V *a);
+static V F_J_dprinter_dgo(V a0, V a1);
+static V S39920(void);
+static V S39922(void);
+static V L39926(V *a);
+static V L39929(V *a);
+static V S39931(void);
+static V S39932(void);
+static V S39933(void);
+static V L39940(V *a);
+static V S39943(void);
+static V S39944(void);
+static V S39948(void);
+static V S39949(void);
 static V S39950(void);
-static V L39952(V *a);
+static V L39957(V *a);
+static V L39961(V *a);
+static V S39969(void);
+static V S39970(void);
+static V S39971(void);
+static V S39972(void);
+static V S39973(void);
+static V S39975(void);
+static V S39985(void);
+static V L39987(V *a);
+static V S39991(void);
+static V S39992(void);
+static V S39995(void);
+static V S39996(void);
+static V S39997(void);
+static V K40001(void);
+static V L40004(V *a);
+static V L40007(V *a);
+static V L40020(V *a);
+static V K40022(void);
+static V L40024(V *a);
+static V K40025(void);
+static V L40027(V *a);
+static V K40028(void);
+static V L40029(V *a);
+static V K40030(void);
+static V L40031(V *a);
+static V K40032(void);
+static V L40033(V *a);
+static V K40034(void);
+static V L40035(V *a);
+static V K40036(void);
+static V L40042(V *a);
+static V S40044(void);
+static V S40045(void);
+static V S40050(void);
+static V L40052(V *a);
+static V K40054(void);
+static V K40055(void);
+static V L40057(V *a);
+static V K40058(void);
+static V L40059(V *a);
+static V K40060(void);
+static V L40066(V *a);
+static V S40068(void);
+static V S40069(void);
+static V L40072(V *a);
+static V K40073(void);
+static V S40077(void);
+static V S40083(void);
+static V S40085(void);
+static V K40086(void);
+static V L40089(V *a);
+static V L40090(V *a);
+static V S40097(void);
+static V S40108(void);
+static V S40109(void);
+static V K40112(void);
+static V S40121(void);
+static V L40123(V *a);
 static V W_J_dprinter_dgo(V *a);
 static V F_J_dacc(V a0);
-static V S39961(void);
-static V S39963(void);
-static V S39964(void);
+static V S40132(void);
+static V S40134(void);
+static V S40135(void);
 static V W_J_dacc(V *a);
 static V F_J_ddotted(V a0);
 static V H_F_J_ddotted(V a0);
 static V W_J_ddotted(V *a);
 static V F_J_dout(V a1);
-static V L39970(V *a);
-static V S39972(void);
+static V L40141(V *a);
+static V S40143(void);
 static V W_J_dout(V *a);
 static V F_J_dall_dloop(V a0, V a1);
-static V L39983(V *a);
-static V L39991(V *a);
+static V L40154(V *a);
+static V L40162(V *a);
 static V W_J_dall_dloop(V *a);
 static V F_J_ddef_x37u(V a0, V a1, V a2);
 static V W_J_ddef_x37u(V *a);
 static V F_J_ddef_ddecl_x37u(V a0, V a1, V a2, V a3_, V a4, V a5);
-static V L40015(V *a);
+static V L40186(V *a);
 static V W_J_ddef_ddecl_x37u(V *a);
 static V F_J_dwrapper(V a0, V a1);
-static V L40018(V *a);
-static V L40019(V *a);
-static V S40021(void);
-static V S40022(void);
-static V S40025(void);
-static V S40028(void);
-static V S40031(void);
+static V L40189(V *a);
+static V L40190(V *a);
+static V S40192(void);
+static V S40193(void);
+static V S40196(void);
+static V S40199(void);
+static V S40202(void);
 static V W_J_dwrapper(V *a);
 static V F_J_dwkept(V a0, V a1);
 static V D_J_dwkept(V *dst, V a0, V a1);
-static V S40037(void);
+static V S40208(void);
 static V W_J_dwkept(V *a);
 static V F_J_dwrapper_dgo(V a0, V a1_, V a2, V a3);
-static V S40044(void);
-static V S40047(void);
-static V S40048(void);
-static V S40052(void);
-static V S40055(void);
+static V S40215(void);
+static V S40218(void);
+static V S40219(void);
+static V S40223(void);
+static V S40226(void);
 static V W_J_dwrapper_dgo(V *a);
 static V F_J_ddef_deff_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V a8, V a9, V a10);
-static V L40063(V *a);
-static V S40071(void);
-static V S40072(void);
-static V S40075(void);
-static V S40078(void);
-static V S40080(void);
-static V S40081(void);
-static V S40082(void);
-static V S40086(void);
-static V S40088(void);
-static V S40089(void);
-static V S40093(void);
+static V L40234(V *a);
+static V S40242(void);
+static V S40243(void);
+static V S40246(void);
+static V S40249(void);
+static V S40251(void);
+static V S40252(void);
+static V S40253(void);
+static V S40257(void);
+static V S40259(void);
+static V S40260(void);
+static V S40264(void);
 static V W_J_ddef_deff_x37u(V *a);
 static V F_J_deff_dtags_x37u(V a0, V a1, V a2, V a3, V a4);
-static V S40109(void);
+static V S40280(void);
 static V W_J_deff_dtags_x37u(V *a);
 static V F_J_deff_dtags_dio_x37u(V a0, V a1, V a2, V a3, V a4, V a5);
-static V S40112(void);
-static V S40114(void);
-static V S40116(void);
+static V S40283(void);
+static V S40285(void);
+static V S40287(void);
 static V W_J_deff_dtags_dio_x37u(V *a);
 static V F_J_deff_dtags_dty_x37u(V a0, V a1, V a2, V a3, V a4);
-static V S40122(void);
-static V S40123(void);
+static V S40293(void);
+static V S40294(void);
 static V W_J_deff_dtags_dty_x37u(V *a);
 static V F_J_deff_dtags_dof(V a0, V a1);
-static V S40131(void);
-static V S40132(void);
-static V S40134(void);
-static V S40139(void);
-static V S40140(void);
+static V S40302(void);
+static V S40303(void);
+static V S40305(void);
+static V S40310(void);
+static V S40311(void);
 static V W_J_deff_dtags_dof(V *a);
 static V F_J_deff_dtags_dnames(V a0);
-static V S40142(void);
-static V S40143(void);
-static V S40144(void);
-static V S40147(void);
-static V S40148(void);
+static V S40313(void);
+static V S40314(void);
+static V S40315(void);
+static V S40318(void);
+static V S40319(void);
 static V W_J_deff_dtags_dnames(V *a);
 static V F_J_dkind(V a0);
-static V K40154(void);
+static V K40325(void);
 static V W_J_dkind(V *a);
 static V F_J_deff_dhead(V a0);
-static V S40157(void);
+static V S40328(void);
 static V W_J_deff_dhead(V *a);
 static V F_J_deff_dargs(V a0, V a1);
 static V D_J_deff_dargs(V *dst, V a0, V a1);
-static V S40168(void);
-static V S40173(void);
-static V S40182(void);
+static V S40339(void);
+static V S40344(void);
+static V S40353(void);
 static V W_J_deff_dargs(V *a);
 static V F_J_deff_dwrap_dgo(V a0, V a1, V a2);
-static V S40184(void);
-static V S40185(void);
-static V S40187(void);
+static V S40355(void);
+static V S40356(void);
+static V S40358(void);
 static V W_J_deff_dwrap_dgo(V *a);
 static V F_J_deff_dnulls(V a0);
-static V S40193(void);
-static V S40196(void);
+static V S40364(void);
+static V S40367(void);
 static V W_J_deff_dnulls(V *a);
 static V F_J_deff_dargs_x37s3580055888x2930167514(V a0);
 static V D_J_deff_dargs_x37s3580055888x2930167514(V *dst, V a0);
-static V S40206(void);
+static V S40377(void);
 static V W_J_deff_dargs_x37s3580055888x2930167514(V *a);
 static V F_J_deffs_dgo_x37n_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V a8);
 static V U_J_deffs_dgo_x37n_x37u(V a0, V a1, V a2_, V a3, V a4, V a5, V a6, V a7, V a8, V *o);
 static V W_J_deffs_dgo_x37n_x37u(V *a);
 static V F_J_deffs_djs(V a0, V a1);
-static V S40212(void);
+static V S40383(void);
 static V W_J_deffs_djs(V *a);
 static V F_J_deffs_djs_dif(V a0, V a1, V a2, V a3);
-static V S40217(void);
+static V S40388(void);
 static V W_J_deffs_djs_dif(V *a);
 static V F_J_dhost_x37f4001462510x1467917856(V a0);
-static V S40221(void);
-static V S40225(void);
-static V S40229(void);
+static V S40392(void);
+static V S40396(void);
+static V S40400(void);
 static V W_J_dhost_x37f4001462510x1467917856(V *a);
 static V F_J_dhost(V a0);
-static V S40233(void);
-static V S40237(void);
+static V S40404(void);
+static V S40408(void);
 static V W_J_dhost(V *a);
 static V F_String_dto__lower(V a0);
 static V D_String_dto__lower(V *dst, V a0);
@@ -16691,24 +16779,24 @@ static V W_Char_dto__lower(V *a);
 static V F_J_ddef_dnative_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7);
 static V W_J_ddef_dnative_x37u(V *a);
 static V F_J_ddef_dbody_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6);
-static V S40254(void);
-static V L40257(V *a);
-static V S40261(void);
-static V S40262(void);
-static V S40265(void);
-static V S40266(void);
-static V S40268(void);
-static V K40275(void);
+static V S40425(void);
+static V L40428(V *a);
+static V S40432(void);
+static V S40433(void);
+static V S40436(void);
+static V S40437(void);
+static V S40439(void);
+static V K40446(void);
 static V W_J_ddef_dbody_x37u(V *a);
 static V F_J_dloop_dhead(V a0);
-static V S40278(void);
-static V S40279(void);
-static V S40281(void);
-static V S40283(void);
+static V S40449(void);
+static V S40450(void);
+static V S40452(void);
+static V S40454(void);
 static V W_J_dloop_dhead(V *a);
 static V F_J_dloop_dcopies(V a0);
 static V D_J_dloop_dcopies(V *dst, V a0);
-static V S40288(void);
+static V S40459(void);
 static V W_J_dloop_dcopies(V *a);
 static V F_J_dloop_dv(V a0);
 static V W_J_dloop_dv(V *a);
@@ -16716,219 +16804,219 @@ static V F_J_dloop_denv(V a0);
 static V D_J_dloop_denv(V *dst, V a0);
 static V W_J_dloop_denv(V *a);
 static V F_J_dgo(V a0, V a1);
-static V K40324(void);
-static V L40331(V *a);
-static V L40334(V *a);
-static V L40341(V *a);
-static V K40345(void);
-static V K40346(void);
-static V K40347(void);
-static V L40350(V *a);
-static V K40351(void);
-static V L40357(V *a);
-static V S40361(void);
-static V L40364(V *a);
-static V L40366(V *a);
-static V K40368(void);
-static V K40370(void);
-static V L40373(V *a);
-static V L40380(V *a);
-static V S40384(void);
-static V S40387(void);
-static V S40389(void);
-static V K40391(void);
-static V L40396(V *a);
-static V S40398(void);
-static V L40404(V *a);
-static V K40405(void);
-static V S40407(void);
-static V L40410(V *a);
-static V L40412(V *a);
-static V K40414(void);
-static V L40415(V *a);
-static V L40423(V *a);
-static V K40427(void);
-static V K40428(void);
-static V L40437(V *a);
-static V K40438(void);
-static V S40444(void);
-static V K40447(void);
-static V L40449(V *a);
-static V K40451(void);
-static V K40452(void);
-static V L40459(V *a);
-static V L40462(V *a);
-static V S40465(void);
-static V L40467(V *a);
-static V L40470(V *a);
-static V S40471(void);
-static V S40473(void);
-static V L40481(V *a);
-static V K40483(void);
-static V S40484(void);
-static V S40487(void);
-static V L40491(V *a);
-static V K40492(void);
-static V S40494(void);
-static V L40497(V *a);
-static V L40499(V *a);
-static V K40501(void);
-static V S40503(void);
-static V S40506(void);
-static V L40510(V *a);
+static V K40495(void);
+static V L40502(V *a);
+static V L40505(V *a);
 static V L40512(V *a);
-static V K40514(void);
-static V L40515(V *a);
-static V S40522(void);
-static V K40530(void);
-static V K40533(void);
-static V S40535(void);
-static V S40536(void);
+static V K40516(void);
+static V K40517(void);
+static V K40518(void);
+static V L40521(V *a);
+static V K40522(void);
+static V L40528(V *a);
+static V S40532(void);
+static V L40535(V *a);
+static V L40537(V *a);
 static V K40539(void);
+static V K40541(void);
 static V L40544(V *a);
-static V K40546(void);
-static V K40549(void);
-static V L40556(V *a);
-static V L40562(V *a);
-static V K40566(void);
-static V L40568(V *a);
-static V S40575(void);
-static V S40583(void);
-static V S40584(void);
-static V K40587(void);
-static V L40589(V *a);
-static V S40596(void);
-static V K40606(void);
-static V S40610(void);
-static V S40611(void);
-static V K40614(void);
-static V S40618(void);
-static V S40621(void);
-static V S40623(void);
-static V K40627(void);
-static V K40628(void);
+static V L40551(V *a);
+static V S40555(void);
+static V S40558(void);
+static V S40560(void);
+static V K40562(void);
+static V L40567(V *a);
+static V S40569(void);
+static V L40575(V *a);
+static V K40576(void);
+static V S40578(void);
+static V L40581(V *a);
+static V L40583(V *a);
+static V K40585(void);
+static V L40586(V *a);
+static V L40594(V *a);
+static V K40598(void);
+static V K40599(void);
+static V L40608(V *a);
+static V K40609(void);
+static V S40615(void);
+static V K40618(void);
+static V L40620(V *a);
+static V K40622(void);
+static V K40623(void);
 static V L40630(V *a);
 static V L40633(V *a);
-static V S40635(void);
-static V S40637(void);
-static V K40640(void);
-static V L40643(V *a);
-static V K40644(void);
-static V K40646(void);
+static V S40636(void);
+static V L40638(V *a);
+static V L40641(V *a);
+static V S40642(void);
+static V S40644(void);
 static V L40652(V *a);
-static V L40657(V *a);
-static V K40658(void);
-static V L40659(V *a);
-static V S40671(void);
-static V L40680(V *a);
-static V L40685(V *a);
-static V L40694(V *a);
+static V K40654(void);
+static V S40655(void);
+static V S40658(void);
+static V L40662(V *a);
+static V K40663(void);
+static V S40665(void);
+static V L40668(V *a);
+static V L40670(V *a);
+static V K40672(void);
+static V S40674(void);
+static V S40677(void);
+static V L40681(V *a);
+static V L40683(V *a);
+static V K40685(void);
+static V L40686(V *a);
+static V S40693(void);
+static V K40701(void);
+static V K40704(void);
+static V S40706(void);
+static V S40707(void);
+static V K40710(void);
+static V L40715(V *a);
+static V K40717(void);
+static V K40720(void);
+static V L40727(V *a);
+static V L40733(V *a);
+static V K40737(void);
+static V L40739(V *a);
+static V S40746(void);
+static V S40754(void);
+static V S40755(void);
+static V K40758(void);
+static V L40760(V *a);
+static V S40767(void);
+static V K40777(void);
+static V S40781(void);
+static V S40782(void);
+static V K40785(void);
+static V S40789(void);
+static V S40792(void);
+static V S40794(void);
+static V K40798(void);
+static V K40799(void);
+static V L40801(V *a);
+static V L40804(V *a);
+static V S40806(void);
+static V S40808(void);
+static V K40811(void);
+static V L40814(V *a);
+static V K40815(void);
+static V K40817(void);
+static V L40823(V *a);
+static V L40828(V *a);
+static V K40829(void);
+static V L40830(V *a);
+static V S40842(void);
+static V L40851(V *a);
+static V L40856(V *a);
+static V L40865(V *a);
 static V W_J_dgo(V *a);
 static V F_J_dret(V a0, V a1);
-static V K40698(void);
-static V K40699(void);
-static V K40701(void);
-static V K40702(void);
-static V K40704(void);
-static V K40705(void);
-static V K40707(void);
-static V K40708(void);
+static V K40869(void);
+static V K40870(void);
+static V K40872(void);
+static V K40873(void);
+static V K40875(void);
+static V K40876(void);
+static V K40878(void);
+static V K40879(void);
 static V W_J_dret(V *a);
 static V F_J_dscrs_dput_x37u(V a0, V a1, V a2, V a3);
 static V U_J_dscrs_dput_x37u(V a0, V a1, V a2, V a3, V *o);
-static V S40710(void);
-static V S40711(void);
-static V K40714(void);
+static V S40881(void);
+static V S40882(void);
+static V K40885(void);
 static V W_J_dscrs_dput_x37u(V *a);
 static V F_J_dpats(V a0, V a1, V a2, V a3);
 static V U_J_dpats(V a0, V a1, V a2, V a3, V *o);
 static V W_J_dpats(V *a);
 static V F_J_dpat_dgo(V a0, V a1);
-static V S40723(void);
-static V S40725(void);
-static V S40727(void);
-static V S40729(void);
-static V S40731(void);
-static V S40733(void);
-static V S40735(void);
-static V S40737(void);
-static V S40739(void);
-static V S40745(void);
-static V S40746(void);
-static V S40749(void);
-static V S40750(void);
-static V S40758(void);
-static V S40759(void);
-static V S40764(void);
-static V S40765(void);
-static V S40768(void);
-static V S40769(void);
-static V S40772(void);
-static V S40773(void);
-static V S40778(void);
-static V S40779(void);
-static V S40786(void);
-static V S40788(void);
-static V S40789(void);
-static V S40790(void);
-static V S40791(void);
-static V S40796(void);
-static V S40798(void);
-static V S40799(void);
-static V S40804(void);
-static V S40805(void);
-static V S40809(void);
-static V S40810(void);
-static V S40814(void);
-static V S40816(void);
-static V S40817(void);
-static V S40820(void);
-static V S40821(void);
-static V S40826(void);
-static V S40827(void);
-static V S40831(void);
-static V S40832(void);
-static V S40835(void);
-static V S40836(void);
-static V S40839(void);
-static V S40840(void);
-static V S40843(void);
-static V S40849(void);
-static V S40850(void);
-static V S40851(void);
-static V S40858(void);
-static V S40859(void);
-static V S40870(void);
-static V S40871(void);
-static V S40874(void);
-static V S40879(void);
-static V S40880(void);
-static V S40883(void);
-static V S40892(void);
-static V S40893(void);
+static V S40894(void);
+static V S40896(void);
+static V S40898(void);
 static V S40900(void);
-static V S40901(void);
-static V W_J_dpat_dgo(V *a);
-static V F_J_dflt_dof(V a0, V a1);
+static V S40902(void);
+static V S40904(void);
+static V S40906(void);
 static V S40908(void);
-static V S40911(void);
-static V S40914(void);
-static V S40915(void);
-static V W_J_dflt_dof(V *a);
-static V F_J_dflt_dbits(V a0_);
-static V S40927(void);
-static V S40928(void);
-static V W_J_dflt_dbits(V *a);
-static V F_J_dflt_dmag(V a0_, V a1_);
+static V S40910(void);
+static V S40916(void);
+static V S40917(void);
+static V S40920(void);
+static V S40921(void);
+static V S40929(void);
+static V S40930(void);
+static V S40935(void);
+static V S40936(void);
+static V S40939(void);
 static V S40940(void);
+static V S40943(void);
+static V S40944(void);
+static V S40949(void);
 static V S40950(void);
-static V W_J_dflt_dmag(V *a);
-static V F_J_dsucc_dcond(V a0, V a1_);
+static V S40957(void);
+static V S40959(void);
 static V S40960(void);
 static V S40961(void);
-static V S40964(void);
+static V S40962(void);
+static V S40967(void);
 static V S40969(void);
 static V S40970(void);
+static V S40975(void);
+static V S40976(void);
+static V S40980(void);
+static V S40981(void);
+static V S40985(void);
+static V S40987(void);
+static V S40988(void);
+static V S40991(void);
+static V S40992(void);
+static V S40997(void);
+static V S40998(void);
+static V S41002(void);
+static V S41003(void);
+static V S41006(void);
+static V S41007(void);
+static V S41010(void);
+static V S41011(void);
+static V S41014(void);
+static V S41020(void);
+static V S41021(void);
+static V S41022(void);
+static V S41029(void);
+static V S41030(void);
+static V S41041(void);
+static V S41042(void);
+static V S41045(void);
+static V S41050(void);
+static V S41051(void);
+static V S41054(void);
+static V S41063(void);
+static V S41064(void);
+static V S41071(void);
+static V S41072(void);
+static V W_J_dpat_dgo(V *a);
+static V F_J_dflt_dof(V a0, V a1);
+static V S41079(void);
+static V S41082(void);
+static V S41085(void);
+static V S41086(void);
+static V W_J_dflt_dof(V *a);
+static V F_J_dflt_dbits(V a0_);
+static V S41098(void);
+static V S41099(void);
+static V W_J_dflt_dbits(V *a);
+static V F_J_dflt_dmag(V a0_, V a1_);
+static V S41111(void);
+static V S41121(void);
+static V W_J_dflt_dmag(V *a);
+static V F_J_dsucc_dcond(V a0, V a1_);
+static V S41131(void);
+static V S41132(void);
+static V S41135(void);
+static V S41140(void);
+static V S41141(void);
 static V W_J_dsucc_dcond(V *a);
 static V F_J_dctor_x37u(V a0, V a1, V a2);
 static V W_J_dctor_x37u(V *a);
@@ -16937,23 +17025,23 @@ static V D_J_dopt(V *dst, V a0);
 static V W_J_dopt(V *a);
 static V F_J_dpaths(V a0, V a1);
 static V D_J_dpaths(V *dst, V a0, V a1);
-static V S40979(void);
-static V S40980(void);
+static V S41150(void);
+static V S41151(void);
 static V W_J_dpaths(V *a);
 static V F_J_dtail_dtemps(V a0, V a1_);
 static V H_F_J_dtail_dtemps(V a0, V a1_);
-static V S40986(void);
-static V S40989(void);
-static V K40992(void);
+static V S41157(void);
+static V S41160(void);
+static V K41163(void);
 static V W_J_dtail_dtemps(V *a);
 static V F_J_dlit(V a0);
-static V S40997(void);
+static V S41168(void);
 static V W_J_dlit(V *a);
 static V F_J_dlit__chr(V a0_);
-static V K41010(void);
-static V S41012(void);
-static V S41013(void);
-static V S41015(void);
+static V K41181(void);
+static V S41183(void);
+static V S41184(void);
+static V S41186(void);
 static V W_J_dlit__chr(V *a);
 static V F_J_dhex_dgo_x37s2491568216x8239786(V a0_, V a1);
 static V W_J_dhex_dgo_x37s2491568216x8239786(V *a);
@@ -16972,90 +17060,90 @@ static V W_J_dhex_dgo_x37s3867092194x8061040(V *a);
 static V F_J_dhex_dgo_x37s1860454509x8031249(V a0_, V a1);
 static V W_J_dhex_dgo_x37s1860454509x8031249(V *a);
 static V F_J_dhex_dgo_x37s509762208x8001458(V a0_, V a1);
-static V S41178(void);
+static V S41349(void);
 static V W_J_dhex_dgo_x37s509762208x8001458(V *a);
 static V F_J_dvar_dfound_x37u_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6);
-static V L41180(V *a);
-static V S41182(void);
-static V L41187(V *a);
-static V K41188(void);
+static V L41351(V *a);
+static V S41353(void);
+static V L41358(V *a);
+static V K41359(void);
 static V W_J_dvar_dfound_x37u_x37u(V *a);
 static V F_J_dvar_ddef_x37u(V a0, V a1_, V a2);
 static V W_J_dvar_ddef_x37u(V *a);
 static V F_J_dvar_dkind(V a0, V a1, V a2_);
-static V L41194(V *a);
-static V K41195(void);
-static V S41197(void);
-static V L41200(V *a);
-static V L41202(V *a);
-static V K41204(void);
-static V L41205(V *a);
-static V S41214(void);
-static V S41217(void);
-static V S41220(void);
+static V L41365(V *a);
+static V K41366(void);
+static V S41368(void);
+static V L41371(V *a);
+static V L41373(V *a);
+static V K41375(void);
+static V L41376(V *a);
+static V S41385(void);
+static V S41388(void);
+static V S41391(void);
 static V W_J_dvar_dkind(V *a);
 static V F_J_dapply(V a0, V a1);
-static V K41223(void);
-static V K41224(void);
+static V K41394(void);
+static V K41395(void);
 static V W_J_dapply(V *a);
 static V F_J_dctor_dkind(V a0, V a1, V a2, V a3);
-static V S41229(void);
-static V S41231(void);
-static V S41232(void);
-static V S41234(void);
-static V K41236(void);
-static V K41238(void);
-static V K41240(void);
-static V S41242(void);
-static V K41244(void);
-static V S41245(void);
-static V K41247(void);
-static V K41249(void);
-static V K41250(void);
-static V K41252(void);
-static V K41254(void);
-static V K41256(void);
-static V K41258(void);
-static V K41260(void);
-static V S41262(void);
-static V S41265(void);
-static V S41266(void);
-static V K41270(void);
+static V S41400(void);
+static V S41402(void);
+static V S41403(void);
+static V S41405(void);
+static V K41407(void);
+static V K41409(void);
+static V K41411(void);
+static V S41413(void);
+static V K41415(void);
+static V S41416(void);
+static V K41418(void);
+static V K41420(void);
+static V K41421(void);
+static V K41423(void);
+static V K41425(void);
+static V K41427(void);
+static V K41429(void);
+static V K41431(void);
+static V S41433(void);
+static V S41436(void);
+static V S41437(void);
+static V K41441(void);
 static V W_J_dctor_dkind(V *a);
 static V F_Doc_dlist_x37f502031342x2207252200(V a0, V a1);
-static V S41274(void);
-static V S41276(void);
+static V S41445(void);
+static V S41447(void);
 static V W_Doc_dlist_x37f502031342x2207252200(V *a);
 static V F_J_dobj_dfields(V a0, V a1);
 static V D_J_dobj_dfields(V *dst, V a0, V a1);
-static V S41284(void);
-static V S41286(void);
+static V S41455(void);
+static V S41457(void);
 static V W_J_dobj_dfields(V *a);
 static V F_J_dkey(V a0);
-static V S41291(void);
-static V S41295(void);
-static V S41296(void);
-static V S41299(void);
+static V S41462(void);
+static V S41466(void);
+static V S41467(void);
+static V S41470(void);
 static V W_J_dkey(V *a);
 static V F_J_dctor_darr(V a0, V a1);
-static V K41301(void);
-static V K41303(void);
-static V K41305(void);
-static V S41306(void);
-static V K41308(void);
+static V K41472(void);
+static V K41474(void);
+static V K41476(void);
+static V S41477(void);
+static V K41479(void);
 static V W_J_dctor_darr(V *a);
 static V F_Main_demit__value(V a0, V a1);
-static V S41311(void);
-static V S41313(void);
-static V S41317(void);
-static V S41319(void);
+static V S41482(void);
+static V S41484(void);
+static V S41488(void);
+static V S41490(void);
 static V W_Main_demit__value(V *a);
 static V F_Main_drun3(V a0, V a1, V a2);
-static V L41325(V *a);
-static V L41332(V *a);
-static V S41337(void);
-static V L41340(V *a);
-static V S41343(void);
+static V L41496(V *a);
+static V L41503(V *a);
+static V S41508(void);
+static V L41511(V *a);
+static V S41514(void);
 static V W_Main_drun3(V *a);
 static V F_Chk_dreport(V a0);
 static V W_Chk_dreport(V *a);
@@ -17069,7 +17157,7 @@ static V W_Chk_dreport_dwalk_done_x37u(V *a);
 static V F_Chk_dreport_duses(V a0, V a1, V a2);
 static V W_Chk_dreport_duses(V *a);
 static V F_Chk_dtld__refs(V a0);
-static V S41389(void);
+static V S41560(void);
 static V W_Chk_dtld__refs(V *a);
 static V F_Chk_dCtrD_dts(V a0);
 static V D_Chk_dCtrD_dts(V *dst, V a0);
@@ -17110,78 +17198,78 @@ static V W_Chk_dStr_dunique(V *a);
 static V F_Main_dcheck__only_dgo(V a0);
 static V W_Main_dcheck__only_dgo(V *a);
 static V F_Chk_dreport__text(V a0);
-static V S41512(void);
-static V S41515(void);
-static V S41516(void);
-static V S41518(void);
-static V S41522(void);
-static V S41523(void);
-static V S41524(void);
+static V S41683(void);
+static V S41686(void);
+static V S41687(void);
+static V S41689(void);
+static V S41693(void);
+static V S41694(void);
+static V S41695(void);
 static V W_Chk_dreport__text(V *a);
 static V F_Chk_dreport__lines(V a0);
-static V S41533(void);
-static V S41534(void);
+static V S41704(void);
+static V S41705(void);
 static V W_Chk_dreport__lines(V *a);
 static V F_Chk_dreport__text_x37s3596833507x2930167513(void);
-static V S41538(void);
+static V S41709(void);
 static V W_Chk_dreport__text_x37s3596833507x2930167513(V *a);
 static V F_Main_drun2(V a0, V a1, V a2);
-static V L41541(V *a);
-static V L41547(V *a);
-static V L41553(V *a);
-static V S41563(void);
-static V S41567(void);
+static V L41712(V *a);
+static V L41718(V *a);
+static V L41724(V *a);
+static V S41734(void);
+static V S41738(void);
 static V W_Main_drun2(V *a);
 static V F_Main_dast(V a0);
-static V S41570(void);
+static V S41741(void);
 static V W_Main_dast(V *a);
 static V F_Decls_dshow_dgo(V a0);
-static V S41576(void);
-static V S41578(void);
+static V S41747(void);
+static V S41749(void);
 static V W_Decls_dshow_dgo(V *a);
 static V F_Decl_dshow(V a0);
-static V S41583(void);
-static V S41584(void);
-static V S41586(void);
-static V S41587(void);
-static V S41594(void);
-static V S41595(void);
-static V S41597(void);
-static V S41602(void);
-static V S41603(void);
-static V S41605(void);
-static V S41610(void);
-static V S41611(void);
-static V S41616(void);
-static V S41617(void);
+static V S41754(void);
+static V S41755(void);
+static V S41757(void);
+static V S41758(void);
+static V S41765(void);
+static V S41766(void);
+static V S41768(void);
+static V S41773(void);
+static V S41774(void);
+static V S41776(void);
+static V S41781(void);
+static V S41782(void);
+static V S41787(void);
+static V S41788(void);
 static V W_Decl_dshow(V *a);
 static V F_Ctors_dshow(V a0);
-static V S41622(void);
-static V S41626(void);
+static V S41793(void);
+static V S41797(void);
 static V W_Ctors_dshow(V *a);
 static V F_Ctor_dshow_x37u(V a0, V a1);
-static V S41630(void);
-static V S41632(void);
+static V S41801(void);
+static V S41803(void);
 static V W_Ctor_dshow_x37u(V *a);
 static V F_Fields_dshow(V a0);
-static V S41637(void);
-static V S41638(void);
-static V S41639(void);
-static V S41641(void);
+static V S41808(void);
+static V S41809(void);
+static V S41810(void);
+static V S41812(void);
 static V W_Fields_dshow(V *a);
 static V F_Params_dshow(V a0);
-static V S41648(void);
-static V S41652(void);
+static V S41819(void);
+static V S41823(void);
 static V W_Params_dshow(V *a);
 static V F_Param_dshow_x37u(V a0, V a1_, V a2);
-static V S41658(void);
+static V S41829(void);
 static V W_Param_dshow_x37u(V *a);
 static V F_Toks_dshow(V a0);
-static V S41663(void);
+static V S41834(void);
 static V W_Toks_dshow(V *a);
 static V F_Tok_dshow_x37u(V a0, V a1, V a2_);
-static V S41671(void);
-static V S41672(void);
+static V S41842(void);
+static V S41843(void);
 static V W_Tok_dshow_x37u(V *a);
 static V F_IO_dprint(V a0);
 static V E_IO_dprint(V *a);
@@ -89473,7 +89561,7 @@ BEND_UINL V U_G_dhless_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o) {
 top:;
 V s36485 = (a0);
 if ((s36485) == IMM(1)) {
-o[0] = F_G_dhless_ddecls(a5, a1, F_G_dhless_dshared(a5));
+o[0] = F_G_dhless_ddecls(a5, a1, F_List_dappend(0, F_G_dhless_dshared(a5), F_G_dhless_dforeign(a5)));
 o[1] = a2;
 o[2] = a3;
 o[3] = a4;
@@ -89488,15 +89576,359 @@ return 0;
 }
 static V F_G_dhless_x37u(V a0, V a1, V a2, V a3, V a4, V a5) { V o[4]; U_G_dhless_x37u(a0, a1, a2, a3, a4, a5, o); return CN(0, 4, o); }
 static V W_G_dhless_x37u(V *a) { (void)a; return F_G_dhless_x37u(a[0], a[1], a[2], a[3], a[4], a[5]); }
+static V F_G_dhless_dforeign(V a0) {
+top:;
+V v36490 = F_G_dhless_deffs(a0);
+return F_G_dhless_dreach_x37s4117685691x247372143(F_Gen_ddedup(F_List_dappend(0, v36490, F_G_dhless_dlaws(v36490, a0)), IMM(0)), a0);
+}
+static V W_G_dhless_dforeign(V *a) { (void)a; return F_G_dhless_dforeign(a[0]); }
+static V F_G_dhless_dlaws(V a0, V a1) {
+top:;
+V s36496 = a1;
+if ((s36496) == IMM(0)) {
+return IMM(0);
+} else if (IS_N(s36496, 1) && IS_N(FLD(s36496, 0), 2)) {
+V s36497 = F_List_dcontains_x37s539261848x2963157848(a0, FLD(FLD(s36496, 0), 0));
+if ((s36497) == IMM(0)) {
+{ V t0 = a0; V t1 = FLD(s36496, 1); a0 = t0; a1 = t1; goto top; }
+} else if ((s36497) == IMM(1)) {
+return F_List_dappend(0, F_G_dhless_dpexprs(FLD(FLD(s36496, 0), 1)), F_List_dappend(0, F_G_dhless_dtnames_x37s2491568216x8239786(C2(1, FLD(FLD(s36496, 0), 2), IMM(0))), F_G_dhless_dlaws(a0, FLD(s36496, 1))));
+} else { bend_fail("runtime fail-stop"); }
+} else if (IS_N(s36496, 1)) {
+{ V t0 = a0; V t1 = FLD(s36496, 1); a0 = t0; a1 = t1; goto top; }
+} else { bend_fail("runtime fail-stop"); }
+}
+static V W_G_dhless_dlaws(V *a) { (void)a; return F_G_dhless_dlaws(a[0], a[1]); }
+BEND_UINL V F_G_dhless_dtnames_x37s2491568216x8239786(V a0) {
+top:;
+return F_List_dappend_x37f845870545x3232893703(0, F_G_dhless_dtnames_x37s1291691603x8209995(F_G_dhless_dsubs(a0)), a0);
+}
+static V W_G_dhless_dtnames_x37s2491568216x8239786(V *a) { (void)a; return F_G_dhless_dtnames_x37s2491568216x8239786(a[0]); }
+static __attribute__((noinline)) V H_F_G_dhless_dsubs(V a0) {
+top:;
+V s36507 = a0;
+if ((s36507) == IMM(0)) {
+return IMM(0);
+} else if (IS_N(s36507, 1)) {
+return F_List_dappend(0, ({ V r36508;
+V s36509 = FLD(s36507, 0);
+if (IS_N(s36509, 14)) {
+r36508 = FLD(s36509, 1);
+} else if (IS_N(s36509, 5)) {
+r36508 = FLD(s36509, 1);
+} else {
+r36508 = IMM(0);
+}
+r36508; }), F_G_dhless_dsubs(FLD(s36507, 1)));
+} else { bend_fail("runtime fail-stop"); }
+}
+BEND_UINL V F_G_dhless_dsubs(V a0) {
+if ((a0) == IMM(0)) {
+return IMM(0);
+}
+return H_F_G_dhless_dsubs(a0);
+}
+static V W_G_dhless_dsubs(V *a) { (void)a; return F_G_dhless_dsubs(a[0]); }
+BEND_UINL V F_G_dhless_dtnames_x37s1291691603x8209995(V a0) {
+top:;
+return F_List_dappend_x37f845870545x3232893703(0, F_G_dhless_dtnames_x37s32637286x8180204(F_G_dhless_dsubs(a0)), a0);
+}
+static V W_G_dhless_dtnames_x37s1291691603x8209995(V *a) { (void)a; return F_G_dhless_dtnames_x37s1291691603x8209995(a[0]); }
+BEND_UINL V F_G_dhless_dtnames_x37s32637286x8180204(V a0) {
+top:;
+return F_List_dappend_x37f845870545x3232893703(0, F_G_dhless_dtnames_x37s3239606481x8150413(F_G_dhless_dsubs(a0)), a0);
+}
+static V W_G_dhless_dtnames_x37s32637286x8180204(V *a) { (void)a; return F_G_dhless_dtnames_x37s32637286x8180204(a[0]); }
+BEND_UINL V F_G_dhless_dtnames_x37s3239606481x8150413(V a0) {
+top:;
+return F_List_dappend_x37f845870545x3232893703(0, F_G_dhless_dtnames_x37s2405009636x8120622(F_G_dhless_dsubs(a0)), a0);
+}
+static V W_G_dhless_dtnames_x37s3239606481x8150413(V *a) { (void)a; return F_G_dhless_dtnames_x37s3239606481x8150413(a[0]); }
+BEND_UINL V F_G_dhless_dtnames_x37s2405009636x8120622(V a0) {
+top:;
+return F_List_dappend_x37f845870545x3232893703(0, F_G_dhless_dtnames_x37s1586577935x8090831(F_G_dhless_dsubs(a0)), a0);
+}
+static V W_G_dhless_dtnames_x37s2405009636x8120622(V *a) { (void)a; return F_G_dhless_dtnames_x37s2405009636x8120622(a[0]); }
+BEND_UINL V F_G_dhless_dtnames_x37s1586577935x8090831(V a0) {
+top:;
+return F_List_dappend_x37f845870545x3232893703(0, F_G_dhless_dtnames_x37s3867092194x8061040(F_G_dhless_dsubs(a0)), a0);
+}
+static V W_G_dhless_dtnames_x37s1586577935x8090831(V *a) { (void)a; return F_G_dhless_dtnames_x37s1586577935x8090831(a[0]); }
+BEND_UINL V F_G_dhless_dtnames_x37s3867092194x8061040(V a0) {
+top:;
+return F_List_dappend_x37f845870545x3232893703(0, F_G_dhless_dtnames_x37s1860454509x8031249(F_G_dhless_dsubs(a0)), a0);
+}
+static V W_G_dhless_dtnames_x37s3867092194x8061040(V *a) { (void)a; return F_G_dhless_dtnames_x37s3867092194x8061040(a[0]); }
+BEND_UINL V F_G_dhless_dtnames_x37s1860454509x8031249(V a0) {
+top:;
+return F_List_dappend_x37f845870545x3232893703(0, F_G_dhless_dtnames_x37s509762208x8001458(F_G_dhless_dsubs(a0)), a0);
+}
+static V W_G_dhless_dtnames_x37s1860454509x8031249(V *a) { (void)a; return F_G_dhless_dtnames_x37s1860454509x8031249(a[0]); }
+BEND_UINL V F_G_dhless_dtnames_x37s509762208x8001458(V a0) {
+top:;
+return IMM(0);
+}
+static V W_G_dhless_dtnames_x37s509762208x8001458(V *a) { (void)a; return F_G_dhless_dtnames_x37s509762208x8001458(a[0]); }
+static V F_List_dappend_x37f845870545x3232893703(V a0, V a2, V a3) {
+top:;
+V s36533 = a3;
+if ((s36533) == IMM(0)) {
+return a2;
+} else if (IS_N(s36533, 1)) {
+return C2(1, F_Ty_dhead(FLD(s36533, 0)), F_List_dappend(a0, F_G_dhless_dheads(FLD(s36533, 1)), a2));
+} else { bend_fail("runtime fail-stop"); }
+}
+static V W_List_dappend_x37f845870545x3232893703(V *a) { (void)a; return F_List_dappend_x37f845870545x3232893703(a[0], a[2], a[3]); }
+static V D_G_dhless_dheads(V *dst, V a0) {
+top:;
+V s36537 = a0;
+if ((s36537) == IMM(0)) {
+*dst = IMM(0);
+return 0;
+} else if (IS_N(s36537, 1)) {
+{ V dc = CH2(1, F_Ty_dhead(FLD(s36537, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s36537, 1); a0 = t0; goto top; }
+}
+} else { bend_fail("runtime fail-stop"); }
+}
+static V F_G_dhless_dheads(V a0) { V r; D_G_dhless_dheads(&r, a0); return r; }
+static V W_G_dhless_dheads(V *a) { (void)a; return F_G_dhless_dheads(a[0]); }
+static V S36541(void) { static V c; return STRC(c, ""); }
+static __attribute__((noinline)) V H_F_G_dhless_dpexprs(V a0) {
+top:;
+V s36539 = a0;
+if ((s36539) == IMM(0)) {
+return IMM(0);
+} else if (IS_N(s36539, 1)) {
+return F_List_dappend_x37f2065690091x3962538397(0, F_G_dhless_dpexprs(FLD(s36539, 1)), FLD(FLD(s36539, 0), 2), S36541());
+} else { bend_fail("runtime fail-stop"); }
+}
+BEND_UINL V F_G_dhless_dpexprs(V a0) {
+if ((a0) == IMM(0)) {
+return IMM(0);
+}
+return H_F_G_dhless_dpexprs(a0);
+}
+static V W_G_dhless_dpexprs(V *a) { (void)a; return F_G_dhless_dpexprs(a[0]); }
+static V S36551(void) { static V c; return STRC(c, ""); }
+static V F_List_dappend_x37f2065690091x3962538397(V a0, V a2, V a3, V a4) {
+top:;
+V s36543 = a3;
+if ((s36543) == IMM(0)) {
+return C2(1, a4, F_List_dappend(a0, IMM(0), a2));
+} else if (IS_N(s36543, 1)) {
+V s36545 = ({ V r36546;
+V s36547 = F_Main_dids_dword(FLD(s36543, 0));
+if ((s36547) == IMM(0)) {
+r36546 = F_U32_dis__eq(FLD(s36543, 0), 46u);
+} else if ((s36547) == IMM(1)) {
+r36546 = IMM(1);
+} else { bend_fail("runtime fail-stop"); }
+r36546; });
+if ((s36545) == IMM(1)) {
+{ V t0 = a0; V t1 = a2; V t2 = FLD(s36543, 1); V t3 = F_String_dappend(a4, C2(1, FLD(s36543, 0), IMM(0))); a0 = t0; a2 = t1; a3 = t2; a4 = t3; goto top; }
+} else if ((s36545) == IMM(0)) {
+return C2(1, a4, F_List_dappend(a0, F_G_dhless_dwords(FLD(s36543, 1), S36551()), a2));
+} else { bend_fail("runtime fail-stop"); }
+} else { bend_fail("runtime fail-stop"); }
+}
+static V W_List_dappend_x37f2065690091x3962538397(V *a) { (void)a; return F_List_dappend_x37f2065690091x3962538397(a[0], a[2], a[3], a[4]); }
+static V S36561(void) { static V c; return STRC(c, ""); }
+static V D_G_dhless_dwords(V *dst, V a0, V a1) {
+top:;
+V s36554 = a0;
+if ((s36554) == IMM(0)) {
+*dst = C2(1, a1, IMM(0));
+return 0;
+} else if (IS_N(s36554, 1)) {
+V s36555 = ({ V r36556;
+V s36557 = F_Main_dids_dword(FLD(s36554, 0));
+if ((s36557) == IMM(0)) {
+r36556 = F_U32_dis__eq(FLD(s36554, 0), 46u);
+} else if ((s36557) == IMM(1)) {
+r36556 = IMM(1);
+} else { bend_fail("runtime fail-stop"); }
+r36556; });
+if ((s36555) == IMM(1)) {
+{ V t0 = FLD(s36554, 1); V t1 = F_String_dappend(a1, C2(1, FLD(s36554, 0), IMM(0))); a0 = t0; a1 = t1; goto top; }
+} else if ((s36555) == IMM(0)) {
+{ V dc = CH2(1, a1, BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s36554, 1); V t1 = S36561(); a0 = t0; a1 = t1; goto top; }
+}
+} else { bend_fail("runtime fail-stop"); }
+} else { bend_fail("runtime fail-stop"); }
+}
+static V F_G_dhless_dwords(V a0, V a1) { V r; D_G_dhless_dwords(&r, a0, a1); return r; }
+static V W_G_dhless_dwords(V *a) { (void)a; return F_G_dhless_dwords(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s4117685691x247372143(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s399152620x247342352(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s4117685691x247372143(V *a) { (void)a; return F_G_dhless_dreach_x37s4117685691x247372143(a[0], a[1]); }
+static V F_G_dhless_dfields(V a0, V a1) {
+top:;
+V s36567 = a1;
+if ((s36567) == IMM(0)) {
+return IMM(0);
+} else if (IS_N(s36567, 1) && IS_N(FLD(s36567, 0), 3)) {
+V s36568 = F_List_dcontains_x37s539261848x2963157848(a0, FLD(FLD(s36567, 0), 0));
+if ((s36568) == IMM(0)) {
+{ V t0 = a0; V t1 = FLD(s36567, 1); a0 = t0; a1 = t1; goto top; }
+} else if ((s36568) == IMM(1)) {
+return F_List_dappend(0, F_G_dhless_dctys(FLD(FLD(s36567, 0), 2)), F_G_dhless_dfields(a0, FLD(s36567, 1)));
+} else { bend_fail("runtime fail-stop"); }
+} else if (IS_N(s36567, 1)) {
+{ V t0 = a0; V t1 = FLD(s36567, 1); a0 = t0; a1 = t1; goto top; }
+} else { bend_fail("runtime fail-stop"); }
+}
+static V W_G_dhless_dfields(V *a) { (void)a; return F_G_dhless_dfields(a[0], a[1]); }
+static __attribute__((noinline)) V H_F_G_dhless_dctys(V a0) {
+top:;
+V s36573 = a0;
+if ((s36573) == IMM(0)) {
+return IMM(0);
+} else if (IS_N(s36573, 1)) {
+return F_List_dappend_x37f137127934x3248196978(0, F_G_dhless_dctys(FLD(s36573, 1)), FLD(FLD(s36573, 0), 1));
+} else { bend_fail("runtime fail-stop"); }
+}
+BEND_UINL V F_G_dhless_dctys(V a0) {
+if ((a0) == IMM(0)) {
+return IMM(0);
+}
+return H_F_G_dhless_dctys(a0);
+}
+static V W_G_dhless_dctys(V *a) { (void)a; return F_G_dhless_dctys(a[0]); }
+static V F_List_dappend_x37f137127934x3248196978(V a0, V a2, V a3) {
+top:;
+V s36576 = a3;
+if ((s36576) == IMM(0)) {
+return a2;
+} else if (IS_N(s36576, 1)) {
+return C2(1, FLD(FLD(s36576, 0), 1), F_List_dappend(a0, F_G_dhless_dftys(FLD(s36576, 1)), a2));
+} else { bend_fail("runtime fail-stop"); }
+}
+static V W_List_dappend_x37f137127934x3248196978(V *a) { (void)a; return F_List_dappend_x37f137127934x3248196978(a[0], a[2], a[3]); }
+static V D_G_dhless_dftys(V *dst, V a0) {
+top:;
+V s36579 = a0;
+if ((s36579) == IMM(0)) {
+*dst = IMM(0);
+return 0;
+} else if (IS_N(s36579, 1)) {
+{ V dc = CH2(1, FLD(FLD(s36579, 0), 1), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s36579, 1); a0 = t0; goto top; }
+}
+} else { bend_fail("runtime fail-stop"); }
+}
+static V F_G_dhless_dftys(V a0) { V r; D_G_dhless_dftys(&r, a0); return r; }
+static V W_G_dhless_dftys(V *a) { (void)a; return F_G_dhless_dftys(a[0]); }
+static V F_G_dhless_dreach_x37s399152620x247342352(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s3795296409x247312561(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s399152620x247342352(V *a) { (void)a; return F_G_dhless_dreach_x37s399152620x247342352(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s3795296409x247312561(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s675041226x247282770(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s3795296409x247312561(V *a) { (void)a; return F_G_dhless_dreach_x37s3795296409x247312561(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s675041226x247282770(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s2689494263x247252979(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s675041226x247282770(V *a) { (void)a; return F_G_dhless_dreach_x37s675041226x247282770(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s2689494263x247252979(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s4233607528x247223188(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s2689494263x247252979(V *a) { (void)a; return F_G_dhless_dreach_x37s2689494263x247252979(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s4233607528x247223188(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s1953093269x247193397(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s4233607528x247223188(V *a) { (void)a; return F_G_dhless_dreach_x37s4233607528x247223188(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s1953093269x247193397(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s3305376709x8269577(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s1953093269x247193397(V *a) { (void)a; return F_G_dhless_dreach_x37s1953093269x247193397(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s3305376709x8269577(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s2491568216x8239786(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s3305376709x8269577(V *a) { (void)a; return F_G_dhless_dreach_x37s3305376709x8269577(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s2491568216x8239786(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s1291691603x8209995(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s2491568216x8239786(V *a) { (void)a; return F_G_dhless_dreach_x37s2491568216x8239786(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s1291691603x8209995(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s32637286x8180204(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s1291691603x8209995(V *a) { (void)a; return F_G_dhless_dreach_x37s1291691603x8209995(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s32637286x8180204(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s3239606481x8150413(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s32637286x8180204(V *a) { (void)a; return F_G_dhless_dreach_x37s32637286x8180204(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s3239606481x8150413(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s2405009636x8120622(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s3239606481x8150413(V *a) { (void)a; return F_G_dhless_dreach_x37s3239606481x8150413(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s2405009636x8120622(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s1586577935x8090831(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s2405009636x8120622(V *a) { (void)a; return F_G_dhless_dreach_x37s2405009636x8120622(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s1586577935x8090831(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s3867092194x8061040(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s1586577935x8090831(V *a) { (void)a; return F_G_dhless_dreach_x37s1586577935x8090831(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s3867092194x8061040(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s1860454509x8031249(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s3867092194x8061040(V *a) { (void)a; return F_G_dhless_dreach_x37s3867092194x8061040(a[0], a[1]); }
+static V F_G_dhless_dreach_x37s1860454509x8031249(V a0, V a1) {
+top:;
+return F_G_dhless_dreach_x37s509762208x8001458(F_Gen_ddedup(F_List_dappend(0, a0, F_G_dhless_dtnames_x37s2491568216x8239786(F_G_dhless_dfields(a0, a1))), IMM(0)), a1);
+}
+static V W_G_dhless_dreach_x37s1860454509x8031249(V *a) { (void)a; return F_G_dhless_dreach_x37s1860454509x8031249(a[0], a[1]); }
+BEND_UINL V F_G_dhless_dreach_x37s509762208x8001458(V a0, V a1) {
+top:;
+return a0;
+}
+static V W_G_dhless_dreach_x37s509762208x8001458(V *a) { (void)a; return F_G_dhless_dreach_x37s509762208x8001458(a[0], a[1]); }
+static __attribute__((noinline)) V H_F_G_dhless_deffs(V a0) {
+top:;
+V s36655 = a0;
+if ((s36655) == IMM(0)) {
+return IMM(0);
+} else if (IS_N(s36655, 1) && IS_N(FLD(s36655, 0), 1)) {
+return F_List_dappend(0, C2(1, FLD(FLD(s36655, 0), 0), F_G_dhless_dpexprs(FLD(FLD(s36655, 0), 1))), F_G_dhless_deffs(FLD(s36655, 1)));
+} else if (IS_N(s36655, 1)) {
+{ V t0 = FLD(s36655, 1); a0 = t0; goto top; }
+} else { bend_fail("runtime fail-stop"); }
+}
+BEND_UINL V F_G_dhless_deffs(V a0) {
+if ((a0) == IMM(0)) {
+return IMM(0);
+}
+return H_F_G_dhless_deffs(a0);
+}
+static V W_G_dhless_deffs(V *a) { (void)a; return F_G_dhless_deffs(a[0]); }
 static __attribute__((noinline)) V H_F_G_dhless_dshared(V a0) {
 top:;
-V s36488 = a0;
-if ((s36488) == IMM(0)) {
+V s36659 = a0;
+if ((s36659) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s36488, 1) && IS_N(FLD(s36488, 0), 0)) {
-return F_List_dappend_x37f2445352910x778545120(0, F_G_dhless_dshared(FLD(s36488, 1)), FLD(FLD(s36488, 0), 1));
-} else if (IS_N(s36488, 1)) {
-{ V t0 = FLD(s36488, 1); a0 = t0; goto top; }
+} else if (IS_N(s36659, 1) && IS_N(FLD(s36659, 0), 0)) {
+return F_List_dappend_x37f2445352910x778545120(0, F_G_dhless_dshared(FLD(s36659, 1)), FLD(FLD(s36659, 0), 1));
+} else if (IS_N(s36659, 1)) {
+{ V t0 = FLD(s36659, 1); a0 = t0; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 BEND_UINL V F_G_dhless_dshared(V a0) {
@@ -89508,32 +89940,32 @@ return H_F_G_dhless_dshared(a0);
 static V W_G_dhless_dshared(V *a) { (void)a; return F_G_dhless_dshared(a[0]); }
 static V F_List_dappend_x37f2445352910x778545120(V a0, V a2, V a3) {
 top:;
-V s36491 = a3;
-if ((s36491) == IMM(0)) {
+V s36662 = a3;
+if ((s36662) == IMM(0)) {
 return a2;
-} else if (IS_N(s36491, 1)) {
-V s36492 = F_U32_dis__eq(FLD(FLD(s36491, 0), 1), 2u);
-if ((s36492) == IMM(0)) {
-{ V t0 = a0; V t1 = a2; V t2 = FLD(s36491, 1); a0 = t0; a2 = t1; a3 = t2; goto top; }
-} else if ((s36492) == IMM(1)) {
-return C2(1, FLD(FLD(s36491, 0), 2), F_List_dappend(a0, F_G_dhless_dshared_dps(FLD(s36491, 1)), a2));
+} else if (IS_N(s36662, 1)) {
+V s36663 = F_U32_dis__eq(FLD(FLD(s36662, 0), 1), 2u);
+if ((s36663) == IMM(0)) {
+{ V t0 = a0; V t1 = a2; V t2 = FLD(s36662, 1); a0 = t0; a2 = t1; a3 = t2; goto top; }
+} else if ((s36663) == IMM(1)) {
+return C2(1, FLD(FLD(s36662, 0), 2), F_List_dappend(a0, F_G_dhless_dshared_dps(FLD(s36662, 1)), a2));
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_List_dappend_x37f2445352910x778545120(V *a) { (void)a; return F_List_dappend_x37f2445352910x778545120(a[0], a[2], a[3]); }
 static V D_G_dhless_dshared_dps(V *dst, V a0) {
 top:;
-V s36496 = a0;
-if ((s36496) == IMM(0)) {
+V s36667 = a0;
+if ((s36667) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s36496, 1)) {
-V s36497 = F_U32_dis__eq(FLD(FLD(s36496, 0), 1), 2u);
-if ((s36497) == IMM(0)) {
-{ V t0 = FLD(s36496, 1); a0 = t0; goto top; }
-} else if ((s36497) == IMM(1)) {
-{ V dc = CH2(1, FLD(FLD(s36496, 0), 2), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s36496, 1); a0 = t0; goto top; }
+} else if (IS_N(s36667, 1)) {
+V s36668 = F_U32_dis__eq(FLD(FLD(s36667, 0), 1), 2u);
+if ((s36668) == IMM(0)) {
+{ V t0 = FLD(s36667, 1); a0 = t0; goto top; }
+} else if ((s36668) == IMM(1)) {
+{ V dc = CH2(1, FLD(FLD(s36667, 0), 2), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s36667, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -89542,69 +89974,69 @@ static V F_G_dhless_dshared_dps(V a0) { V r; D_G_dhless_dshared_dps(&r, a0); ret
 static V W_G_dhless_dshared_dps(V *a) { (void)a; return F_G_dhless_dshared_dps(a[0]); }
 static V F_G_dhless_ddecls(V a0, V a1, V a2) {
 top:;
-V s36499 = a0;
-if ((s36499) == IMM(0)) {
+V s36670 = a0;
+if ((s36670) == IMM(0)) {
 return a1;
-} else if (IS_N(s36499, 1) && IS_N(FLD(s36499, 0), 3)) {
-{ V t0 = FLD(s36499, 1); V t1 = F_G_dhless_dtype(FLD(FLD(s36499, 0), 0), FLD(FLD(s36499, 0), 1), FLD(FLD(s36499, 0), 2), a1, a2); V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if (IS_N(s36499, 1)) {
-{ V t0 = FLD(s36499, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s36670, 1) && IS_N(FLD(s36670, 0), 3)) {
+{ V t0 = FLD(s36670, 1); V t1 = F_G_dhless_dtype(FLD(FLD(s36670, 0), 0), FLD(FLD(s36670, 0), 1), FLD(FLD(s36670, 0), 2), a1, a2); V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s36670, 1)) {
+{ V t0 = FLD(s36670, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_G_dhless_ddecls(V *a) { (void)a; return F_G_dhless_ddecls(a[0], a[1], a[2]); }
-static V K36511(void) { static V c; return KONST(c, C2(1, MKS("String"), C2(1, MKS("Image"), C2(1, MKS("Event"), C2(1, MKS("IO.OP"), C2(1, MKS("App"), C2(1, MKS("Word"), C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Char"), C2(1, MKS("Nat"), C2(1, MKS("Array"), C2(1, MKS("Bool"), C2(1, MKS("Unit"), C2(1, MKS("Cmp"), C2(1, MKS("Empty"), IMM(0))))))))))))))))); }
+static V K36682(void) { static V c; return KONST(c, C2(1, MKS("String"), C2(1, MKS("Image"), C2(1, MKS("Event"), C2(1, MKS("IO.OP"), C2(1, MKS("App"), C2(1, MKS("Word"), C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Char"), C2(1, MKS("Nat"), C2(1, MKS("Array"), C2(1, MKS("Bool"), C2(1, MKS("Unit"), C2(1, MKS("Cmp"), C2(1, MKS("Empty"), IMM(0))))))))))))))))); }
 static V F_G_dhless_dtype(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s36501 = ({ V r36502;
-V s36503 = ({ V r36504;
-V s36505 = F_Nat_dis__eq(F_List_dlength(0, a1), 0u);
-if ((s36505) == IMM(0)) {
-r36504 = IMM(0);
-} else if ((s36505) == IMM(1)) {
-V s36508 = F_List_dcontains_x37s539261848x2963157848(a4, a0);
-if ((s36508) == IMM(0)) {
-r36504 = IMM(1);
-} else if ((s36508) == IMM(1)) {
-r36504 = IMM(0);
+V s36672 = ({ V r36673;
+V s36674 = ({ V r36675;
+V s36676 = F_Nat_dis__eq(F_List_dlength(0, a1), 0u);
+if ((s36676) == IMM(0)) {
+r36675 = IMM(0);
+} else if ((s36676) == IMM(1)) {
+V s36679 = F_List_dcontains_x37s539261848x2963157848(a4, a0);
+if ((s36679) == IMM(0)) {
+r36675 = IMM(1);
+} else if ((s36679) == IMM(1)) {
+r36675 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r36504; });
-if ((s36503) == IMM(0)) {
-r36502 = IMM(0);
-} else if ((s36503) == IMM(1)) {
-V s36510 = F_List_dcontains_x37s539261848x2963157848(K36511(), a0);
-if ((s36510) == IMM(0)) {
-V s36513 = F_Nat_dis__ge(F_List_dlength(0, a2), 2u);
-if ((s36513) == IMM(0)) {
-r36502 = IMM(0);
-} else if ((s36513) == IMM(1)) {
-r36502 = F_Nat_dis__eq(F_G_dhless_dcnt(a2, a3, 0u), 1u);
+r36675; });
+if ((s36674) == IMM(0)) {
+r36673 = IMM(0);
+} else if ((s36674) == IMM(1)) {
+V s36681 = F_List_dcontains_x37s539261848x2963157848(K36682(), a0);
+if ((s36681) == IMM(0)) {
+V s36684 = F_Nat_dis__ge(F_List_dlength(0, a2), 2u);
+if ((s36684) == IMM(0)) {
+r36673 = IMM(0);
+} else if ((s36684) == IMM(1)) {
+r36673 = F_Nat_dis__eq(F_G_dhless_dcnt(a2, a3, 0u), 1u);
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s36510) == IMM(1)) {
-r36502 = IMM(0);
+} else if ((s36681) == IMM(1)) {
+r36673 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r36502; });
-if ((s36501) == IMM(0)) {
+r36673; });
+if ((s36672) == IMM(0)) {
 return a3;
-} else if ((s36501) == IMM(1)) {
+} else if ((s36672) == IMM(1)) {
 return F_G_dhless_dctors(a2, a3);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_G_dhless_dtype(V *a) { (void)a; return F_G_dhless_dtype(a[0], a[1], a[2], a[3], a[4]); }
-static V K36522(void) { static V c; return KONST(c, C4(0, 0u, 0u, 4u, IMM(0))); }
+static V K36693(void) { static V c; return KONST(c, C4(0, 0u, 0u, 4u, IMM(0))); }
 static V F_G_dhless_dctors(V a0, V a1) {
 top:;
-V s36519 = a0;
-if ((s36519) == IMM(0)) {
+V s36690 = a0;
+if ((s36690) == IMM(0)) {
 return a1;
-} else if (IS_N(s36519, 1)) {
-{ V t0 = FLD(s36519, 1); V t1 = ({ V r36520;
-V v36521 = F_Map_dget(K36522(), a1, FLD(FLD(s36519, 0), 0));
-V v36524 = FLD(v36521, 1);
-V v36525 = F_G_dhless_dset_x37u(FLD(v36524, 0), FLD(v36524, 1), FLD(v36524, 2), FLD(v36524, 3));
-r36520 = F_Map_dset(0, a1, FLD(FLD(s36519, 0), 0), v36525);
-r36520; }); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36690, 1)) {
+{ V t0 = FLD(s36690, 1); V t1 = ({ V r36691;
+V v36692 = F_Map_dget(K36693(), a1, FLD(FLD(s36690, 0), 0));
+V v36695 = FLD(v36692, 1);
+V v36696 = F_G_dhless_dset_x37u(FLD(v36695, 0), FLD(v36695, 1), FLD(v36695, 2), FLD(v36695, 3));
+r36691 = F_Map_dset(0, a1, FLD(FLD(s36690, 0), 0), v36696);
+r36691; }); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_G_dhless_dctors(V *a) { (void)a; return F_G_dhless_dctors(a[0], a[1]); }
@@ -89615,32 +90047,32 @@ uint32_t a2 = (uint32_t)a2_;
 top:;
 o[0] = (a0);
 o[1] = (a1);
-o[2] = ({ V r36528;
-V (v36529) = F_U32_dis__zero((a2));
-V s36531 = (v36529);
-if ((s36531) == IMM(0)) {
-r36528 = (a2);
-} else if ((s36531) == IMM(1)) {
-r36528 = 8u;
+o[2] = ({ V r36699;
+V (v36700) = F_U32_dis__zero((a2));
+V s36702 = (v36700);
+if ((s36702) == IMM(0)) {
+r36699 = (a2);
+} else if ((s36702) == IMM(1)) {
+r36699 = 8u;
 } else { bend_fail("runtime fail-stop"); }
-r36528; });
+r36699; });
 o[3] = (a3);
 return 0;
 }
 static V F_G_dhless_dset_x37u(V a0, V a1, V a2, V a3) { V o[4]; U_G_dhless_dset_x37u(a0, a1, a2, a3, o); return CN(0, 4, o); }
 static V W_G_dhless_dset_x37u(V *a) { (void)a; return F_G_dhless_dset_x37u(a[0], a[1], a[2], a[3]); }
-static V K36535(void) { static V c; return KONST(c, C4(0, 0u, 0u, 4u, IMM(0))); }
+static V K36706(void) { static V c; return KONST(c, C4(0, 0u, 0u, 4u, IMM(0))); }
 static V F_G_dhless_dcnt(V a0, V a1, V a2) {
 top:;
-V s36532 = a0;
-if ((s36532) == IMM(0)) {
+V s36703 = a0;
+if ((s36703) == IMM(0)) {
 return (a2);
-} else if (IS_N(s36532, 1)) {
-{ V t0 = FLD(s36532, 1); V t1 = a1; V t2 = F_Nat_dadd((a2), ({ V r36533;
-V v36534 = F_Map_dget(K36535(), a1, FLD(FLD(s36532, 0), 0));
-V v36537 = FLD(v36534, 1);
-r36533 = F_G_dhless_dw_x37u(FLD(v36537, 0), FLD(v36537, 1), FLD(v36537, 2), FLD(v36537, 3));
-r36533; })); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s36703, 1)) {
+{ V t0 = FLD(s36703, 1); V t1 = a1; V t2 = F_Nat_dadd((a2), ({ V r36704;
+V v36705 = F_Map_dget(K36706(), a1, FLD(FLD(s36703, 0), 0));
+V v36708 = FLD(v36705, 1);
+r36704 = F_G_dhless_dw_x37u(FLD(v36708, 0), FLD(v36708, 1), FLD(v36708, 2), FLD(v36708, 3));
+r36704; })); a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_G_dhless_dcnt(V *a) { (void)a; return F_G_dhless_dcnt(a[0], a[1], a[2]); }
@@ -89649,57 +90081,57 @@ uint32_t a0 = (uint32_t)a0_;
 uint32_t a1 = (uint32_t)a1_;
 uint32_t a2 = (uint32_t)a2_;
 top:;
-V v36540 = ({ V r36541;
-V s36542 = F_U32_dis__ge((a1), 1u);
-if ((s36542) == IMM(0)) {
-r36541 = IMM(0);
-} else if ((s36542) == IMM(1)) {
-r36541 = F_U32_dis__le((a1), 15u);
+V v36711 = ({ V r36712;
+V s36713 = F_U32_dis__ge((a1), 1u);
+if ((s36713) == IMM(0)) {
+r36712 = IMM(0);
+} else if ((s36713) == IMM(1)) {
+r36712 = F_U32_dis__le((a1), 15u);
 } else { bend_fail("runtime fail-stop"); }
-r36541; });
-V v36545 = ({ V r36546;
-V s36547 = v36540;
-if ((s36547) == IMM(0)) {
-r36546 = 99u;
-} else if ((s36547) == IMM(1)) {
-r36546 = 1u;
+r36712; });
+V v36716 = ({ V r36717;
+V s36718 = v36711;
+if ((s36718) == IMM(0)) {
+r36717 = 99u;
+} else if ((s36718) == IMM(1)) {
+r36717 = 1u;
 } else { bend_fail("runtime fail-stop"); }
-r36546; });
-V v36548 = ({ V r36549;
-V s36550 = F_U32_dis__eq((a2), 1u);
-if ((s36550) == IMM(0)) {
-r36549 = F_U32_dis__eq((a2), 7u);
-} else if ((s36550) == IMM(1)) {
-r36549 = IMM(1);
+r36717; });
+V v36719 = ({ V r36720;
+V s36721 = F_U32_dis__eq((a2), 1u);
+if ((s36721) == IMM(0)) {
+r36720 = F_U32_dis__eq((a2), 7u);
+} else if ((s36721) == IMM(1)) {
+r36720 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r36549; });
-V v36553 = ({ V r36554;
-V s36555 = v36548;
-if ((s36555) == IMM(0)) {
-r36554 = 99u;
-} else if ((s36555) == IMM(1)) {
-r36554 = 0u;
+r36720; });
+V v36724 = ({ V r36725;
+V s36726 = v36719;
+if ((s36726) == IMM(0)) {
+r36725 = 99u;
+} else if ((s36726) == IMM(1)) {
+r36725 = 0u;
 } else { bend_fail("runtime fail-stop"); }
-r36554; });
-V (v36556) = F_U32_dis__zero((a2));
-V s36558 = (v36556);
-if ((s36558) == IMM(0)) {
-return v36553;
-} else if ((s36558) == IMM(1)) {
-return v36545;
+r36725; });
+V (v36727) = F_U32_dis__zero((a2));
+V s36729 = (v36727);
+if ((s36729) == IMM(0)) {
+return v36724;
+} else if ((s36729) == IMM(1)) {
+return v36716;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_G_dhless_dw_x37u(V *a) { (void)a; return F_G_dhless_dw_x37u(a[0], a[1], a[2], a[3]); }
 BEND_UINL V U_G_dli_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o) {
 top:;
-V s36559 = (a0);
-if ((s36559) == IMM(1)) {
+V s36730 = (a0);
+if ((s36730) == IMM(1)) {
 o[0] = F_G_dli_ddecls(a5, a1);
 o[1] = a2;
 o[2] = a3;
 o[3] = a4;
 return 0;
-} else if ((s36559) == IMM(0)) {
+} else if ((s36730) == IMM(0)) {
 o[0] = a1;
 o[1] = a2;
 o[2] = a3;
@@ -89709,91 +90141,91 @@ return 0;
 }
 static V F_G_dli_x37u(V a0, V a1, V a2, V a3, V a4, V a5) { V o[4]; U_G_dli_x37u(a0, a1, a2, a3, a4, a5, o); return CN(0, 4, o); }
 static V W_G_dli_x37u(V *a) { (void)a; return F_G_dli_x37u(a[0], a[1], a[2], a[3], a[4], a[5]); }
-static V K36567(void) { static V c; return KONST(c, C2(1, MKS("Nat"), C2(1, MKS("Array"), IMM(0)))); }
+static V K36738(void) { static V c; return KONST(c, C2(1, MKS("Nat"), C2(1, MKS("Array"), IMM(0)))); }
 static V F_G_dli_ddecls(V a0, V a1) {
 top:;
-V s36561 = a0;
-if ((s36561) == IMM(0)) {
+V s36732 = a0;
+if ((s36732) == IMM(0)) {
 return a1;
-} else if (IS_N(s36561, 1) && IS_N(FLD(s36561, 0), 3)) {
-{ V t0 = FLD(s36561, 1); V t1 = F_G_dli_dctors(({ V r36562;
-V s36563 = F_Nat_dis__ge(F_List_dlength(0, FLD(FLD(s36561, 0), 2)), 2u);
-if ((s36563) == IMM(0)) {
-r36562 = IMM(0);
-} else if ((s36563) == IMM(1)) {
-V s36566 = F_List_dcontains_x37s539261848x2963157848(K36567(), FLD(FLD(s36561, 0), 0));
-if ((s36566) == IMM(0)) {
-r36562 = IMM(1);
-} else if ((s36566) == IMM(1)) {
-r36562 = IMM(0);
+} else if (IS_N(s36732, 1) && IS_N(FLD(s36732, 0), 3)) {
+{ V t0 = FLD(s36732, 1); V t1 = F_G_dli_dctors(({ V r36733;
+V s36734 = F_Nat_dis__ge(F_List_dlength(0, FLD(FLD(s36732, 0), 2)), 2u);
+if ((s36734) == IMM(0)) {
+r36733 = IMM(0);
+} else if ((s36734) == IMM(1)) {
+V s36737 = F_List_dcontains_x37s539261848x2963157848(K36738(), FLD(FLD(s36732, 0), 0));
+if ((s36737) == IMM(0)) {
+r36733 = IMM(1);
+} else if ((s36737) == IMM(1)) {
+r36733 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r36562; }), FLD(FLD(s36561, 0), 2), a1); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s36561, 1)) {
-{ V t0 = FLD(s36561, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+r36733; }), FLD(FLD(s36732, 0), 2), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36732, 1)) {
+{ V t0 = FLD(s36732, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_G_dli_ddecls(V *a) { (void)a; return F_G_dli_ddecls(a[0], a[1]); }
-static V K36573(void) { static V c; return KONST(c, C4(0, 0u, 0u, 4u, IMM(0))); }
+static V K36744(void) { static V c; return KONST(c, C4(0, 0u, 0u, 4u, IMM(0))); }
 static V F_G_dli_dctors(V a0, V a1, V a2) {
 top:;
-V s36570 = a1;
-if ((s36570) == IMM(0)) {
+V s36741 = a1;
+if ((s36741) == IMM(0)) {
 return a2;
-} else if (IS_N(s36570, 1)) {
-{ V t0 = (a0); V t1 = FLD(s36570, 1); V t2 = F_Map_dset(0, a2, FLD(FLD(s36570, 0), 0), ({ V r36571;
-V v36572 = F_Map_dget(K36573(), a2, FLD(FLD(s36570, 0), 0));
-V v36575 = FLD(v36572, 1);
-V s36576 = ({ V r36577;
-V s36578 = (a0);
-if ((s36578) == IMM(0)) {
-r36577 = IMM(0);
-} else if ((s36578) == IMM(1)) {
-r36577 = F_G_dli_dfield(FLD(FLD(s36570, 0), 1));
+} else if (IS_N(s36741, 1)) {
+{ V t0 = (a0); V t1 = FLD(s36741, 1); V t2 = F_Map_dset(0, a2, FLD(FLD(s36741, 0), 0), ({ V r36742;
+V v36743 = F_Map_dget(K36744(), a2, FLD(FLD(s36741, 0), 0));
+V v36746 = FLD(v36743, 1);
+V s36747 = ({ V r36748;
+V s36749 = (a0);
+if ((s36749) == IMM(0)) {
+r36748 = IMM(0);
+} else if ((s36749) == IMM(1)) {
+r36748 = F_G_dli_dfield(FLD(FLD(s36741, 0), 1));
 } else { bend_fail("runtime fail-stop"); }
-r36577; });
-if ((s36576) == IMM(1)) {
-r36571 = C4(0, FLD(v36575, 0), FLD(v36575, 1), 7u, FLD(v36575, 3));
-} else if ((s36576) == IMM(0)) {
-r36571 = C4(0, FLD(v36575, 0), FLD(v36575, 1), FLD(v36575, 2), FLD(v36575, 3));
+r36748; });
+if ((s36747) == IMM(1)) {
+r36742 = C4(0, FLD(v36746, 0), FLD(v36746, 1), 7u, FLD(v36746, 3));
+} else if ((s36747) == IMM(0)) {
+r36742 = C4(0, FLD(v36746, 0), FLD(v36746, 1), FLD(v36746, 2), FLD(v36746, 3));
 } else { bend_fail("runtime fail-stop"); }
-r36571; })); a0 = t0; a1 = t1; a2 = t2; goto top; }
+r36742; })); a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_G_dli_dctors(V *a) { (void)a; return F_G_dli_dctors(a[0], a[1], a[2]); }
-static V K36582(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Char"), C2(1, MKS("Bool"), IMM(0)))))); }
+static V K36753(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Char"), C2(1, MKS("Bool"), IMM(0)))))); }
 static V F_G_dli_dfield(V a0) {
 top:;
-V s36581 = a0;
-if (IS_N(s36581, 1) && (FLD(s36581, 1)) == IMM(0)) {
-return F_List_dcontains_x37s539261848x2963157848(K36582(), F_Ty_dhead(FLD(FLD(s36581, 0), 1)));
+V s36752 = a0;
+if (IS_N(s36752, 1) && (FLD(s36752, 1)) == IMM(0)) {
+return F_List_dcontains_x37s539261848x2963157848(K36753(), F_Ty_dhead(FLD(FLD(s36752, 0), 1)));
 } else {
 return IMM(0);
 }
 }
 static V W_G_dli_dfield(V *a) { (void)a; return F_G_dli_dfield(a[0]); }
-static V K36591(void) { static V c; return KONST(c, C2(1, MKS("Array.get"), C2(1, MKS("Array.set"), C2(1, MKS("Array.swap"), C2(1, MKS("Array.new"), IMM(0)))))); }
-static V S36594(void) { static V c; return STRC(c, "%w"); }
+static V K36762(void) { static V c; return KONST(c, C2(1, MKS("Array.get"), C2(1, MKS("Array.set"), C2(1, MKS("Array.swap"), C2(1, MKS("Array.new"), IMM(0)))))); }
+static V S36765(void) { static V c; return STRC(c, "%w"); }
 static __attribute__((noinline)) V H_F_Arrw_ddecls_x37f2739175496x1984684048(V a0) {
 top:;
-V s36585 = a0;
-if ((s36585) == IMM(0)) {
+V s36756 = a0;
+if ((s36756) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s36585, 1)) {
-V s36586 = C2(1, F_Pick_ddecl(FLD(s36585, 0)), F_Pick_ddecls(FLD(s36585, 1)));
-if ((s36586) == IMM(0)) {
+} else if (IS_N(s36756, 1)) {
+V s36757 = C2(1, F_Pick_ddecl(FLD(s36756, 0)), F_Pick_ddecls(FLD(s36756, 1)));
+if ((s36757) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s36586, 1) && IS_N(FLD(s36586, 0), 0)) {
-return F_List_dappend(0, ({ V r36589;
-V s36590 = F_List_dcontains_x37s539261848x2963157848(K36591(), FLD(FLD(s36586, 0), 0));
-if ((s36590) == IMM(0)) {
-r36589 = C2(1, C4(0, FLD(FLD(s36586, 0), 0), FLD(FLD(s36586, 0), 1), F_Arrw_dgo(FLD(FLD(s36586, 0), 2), IMM(1)), FLD(FLD(s36586, 0), 3)), IMM(0));
-} else if ((s36590) == IMM(1)) {
-r36589 = C2(1, C4(0, FLD(FLD(s36586, 0), 0), FLD(FLD(s36586, 0), 1), FLD(FLD(s36586, 0), 2), FLD(FLD(s36586, 0), 3)), C2(1, C4(0, F_String_dappend(FLD(FLD(s36586, 0), 0), S36594()), FLD(FLD(s36586, 0), 1), FLD(FLD(s36586, 0), 2), FLD(FLD(s36586, 0), 3)), IMM(0)));
+} else if (IS_N(s36757, 1) && IS_N(FLD(s36757, 0), 0)) {
+return F_List_dappend(0, ({ V r36760;
+V s36761 = F_List_dcontains_x37s539261848x2963157848(K36762(), FLD(FLD(s36757, 0), 0));
+if ((s36761) == IMM(0)) {
+r36760 = C2(1, C4(0, FLD(FLD(s36757, 0), 0), FLD(FLD(s36757, 0), 1), F_Arrw_dgo(FLD(FLD(s36757, 0), 2), IMM(1)), FLD(FLD(s36757, 0), 3)), IMM(0));
+} else if ((s36761) == IMM(1)) {
+r36760 = C2(1, C4(0, FLD(FLD(s36757, 0), 0), FLD(FLD(s36757, 0), 1), FLD(FLD(s36757, 0), 2), FLD(FLD(s36757, 0), 3)), C2(1, C4(0, F_String_dappend(FLD(FLD(s36757, 0), 0), S36765()), FLD(FLD(s36757, 0), 1), FLD(FLD(s36757, 0), 2), FLD(FLD(s36757, 0), 3)), IMM(0)));
 } else { bend_fail("runtime fail-stop"); }
-r36589; }), F_Arrw_ddecls(FLD(s36586, 1)));
-} else if (IS_N(s36586, 1)) {
-return C2(1, FLD(s36586, 0), F_Arrw_ddecls(FLD(s36586, 1)));
+r36760; }), F_Arrw_ddecls(FLD(s36757, 1)));
+} else if (IS_N(s36757, 1)) {
+return C2(1, FLD(s36757, 0), F_Arrw_ddecls(FLD(s36757, 1)));
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -89804,102 +90236,102 @@ return IMM(0);
 return H_F_Arrw_ddecls_x37f2739175496x1984684048(a0);
 }
 static V W_Arrw_ddecls_x37f2739175496x1984684048(V *a) { (void)a; return F_Arrw_ddecls_x37f2739175496x1984684048(a[0]); }
-static V K36602(void) { static V c; return KONST(c, C2(1, MKS("Array.get"), C2(1, MKS("Array.set"), C2(1, MKS("Array.swap"), C2(1, MKS("Array.new"), IMM(0)))))); }
-static V S36605(void) { static V c; return STRC(c, "%w"); }
+static V K36773(void) { static V c; return KONST(c, C2(1, MKS("Array.get"), C2(1, MKS("Array.set"), C2(1, MKS("Array.swap"), C2(1, MKS("Array.new"), IMM(0)))))); }
+static V S36776(void) { static V c; return STRC(c, "%w"); }
 static V D_Arrw_ddecls(V *dst, V a0) {
 top:;
-V s36599 = a0;
-if ((s36599) == IMM(0)) {
+V s36770 = a0;
+if ((s36770) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s36599, 1) && IS_N(FLD(s36599, 0), 0)) {
-*dst = F_List_dappend(0, ({ V r36600;
-V s36601 = F_List_dcontains_x37s539261848x2963157848(K36602(), FLD(FLD(s36599, 0), 0));
-if ((s36601) == IMM(0)) {
-r36600 = C2(1, C4(0, FLD(FLD(s36599, 0), 0), FLD(FLD(s36599, 0), 1), F_Arrw_dgo(FLD(FLD(s36599, 0), 2), IMM(1)), FLD(FLD(s36599, 0), 3)), IMM(0));
-} else if ((s36601) == IMM(1)) {
-r36600 = C2(1, C4(0, FLD(FLD(s36599, 0), 0), FLD(FLD(s36599, 0), 1), FLD(FLD(s36599, 0), 2), FLD(FLD(s36599, 0), 3)), C2(1, C4(0, F_String_dappend(FLD(FLD(s36599, 0), 0), S36605()), FLD(FLD(s36599, 0), 1), FLD(FLD(s36599, 0), 2), FLD(FLD(s36599, 0), 3)), IMM(0)));
+} else if (IS_N(s36770, 1) && IS_N(FLD(s36770, 0), 0)) {
+*dst = F_List_dappend(0, ({ V r36771;
+V s36772 = F_List_dcontains_x37s539261848x2963157848(K36773(), FLD(FLD(s36770, 0), 0));
+if ((s36772) == IMM(0)) {
+r36771 = C2(1, C4(0, FLD(FLD(s36770, 0), 0), FLD(FLD(s36770, 0), 1), F_Arrw_dgo(FLD(FLD(s36770, 0), 2), IMM(1)), FLD(FLD(s36770, 0), 3)), IMM(0));
+} else if ((s36772) == IMM(1)) {
+r36771 = C2(1, C4(0, FLD(FLD(s36770, 0), 0), FLD(FLD(s36770, 0), 1), FLD(FLD(s36770, 0), 2), FLD(FLD(s36770, 0), 3)), C2(1, C4(0, F_String_dappend(FLD(FLD(s36770, 0), 0), S36776()), FLD(FLD(s36770, 0), 1), FLD(FLD(s36770, 0), 2), FLD(FLD(s36770, 0), 3)), IMM(0)));
 } else { bend_fail("runtime fail-stop"); }
-r36600; }), F_Arrw_ddecls(FLD(s36599, 1)));
+r36771; }), F_Arrw_ddecls(FLD(s36770, 1)));
 return 0;
-} else if (IS_N(s36599, 1)) {
-{ V dc = CH2(1, FLD(s36599, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s36599, 1); a0 = t0; goto top; }
+} else if (IS_N(s36770, 1)) {
+{ V dc = CH2(1, FLD(s36770, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s36770, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Arrw_ddecls(V a0) { V r; D_Arrw_ddecls(&r, a0); return r; }
 static V W_Arrw_ddecls(V *a) { (void)a; return F_Arrw_ddecls(a[0]); }
-static V K36628(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
+static V K36799(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
 static V D_Arrw_dgo(V *dst, V a0, V a1) {
 top:;
-V s36609 = a0;
-if (IS_N(s36609, 5)) {
-V s36610 = FLD(s36609, 1);
-if ((s36610) == IMM(0)) {
-*dst = F_Arrw_dtop((a1), C2(5, F_Arrw_dgo(FLD(s36609, 0), IMM(1)), IMM(0)));
+V s36780 = a0;
+if (IS_N(s36780, 5)) {
+V s36781 = FLD(s36780, 1);
+if ((s36781) == IMM(0)) {
+*dst = F_Arrw_dtop((a1), C2(5, F_Arrw_dgo(FLD(s36780, 0), IMM(1)), IMM(0)));
 return 0;
-} else if (IS_N(s36610, 1)) {
-*dst = F_Arrw_dtop((a1), F_Expr_dpush(F_Arrw_dgo(FLD(s36610, 0), IMM(1)), F_Arrw_dgo(C2(5, FLD(s36609, 0), FLD(s36610, 1)), IMM(0))));
-return 0;
-} else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s36609, 6)) {
-V s36617 = FLD(s36609, 1);
-if ((s36617) == IMM(0)) {
-*dst = C2(6, FLD(s36609, 0), IMM(0));
-return 0;
-} else if (IS_N(s36617, 1)) {
-*dst = F_Expr_dpush(F_Arrw_dgo(FLD(s36617, 0), IMM(1)), F_Arrw_dgo(C2(6, FLD(s36609, 0), FLD(s36617, 1)), IMM(1)));
+} else if (IS_N(s36781, 1)) {
+*dst = F_Arrw_dtop((a1), F_Expr_dpush(F_Arrw_dgo(FLD(s36781, 0), IMM(1)), F_Arrw_dgo(C2(5, FLD(s36780, 0), FLD(s36781, 1)), IMM(0))));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s36609, 12)) {
-{ V dc = CH3(12, FLD(s36609, 0), F_Arrw_dgo(FLD(s36609, 1), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = FLD(s36609, 2); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
-}
-} else if (IS_N(s36609, 7)) {
-{ V dc = CH2(7, FLD(s36609, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s36609, 1); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
-}
-} else if (IS_N(s36609, 8)) {
-{ V dc = CH3(8, FLD(s36609, 0), F_Arrw_dgo(FLD(s36609, 1), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = FLD(s36609, 2); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
-}
-} else if (IS_N(s36609, 9)) {
-V s36623 = FLD(s36609, 0);
-if (IS_N(s36623, 1)) {
-*dst = F_Expr_dpush(F_Arrw_dgo(FLD(s36623, 0), IMM(1)), F_Arrw_dgo(C2(9, FLD(s36623, 1), FLD(s36609, 1)), IMM(1)));
+} else if (IS_N(s36780, 6)) {
+V s36788 = FLD(s36780, 1);
+if ((s36788) == IMM(0)) {
+*dst = C2(6, FLD(s36780, 0), IMM(0));
 return 0;
-} else if ((s36623) == IMM(0)) {
-V s36627 = FLD(s36609, 1);
-if ((s36627) == IMM(0)) {
-*dst = K36628();
+} else if (IS_N(s36788, 1)) {
+*dst = F_Expr_dpush(F_Arrw_dgo(FLD(s36788, 0), IMM(1)), F_Arrw_dgo(C2(6, FLD(s36780, 0), FLD(s36788, 1)), IMM(1)));
 return 0;
-} else if (IS_N(s36627, 1)) {
-V v36629 = F_Arrw_dgo(C2(9, IMM(0), FLD(s36627, 1)), IMM(1));
-V s36631 = v36629;
-if (IS_N(s36631, 9)) {
-*dst = C2(9, FLD(s36631, 0), C2(1, F_Arrw_dgo(FLD(s36627, 0), IMM(1)), FLD(s36631, 1)));
+} else { bend_fail("runtime fail-stop"); }
+} else if (IS_N(s36780, 12)) {
+{ V dc = CH3(12, FLD(s36780, 0), F_Arrw_dgo(FLD(s36780, 1), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = FLD(s36780, 2); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
+}
+} else if (IS_N(s36780, 7)) {
+{ V dc = CH2(7, FLD(s36780, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s36780, 1); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
+}
+} else if (IS_N(s36780, 8)) {
+{ V dc = CH3(8, FLD(s36780, 0), F_Arrw_dgo(FLD(s36780, 1), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = FLD(s36780, 2); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
+}
+} else if (IS_N(s36780, 9)) {
+V s36794 = FLD(s36780, 0);
+if (IS_N(s36794, 1)) {
+*dst = F_Expr_dpush(F_Arrw_dgo(FLD(s36794, 0), IMM(1)), F_Arrw_dgo(C2(9, FLD(s36794, 1), FLD(s36780, 1)), IMM(1)));
+return 0;
+} else if ((s36794) == IMM(0)) {
+V s36798 = FLD(s36780, 1);
+if ((s36798) == IMM(0)) {
+*dst = K36799();
+return 0;
+} else if (IS_N(s36798, 1)) {
+V v36800 = F_Arrw_dgo(C2(9, IMM(0), FLD(s36798, 1)), IMM(1));
+V s36802 = v36800;
+if (IS_N(s36802, 9)) {
+*dst = C2(9, FLD(s36802, 0), C2(1, F_Arrw_dgo(FLD(s36798, 0), IMM(1)), FLD(s36802, 1)));
 return 0;
 } else {
-*dst = s36631;
+*dst = s36802;
 return 0;
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s36609, 10)) {
-{ V dc = CH2(10, FLD(s36609, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s36609, 1); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36780, 10)) {
+{ V dc = CH2(10, FLD(s36780, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s36780, 1); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s36609, 11)) {
-{ V dc = CH2(11, FLD(s36609, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s36609, 1); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36780, 11)) {
+{ V dc = CH2(11, FLD(s36780, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s36780, 1); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s36609, 13)) {
-{ V dc = CH2(13, BEND_HOLE, FLD(s36609, 1)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = FLD(s36609, 0); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36780, 13)) {
+{ V dc = CH2(13, BEND_HOLE, FLD(s36780, 1)); *dst = dc; dst = &FLD(dc, 0);
+{ V t0 = FLD(s36780, 0); V t1 = IMM(1); a0 = t0; a1 = t1; goto top; }
 }
 } else {
-*dst = s36609;
+*dst = s36780;
 return 0;
 }
 }
@@ -89907,108 +90339,108 @@ static V F_Arrw_dgo(V a0, V a1) { V r; D_Arrw_dgo(&r, a0, a1); return r; }
 static V W_Arrw_dgo(V *a) { (void)a; return F_Arrw_dgo(a[0], a[1]); }
 static V F_Arrw_dtop(V a0, V a1) {
 top:;
-V s36633 = (a0);
-if ((s36633) == IMM(1)) {
-V s36634 = a1;
-if (IS_N(s36634, 5)) {
-return C2(5, F_Arrw_dname(FLD(s36634, 0), FLD(s36634, 1)), FLD(s36634, 1));
+V s36804 = (a0);
+if ((s36804) == IMM(1)) {
+V s36805 = a1;
+if (IS_N(s36805, 5)) {
+return C2(5, F_Arrw_dname(FLD(s36805, 0), FLD(s36805, 1)), FLD(s36805, 1));
 } else {
-return s36634;
+return s36805;
 }
-} else if ((s36633) == IMM(0)) {
+} else if ((s36804) == IMM(0)) {
 return a1;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Arrw_dtop(V *a) { (void)a; return F_Arrw_dtop(a[0], a[1]); }
-static V S36640(void) { static V c; return STRC(c, "%w"); }
+static V S36811(void) { static V c; return STRC(c, "%w"); }
 static V F_Arrw_dname(V a0, V a1) {
 top:;
-V s36636 = a0;
-if (IS_N(s36636, 0)) {
-return C1(0, ({ V r36637;
-V s36638 = F_Arrw_dhit(FLD(s36636, 0), a1);
-if ((s36638) == IMM(0)) {
-r36637 = FLD(s36636, 0);
-} else if ((s36638) == IMM(1)) {
-r36637 = F_String_dappend(FLD(s36636, 0), S36640());
+V s36807 = a0;
+if (IS_N(s36807, 0)) {
+return C1(0, ({ V r36808;
+V s36809 = F_Arrw_dhit(FLD(s36807, 0), a1);
+if ((s36809) == IMM(0)) {
+r36808 = FLD(s36807, 0);
+} else if ((s36809) == IMM(1)) {
+r36808 = F_String_dappend(FLD(s36807, 0), S36811());
 } else { bend_fail("runtime fail-stop"); }
-r36637; }));
+r36808; }));
 } else {
-return s36636;
+return s36807;
 }
 }
 static V W_Arrw_dname(V *a) { (void)a; return F_Arrw_dname(a[0], a[1]); }
-static V S36644(void) { static V c; return STRC(c, "Array.new"); }
-static V K36647(void) { static V c; return KONST(c, C2(1, MKS("Array.get"), C2(1, MKS("Array.set"), C2(1, MKS("Array.swap"), IMM(0))))); }
+static V S36815(void) { static V c; return STRC(c, "Array.new"); }
+static V K36818(void) { static V c; return KONST(c, C2(1, MKS("Array.get"), C2(1, MKS("Array.set"), C2(1, MKS("Array.swap"), IMM(0))))); }
 static V F_Arrw_dhit(V a0, V a1) {
 top:;
-V s36642 = a1;
-if (IS_N(s36642, 1)) {
-V s36643 = F_String_deq(a0, S36644());
-if ((s36643) == IMM(0)) {
-V s36646 = F_List_dcontains_x37s539261848x2963157848(K36647(), a0);
-if ((s36646) == IMM(0)) {
+V s36813 = a1;
+if (IS_N(s36813, 1)) {
+V s36814 = F_String_deq(a0, S36815());
+if ((s36814) == IMM(0)) {
+V s36817 = F_List_dcontains_x37s539261848x2963157848(K36818(), a0);
+if ((s36817) == IMM(0)) {
 return IMM(0);
-} else if ((s36646) == IMM(1)) {
-return F_Arrw_dscalar(FLD(s36642, 0));
+} else if ((s36817) == IMM(1)) {
+return F_Arrw_dscalar(FLD(s36813, 0));
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s36643) == IMM(1)) {
-V s36650 = F_Arrw_dscalar(FLD(s36642, 0));
-if ((s36650) == IMM(0)) {
-return F_Arrw_dlit(FLD(s36642, 1));
-} else if ((s36650) == IMM(1)) {
+} else if ((s36814) == IMM(1)) {
+V s36821 = F_Arrw_dscalar(FLD(s36813, 0));
+if ((s36821) == IMM(0)) {
+return F_Arrw_dlit(FLD(s36813, 1));
+} else if ((s36821) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s36642) == IMM(0)) {
+} else if ((s36813) == IMM(0)) {
 return IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Arrw_dhit(V *a) { (void)a; return F_Arrw_dhit(a[0], a[1]); }
-static V K36657(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Bool"), C2(1, MKS("Char"), IMM(0)))))); }
+static V K36828(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Bool"), C2(1, MKS("Char"), IMM(0)))))); }
 static V F_Arrw_dlit(V a0) {
 top:;
-V s36653 = a0;
-if (IS_N(s36653, 1)) {
-V s36654 = FLD(s36653, 1);
-if (IS_N(s36654, 1)) {
-V s36655 = FLD(s36654, 0);
-if (IS_N(s36655, 13)) {
-V v36656 = FLD(s36655, 1);
-return F_List_dcontains_x37s539261848x2963157848(K36657(), v36656);
+V s36824 = a0;
+if (IS_N(s36824, 1)) {
+V s36825 = FLD(s36824, 1);
+if (IS_N(s36825, 1)) {
+V s36826 = FLD(s36825, 0);
+if (IS_N(s36826, 13)) {
+V v36827 = FLD(s36826, 1);
+return F_List_dcontains_x37s539261848x2963157848(K36828(), v36827);
 } else {
 return IMM(0);
 }
-} else if ((s36654) == IMM(0)) {
+} else if ((s36825) == IMM(0)) {
 return IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s36653) == IMM(0)) {
+} else if ((s36824) == IMM(0)) {
 return IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Arrw_dlit(V *a) { (void)a; return F_Arrw_dlit(a[0]); }
-static V K36664(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Bool"), C2(1, MKS("Char"), IMM(0)))))); }
-static V K36666(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Bool"), C2(1, MKS("Char"), IMM(0)))))); }
+static V K36835(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Bool"), C2(1, MKS("Char"), IMM(0)))))); }
+static V K36837(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Bool"), C2(1, MKS("Char"), IMM(0)))))); }
 static V F_Arrw_dscalar(V a0) {
 top:;
-V s36659 = a0;
-if (IS_N(s36659, 14)) {
-V v36660 = ({ V r36661;
-V s36662 = FLD(s36659, 1);
-if ((s36662) == IMM(0)) {
-r36661 = IMM(1);
-} else if (IS_N(s36662, 1)) {
-r36661 = IMM(0);
+V s36830 = a0;
+if (IS_N(s36830, 14)) {
+V v36831 = ({ V r36832;
+V s36833 = FLD(s36830, 1);
+if ((s36833) == IMM(0)) {
+r36832 = IMM(1);
+} else if (IS_N(s36833, 1)) {
+r36832 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r36661; });
-V s36663 = v36660;
-if ((s36663) == IMM(0)) {
+r36832; });
+V s36834 = v36831;
+if ((s36834) == IMM(0)) {
 return IMM(0);
-} else if ((s36663) == IMM(1)) {
-return F_List_dcontains_x37s539261848x2963157848(K36664(), FLD(s36659, 0));
+} else if ((s36834) == IMM(1)) {
+return F_List_dcontains_x37s539261848x2963157848(K36835(), FLD(s36830, 0));
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s36659, 0)) {
-return F_List_dcontains_x37s539261848x2963157848(K36666(), FLD(s36659, 0));
+} else if (IS_N(s36830, 0)) {
+return F_List_dcontains_x37s539261848x2963157848(K36837(), FLD(s36830, 0));
 } else {
 return IMM(0);
 }
@@ -90016,84 +90448,84 @@ return IMM(0);
 static V W_Arrw_dscalar(V *a) { (void)a; return F_Arrw_dscalar(a[0]); }
 static V F_Unb_dsum_dprogram(V a0, V a1) {
 top:;
-V s36668 = (a0);
-if ((s36668) == IMM(1)) {
+V s36839 = (a0);
+if ((s36839) == IMM(1)) {
 return F_Unb_dsum_ddecls(F_Unb_dsum_dmap(a1, F_Unb_dsum_dnames(a1, IMM(0)), IMM(0)), a1);
-} else if ((s36668) == IMM(0)) {
+} else if ((s36839) == IMM(0)) {
 return a1;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dsum_dprogram(V *a) { (void)a; return F_Unb_dsum_dprogram(a[0], a[1]); }
 static V F_Unb_dsum_dnames(V a0, V a1) {
 top:;
-V s36672 = a0;
-if ((s36672) == IMM(0)) {
+V s36843 = a0;
+if ((s36843) == IMM(0)) {
 return a1;
-} else if (IS_N(s36672, 1) && IS_N(FLD(s36672, 0), 3)) {
-{ V t0 = FLD(s36672, 1); V t1 = F_Unb_dsum_dcnames(FLD(FLD(s36672, 0), 2), a1); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s36672, 1)) {
-{ V t0 = FLD(s36672, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36843, 1) && IS_N(FLD(s36843, 0), 3)) {
+{ V t0 = FLD(s36843, 1); V t1 = F_Unb_dsum_dcnames(FLD(FLD(s36843, 0), 2), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36843, 1)) {
+{ V t0 = FLD(s36843, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dsum_dnames(V *a) { (void)a; return F_Unb_dsum_dnames(a[0], a[1]); }
 static V F_Unb_dsum_dcnames(V a0, V a1) {
 top:;
-V s36674 = a0;
-if ((s36674) == IMM(0)) {
+V s36845 = a0;
+if ((s36845) == IMM(0)) {
 return a1;
-} else if (IS_N(s36674, 1)) {
-{ V t0 = FLD(s36674, 1); V t1 = F_Map_dset(0, a1, FLD(FLD(s36674, 0), 0), IMM(0)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36845, 1)) {
+{ V t0 = FLD(s36845, 1); V t1 = F_Map_dset(0, a1, FLD(FLD(s36845, 0), 0), IMM(0)); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dsum_dcnames(V *a) { (void)a; return F_Unb_dsum_dcnames(a[0], a[1]); }
-static V S36678(void) { static V c; return STRC(c, "._s"); }
+static V S36849(void) { static V c; return STRC(c, "._s"); }
 static V F_Unb_dsum_dmap(V a0, V a1, V a2) {
 top:;
-V s36676 = a0;
-if ((s36676) == IMM(0)) {
+V s36847 = a0;
+if ((s36847) == IMM(0)) {
 return a2;
-} else if (IS_N(s36676, 1) && IS_N(FLD(s36676, 0), 3)) {
-V v36677 = F_String_dappend(FLD(FLD(s36676, 0), 0), S36678());
-{ V t0 = FLD(s36676, 1); V t1 = a1; V t2 = F_Unb_dsum_dput_dif(F_Unb_dsum_dok(a1, v36677, FLD(FLD(s36676, 0), 1), FLD(FLD(s36676, 0), 2)), FLD(FLD(s36676, 0), 2), v36677, a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if (IS_N(s36676, 1)) {
-{ V t0 = FLD(s36676, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s36847, 1) && IS_N(FLD(s36847, 0), 3)) {
+V v36848 = F_String_dappend(FLD(FLD(s36847, 0), 0), S36849());
+{ V t0 = FLD(s36847, 1); V t1 = a1; V t2 = F_Unb_dsum_dput_dif(F_Unb_dsum_dok(a1, v36848, FLD(FLD(s36847, 0), 1), FLD(FLD(s36847, 0), 2)), FLD(FLD(s36847, 0), 2), v36848, a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s36847, 1)) {
+{ V t0 = FLD(s36847, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dsum_dmap(V *a) { (void)a; return F_Unb_dsum_dmap(a[0], a[1], a[2]); }
 static V F_Unb_dsum_dok(V a0, V a1, V a2, V a3) {
 top:;
-V s36682 = ({ V r36683;
-V s36684 = a2;
-if ((s36684) == IMM(0)) {
-r36683 = F_Nat_dis__ge(F_List_dlength(0, a3), 2u);
-} else if (IS_N(s36684, 1)) {
-r36683 = IMM(0);
+V s36853 = ({ V r36854;
+V s36855 = a2;
+if ((s36855) == IMM(0)) {
+r36854 = F_Nat_dis__ge(F_List_dlength(0, a3), 2u);
+} else if (IS_N(s36855, 1)) {
+r36854 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r36683; });
-if ((s36682) == IMM(0)) {
+r36854; });
+if ((s36853) == IMM(0)) {
 return IMM(0);
-} else if ((s36682) == IMM(1)) {
-V (v36687) = F_List_dlength(0, F_Unb_dsum_dwide(a3, IMM(0)));
-V s36690 = ({ V r36691;
-V s36692 = F_Nat_dis__ge((v36687), 2u);
-if ((s36692) == IMM(0)) {
-r36691 = IMM(0);
-} else if ((s36692) == IMM(1)) {
-r36691 = F_Nat_dis__le((v36687), 7u);
+} else if ((s36853) == IMM(1)) {
+V (v36858) = F_List_dlength(0, F_Unb_dsum_dwide(a3, IMM(0)));
+V s36861 = ({ V r36862;
+V s36863 = F_Nat_dis__ge((v36858), 2u);
+if ((s36863) == IMM(0)) {
+r36862 = IMM(0);
+} else if ((s36863) == IMM(1)) {
+r36862 = F_Nat_dis__le((v36858), 7u);
 } else { bend_fail("runtime fail-stop"); }
-r36691; });
-if ((s36690) == IMM(0)) {
+r36862; });
+if ((s36861) == IMM(0)) {
 return IMM(0);
-} else if ((s36690) == IMM(1)) {
-V s36695 = F_Unb_dsum_dall(a3);
-if ((s36695) == IMM(0)) {
+} else if ((s36861) == IMM(1)) {
+V s36866 = F_Unb_dsum_dall(a3);
+if ((s36866) == IMM(0)) {
 return IMM(0);
-} else if ((s36695) == IMM(1)) {
-V v36697 = F_Map_dhas(a0, a1);
-V s36699 = FLD(v36697, 1);
-if ((s36699) == IMM(0)) {
+} else if ((s36866) == IMM(1)) {
+V v36868 = F_Map_dhas(a0, a1);
+V s36870 = FLD(v36868, 1);
+if ((s36870) == IMM(0)) {
 return IMM(1);
-} else if ((s36699) == IMM(1)) {
+} else if ((s36870) == IMM(1)) {
 return IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -90103,15 +90535,15 @@ return IMM(0);
 static V W_Unb_dsum_dok(V *a) { (void)a; return F_Unb_dsum_dok(a[0], a[1], a[2], a[3]); }
 static __attribute__((noinline)) V H_F_Unb_dsum_dall(V a0) {
 top:;
-V s36700 = a0;
-if ((s36700) == IMM(0)) {
+V s36871 = a0;
+if ((s36871) == IMM(0)) {
 return IMM(1);
-} else if (IS_N(s36700, 1)) {
-V s36701 = F_Unb_dsum_du32s(FLD(FLD(s36700, 0), 1));
-if ((s36701) == IMM(0)) {
+} else if (IS_N(s36871, 1)) {
+V s36872 = F_Unb_dsum_du32s(FLD(FLD(s36871, 0), 1));
+if ((s36872) == IMM(0)) {
 return IMM(0);
-} else if ((s36701) == IMM(1)) {
-{ V t0 = FLD(s36700, 1); a0 = t0; goto top; }
+} else if ((s36872) == IMM(1)) {
+{ V t0 = FLD(s36871, 1); a0 = t0; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -90122,25 +90554,25 @@ return IMM(1);
 return H_F_Unb_dsum_dall(a0);
 }
 static V W_Unb_dsum_dall(V *a) { (void)a; return F_Unb_dsum_dall(a[0]); }
-static V S36708(void) { static V c; return STRC(c, "U32"); }
+static V S36879(void) { static V c; return STRC(c, "U32"); }
 static __attribute__((noinline)) V H_F_Unb_dsum_du32s(V a0) {
 top:;
-V s36703 = a0;
-if ((s36703) == IMM(0)) {
+V s36874 = a0;
+if ((s36874) == IMM(0)) {
 return IMM(1);
-} else if (IS_N(s36703, 1)) {
-V s36704 = F_String_deq(({ V r36705;
-V s36706 = FLD(FLD(s36703, 0), 1);
-if (IS_N(s36706, 14) && (FLD(s36706, 0)) == IMM(0) && IS_N(FLD(s36706, 1), 1) && IS_N(FLD(FLD(s36706, 1), 0), 14) && (FLD(FLD(FLD(s36706, 1), 0), 1)) == IMM(0) && (FLD(FLD(s36706, 1), 1)) == IMM(0)) {
-r36705 = FLD(FLD(FLD(s36706, 1), 0), 0);
+} else if (IS_N(s36874, 1)) {
+V s36875 = F_String_deq(({ V r36876;
+V s36877 = FLD(FLD(s36874, 0), 1);
+if (IS_N(s36877, 14) && (FLD(s36877, 0)) == IMM(0) && IS_N(FLD(s36877, 1), 1) && IS_N(FLD(FLD(s36877, 1), 0), 14) && (FLD(FLD(FLD(s36877, 1), 0), 1)) == IMM(0) && (FLD(FLD(s36877, 1), 1)) == IMM(0)) {
+r36876 = FLD(FLD(FLD(s36877, 1), 0), 0);
 } else {
-r36705 = F_P_dhead(s36706);
+r36876 = F_P_dhead(s36877);
 }
-r36705; }), S36708());
-if ((s36704) == IMM(0)) {
+r36876; }), S36879());
+if ((s36875) == IMM(0)) {
 return IMM(0);
-} else if ((s36704) == IMM(1)) {
-{ V t0 = FLD(s36703, 1); a0 = t0; goto top; }
+} else if ((s36875) == IMM(1)) {
+{ V t0 = FLD(s36874, 1); a0 = t0; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -90153,27 +90585,27 @@ return H_F_Unb_dsum_du32s(a0);
 static V W_Unb_dsum_du32s(V *a) { (void)a; return F_Unb_dsum_du32s(a[0]); }
 static V F_Unb_dsum_dwide(V a0, V a1) {
 top:;
-V s36710 = a0;
-if ((s36710) == IMM(0)) {
+V s36881 = a0;
+if ((s36881) == IMM(0)) {
 return a1;
-} else if (IS_N(s36710, 1)) {
-{ V t0 = FLD(s36710, 1); V t1 = ({ V r36711;
-V s36712 = F_Nat_dis__gt(F_List_dlength(0, FLD(FLD(s36710, 0), 1)), F_List_dlength(0, a1));
-if ((s36712) == IMM(0)) {
-r36711 = a1;
-} else if ((s36712) == IMM(1)) {
-r36711 = FLD(FLD(s36710, 0), 1);
+} else if (IS_N(s36881, 1)) {
+{ V t0 = FLD(s36881, 1); V t1 = ({ V r36882;
+V s36883 = F_Nat_dis__gt(F_List_dlength(0, FLD(FLD(s36881, 0), 1)), F_List_dlength(0, a1));
+if ((s36883) == IMM(0)) {
+r36882 = a1;
+} else if ((s36883) == IMM(1)) {
+r36882 = FLD(FLD(s36881, 0), 1);
 } else { bend_fail("runtime fail-stop"); }
-r36711; }); a0 = t0; a1 = t1; goto top; }
+r36882; }); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dsum_dwide(V *a) { (void)a; return F_Unb_dsum_dwide(a[0], a[1]); }
 static V F_Unb_dsum_dput_dif(V a0, V a1, V a2, V a3) {
 top:;
-V s36716 = (a0);
-if ((s36716) == IMM(1)) {
+V s36887 = (a0);
+if ((s36887) == IMM(1)) {
 return F_Unb_dsum_dput(a1, a2, F_List_dlength(0, F_Unb_dsum_dwide(a1, IMM(0))), 0u, a3);
-} else if ((s36716) == IMM(0)) {
+} else if ((s36887) == IMM(0)) {
 return a3;
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -90181,110 +90613,110 @@ static V W_Unb_dsum_dput_dif(V *a) { (void)a; return F_Unb_dsum_dput_dif(a[0], a
 static V F_Unb_dsum_dput(V a0, V a1, V a2, V a3_, V a4) {
 uint32_t a3 = (uint32_t)a3_;
 top:;
-V s36720 = a0;
-if ((s36720) == IMM(0)) {
+V s36891 = a0;
+if ((s36891) == IMM(0)) {
 return a4;
-} else if (IS_N(s36720, 1)) {
-{ V t0 = FLD(s36720, 1); V t1 = a1; V t2 = (a2); V t3 = F_U32_dinc((a3)); V t4 = F_Map_dset(0, a4, FLD(FLD(s36720, 0), 0), C3(0, a1, F_Nat_dsub((a2), F_List_dlength(0, FLD(FLD(s36720, 0), 1))), (a3))); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s36891, 1)) {
+{ V t0 = FLD(s36891, 1); V t1 = a1; V t2 = (a2); V t3 = F_U32_dinc((a3)); V t4 = F_Map_dset(0, a4, FLD(FLD(s36891, 0), 0), C3(0, a1, F_Nat_dsub((a2), F_List_dlength(0, FLD(FLD(s36891, 0), 1))), (a3))); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dsum_dput(V *a) { (void)a; return F_Unb_dsum_dput(a[0], a[1], a[2], a[3], a[4]); }
 static V D_Unb_dsum_ddecls(V *dst, V a0, V a1) {
 top:;
-V s36725 = a1;
-if ((s36725) == IMM(0)) {
+V s36896 = a1;
+if ((s36896) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s36725, 1) && IS_N(FLD(s36725, 0), 3)) {
-{ V dc = CH2(1, F_Unb_dsum_dtype(a0, FLD(FLD(s36725, 0), 0), FLD(FLD(s36725, 0), 1), FLD(FLD(s36725, 0), 2)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s36725, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36896, 1) && IS_N(FLD(s36896, 0), 3)) {
+{ V dc = CH2(1, F_Unb_dsum_dtype(a0, FLD(FLD(s36896, 0), 0), FLD(FLD(s36896, 0), 1), FLD(FLD(s36896, 0), 2)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s36896, 1); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s36725, 1) && IS_N(FLD(s36725, 0), 0)) {
-{ V dc = CH2(1, C4(0, FLD(FLD(s36725, 0), 0), FLD(FLD(s36725, 0), 1), F_Unb_dsum_de(a0, FLD(FLD(s36725, 0), 2)), FLD(FLD(s36725, 0), 3)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s36725, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36896, 1) && IS_N(FLD(s36896, 0), 0)) {
+{ V dc = CH2(1, C4(0, FLD(FLD(s36896, 0), 0), FLD(FLD(s36896, 0), 1), F_Unb_dsum_de(a0, FLD(FLD(s36896, 0), 2)), FLD(FLD(s36896, 0), 3)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s36896, 1); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s36725, 1)) {
-{ V dc = CH2(1, FLD(s36725, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s36725, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36896, 1)) {
+{ V dc = CH2(1, FLD(s36896, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s36896, 1); a0 = t0; a1 = t1; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dsum_ddecls(V a0, V a1) { V r; D_Unb_dsum_ddecls(&r, a0, a1); return r; }
 static V W_Unb_dsum_ddecls(V *a) { (void)a; return F_Unb_dsum_ddecls(a[0], a[1]); }
-static V K36735(void) { static V c; return KONST(c, C3(0, MKS(""), 0u, 0u)); }
-static V K36750(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
+static V K36906(void) { static V c; return KONST(c, C3(0, MKS(""), 0u, 0u)); }
+static V K36921(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
 static V D_Unb_dsum_de(V *dst, V a0, V a1) {
 top:;
-V s36728 = a1;
-if (IS_N(s36728, 5)) {
-V s36729 = FLD(s36728, 1);
-if ((s36729) == IMM(0)) {
+V s36899 = a1;
+if (IS_N(s36899, 5)) {
+V s36900 = FLD(s36899, 1);
+if ((s36900) == IMM(0)) {
 { V dc = CH2(5, BEND_HOLE, IMM(0)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = a0; V t1 = FLD(s36728, 0); a0 = t0; a1 = t1; goto top; }
+{ V t0 = a0; V t1 = FLD(s36899, 0); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s36729, 1)) {
-*dst = F_Expr_dpush(F_Unb_dsum_de(a0, FLD(s36729, 0)), F_Unb_dsum_de(a0, C2(5, FLD(s36728, 0), FLD(s36729, 1))));
+} else if (IS_N(s36900, 1)) {
+*dst = F_Expr_dpush(F_Unb_dsum_de(a0, FLD(s36900, 0)), F_Unb_dsum_de(a0, C2(5, FLD(s36899, 0), FLD(s36900, 1))));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s36728, 6)) {
-V s36733 = FLD(s36728, 1);
-if ((s36733) == IMM(0)) {
-V v36734 = F_Map_dget(K36735(), a0, FLD(s36728, 0));
-V v36737 = FLD(v36734, 1);
-*dst = F_Unb_dsum_dctor_x37u(FLD(v36737, 0), FLD(v36737, 1), FLD(v36737, 2), FLD(s36728, 0));
+} else if (IS_N(s36899, 6)) {
+V s36904 = FLD(s36899, 1);
+if ((s36904) == IMM(0)) {
+V v36905 = F_Map_dget(K36906(), a0, FLD(s36899, 0));
+V v36908 = FLD(v36905, 1);
+*dst = F_Unb_dsum_dctor_x37u(FLD(v36908, 0), FLD(v36908, 1), FLD(v36908, 2), FLD(s36899, 0));
 return 0;
-} else if (IS_N(s36733, 1)) {
-*dst = F_Expr_dpush(F_Unb_dsum_de(a0, FLD(s36733, 0)), F_Unb_dsum_de(a0, C2(6, FLD(s36728, 0), FLD(s36733, 1))));
+} else if (IS_N(s36904, 1)) {
+*dst = F_Expr_dpush(F_Unb_dsum_de(a0, FLD(s36904, 0)), F_Unb_dsum_de(a0, C2(6, FLD(s36899, 0), FLD(s36904, 1))));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s36728, 7)) {
-{ V dc = CH2(7, F_Unb_dsum_dp(a0, FLD(s36728, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s36728, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36899, 7)) {
+{ V dc = CH2(7, F_Unb_dsum_dp(a0, FLD(s36899, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s36899, 1); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s36728, 8)) {
-{ V dc = CH3(8, F_Unb_dsum_dp(a0, FLD(s36728, 0)), F_Unb_dsum_de(a0, FLD(s36728, 1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = a0; V t1 = FLD(s36728, 2); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36899, 8)) {
+{ V dc = CH3(8, F_Unb_dsum_dp(a0, FLD(s36899, 0)), F_Unb_dsum_de(a0, FLD(s36899, 1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = a0; V t1 = FLD(s36899, 2); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s36728, 9)) {
-V s36745 = FLD(s36728, 0);
-if (IS_N(s36745, 1)) {
-*dst = F_Expr_dpush(F_Unb_dsum_de(a0, FLD(s36745, 0)), F_Unb_dsum_de(a0, C2(9, FLD(s36745, 1), FLD(s36728, 1))));
+} else if (IS_N(s36899, 9)) {
+V s36916 = FLD(s36899, 0);
+if (IS_N(s36916, 1)) {
+*dst = F_Expr_dpush(F_Unb_dsum_de(a0, FLD(s36916, 0)), F_Unb_dsum_de(a0, C2(9, FLD(s36916, 1), FLD(s36899, 1))));
 return 0;
-} else if ((s36745) == IMM(0)) {
-V s36749 = FLD(s36728, 1);
-if ((s36749) == IMM(0)) {
-*dst = K36750();
+} else if ((s36916) == IMM(0)) {
+V s36920 = FLD(s36899, 1);
+if ((s36920) == IMM(0)) {
+*dst = K36921();
 return 0;
-} else if (IS_N(s36749, 1)) {
-V v36751 = F_Unb_dsum_de(a0, C2(9, IMM(0), FLD(s36749, 1)));
-V s36753 = v36751;
-if (IS_N(s36753, 9)) {
-*dst = C2(9, FLD(s36753, 0), C2(1, F_Unb_dsum_de(a0, FLD(s36749, 0)), FLD(s36753, 1)));
+} else if (IS_N(s36920, 1)) {
+V v36922 = F_Unb_dsum_de(a0, C2(9, IMM(0), FLD(s36920, 1)));
+V s36924 = v36922;
+if (IS_N(s36924, 9)) {
+*dst = C2(9, FLD(s36924, 0), C2(1, F_Unb_dsum_de(a0, FLD(s36920, 0)), FLD(s36924, 1)));
 return 0;
 } else {
-*dst = s36753;
+*dst = s36924;
 return 0;
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s36728, 10)) {
-{ V dc = CH2(10, F_Unb_dsum_dps(a0, FLD(s36728, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s36728, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36899, 10)) {
+{ V dc = CH2(10, F_Unb_dsum_dps(a0, FLD(s36899, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s36899, 1); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s36728, 11)) {
-{ V dc = CH2(11, FLD(s36728, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s36728, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36899, 11)) {
+{ V dc = CH2(11, FLD(s36899, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s36899, 1); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s36728, 12)) {
-{ V dc = CH3(12, FLD(s36728, 0), F_Unb_dsum_de(a0, FLD(s36728, 1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = a0; V t1 = FLD(s36728, 2); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36899, 12)) {
+{ V dc = CH3(12, FLD(s36899, 0), F_Unb_dsum_de(a0, FLD(s36899, 1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = a0; V t1 = FLD(s36899, 2); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s36728, 13)) {
-{ V dc = CH2(13, BEND_HOLE, FLD(s36728, 1)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = a0; V t1 = FLD(s36728, 0); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36899, 13)) {
+{ V dc = CH2(13, BEND_HOLE, FLD(s36899, 1)); *dst = dc; dst = &FLD(dc, 0);
+{ V t0 = a0; V t1 = FLD(s36899, 0); a0 = t0; a1 = t1; goto top; }
 }
 } else {
-*dst = s36728;
+*dst = s36899;
 return 0;
 }
 }
@@ -90292,46 +90724,46 @@ static V F_Unb_dsum_de(V a0, V a1) { V r; D_Unb_dsum_de(&r, a0, a1); return r; }
 static V W_Unb_dsum_de(V *a) { (void)a; return F_Unb_dsum_de(a[0], a[1]); }
 static V D_Unb_dsum_dps(V *dst, V a0, V a1) {
 top:;
-V s36757 = a1;
-if ((s36757) == IMM(0)) {
+V s36928 = a1;
+if ((s36928) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s36757, 1)) {
-{ V dc = CH2(1, F_Unb_dsum_dp(a0, FLD(s36757, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s36757, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36928, 1)) {
+{ V dc = CH2(1, F_Unb_dsum_dp(a0, FLD(s36928, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s36928, 1); a0 = t0; a1 = t1; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dsum_dps(V a0, V a1) { V r; D_Unb_dsum_dps(&r, a0, a1); return r; }
 static V W_Unb_dsum_dps(V *a) { (void)a; return F_Unb_dsum_dps(a[0], a[1]); }
-static V K36762(void) { static V c; return KONST(c, C3(0, MKS(""), 0u, 0u)); }
+static V K36933(void) { static V c; return KONST(c, C3(0, MKS(""), 0u, 0u)); }
 static V D_Unb_dsum_dp(V *dst, V a0, V a1) {
 top:;
-V s36759 = a1;
-if (IS_N(s36759, 1)) {
-V s36760 = FLD(s36759, 1);
-if ((s36760) == IMM(0)) {
-V v36761 = F_Map_dget(K36762(), a0, FLD(s36759, 0));
-V v36764 = FLD(v36761, 1);
-*dst = F_Unb_dsum_dpctor_x37u(FLD(v36764, 0), FLD(v36764, 1), FLD(v36764, 2), FLD(s36759, 0));
+V s36930 = a1;
+if (IS_N(s36930, 1)) {
+V s36931 = FLD(s36930, 1);
+if ((s36931) == IMM(0)) {
+V v36932 = F_Map_dget(K36933(), a0, FLD(s36930, 0));
+V v36935 = FLD(v36932, 1);
+*dst = F_Unb_dsum_dpctor_x37u(FLD(v36935, 0), FLD(v36935, 1), FLD(v36935, 2), FLD(s36930, 0));
 return 0;
-} else if (IS_N(s36760, 1)) {
-V v36766 = F_Unb_dsum_dp(a0, C2(1, FLD(s36759, 0), FLD(s36760, 1)));
-V s36768 = v36766;
-if (IS_N(s36768, 1)) {
-*dst = C2(1, FLD(s36768, 0), C2(1, F_Unb_dsum_dp(a0, FLD(s36760, 0)), FLD(s36768, 1)));
+} else if (IS_N(s36931, 1)) {
+V v36937 = F_Unb_dsum_dp(a0, C2(1, FLD(s36930, 0), FLD(s36931, 1)));
+V s36939 = v36937;
+if (IS_N(s36939, 1)) {
+*dst = C2(1, FLD(s36939, 0), C2(1, F_Unb_dsum_dp(a0, FLD(s36931, 0)), FLD(s36939, 1)));
 return 0;
 } else {
-*dst = s36768;
+*dst = s36939;
 return 0;
 }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s36759, 3)) {
-{ V dc = CH2(3, FLD(s36759, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s36759, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36930, 3)) {
+{ V dc = CH2(3, FLD(s36930, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s36930, 1); a0 = t0; a1 = t1; goto top; }
 }
 } else {
-*dst = s36759;
+*dst = s36930;
 return 0;
 }
 }
@@ -90340,49 +90772,49 @@ static V W_Unb_dsum_dp(V *a) { (void)a; return F_Unb_dsum_dp(a[0], a[1]); }
 static V F_Unb_dsum_dpctor_x37u(V a0, V a1, V a2_, V a3) {
 uint32_t a2 = (uint32_t)a2_;
 top:;
-return F_Unb_dsum_dpctor_dgo(({ V r36770;
-V v36771 = a0;
-V s36772 = v36771;
-if ((s36772) == IMM(0)) {
-r36770 = IMM(1);
-} else if (IS_N(s36772, 1)) {
-r36770 = IMM(0);
+return F_Unb_dsum_dpctor_dgo(({ V r36941;
+V v36942 = a0;
+V s36943 = v36942;
+if ((s36943) == IMM(0)) {
+r36941 = IMM(1);
+} else if (IS_N(s36943, 1)) {
+r36941 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r36770; }), a3, a0, (a1), (a2));
+r36941; }), a3, a0, (a1), (a2));
 }
 static V W_Unb_dsum_dpctor_x37u(V *a) { (void)a; return F_Unb_dsum_dpctor_x37u(a[0], a[1], a[2], a[3]); }
 static V F_Unb_dsum_dpctor_dgo(V a0, V a1, V a2, V a3, V a4_) {
 uint32_t a4 = (uint32_t)a4_;
 top:;
-V s36774 = (a0);
-if ((s36774) == IMM(1)) {
+V s36945 = (a0);
+if ((s36945) == IMM(1)) {
 return C2(1, a1, IMM(0));
-} else if ((s36774) == IMM(0)) {
+} else if ((s36945) == IMM(0)) {
 return C2(1, a2, F_List_dappend_x37f4024406551x1651636969(0, C2(1, LI(4, (a4)), IMM(0)), (a3)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dsum_dpctor_dgo(V *a) { (void)a; return F_Unb_dsum_dpctor_dgo(a[0], a[1], a[2], a[3], a[4]); }
-static V K36777(void) { static V c; return KONST(c, C1(0, MKS("_"))); }
+static V K36948(void) { static V c; return KONST(c, C1(0, MKS("_"))); }
 static V F_List_dappend_x37f4024406551x1651636969(V a0, V a2, V a3) {
 top:;
-V s36776 = (a3);
-if ((s36776) == 0) {
+V s36947 = (a3);
+if ((s36947) == 0) {
 return a2;
-} else if (nat_ge(s36776, 1)) {
-return C2(1, K36777(), F_List_dappend(a0, F_Unb_dsum_dwilds(nat_subk(s36776, 1)), a2));
+} else if (nat_ge(s36947, 1)) {
+return C2(1, K36948(), F_List_dappend(a0, F_Unb_dsum_dwilds(nat_subk(s36947, 1)), a2));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_List_dappend_x37f4024406551x1651636969(V *a) { (void)a; return F_List_dappend_x37f4024406551x1651636969(a[0], a[2], a[3]); }
-static V K36781(void) { static V c; return KONST(c, C1(0, MKS("_"))); }
+static V K36952(void) { static V c; return KONST(c, C1(0, MKS("_"))); }
 static V D_Unb_dsum_dwilds(V *dst, V a0) {
 top:;
-V s36780 = (a0);
-if ((s36780) == 0) {
+V s36951 = (a0);
+if ((s36951) == 0) {
 *dst = IMM(0);
 return 0;
-} else if (nat_ge(s36780, 1)) {
-{ V dc = CH2(1, K36781(), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = nat_subk(s36780, 1); a0 = t0; goto top; }
+} else if (nat_ge(s36951, 1)) {
+{ V dc = CH2(1, K36952(), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = nat_subk(s36951, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -90391,94 +90823,94 @@ static V W_Unb_dsum_dwilds(V *a) { (void)a; return F_Unb_dsum_dwilds(a[0]); }
 static V F_Unb_dsum_dctor_x37u(V a0, V a1, V a2_, V a3) {
 uint32_t a2 = (uint32_t)a2_;
 top:;
-return F_Unb_dsum_dctor_dgo(({ V r36782;
-V v36783 = a0;
-V s36784 = v36783;
-if ((s36784) == IMM(0)) {
-r36782 = IMM(1);
-} else if (IS_N(s36784, 1)) {
-r36782 = IMM(0);
+return F_Unb_dsum_dctor_dgo(({ V r36953;
+V v36954 = a0;
+V s36955 = v36954;
+if ((s36955) == IMM(0)) {
+r36953 = IMM(1);
+} else if (IS_N(s36955, 1)) {
+r36953 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r36782; }), a3, a0, (a1), (a2));
+r36953; }), a3, a0, (a1), (a2));
 }
 static V W_Unb_dsum_dctor_x37u(V *a) { (void)a; return F_Unb_dsum_dctor_x37u(a[0], a[1], a[2], a[3]); }
 static V F_Unb_dsum_dctor_dgo(V a0, V a1, V a2, V a3, V a4_) {
 uint32_t a4 = (uint32_t)a4_;
 top:;
-V s36786 = (a0);
-if ((s36786) == IMM(1)) {
+V s36957 = (a0);
+if ((s36957) == IMM(1)) {
 return C2(6, a1, IMM(0));
-} else if ((s36786) == IMM(0)) {
+} else if ((s36957) == IMM(0)) {
 return C2(6, a2, F_List_dappend_x37f1435582573x4205500235(0, C2(1, LI(1, (a4)), IMM(0)), (a3)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dsum_dctor_dgo(V *a) { (void)a; return F_Unb_dsum_dctor_dgo(a[0], a[1], a[2], a[3], a[4]); }
 static V F_List_dappend_x37f1435582573x4205500235(V a0, V a2, V a3) {
 top:;
-V s36788 = (a3);
-if ((s36788) == 0) {
+V s36959 = (a3);
+if ((s36959) == 0) {
 return a2;
-} else if (nat_ge(s36788, 1)) {
-return C2(1, LI(1, 0u), F_List_dappend(a0, F_Unb_dsum_dzeros(nat_subk(s36788, 1)), a2));
+} else if (nat_ge(s36959, 1)) {
+return C2(1, LI(1, 0u), F_List_dappend(a0, F_Unb_dsum_dzeros(nat_subk(s36959, 1)), a2));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_List_dappend_x37f1435582573x4205500235(V *a) { (void)a; return F_List_dappend_x37f1435582573x4205500235(a[0], a[2], a[3]); }
 static V D_Unb_dsum_dzeros(V *dst, V a0) {
 top:;
-V s36791 = (a0);
-if ((s36791) == 0) {
+V s36962 = (a0);
+if ((s36962) == 0) {
 *dst = IMM(0);
 return 0;
-} else if (nat_ge(s36791, 1)) {
+} else if (nat_ge(s36962, 1)) {
 { V dc = CH2(1, LI(1, 0u), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = nat_subk(s36791, 1); a0 = t0; goto top; }
+{ V t0 = nat_subk(s36962, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dsum_dzeros(V a0) { V r; D_Unb_dsum_dzeros(&r, a0); return r; }
 static V W_Unb_dsum_dzeros(V *a) { (void)a; return F_Unb_dsum_dzeros(a[0]); }
-static V K36794(void) { static V c; return KONST(c, C3(0, MKS(""), 0u, 0u)); }
-static V S36797(void) { static V c; return STRC(c, ""); }
+static V K36965(void) { static V c; return KONST(c, C3(0, MKS(""), 0u, 0u)); }
+static V S36968(void) { static V c; return STRC(c, ""); }
 static V F_Unb_dsum_dtype(V a0, V a1, V a2, V a3) {
 top:;
-return F_Unb_dsum_dtype_dgo(({ V r36792;
-V v36793 = F_Map_dget(K36794(), a0, ({ V r36795;
-V s36796 = a3;
-if ((s36796) == IMM(0)) {
-r36795 = S36797();
-} else if (IS_N(s36796, 1)) {
-r36795 = FLD(FLD(s36796, 0), 0);
+return F_Unb_dsum_dtype_dgo(({ V r36963;
+V v36964 = F_Map_dget(K36965(), a0, ({ V r36966;
+V s36967 = a3;
+if ((s36967) == IMM(0)) {
+r36966 = S36968();
+} else if (IS_N(s36967, 1)) {
+r36966 = FLD(FLD(s36967, 0), 0);
 } else { bend_fail("runtime fail-stop"); }
-r36795; }));
-V v36799 = FLD(v36793, 1);
-V s36800 = FLD(v36799, 0);
-if ((s36800) == IMM(0)) {
-r36792 = IMM(1);
-} else if (IS_N(s36800, 1)) {
-r36792 = IMM(0);
+r36966; }));
+V v36970 = FLD(v36964, 1);
+V s36971 = FLD(v36970, 0);
+if ((s36971) == IMM(0)) {
+r36963 = IMM(1);
+} else if (IS_N(s36971, 1)) {
+r36963 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r36792; }), a1, a2, a3);
+r36963; }), a1, a2, a3);
 }
 static V W_Unb_dsum_dtype(V *a) { (void)a; return F_Unb_dsum_dtype(a[0], a[1], a[2], a[3]); }
-static V S36803(void) { static V c; return STRC(c, "._s"); }
+static V S36974(void) { static V c; return STRC(c, "._s"); }
 static V F_Unb_dsum_dtype_dgo(V a0, V a1, V a2, V a3) {
 top:;
-V s36802 = (a0);
-if ((s36802) == IMM(1)) {
+V s36973 = (a0);
+if ((s36973) == IMM(1)) {
 return C3(3, a1, a2, a3);
-} else if ((s36802) == IMM(0)) {
-return C3(3, a1, a2, C2(1, C2(0, F_String_dappend(a1, S36803()), F_Unb_dsum_drec(F_Unb_dsum_dwide(a3, IMM(0)))), IMM(0)));
+} else if ((s36973) == IMM(0)) {
+return C3(3, a1, a2, C2(1, C2(0, F_String_dappend(a1, S36974()), F_Unb_dsum_drec(F_Unb_dsum_dwide(a3, IMM(0)))), IMM(0)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dsum_dtype_dgo(V *a) { (void)a; return F_Unb_dsum_dtype_dgo(a[0], a[1], a[2], a[3]); }
-static V S36808(void) { static V c; return STRC(c, "_s_tag"); }
+static V S36979(void) { static V c; return STRC(c, "_s_tag"); }
 static __attribute__((noinline)) V H_F_Unb_dsum_drec(V a0) {
 top:;
-V s36807 = a0;
-if ((s36807) == IMM(0)) {
+V s36978 = a0;
+if ((s36978) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s36807, 1)) {
-return F_List_dappend(0, C2(1, C2(0, FLD(FLD(s36807, 0), 0), FLD(FLD(s36807, 0), 1)), FLD(s36807, 1)), C2(1, C2(0, S36808(), FLD(FLD(s36807, 0), 1)), IMM(0)));
+} else if (IS_N(s36978, 1)) {
+return F_List_dappend(0, C2(1, C2(0, FLD(FLD(s36978, 0), 0), FLD(FLD(s36978, 0), 1)), FLD(s36978, 1)), C2(1, C2(0, S36979(), FLD(FLD(s36978, 0), 1)), IMM(0)));
 } else { bend_fail("runtime fail-stop"); }
 }
 BEND_UINL V F_Unb_dsum_drec(V a0) {
@@ -90490,32 +90922,32 @@ return H_F_Unb_dsum_drec(a0);
 static V W_Unb_dsum_drec(V *a) { (void)a; return F_Unb_dsum_drec(a[0]); }
 static V F_Nest_dprogram(V a0, V a1) {
 top:;
-V s36810 = (a0);
-if ((s36810) == IMM(1)) {
+V s36981 = (a0);
+if ((s36981) == IMM(1)) {
 return F_Nest_ddecls(F_Nest_dcands(F_Nest_dtypes(a1, IMM(0)), F_G_dlaws(a1, IMM(0)), a1, IMM(0)), a1);
-} else if ((s36810) == IMM(0)) {
+} else if ((s36981) == IMM(0)) {
 return a1;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Nest_dprogram(V *a) { (void)a; return F_Nest_dprogram(a[0], a[1]); }
 static V F_Nest_dtypes(V a0, V a1) {
 top:;
-V s36815 = a0;
-if ((s36815) == IMM(0)) {
+V s36986 = a0;
+if ((s36986) == IMM(0)) {
 return a1;
-} else if (IS_N(s36815, 1) && IS_N(FLD(s36815, 0), 3)) {
-{ V t0 = FLD(s36815, 1); V t1 = F_Nest_dtype(FLD(FLD(s36815, 0), 0), FLD(FLD(s36815, 0), 1), FLD(FLD(s36815, 0), 2), a1); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s36815, 1)) {
-{ V t0 = FLD(s36815, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36986, 1) && IS_N(FLD(s36986, 0), 3)) {
+{ V t0 = FLD(s36986, 1); V t1 = F_Nest_dtype(FLD(FLD(s36986, 0), 0), FLD(FLD(s36986, 0), 1), FLD(FLD(s36986, 0), 2), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s36986, 1)) {
+{ V t0 = FLD(s36986, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Nest_dtypes(V *a) { (void)a; return F_Nest_dtypes(a[0], a[1]); }
 static V F_Nest_dtype(V a0, V a1, V a2, V a3) {
 top:;
-V s36817 = a1;
-V s36818 = a2;
-if ((s36817) == IMM(0) && IS_N(s36818, 1) && (FLD(s36818, 1)) == IMM(0)) {
-return F_Nest_dput_dtype(F_Unb_dfits(FLD(FLD(s36818, 0), 1)), a0, C2(0, FLD(FLD(s36818, 0), 0), FLD(FLD(s36818, 0), 1)), a3);
+V s36988 = a1;
+V s36989 = a2;
+if ((s36988) == IMM(0) && IS_N(s36989, 1) && (FLD(s36989, 1)) == IMM(0)) {
+return F_Nest_dput_dtype(F_Unb_dfits(FLD(FLD(s36989, 0), 1)), a0, C2(0, FLD(FLD(s36989, 0), 0), FLD(FLD(s36989, 0), 1)), a3);
 } else {
 return a3;
 }
@@ -90523,39 +90955,39 @@ return a3;
 static V W_Nest_dtype(V *a) { (void)a; return F_Nest_dtype(a[0], a[1], a[2], a[3]); }
 static V F_Nest_dput_dtype(V a0, V a1, V a2, V a3) {
 top:;
-V s36821 = (a0);
-if ((s36821) == IMM(1)) {
+V s36992 = (a0);
+if ((s36992) == IMM(1)) {
 return F_Map_dset(0, a3, a1, a2);
-} else if ((s36821) == IMM(0)) {
+} else if ((s36992) == IMM(0)) {
 return a3;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Nest_dput_dtype(V *a) { (void)a; return F_Nest_dput_dtype(a[0], a[1], a[2], a[3]); }
 static V F_Nest_dcands(V a0, V a1, V a2, V a3) {
 top:;
-V s36823 = a2;
-if ((s36823) == IMM(0)) {
+V s36994 = a2;
+if ((s36994) == IMM(0)) {
 return a3;
-} else if (IS_N(s36823, 1) && IS_N(FLD(s36823, 0), 0)) {
-{ V t0 = a0; V t1 = a1; V t2 = FLD(s36823, 1); V t3 = ({ V r36824;
-V uo36825[2]; U_Nest_dcand(a0, a1, FLD(FLD(s36823, 0), 0), FLD(FLD(s36823, 0), 1), FLD(FLD(s36823, 0), 3), uo36825);
-r36824 = F_Nest_dput_x37u(uo36825[0], uo36825[1], FLD(FLD(s36823, 0), 0), a3);
-r36824; }); a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
-} else if (IS_N(s36823, 1)) {
-{ V t0 = a0; V t1 = a1; V t2 = FLD(s36823, 1); V t3 = a3; a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
+} else if (IS_N(s36994, 1) && IS_N(FLD(s36994, 0), 0)) {
+{ V t0 = a0; V t1 = a1; V t2 = FLD(s36994, 1); V t3 = ({ V r36995;
+V uo36996[2]; U_Nest_dcand(a0, a1, FLD(FLD(s36994, 0), 0), FLD(FLD(s36994, 0), 1), FLD(FLD(s36994, 0), 3), uo36996);
+r36995 = F_Nest_dput_x37u(uo36996[0], uo36996[1], FLD(FLD(s36994, 0), 0), a3);
+r36995; }); a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
+} else if (IS_N(s36994, 1)) {
+{ V t0 = a0; V t1 = a1; V t2 = FLD(s36994, 1); V t3 = a3; a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Nest_dcands(V *a) { (void)a; return F_Nest_dcands(a[0], a[1], a[2], a[3]); }
 static V F_Nest_dput_x37u(V a0, V a1, V a2, V a3) {
 top:;
-V s36828 = a0;
-V s36829 = (a1);
+V s36999 = a0;
+V s37000 = (a1);
 {
-V s36830 = s36828;
-if ((s36830) == IMM(0)) {
+V s37001 = s36999;
+if ((s37001) == IMM(0)) {
 return a3;
-} else if (IS_N(s36830, 1)) {
-return F_Map_dset(0, a3, a2, C2(0, C2(1, FLD(s36830, 0), FLD(s36830, 1)), s36829));
+} else if (IS_N(s37001, 1)) {
+return F_Map_dset(0, a3, a2, C2(0, C2(1, FLD(s37001, 0), FLD(s37001, 1)), s37000));
 } else { bend_fail("runtime fail-stop"); }
 }
 }
@@ -90566,56 +90998,56 @@ return U_Nest_dcand_dgo(F_Nest_dcomps_dof(a0, F_Nest_dcomps(a4)), F_Unb_dok_ddef
 }
 static V F_Nest_dcand(V a0, V a1, V a2, V a3, V a4) { V o[2]; U_Nest_dcand(a0, a1, a2, a3, a4, o); return CN(0, 2, o); }
 static V W_Nest_dcand(V *a) { (void)a; return F_Nest_dcand(a[0], a[1], a[2], a[3], a[4]); }
-static V S36844(void) { static V c; return STRC(c, "main"); }
+static V S37015(void) { static V c; return STRC(c, "main"); }
 static V F_Unb_dok_ddef(V a0, V a1, V a2) {
 top:;
-V s36837 = ({ V r36838;
-V s36839 = ({ V r36840;
-V s36841 = F_List_dcontains_x37s539261848x2963157848(F_Natives(), a0);
-if ((s36841) == IMM(0)) {
-r36840 = F_String_deq(a0, S36844());
-} else if ((s36841) == IMM(1)) {
-r36840 = IMM(1);
+V s37008 = ({ V r37009;
+V s37010 = ({ V r37011;
+V s37012 = F_List_dcontains_x37s539261848x2963157848(F_Natives(), a0);
+if ((s37012) == IMM(0)) {
+r37011 = F_String_deq(a0, S37015());
+} else if ((s37012) == IMM(1)) {
+r37011 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r36840; });
-if ((s36839) == IMM(0)) {
-V s36846 = F_G_derased__ty(F_Ty_dhead(a1));
-if ((s36846) == IMM(0)) {
-V v36849 = F_Map_dhas(a2, a0);
-r36838 = FLD(v36849, 1);
-} else if ((s36846) == IMM(1)) {
-r36838 = IMM(1);
+r37011; });
+if ((s37010) == IMM(0)) {
+V s37017 = F_G_derased__ty(F_Ty_dhead(a1));
+if ((s37017) == IMM(0)) {
+V v37020 = F_Map_dhas(a2, a0);
+r37009 = FLD(v37020, 1);
+} else if ((s37017) == IMM(1)) {
+r37009 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s36839) == IMM(1)) {
-r36838 = IMM(1);
+} else if ((s37010) == IMM(1)) {
+r37009 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r36838; });
-if ((s36837) == IMM(0)) {
+r37009; });
+if ((s37008) == IMM(0)) {
 return IMM(1);
-} else if ((s36837) == IMM(1)) {
+} else if ((s37008) == IMM(1)) {
 return IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dok_ddef(V *a) { (void)a; return F_Unb_dok_ddef(a[0], a[1], a[2]); }
-static V S36856(void) { static V c; return STRC(c, "&"); }
-static V S36858(void) { static V c; return STRC(c, "Sigma"); }
+static V S37027(void) { static V c; return STRC(c, "&"); }
+static V S37029(void) { static V c; return STRC(c, "Sigma"); }
 static V F_Nest_dcomps(V a0) {
 top:;
-V s36851 = a0;
-if (IS_N(s36851, 14)) {
-V s36852 = FLD(s36851, 1);
-if (IS_N(s36852, 1) && IS_N(FLD(s36852, 1), 1) && (FLD(FLD(s36852, 1), 1)) == IMM(0)) {
-V s36853 = ({ V r36854;
-V v36855 = S36856();
-r36854 = F_String_deq(FLD(s36851, 0), v36855);
-r36854; });
-if ((s36853) == IMM(0)) {
+V s37022 = a0;
+if (IS_N(s37022, 14)) {
+V s37023 = FLD(s37022, 1);
+if (IS_N(s37023, 1) && IS_N(FLD(s37023, 1), 1) && (FLD(FLD(s37023, 1), 1)) == IMM(0)) {
+V s37024 = ({ V r37025;
+V v37026 = S37027();
+r37025 = F_String_deq(FLD(s37022, 0), v37026);
+r37025; });
+if ((s37024) == IMM(0)) {
 return IMM(0);
-} else if ((s36853) == IMM(1)) {
-return C2(1, FLD(s36852, 0), C2(1, FLD(FLD(s36852, 1), 0), IMM(0)));
+} else if ((s37024) == IMM(1)) {
+return C2(1, FLD(s37023, 0), C2(1, FLD(FLD(s37023, 1), 0), IMM(0)));
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s36852, 1) && IS_N(FLD(s36852, 1), 1) && IS_N(FLD(FLD(s36852, 1), 1), 1) && IS_N(FLD(FLD(FLD(s36852, 1), 1), 1), 1) && (FLD(FLD(FLD(FLD(s36852, 1), 1), 1), 1)) == IMM(0)) {
-return F_Nest_dsigma(FLD(FLD(FLD(FLD(s36852, 1), 1), 1), 0), F_String_deq(FLD(s36851, 0), S36858()), FLD(FLD(FLD(s36852, 1), 1), 0));
+} else if (IS_N(s37023, 1) && IS_N(FLD(s37023, 1), 1) && IS_N(FLD(FLD(s37023, 1), 1), 1) && IS_N(FLD(FLD(FLD(s37023, 1), 1), 1), 1) && (FLD(FLD(FLD(FLD(s37023, 1), 1), 1), 1)) == IMM(0)) {
+return F_Nest_dsigma(FLD(FLD(FLD(FLD(s37023, 1), 1), 1), 0), F_String_deq(FLD(s37022, 0), S37029()), FLD(FLD(FLD(s37023, 1), 1), 0));
 } else {
 return IMM(0);
 }
@@ -90626,13 +91058,13 @@ return IMM(0);
 static V W_Nest_dcomps(V *a) { (void)a; return F_Nest_dcomps(a[0]); }
 static V F_Nest_dsigma(V a0, V a1, V a2) {
 top:;
-V s36861 = a0;
-if (IS_N(s36861, 7)) {
-V s36862 = (a1);
-if ((s36862) == IMM(0)) {
+V s37032 = a0;
+if (IS_N(s37032, 7)) {
+V s37033 = (a1);
+if ((s37033) == IMM(0)) {
 return IMM(0);
-} else if ((s36862) == IMM(1)) {
-return C2(1, a2, C2(1, FLD(s36861, 1), IMM(0)));
+} else if ((s37033) == IMM(1)) {
+return C2(1, a2, C2(1, FLD(s37032, 1), IMM(0)));
 } else { bend_fail("runtime fail-stop"); }
 } else {
 return IMM(0);
@@ -90641,42 +91073,42 @@ return IMM(0);
 static V W_Nest_dsigma(V *a) { (void)a; return F_Nest_dsigma(a[0], a[1], a[2]); }
 static V D_Nest_dcomps_dof(V *dst, V a0, V a1) {
 top:;
-V s36863 = a1;
-if ((s36863) == IMM(0)) {
+V s37034 = a1;
+if ((s37034) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s36863, 1)) {
-{ V dc = CH2(1, F_Nest_dcomp(a0, FLD(s36863, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s36863, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s37034, 1)) {
+{ V dc = CH2(1, F_Nest_dcomp(a0, FLD(s37034, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s37034, 1); a0 = t0; a1 = t1; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Nest_dcomps_dof(V a0, V a1) { V r; D_Nest_dcomps_dof(&r, a0, a1); return r; }
 static V W_Nest_dcomps_dof(V *a) { (void)a; return F_Nest_dcomps_dof(a[0], a[1]); }
-static V K36866(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
+static V K37037(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
 BEND_UINL V U_Nest_dcomp(V a0, V a1, V *o) {
 top:;
-V v36865 = F_Map_dget(K36866(), a0, F_Ty_dhead(a1));
-V v36869 = FLD(v36865, 1);
-return U_Nest_dcomp_dgo_x37u(FLD(v36869, 0), FLD(v36869, 1), a1, o);
+V v37036 = F_Map_dget(K37037(), a0, F_Ty_dhead(a1));
+V v37040 = FLD(v37036, 1);
+return U_Nest_dcomp_dgo_x37u(FLD(v37040, 0), FLD(v37040, 1), a1, o);
 }
 static V F_Nest_dcomp(V a0, V a1) { V o[2]; U_Nest_dcomp(a0, a1, o); return CN(0, 2, o); }
 static V W_Nest_dcomp(V *a) { (void)a; return F_Nest_dcomp(a[0], a[1]); }
-static V S36874(void) { static V c; return STRC(c, ""); }
-static V S36875(void) { static V c; return STRC(c, "x"); }
+static V S37045(void) { static V c; return STRC(c, ""); }
+static V S37046(void) { static V c; return STRC(c, "x"); }
 BEND_UINL V U_Nest_dcomp_dgo_x37u(V a0, V a1, V a2, V *o) {
 top:;
-V s36871 = a0;
-V s36872 = a1;
+V s37042 = a0;
+V s37043 = a1;
 {
-V s36873 = s36871;
-if ((s36873) == IMM(0)) {
-o[0] = S36874();
-o[1] = C2(1, C2(0, S36875(), a2), IMM(0));
+V s37044 = s37042;
+if ((s37044) == IMM(0)) {
+o[0] = S37045();
+o[1] = C2(1, C2(0, S37046(), a2), IMM(0));
 return 0;
-} else if (IS_N(s36873, 1)) {
-o[0] = s36871;
-o[1] = s36872;
+} else if (IS_N(s37044, 1)) {
+o[0] = s37042;
+o[1] = s37043;
 return 0;
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -90685,24 +91117,24 @@ static V F_Nest_dcomp_dgo_x37u(V a0, V a1, V a2) { V o[2]; U_Nest_dcomp_dgo_x37u
 static V W_Nest_dcomp_dgo_x37u(V *a) { (void)a; return F_Nest_dcomp_dgo_x37u(a[0], a[1], a[2]); }
 BEND_UINL V U_Nest_dcand_dgo(V a0, V a1, V a2, V *o) {
 top:;
-V s36876 = ({ V r36877;
-V s36878 = (a1);
-if ((s36878) == IMM(0)) {
-r36877 = IMM(0);
-} else if ((s36878) == IMM(1)) {
-V s36879 = F_Nest_dnested(a0);
-if ((s36879) == IMM(0)) {
-r36877 = IMM(0);
-} else if ((s36879) == IMM(1)) {
-r36877 = F_Unb_dfits(F_Nest_dfields(a0));
+V s37047 = ({ V r37048;
+V s37049 = (a1);
+if ((s37049) == IMM(0)) {
+r37048 = IMM(0);
+} else if ((s37049) == IMM(1)) {
+V s37050 = F_Nest_dnested(a0);
+if ((s37050) == IMM(0)) {
+r37048 = IMM(0);
+} else if ((s37050) == IMM(1)) {
+r37048 = F_Unb_dfits(F_Nest_dfields(a0));
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r36877; });
-if ((s36876) == IMM(0)) {
+r37048; });
+if ((s37047) == IMM(0)) {
 o[0] = IMM(0);
 o[1] = 0u;
 return 0;
-} else if ((s36876) == IMM(1)) {
+} else if ((s37047) == IMM(1)) {
 o[0] = a0;
 o[1] = (a2);
 return 0;
@@ -90712,11 +91144,11 @@ static V F_Nest_dcand_dgo(V a0, V a1, V a2) { V o[2]; U_Nest_dcand_dgo(a0, a1, a
 static V W_Nest_dcand_dgo(V *a) { (void)a; return F_Nest_dcand_dgo(a[0], a[1], a[2]); }
 static __attribute__((noinline)) V H_F_Nest_dfields(V a0) {
 top:;
-V s36883 = a0;
-if ((s36883) == IMM(0)) {
+V s37054 = a0;
+if ((s37054) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s36883, 1)) {
-return F_List_dappend(0, FLD(FLD(s36883, 0), 1), F_Nest_dfields(FLD(s36883, 1)));
+} else if (IS_N(s37054, 1)) {
+return F_List_dappend(0, FLD(FLD(s37054, 0), 1), F_Nest_dfields(FLD(s37054, 1)));
 } else { bend_fail("runtime fail-stop"); }
 }
 BEND_UINL V F_Nest_dfields(V a0) {
@@ -90728,21 +91160,21 @@ return H_F_Nest_dfields(a0);
 static V W_Nest_dfields(V *a) { (void)a; return F_Nest_dfields(a[0]); }
 static __attribute__((noinline)) V H_F_Nest_dnested(V a0) {
 top:;
-V s36886 = a0;
-if ((s36886) == IMM(0)) {
+V s37057 = a0;
+if ((s37057) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s36886, 1)) {
-V s36887 = ({ V r36888;
-V s36889 = FLD(FLD(s36886, 0), 0);
-if ((s36889) == IMM(0)) {
-r36888 = IMM(0);
-} else if (IS_N(s36889, 1)) {
-r36888 = IMM(1);
+} else if (IS_N(s37057, 1)) {
+V s37058 = ({ V r37059;
+V s37060 = FLD(FLD(s37057, 0), 0);
+if ((s37060) == IMM(0)) {
+r37059 = IMM(0);
+} else if (IS_N(s37060, 1)) {
+r37059 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r36888; });
-if ((s36887) == IMM(0)) {
-{ V t0 = FLD(s36886, 1); a0 = t0; goto top; }
-} else if ((s36887) == IMM(1)) {
+r37059; });
+if ((s37058) == IMM(0)) {
+{ V t0 = FLD(s37057, 1); a0 = t0; goto top; }
+} else if ((s37058) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -90756,103 +91188,103 @@ return H_F_Nest_dnested(a0);
 static V W_Nest_dnested(V *a) { (void)a; return F_Nest_dnested(a[0]); }
 static V F_Nest_ddecls(V a0, V a1) {
 top:;
-V s36890 = a1;
-if ((s36890) == IMM(0)) {
+V s37061 = a1;
+if ((s37061) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s36890, 1)) {
-return F_List_dappend(0, F_Nest_ddecl(a0, FLD(s36890, 0)), F_Nest_ddecls(a0, FLD(s36890, 1)));
+} else if (IS_N(s37061, 1)) {
+return F_List_dappend(0, F_Nest_ddecl(a0, FLD(s37061, 0)), F_Nest_ddecls(a0, FLD(s37061, 1)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Nest_ddecls(V *a) { (void)a; return F_Nest_ddecls(a[0], a[1]); }
-static V K36896(void) { static V c; return KONST(c, C2(0, IMM(0), 0u)); }
+static V K37067(void) { static V c; return KONST(c, C2(0, IMM(0), 0u)); }
 static V F_Nest_ddecl(V a0, V a1) {
 top:;
-V s36894 = a1;
-if (IS_N(s36894, 0)) {
-V v36895 = F_Map_dget(K36896(), a0, FLD(s36894, 0));
-V v36898 = FLD(v36895, 1);
-return F_Nest_ddecl_dgo_x37u(FLD(v36898, 0), FLD(v36898, 1), a0, FLD(s36894, 0), FLD(s36894, 1), FLD(s36894, 2), FLD(s36894, 3));
+V s37065 = a1;
+if (IS_N(s37065, 0)) {
+V v37066 = F_Map_dget(K37067(), a0, FLD(s37065, 0));
+V v37069 = FLD(v37066, 1);
+return F_Nest_ddecl_dgo_x37u(FLD(v37069, 0), FLD(v37069, 1), a0, FLD(s37065, 0), FLD(s37065, 1), FLD(s37065, 2), FLD(s37065, 3));
 } else {
-return C2(1, s36894, IMM(0));
+return C2(1, s37065, IMM(0));
 }
 }
 static V W_Nest_ddecl(V *a) { (void)a; return F_Nest_ddecl(a[0], a[1]); }
-static V S36903(void) { static V c; return STRC(c, ""); }
-static V S36905(void) { static V c; return STRC(c, "N%"); }
-static V S36907(void) { static V c; return STRC(c, "N%"); }
-static V S36910(void) { static V c; return STRC(c, "%n"); }
-static V S36912(void) { static V c; return STRC(c, "N%"); }
-static V S36915(void) { static V c; return STRC(c, ""); }
-static V S36917(void) { static V c; return STRC(c, "N%"); }
-static V S36920(void) { static V c; return STRC(c, ""); }
+static V S37074(void) { static V c; return STRC(c, ""); }
+static V S37076(void) { static V c; return STRC(c, "N%"); }
+static V S37078(void) { static V c; return STRC(c, "N%"); }
+static V S37081(void) { static V c; return STRC(c, "%n"); }
+static V S37083(void) { static V c; return STRC(c, "N%"); }
+static V S37086(void) { static V c; return STRC(c, ""); }
+static V S37088(void) { static V c; return STRC(c, "N%"); }
+static V S37091(void) { static V c; return STRC(c, ""); }
 static V F_Nest_ddecl_dgo_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6) {
 top:;
-V s36900 = a0;
-V s36901 = (a1);
+V s37071 = a0;
+V s37072 = (a1);
 {
-V s36902 = s36900;
-if ((s36902) == IMM(0)) {
-return C2(1, C4(0, a3, a4, F_Nest_dcalls(a5, a2, IMM(0), S36903(), IMM(1)), a6), IMM(0));
-} else if (IS_N(s36902, 1)) {
-return C2(1, C3(3, F_String_dappend(S36905(), a3), IMM(0), C2(1, C2(0, F_String_dappend(S36907(), a3), F_Nest_dfields(C2(1, FLD(s36902, 0), FLD(s36902, 1)))), IMM(0))), C2(1, C4(0, F_String_dappend(a3, S36910()), a4, F_Nest_dcalls(F_Nest_dtail(a5, a2, F_String_dappend(S36912(), a3), C2(1, FLD(s36902, 0), FLD(s36902, 1)), 0u), a2, IMM(0), S36915(), IMM(1)), C2(14, F_String_dappend(S36917(), a3), IMM(0))), C2(1, C4(0, a3, a4, F_Nest_drebuild(a3, C2(1, FLD(s36902, 0), FLD(s36902, 1)), F_Nest_dargs(a4), S36920()), a6), IMM(0))));
+V s37073 = s37071;
+if ((s37073) == IMM(0)) {
+return C2(1, C4(0, a3, a4, F_Nest_dcalls(a5, a2, IMM(0), S37074(), IMM(1)), a6), IMM(0));
+} else if (IS_N(s37073, 1)) {
+return C2(1, C3(3, F_String_dappend(S37076(), a3), IMM(0), C2(1, C2(0, F_String_dappend(S37078(), a3), F_Nest_dfields(C2(1, FLD(s37073, 0), FLD(s37073, 1)))), IMM(0))), C2(1, C4(0, F_String_dappend(a3, S37081()), a4, F_Nest_dcalls(F_Nest_dtail(a5, a2, F_String_dappend(S37083(), a3), C2(1, FLD(s37073, 0), FLD(s37073, 1)), 0u), a2, IMM(0), S37086(), IMM(1)), C2(14, F_String_dappend(S37088(), a3), IMM(0))), C2(1, C4(0, a3, a4, F_Nest_drebuild(a3, C2(1, FLD(s37073, 0), FLD(s37073, 1)), F_Nest_dargs(a4), S37091()), a6), IMM(0))));
 } else { bend_fail("runtime fail-stop"); }
 }
 }
 static V W_Nest_ddecl_dgo_x37u(V *a) { (void)a; return F_Nest_ddecl_dgo_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); }
 static V D_Nest_dargs(V *dst, V a0) {
 top:;
-V s36922 = a0;
-if ((s36922) == IMM(0)) {
+V s37093 = a0;
+if ((s37093) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s36922, 1)) {
-{ V dc = CH2(1, C1(0, FLD(FLD(s36922, 0), 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s36922, 1); a0 = t0; goto top; }
+} else if (IS_N(s37093, 1)) {
+{ V dc = CH2(1, C1(0, FLD(FLD(s37093, 0), 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37093, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Nest_dargs(V a0) { V r; D_Nest_dargs(&r, a0); return r; }
 static V W_Nest_dargs(V *a) { (void)a; return F_Nest_dargs(a[0]); }
-static V S36924(void) { static V c; return STRC(c, "_nc"); }
-static V S36925(void) { static V c; return STRC(c, "_"); }
-static V S36928(void) { static V c; return STRC(c, "N%"); }
-static V S36932(void) { static V c; return STRC(c, "%n"); }
-static V S36934(void) { static V c; return STRC(c, "Tuple"); }
+static V S37095(void) { static V c; return STRC(c, "_nc"); }
+static V S37096(void) { static V c; return STRC(c, "_"); }
+static V S37099(void) { static V c; return STRC(c, "N%"); }
+static V S37103(void) { static V c; return STRC(c, "%n"); }
+static V S37105(void) { static V c; return STRC(c, "Tuple"); }
 static V F_Nest_drebuild(V a0, V a1, V a2, V a3) {
 top:;
-V v36923 = F_String_dappend(S36924(), F_String_dappend(a3, S36925()));
-return C3(8, C2(1, F_String_dappend(S36928(), a0), F_Unb_dpvars(F_Nest_dnames(v36923, a1, 0u))), C2(5, C1(0, F_String_dappend(a0, S36932())), a2), C2(6, S36934(), F_Nest_dout(v36923, a1, 0u)));
+V v37094 = F_String_dappend(S37095(), F_String_dappend(a3, S37096()));
+return C3(8, C2(1, F_String_dappend(S37099(), a0), F_Unb_dpvars(F_Nest_dnames(v37094, a1, 0u))), C2(5, C1(0, F_String_dappend(a0, S37103())), a2), C2(6, S37105(), F_Nest_dout(v37094, a1, 0u)));
 }
 static V W_Nest_drebuild(V *a) { (void)a; return F_Nest_drebuild(a[0], a[1], a[2], a[3]); }
-static V S36941(void) { static V c; return STRC(c, "_"); }
+static V S37112(void) { static V c; return STRC(c, "_"); }
 static V D_Nest_dout(V *dst, V a0, V a1, V a2) {
 top:;
-V s36936 = a1;
-if ((s36936) == IMM(0)) {
+V s37107 = a1;
+if ((s37107) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s36936, 1)) {
-{ V dc = CH2(1, F_Nest_done(({ V r36937;
-V s36938 = FLD(FLD(s36936, 0), 0);
-if ((s36938) == IMM(0)) {
-r36937 = IMM(1);
-} else if (IS_N(s36938, 1)) {
-r36937 = IMM(0);
+} else if (IS_N(s37107, 1)) {
+{ V dc = CH2(1, F_Nest_done(({ V r37108;
+V s37109 = FLD(FLD(s37107, 0), 0);
+if ((s37109) == IMM(0)) {
+r37108 = IMM(1);
+} else if (IS_N(s37109, 1)) {
+r37108 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r36937; }), FLD(FLD(s36936, 0), 0), F_String_dappend(a0, F_String_dappend(F_U32_dshow_dif((a2), F_U32_dis__zero((a2))), S36941())), FLD(FLD(s36936, 0), 1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s36936, 1); V t2 = F_U32_dinc((a2)); a0 = t0; a1 = t1; a2 = t2; goto top; }
+r37108; }), FLD(FLD(s37107, 0), 0), F_String_dappend(a0, F_String_dappend(F_U32_dshow_dif((a2), F_U32_dis__zero((a2))), S37112())), FLD(FLD(s37107, 0), 1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s37107, 1); V t2 = F_U32_dinc((a2)); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Nest_dout(V a0, V a1, V a2) { V r; D_Nest_dout(&r, a0, a1, a2); return r; }
 static V W_Nest_dout(V *a) { (void)a; return F_Nest_dout(a[0], a[1], a[2]); }
-static V S36947(void) { static V c; return STRC(c, "0"); }
+static V S37118(void) { static V c; return STRC(c, "0"); }
 static V F_Nest_done(V a0, V a1, V a2, V a3) {
 top:;
-V s36946 = (a0);
-if ((s36946) == IMM(1)) {
-return C1(0, F_String_dappend(a2, S36947()));
-} else if ((s36946) == IMM(0)) {
+V s37117 = (a0);
+if ((s37117) == IMM(1)) {
+return C1(0, F_String_dappend(a2, S37118()));
+} else if ((s37117) == IMM(0)) {
 return C2(6, a1, F_Unb_dvars_x37f2766552586x3837610142(a2, a3, 0u));
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -90860,163 +91292,163 @@ static V W_Nest_done(V *a) { (void)a; return F_Nest_done(a[0], a[1], a[2], a[3])
 static V F_Unb_dvars_x37f2766552586x3837610142(V a0, V a1, V a2_) {
 uint32_t a2 = (uint32_t)a2_;
 top:;
-V s36950 = a1;
-if ((s36950) == IMM(0)) {
+V s37121 = a1;
+if ((s37121) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s36950, 1)) {
-return C2(1, C1(0, F_String_dappend(a0, F_U32_dshow_dif((a2), F_U32_dis__zero((a2))))), F_Unb_dvars(F_Nest_dfnames(a0, FLD(s36950, 1), F_U32_dinc((a2)))));
+} else if (IS_N(s37121, 1)) {
+return C2(1, C1(0, F_String_dappend(a0, F_U32_dshow_dif((a2), F_U32_dis__zero((a2))))), F_Unb_dvars(F_Nest_dfnames(a0, FLD(s37121, 1), F_U32_dinc((a2)))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dvars_x37f2766552586x3837610142(V *a) { (void)a; return F_Unb_dvars_x37f2766552586x3837610142(a[0], a[1], a[2]); }
 static V D_Nest_dfnames(V *dst, V a0, V a1, V a2) {
 top:;
-V s36957 = a1;
-if ((s36957) == IMM(0)) {
+V s37128 = a1;
+if ((s37128) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s36957, 1)) {
+} else if (IS_N(s37128, 1)) {
 { V dc = CH2(1, F_String_dappend(a0, F_U32_dshow_dif((a2), F_U32_dis__zero((a2)))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s36957, 1); V t2 = F_U32_dinc((a2)); a0 = t0; a1 = t1; a2 = t2; goto top; }
+{ V t0 = a0; V t1 = FLD(s37128, 1); V t2 = F_U32_dinc((a2)); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Nest_dfnames(V a0, V a1, V a2) { V r; D_Nest_dfnames(&r, a0, a1, a2); return r; }
 static V W_Nest_dfnames(V *a) { (void)a; return F_Nest_dfnames(a[0], a[1], a[2]); }
-static V S36967(void) { static V c; return STRC(c, "_"); }
+static V S37138(void) { static V c; return STRC(c, "_"); }
 static V F_Nest_dnames(V a0, V a1, V a2_) {
 uint32_t a2 = (uint32_t)a2_;
 top:;
-V s36962 = a1;
-if ((s36962) == IMM(0)) {
+V s37133 = a1;
+if ((s37133) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s36962, 1)) {
-return F_List_dappend_x37f2732997348x3837610144(0, F_Nest_dnames(a0, FLD(s36962, 1), F_U32_dinc((a2))), F_String_dappend(a0, F_String_dappend(F_U32_dshow_dif((a2), F_U32_dis__zero((a2))), S36967())), FLD(FLD(s36962, 0), 1), 0u);
+} else if (IS_N(s37133, 1)) {
+return F_List_dappend_x37f2732997348x3837610144(0, F_Nest_dnames(a0, FLD(s37133, 1), F_U32_dinc((a2))), F_String_dappend(a0, F_String_dappend(F_U32_dshow_dif((a2), F_U32_dis__zero((a2))), S37138())), FLD(FLD(s37133, 0), 1), 0u);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Nest_dnames(V *a) { (void)a; return F_Nest_dnames(a[0], a[1], a[2]); }
 static V F_List_dappend_x37f2732997348x3837610144(V a0, V a2, V a3, V a4, V a5_) {
 uint32_t a5 = (uint32_t)a5_;
 top:;
-V s36971 = a4;
-if ((s36971) == IMM(0)) {
+V s37142 = a4;
+if ((s37142) == IMM(0)) {
 return a2;
-} else if (IS_N(s36971, 1)) {
-return C2(1, F_String_dappend(a3, F_U32_dshow_dif((a5), F_U32_dis__zero((a5)))), F_List_dappend(a0, F_Nest_dfnames(a3, FLD(s36971, 1), F_U32_dinc((a5))), a2));
+} else if (IS_N(s37142, 1)) {
+return C2(1, F_String_dappend(a3, F_U32_dshow_dif((a5), F_U32_dis__zero((a5)))), F_List_dappend(a0, F_Nest_dfnames(a3, FLD(s37142, 1), F_U32_dinc((a5))), a2));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_List_dappend_x37f2732997348x3837610144(V *a) { (void)a; return F_List_dappend_x37f2732997348x3837610144(a[0], a[2], a[3], a[4], a[5]); }
 static V D_Unb_dpvars(V *dst, V a0) {
 top:;
-V s36978 = a0;
-if ((s36978) == IMM(0)) {
+V s37149 = a0;
+if ((s37149) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s36978, 1)) {
-{ V dc = CH2(1, C1(0, FLD(s36978, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s36978, 1); a0 = t0; goto top; }
+} else if (IS_N(s37149, 1)) {
+{ V dc = CH2(1, C1(0, FLD(s37149, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37149, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dpvars(V a0) { V r; D_Unb_dpvars(&r, a0); return r; }
 static V W_Unb_dpvars(V *a) { (void)a; return F_Unb_dpvars(a[0]); }
-static V K36985(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
-static V S36995(void) { static V c; return STRC(c, "Tuple"); }
+static V K37156(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
+static V S37166(void) { static V c; return STRC(c, "Tuple"); }
 static V D_Nest_dtail(V *dst, V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s36979 = a0;
-if (IS_N(s36979, 8)) {
-{ V dc = CH3(8, FLD(s36979, 0), FLD(s36979, 1), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = FLD(s36979, 2); V t1 = a1; V t2 = a2; V t3 = a3; V t4 = F_U32_dinc((a4)); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+V s37150 = a0;
+if (IS_N(s37150, 8)) {
+{ V dc = CH3(8, FLD(s37150, 0), FLD(s37150, 1), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = FLD(s37150, 2); V t1 = a1; V t2 = a2; V t3 = a3; V t4 = F_U32_dinc((a4)); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
-} else if (IS_N(s36979, 9)) {
-V s36981 = FLD(s36979, 0);
-if (IS_N(s36981, 1)) {
-*dst = F_Expr_dpush(FLD(s36981, 0), F_Nest_dtail(C2(9, FLD(s36981, 1), FLD(s36979, 1)), a1, a2, a3, (a4)));
+} else if (IS_N(s37150, 9)) {
+V s37152 = FLD(s37150, 0);
+if (IS_N(s37152, 1)) {
+*dst = F_Expr_dpush(FLD(s37152, 0), F_Nest_dtail(C2(9, FLD(s37152, 1), FLD(s37150, 1)), a1, a2, a3, (a4)));
 return 0;
-} else if ((s36981) == IMM(0)) {
-V s36984 = FLD(s36979, 1);
-if ((s36984) == IMM(0)) {
-*dst = K36985();
+} else if ((s37152) == IMM(0)) {
+V s37155 = FLD(s37150, 1);
+if ((s37155) == IMM(0)) {
+*dst = K37156();
 return 0;
-} else if (IS_N(s36984, 1)) {
-V v36986 = F_Nest_dtail(FLD(s36984, 0), a1, a2, a3, F_U32_dinc((a4)));
-V v36989 = F_Nest_dtail(C2(9, IMM(0), FLD(s36984, 1)), a1, a2, a3, (a4));
-V s36991 = v36989;
-if (IS_N(s36991, 9)) {
-*dst = C2(9, FLD(s36991, 0), C2(1, v36986, FLD(s36991, 1)));
+} else if (IS_N(s37155, 1)) {
+V v37157 = F_Nest_dtail(FLD(s37155, 0), a1, a2, a3, F_U32_dinc((a4)));
+V v37160 = F_Nest_dtail(C2(9, IMM(0), FLD(s37155, 1)), a1, a2, a3, (a4));
+V s37162 = v37160;
+if (IS_N(s37162, 9)) {
+*dst = C2(9, FLD(s37162, 0), C2(1, v37157, FLD(s37162, 1)));
 return 0;
 } else {
-*dst = s36991;
+*dst = s37162;
 return 0;
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s36979, 10)) {
-{ V dc = CH2(10, FLD(s36979, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s36979, 1); V t1 = a1; V t2 = a2; V t3 = a3; V t4 = F_U32_dinc((a4)); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s37150, 10)) {
+{ V dc = CH2(10, FLD(s37150, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37150, 1); V t1 = a1; V t2 = a2; V t3 = a3; V t4 = F_U32_dinc((a4)); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
-} else if (IS_N(s36979, 13)) {
-{ V t0 = FLD(s36979, 0); V t1 = a1; V t2 = a2; V t3 = a3; V t4 = (a4); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
-} else if (IS_N(s36979, 6)) {
-*dst = F_Nest_dctor(({ V r36993;
-V s36994 = F_String_deq(FLD(s36979, 0), S36995());
-if ((s36994) == IMM(0)) {
-r36993 = IMM(0);
-} else if ((s36994) == IMM(1)) {
-r36993 = F_Nat_dis__eq(F_List_dlength(0, FLD(s36979, 1)), F_List_dlength(0, a3));
+} else if (IS_N(s37150, 13)) {
+{ V t0 = FLD(s37150, 0); V t1 = a1; V t2 = a2; V t3 = a3; V t4 = (a4); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s37150, 6)) {
+*dst = F_Nest_dctor(({ V r37164;
+V s37165 = F_String_deq(FLD(s37150, 0), S37166());
+if ((s37165) == IMM(0)) {
+r37164 = IMM(0);
+} else if ((s37165) == IMM(1)) {
+r37164 = F_Nat_dis__eq(F_List_dlength(0, FLD(s37150, 1)), F_List_dlength(0, a3));
 } else { bend_fail("runtime fail-stop"); }
-r36993; }), FLD(s36979, 0), FLD(s36979, 1), a2, a3, (a4));
+r37164; }), FLD(s37150, 0), FLD(s37150, 1), a2, a3, (a4));
 return 0;
-} else if (IS_N(s36979, 5)) {
-*dst = F_Nest_dtcall(FLD(s36979, 0), FLD(s36979, 1), a1, a2, a3, (a4));
+} else if (IS_N(s37150, 5)) {
+*dst = F_Nest_dtcall(FLD(s37150, 0), FLD(s37150, 1), a1, a2, a3, (a4));
 return 0;
 } else {
-*dst = F_Nest_dopen(s36979, a2, a3, (a4));
+*dst = F_Nest_dopen(s37150, a2, a3, (a4));
 return 0;
 }
 }
 static V F_Nest_dtail(V a0, V a1, V a2, V a3, V a4) { V r; D_Nest_dtail(&r, a0, a1, a2, a3, a4); return r; }
 static V W_Nest_dtail(V *a) { (void)a; return F_Nest_dtail(a[0], a[1], a[2], a[3], a[4]); }
-static V S37004(void) { static V c; return STRC(c, "_nt"); }
-static V S37007(void) { static V c; return STRC(c, "_"); }
-static V S37011(void) { static V c; return STRC(c, "Tuple"); }
-static V S37016(void) { static V c; return STRC(c, "_nq"); }
-static V S37019(void) { static V c; return STRC(c, "_"); }
+static V S37175(void) { static V c; return STRC(c, "_nt"); }
+static V S37178(void) { static V c; return STRC(c, "_"); }
+static V S37182(void) { static V c; return STRC(c, "Tuple"); }
+static V S37187(void) { static V c; return STRC(c, "_nq"); }
+static V S37190(void) { static V c; return STRC(c, "_"); }
 static V F_Nest_dopen(V a0, V a1, V a2, V a3_) {
 uint32_t a3 = (uint32_t)a3_;
 top:;
-V v37003 = F_Nest_dpnames(F_String_dappend(S37004(), F_String_dappend(F_U32_dshow_dif((a3), F_U32_dis__zero((a3))), S37007())), a2, 0u);
-return C3(8, C2(1, S37011(), F_Unb_dpvars(v37003)), a0, ({ V r37013;
-V uo37014[2]; U_Nest_dleaves(a2, F_Unb_dvars(v37003), F_String_dappend(S37016(), F_String_dappend(F_U32_dshow_dif((a3), F_U32_dis__zero((a3))), S37019())), 0u, uo37014);
-r37013 = F_Unb_dwrap(uo37014[1], C2(6, a1, uo37014[0]));
-r37013; }));
+V v37174 = F_Nest_dpnames(F_String_dappend(S37175(), F_String_dappend(F_U32_dshow_dif((a3), F_U32_dis__zero((a3))), S37178())), a2, 0u);
+return C3(8, C2(1, S37182(), F_Unb_dpvars(v37174)), a0, ({ V r37184;
+V uo37185[2]; U_Nest_dleaves(a2, F_Unb_dvars(v37174), F_String_dappend(S37187(), F_String_dappend(F_U32_dshow_dif((a3), F_U32_dis__zero((a3))), S37190())), 0u, uo37185);
+r37184 = F_Unb_dwrap(uo37185[1], C2(6, a1, uo37185[0]));
+r37184; }));
 }
 static V W_Nest_dopen(V *a) { (void)a; return F_Nest_dopen(a[0], a[1], a[2], a[3]); }
 static V F_Unb_dwrap(V a0, V a1) {
 top:;
-V s37024 = a0;
-if ((s37024) == IMM(0)) {
+V s37195 = a0;
+if ((s37195) == IMM(0)) {
 return a1;
-} else if (IS_N(s37024, 1)) {
-return F_Unb_dfloat(FLD(FLD(s37024, 0), 0), FLD(FLD(s37024, 0), 1), F_Unb_dwrap(FLD(s37024, 1), a1));
+} else if (IS_N(s37195, 1)) {
+return F_Unb_dfloat(FLD(FLD(s37195, 0), 0), FLD(FLD(s37195, 0), 1), F_Unb_dwrap(FLD(s37195, 1), a1));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dwrap(V *a) { (void)a; return F_Unb_dwrap(a[0], a[1]); }
 static V D_Unb_dfloat(V *dst, V a0, V a1, V a2) {
 top:;
-V s37027 = a1;
-if (IS_N(s37027, 8)) {
-V s37028 = F_Unb_dfree_dnone(F_Pat_dvars(FLD(s37027, 0), IMM(0)), C2(7, a0, a2));
-if ((s37028) == IMM(1)) {
-{ V dc = CH3(8, FLD(s37027, 0), FLD(s37027, 1), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = a0; V t1 = FLD(s37027, 2); V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+V s37198 = a1;
+if (IS_N(s37198, 8)) {
+V s37199 = F_Unb_dfree_dnone(F_Pat_dvars(FLD(s37198, 0), IMM(0)), C2(7, a0, a2));
+if ((s37199) == IMM(1)) {
+{ V dc = CH3(8, FLD(s37198, 0), FLD(s37198, 1), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = a0; V t1 = FLD(s37198, 2); V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if ((s37028) == IMM(0)) {
-*dst = C3(8, a0, C3(8, FLD(s37027, 0), FLD(s37027, 1), FLD(s37027, 2)), a2);
+} else if ((s37199) == IMM(0)) {
+*dst = C3(8, a0, C3(8, FLD(s37198, 0), FLD(s37198, 1), FLD(s37198, 2)), a2);
 return 0;
 } else { bend_fail("runtime fail-stop"); }
 } else {
-*dst = C3(8, a0, s37027, a2);
+*dst = C3(8, a0, s37198, a2);
 return 0;
 }
 }
@@ -91024,37 +91456,37 @@ static V F_Unb_dfloat(V a0, V a1, V a2) { V r; D_Unb_dfloat(&r, a0, a1, a2); ret
 static V W_Unb_dfloat(V *a) { (void)a; return F_Unb_dfloat(a[0], a[1], a[2]); }
 static V F_Unb_dfree_dnone(V a0, V a1) {
 top:;
-V s37031 = a0;
-if ((s37031) == IMM(0)) {
+V s37202 = a0;
+if ((s37202) == IMM(0)) {
 return IMM(1);
-} else if (IS_N(s37031, 1)) {
-V s37032 = F_Expr_dfree(a1, FLD(s37031, 0));
-if ((s37032) == IMM(0)) {
-{ V t0 = FLD(s37031, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if ((s37032) == IMM(1)) {
+} else if (IS_N(s37202, 1)) {
+V s37203 = F_Expr_dfree(a1, FLD(s37202, 0));
+if ((s37203) == IMM(0)) {
+{ V t0 = FLD(s37202, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if ((s37203) == IMM(1)) {
 return IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dfree_dnone(V *a) { (void)a; return F_Unb_dfree_dnone(a[0], a[1]); }
-static V S37042(void) { static V c; return STRC(c, "_"); }
+static V S37213(void) { static V c; return STRC(c, "_"); }
 BEND_UINL V U_Nest_dleaves(V a0, V a1, V a2, V a3_, V *o) {
 uint32_t a3 = (uint32_t)a3_;
 top:;
-V s37034 = a0;
-V s37035 = a1;
-if (IS_N(s37034, 1) && IS_N(s37035, 1)) {
-V v37036 = ({ V r37037;
-V s37038 = FLD(FLD(s37034, 0), 0);
-if ((s37038) == IMM(0)) {
-r37037 = IMM(1);
-} else if (IS_N(s37038, 1)) {
-r37037 = IMM(0);
+V s37205 = a0;
+V s37206 = a1;
+if (IS_N(s37205, 1) && IS_N(s37206, 1)) {
+V v37207 = ({ V r37208;
+V s37209 = FLD(FLD(s37205, 0), 0);
+if ((s37209) == IMM(0)) {
+r37208 = IMM(1);
+} else if (IS_N(s37209, 1)) {
+r37208 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r37037; });
-V v37039 = F_Nest_dfnames(F_String_dappend(a2, F_String_dappend(F_U32_dshow_dif((a3), F_U32_dis__zero((a3))), S37042())), FLD(FLD(s37034, 0), 1), 0u);
-V uo37046[2]; U_Nest_dleaves(FLD(s37034, 1), FLD(s37035, 1), a2, F_U32_dinc((a3)), uo37046);
-return U_Nest_dleaf_x37u(v37036, FLD(s37035, 0), FLD(FLD(s37034, 0), 0), FLD(FLD(s37034, 0), 1), v37039, uo37046[0], uo37046[1], o);
+r37208; });
+V v37210 = F_Nest_dfnames(F_String_dappend(a2, F_String_dappend(F_U32_dshow_dif((a3), F_U32_dis__zero((a3))), S37213())), FLD(FLD(s37205, 0), 1), 0u);
+V uo37217[2]; U_Nest_dleaves(FLD(s37205, 1), FLD(s37206, 1), a2, F_U32_dinc((a3)), uo37217);
+return U_Nest_dleaf_x37u(v37207, FLD(s37206, 0), FLD(FLD(s37205, 0), 0), FLD(FLD(s37205, 0), 1), v37210, uo37217[0], uo37217[1], o);
 } else {
 o[0] = IMM(0);
 o[1] = IMM(0);
@@ -91065,12 +91497,12 @@ static V F_Nest_dleaves(V a0, V a1, V a2, V a3) { V o[2]; U_Nest_dleaves(a0, a1,
 static V W_Nest_dleaves(V *a) { (void)a; return F_Nest_dleaves(a[0], a[1], a[2], a[3]); }
 BEND_UINL V U_Nest_dleaf_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V *o) {
 top:;
-V s37050 = (a0);
-if ((s37050) == IMM(1)) {
+V s37221 = (a0);
+if ((s37221) == IMM(1)) {
 o[0] = C2(1, a1, a5);
 o[1] = a6;
 return 0;
-} else if ((s37050) == IMM(0)) {
+} else if ((s37221) == IMM(0)) {
 return U_Unb_darg_dflat_x37u(a1, a2, F_List_dlength(0, a3), a4, a5, a6, o);
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -91078,29 +91510,29 @@ static V F_Nest_dleaf_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6) { V o[2]; U
 static V W_Nest_dleaf_x37u(V *a) { (void)a; return F_Nest_dleaf_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); }
 BEND_UINL V U_Unb_darg_dflat_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o) {
 top:;
-V s37053 = a0;
-if (IS_N(s37053, 6)) {
-return U_Unb_darg_dctor_x37u(({ V r37054;
-V (v37055) = F_String_deq(FLD(s37053, 0), a1);
-V s37057 = (v37055);
-if ((s37057) == IMM(0)) {
-r37054 = IMM(0);
-} else if ((s37057) == IMM(1)) {
-r37054 = F_Nat_dis__eq((a2), F_List_dlength(0, FLD(s37053, 1)));
+V s37224 = a0;
+if (IS_N(s37224, 6)) {
+return U_Unb_darg_dctor_x37u(({ V r37225;
+V (v37226) = F_String_deq(FLD(s37224, 0), a1);
+V s37228 = (v37226);
+if ((s37228) == IMM(0)) {
+r37225 = IMM(0);
+} else if ((s37228) == IMM(1)) {
+r37225 = F_Nat_dis__eq((a2), F_List_dlength(0, FLD(s37224, 1)));
 } else { bend_fail("runtime fail-stop"); }
-r37054; }), a1, FLD(s37053, 1), a3, a4, a5, o);
-} else if (IS_N(s37053, 8)) {
-V s37061 = F_Unb_dnc(F_Pat_dvars(FLD(s37053, 0), IMM(0)));
-if ((s37061) == IMM(1)) {
-V uo37064[2]; U_Unb_darg_dflat_x37u(FLD(s37053, 2), a1, (a2), a3, a4, a5, uo37064);
-o[0] = uo37064[0];
-o[1] = C2(1, C2(0, FLD(s37053, 0), FLD(s37053, 1)), uo37064[1]);
+r37225; }), a1, FLD(s37224, 1), a3, a4, a5, o);
+} else if (IS_N(s37224, 8)) {
+V s37232 = F_Unb_dnc(F_Pat_dvars(FLD(s37224, 0), IMM(0)));
+if ((s37232) == IMM(1)) {
+V uo37235[2]; U_Unb_darg_dflat_x37u(FLD(s37224, 2), a1, (a2), a3, a4, a5, uo37235);
+o[0] = uo37235[0];
+o[1] = C2(1, C2(0, FLD(s37224, 0), FLD(s37224, 1)), uo37235[1]);
 return 0;
-} else if ((s37061) == IMM(0)) {
-return U_Unb_darg_dopen_x37u(a1, C3(8, FLD(s37053, 0), FLD(s37053, 1), FLD(s37053, 2)), a3, a4, a5, o);
+} else if ((s37232) == IMM(0)) {
+return U_Unb_darg_dopen_x37u(a1, C3(8, FLD(s37224, 0), FLD(s37224, 1), FLD(s37224, 2)), a3, a4, a5, o);
 } else { bend_fail("runtime fail-stop"); }
 } else {
-return U_Unb_darg_dopen_x37u(a1, s37053, a3, a4, a5, o);
+return U_Unb_darg_dopen_x37u(a1, s37224, a3, a4, a5, o);
 }
 }
 static V F_Unb_darg_dflat_x37u(V a0, V a1, V a2, V a3, V a4, V a5) { V o[2]; U_Unb_darg_dflat_x37u(a0, a1, a2, a3, a4, a5, o); return CN(0, 2, o); }
@@ -91115,53 +91547,53 @@ static V F_Unb_darg_dopen_x37u(V a0, V a1, V a2, V a3, V a4) { V o[2]; U_Unb_dar
 static V W_Unb_darg_dopen_x37u(V *a) { (void)a; return F_Unb_darg_dopen_x37u(a[0], a[1], a[2], a[3], a[4]); }
 static V F_List_dappend_x37f3458268597x4169482151(V a0, V a2, V a3) {
 top:;
-V s37070 = a3;
-if ((s37070) == IMM(0)) {
+V s37241 = a3;
+if ((s37241) == IMM(0)) {
 return a2;
-} else if (IS_N(s37070, 1)) {
-return C2(1, C1(0, FLD(s37070, 0)), F_List_dappend(a0, F_Unb_dvars(FLD(s37070, 1)), a2));
+} else if (IS_N(s37241, 1)) {
+return C2(1, C1(0, FLD(s37241, 0)), F_List_dappend(a0, F_Unb_dvars(FLD(s37241, 1)), a2));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_List_dappend_x37f3458268597x4169482151(V *a) { (void)a; return F_List_dappend_x37f3458268597x4169482151(a[0], a[2], a[3]); }
-static V S37077(void) { static V c; return STRC(c, "_nc"); }
-static V S37080(void) { static V c; return STRC(c, "_ub"); }
-static V S37085(void) { static V c; return STRC(c, "_ub_"); }
-static V S37087(void) { static V c; return STRC(c, "_ubl"); }
+static V S37248(void) { static V c; return STRC(c, "_nc"); }
+static V S37251(void) { static V c; return STRC(c, "_ub"); }
+static V S37256(void) { static V c; return STRC(c, "_ub_"); }
+static V S37258(void) { static V c; return STRC(c, "_ubl"); }
 static __attribute__((noinline)) V H_F_Unb_dnc(V a0) {
 top:;
-V s37073 = a0;
-if ((s37073) == IMM(0)) {
+V s37244 = a0;
+if ((s37244) == IMM(0)) {
 return IMM(1);
-} else if (IS_N(s37073, 1)) {
-V s37074 = ({ V r37075;
-V s37076 = F_String_dstarts__with(FLD(s37073, 0), S37077());
-if ((s37076) == IMM(0)) {
-V s37079 = F_String_dstarts__with(FLD(s37073, 0), S37080());
-if ((s37079) == IMM(0)) {
-r37075 = IMM(0);
-} else if ((s37079) == IMM(1)) {
-V s37082 = ({ V r37083;
-V s37084 = F_String_dstarts__with(FLD(s37073, 0), S37085());
-if ((s37084) == IMM(0)) {
-r37083 = F_String_dstarts__with(FLD(s37073, 0), S37087());
-} else if ((s37084) == IMM(1)) {
-r37083 = IMM(1);
+} else if (IS_N(s37244, 1)) {
+V s37245 = ({ V r37246;
+V s37247 = F_String_dstarts__with(FLD(s37244, 0), S37248());
+if ((s37247) == IMM(0)) {
+V s37250 = F_String_dstarts__with(FLD(s37244, 0), S37251());
+if ((s37250) == IMM(0)) {
+r37246 = IMM(0);
+} else if ((s37250) == IMM(1)) {
+V s37253 = ({ V r37254;
+V s37255 = F_String_dstarts__with(FLD(s37244, 0), S37256());
+if ((s37255) == IMM(0)) {
+r37254 = F_String_dstarts__with(FLD(s37244, 0), S37258());
+} else if ((s37255) == IMM(1)) {
+r37254 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37083; });
-if ((s37082) == IMM(0)) {
-r37075 = IMM(1);
-} else if ((s37082) == IMM(1)) {
-r37075 = IMM(0);
+r37254; });
+if ((s37253) == IMM(0)) {
+r37246 = IMM(1);
+} else if ((s37253) == IMM(1)) {
+r37246 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s37076) == IMM(1)) {
-r37075 = IMM(1);
+} else if ((s37247) == IMM(1)) {
+r37246 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37075; });
-if ((s37074) == IMM(0)) {
+r37246; });
+if ((s37245) == IMM(0)) {
 return IMM(0);
-} else if ((s37074) == IMM(1)) {
-{ V t0 = FLD(s37073, 1); a0 = t0; goto top; }
+} else if ((s37245) == IMM(1)) {
+{ V t0 = FLD(s37244, 1); a0 = t0; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -91172,21 +91604,21 @@ return IMM(1);
 return H_F_Unb_dnc(a0);
 }
 static V W_Unb_dnc(V *a) { (void)a; return F_Unb_dnc(a[0]); }
-static V S37092(void) { static V c; return STRC(c, "_ub"); }
-static V S37093(void) { static V c; return STRC(c, "k"); }
+static V S37263(void) { static V c; return STRC(c, "_ub"); }
+static V S37264(void) { static V c; return STRC(c, "k"); }
 BEND_UINL V U_Unb_darg_dctor_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o) {
 top:;
-V s37089 = (a0);
-if ((s37089) == IMM(1)) {
-return U_Unb_darg_dkeeps_x37u(a2, F_String_dappend(({ V r37090;
-V s37091 = a3;
-if ((s37091) == IMM(0)) {
-r37090 = S37092();
-} else if (IS_N(s37091, 1)) {
-r37090 = FLD(s37091, 0);
+V s37260 = (a0);
+if ((s37260) == IMM(1)) {
+return U_Unb_darg_dkeeps_x37u(a2, F_String_dappend(({ V r37261;
+V s37262 = a3;
+if ((s37262) == IMM(0)) {
+r37261 = S37263();
+} else if (IS_N(s37262, 1)) {
+r37261 = FLD(s37262, 0);
 } else { bend_fail("runtime fail-stop"); }
-r37090; }), S37093()), 0u, a4, a5, o);
-} else if ((s37089) == IMM(0)) {
+r37261; }), S37264()), 0u, a4, a5, o);
+} else if ((s37260) == IMM(0)) {
 return U_Unb_darg_dopen_x37u(a1, C2(6, a1, a2), a3, a4, a5, o);
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -91195,55 +91627,55 @@ static V W_Unb_darg_dctor_x37u(V *a) { (void)a; return F_Unb_darg_dctor_x37u(a[0
 BEND_UINL V U_Unb_darg_dkeeps_x37u(V a0, V a1, V a2_, V a3, V a4, V *o) {
 uint32_t a2 = (uint32_t)a2_;
 top:;
-V s37097 = a0;
-if ((s37097) == IMM(0)) {
+V s37268 = a0;
+if ((s37268) == IMM(0)) {
 o[0] = a3;
 o[1] = a4;
 return 0;
-} else if (IS_N(s37097, 1)) {
-V v37098 = F_String_dappend(a1, F_U32_dshow_dif((a2), F_U32_dis__zero((a2))));
-V uo37102[2]; U_Unb_darg_dkeeps_x37u(FLD(s37097, 1), a1, F_U32_dinc((a2)), a3, a4, uo37102);
-return U_Unb_darg_dkeep_x37u(FLD(s37097, 0), v37098, uo37102[0], uo37102[1], o);
+} else if (IS_N(s37268, 1)) {
+V v37269 = F_String_dappend(a1, F_U32_dshow_dif((a2), F_U32_dis__zero((a2))));
+V uo37273[2]; U_Unb_darg_dkeeps_x37u(FLD(s37268, 1), a1, F_U32_dinc((a2)), a3, a4, uo37273);
+return U_Unb_darg_dkeep_x37u(FLD(s37268, 0), v37269, uo37273[0], uo37273[1], o);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_darg_dkeeps_x37u(V a0, V a1, V a2, V a3, V a4) { V o[2]; U_Unb_darg_dkeeps_x37u(a0, a1, a2, a3, a4, o); return CN(0, 2, o); }
 static V W_Unb_darg_dkeeps_x37u(V *a) { (void)a; return F_Unb_darg_dkeeps_x37u(a[0], a[1], a[2], a[3], a[4]); }
 BEND_UINL V U_Unb_darg_dkeep_x37u(V a0, V a1, V a2, V a3, V *o) {
 top:;
-V s37106 = a2;
-V s37107 = a3;
+V s37277 = a2;
+V s37278 = a3;
 {
-V v37108 = ({ V r37109;
-V s37110 = F_Unb_datom(a0);
-if ((s37110) == IMM(0)) {
-r37109 = IMM(1);
-} else if ((s37110) == IMM(1)) {
-r37109 = IMM(0);
+V v37279 = ({ V r37280;
+V s37281 = F_Unb_datom(a0);
+if ((s37281) == IMM(0)) {
+r37280 = IMM(1);
+} else if ((s37281) == IMM(1)) {
+r37280 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r37109; });
-V s37112 = ({ V r37113;
-V v37114 = ({ V r37115;
-V s37116 = s37107;
-if ((s37116) == IMM(0)) {
-r37115 = IMM(0);
-} else if (IS_N(s37116, 1)) {
-r37115 = IMM(1);
+r37280; });
+V s37283 = ({ V r37284;
+V v37285 = ({ V r37286;
+V s37287 = s37278;
+if ((s37287) == IMM(0)) {
+r37286 = IMM(0);
+} else if (IS_N(s37287, 1)) {
+r37286 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37115; });
-V s37117 = v37114;
-if ((s37117) == IMM(0)) {
-r37113 = IMM(0);
-} else if ((s37117) == IMM(1)) {
-r37113 = v37108;
+r37286; });
+V s37288 = v37285;
+if ((s37288) == IMM(0)) {
+r37284 = IMM(0);
+} else if ((s37288) == IMM(1)) {
+r37284 = v37279;
 } else { bend_fail("runtime fail-stop"); }
-r37113; });
-if ((s37112) == IMM(1)) {
-o[0] = C2(1, C1(0, a1), s37106);
-o[1] = C2(1, C2(0, C1(0, a1), a0), s37107);
+r37284; });
+if ((s37283) == IMM(1)) {
+o[0] = C2(1, C1(0, a1), s37277);
+o[1] = C2(1, C2(0, C1(0, a1), a0), s37278);
 return 0;
-} else if ((s37112) == IMM(0)) {
-o[0] = C2(1, a0, s37106);
-o[1] = s37107;
+} else if ((s37283) == IMM(0)) {
+o[0] = C2(1, a0, s37277);
+o[1] = s37278;
 return 0;
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -91252,21 +91684,21 @@ static V F_Unb_darg_dkeep_x37u(V a0, V a1, V a2, V a3) { V o[2]; U_Unb_darg_dkee
 static V W_Unb_darg_dkeep_x37u(V *a) { (void)a; return F_Unb_darg_dkeep_x37u(a[0], a[1], a[2], a[3]); }
 static V F_Unb_datom(V a0) {
 top:;
-V s37118 = a0;
-if (IS_N(s37118, 0)) {
+V s37289 = a0;
+if (IS_N(s37289, 0)) {
 return IMM(1);
-} else if (IS_LI(s37118, 1)) {
+} else if (IS_LI(s37289, 1)) {
 return IMM(1);
-} else if (IS_LI(s37118, 2)) {
+} else if (IS_LI(s37289, 2)) {
 return IMM(1);
-} else if (IS_N(s37118, 3)) {
+} else if (IS_N(s37289, 3)) {
 return IMM(1);
-} else if (IS_N(s37118, 4)) {
+} else if (IS_N(s37289, 4)) {
 return IMM(1);
-} else if (IS_N(s37118, 14)) {
+} else if (IS_N(s37289, 14)) {
 return IMM(1);
-} else if (IS_N(s37118, 13)) {
-{ V t0 = FLD(s37118, 0); a0 = t0; goto top; }
+} else if (IS_N(s37289, 13)) {
+{ V t0 = FLD(s37289, 0); a0 = t0; goto top; }
 } else {
 return IMM(0);
 }
@@ -91274,58 +91706,58 @@ return IMM(0);
 static V W_Unb_datom(V *a) { (void)a; return F_Unb_datom(a[0]); }
 static V D_Nest_dpnames(V *dst, V a0, V a1, V a2) {
 top:;
-V s37119 = a1;
-if ((s37119) == IMM(0)) {
+V s37290 = a1;
+if ((s37290) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s37119, 1)) {
+} else if (IS_N(s37290, 1)) {
 { V dc = CH2(1, F_String_dappend(a0, F_U32_dshow_dif((a2), F_U32_dis__zero((a2)))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s37119, 1); V t2 = F_U32_dinc((a2)); a0 = t0; a1 = t1; a2 = t2; goto top; }
+{ V t0 = a0; V t1 = FLD(s37290, 1); V t2 = F_U32_dinc((a2)); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Nest_dpnames(V a0, V a1, V a2) { V r; D_Nest_dpnames(&r, a0, a1, a2); return r; }
 static V W_Nest_dpnames(V *a) { (void)a; return F_Nest_dpnames(a[0], a[1], a[2]); }
-static V K37127(void) { static V c; return KONST(c, C2(0, IMM(0), 0u)); }
+static V K37298(void) { static V c; return KONST(c, C2(0, IMM(0), 0u)); }
 static V F_Nest_dtcall(V a0, V a1, V a2, V a3, V a4, V a5_) {
 uint32_t a5 = (uint32_t)a5_;
 top:;
-V s37124 = a0;
-if (IS_N(s37124, 0)) {
-V v37125 = FLD(s37124, 0);
-V v37126 = F_Map_dget(K37127(), a2, v37125);
-V v37129 = FLD(v37126, 1);
-return F_Nest_dtcall_dgo_x37u(FLD(v37129, 0), FLD(v37129, 1), FLD(s37124, 0), a1, a3, a4, (a5));
+V s37295 = a0;
+if (IS_N(s37295, 0)) {
+V v37296 = FLD(s37295, 0);
+V v37297 = F_Map_dget(K37298(), a2, v37296);
+V v37300 = FLD(v37297, 1);
+return F_Nest_dtcall_dgo_x37u(FLD(v37300, 0), FLD(v37300, 1), FLD(s37295, 0), a1, a3, a4, (a5));
 } else {
-return F_Nest_dopen(C2(5, s37124, a1), a3, a4, (a5));
+return F_Nest_dopen(C2(5, s37295, a1), a3, a4, (a5));
 }
 }
 static V W_Nest_dtcall(V *a) { (void)a; return F_Nest_dtcall(a[0], a[1], a[2], a[3], a[4], a[5]); }
-static V S37143(void) { static V c; return STRC(c, "%n"); }
+static V S37314(void) { static V c; return STRC(c, "%n"); }
 static V F_Nest_dtcall_dgo_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6_) {
 uint32_t a6 = (uint32_t)a6_;
 top:;
-V s37132 = a0;
-V s37133 = (a1);
+V s37303 = a0;
+V s37304 = (a1);
 {
-V s37134 = ({ V r37135;
-V s37136 = ({ V r37137;
-V s37138 = F_Nest_dnested(s37132);
-if ((s37138) == IMM(0)) {
-r37137 = IMM(0);
-} else if ((s37138) == IMM(1)) {
-r37137 = F_Nest_dsame(s37132, a5);
+V s37305 = ({ V r37306;
+V s37307 = ({ V r37308;
+V s37309 = F_Nest_dnested(s37303);
+if ((s37309) == IMM(0)) {
+r37308 = IMM(0);
+} else if ((s37309) == IMM(1)) {
+r37308 = F_Nest_dsame(s37303, a5);
 } else { bend_fail("runtime fail-stop"); }
-r37137; });
-if ((s37136) == IMM(0)) {
-r37135 = IMM(0);
-} else if ((s37136) == IMM(1)) {
-r37135 = F_Nat_dis__eq(s37133, F_List_dlength(0, a3));
+r37308; });
+if ((s37307) == IMM(0)) {
+r37306 = IMM(0);
+} else if ((s37307) == IMM(1)) {
+r37306 = F_Nat_dis__eq(s37304, F_List_dlength(0, a3));
 } else { bend_fail("runtime fail-stop"); }
-r37135; });
-if ((s37134) == IMM(1)) {
-return C2(5, C1(0, F_String_dappend(a2, S37143())), a3);
-} else if ((s37134) == IMM(0)) {
+r37306; });
+if ((s37305) == IMM(1)) {
+return C2(5, C1(0, F_String_dappend(a2, S37314())), a3);
+} else if ((s37305) == IMM(0)) {
 return F_Nest_dopen(C2(5, C1(0, a2), a3), a4, a5, (a6));
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -91333,139 +91765,139 @@ return F_Nest_dopen(C2(5, C1(0, a2), a3), a4, a5, (a6));
 static V W_Nest_dtcall_dgo_x37u(V *a) { (void)a; return F_Nest_dtcall_dgo_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); }
 static V F_Nest_dsame(V a0, V a1) {
 top:;
-V s37146 = a0;
-V s37147 = a1;
-if (IS_N(s37146, 1) && IS_N(s37147, 1)) {
-V s37148 = ({ V r37149;
-V s37150 = F_String_deq(FLD(FLD(s37146, 0), 0), FLD(FLD(s37147, 0), 0));
-if ((s37150) == IMM(0)) {
-r37149 = IMM(0);
-} else if ((s37150) == IMM(1)) {
-r37149 = F_Nat_dis__eq(F_List_dlength(0, FLD(FLD(s37146, 0), 1)), F_List_dlength(0, FLD(FLD(s37147, 0), 1)));
+V s37317 = a0;
+V s37318 = a1;
+if (IS_N(s37317, 1) && IS_N(s37318, 1)) {
+V s37319 = ({ V r37320;
+V s37321 = F_String_deq(FLD(FLD(s37317, 0), 0), FLD(FLD(s37318, 0), 0));
+if ((s37321) == IMM(0)) {
+r37320 = IMM(0);
+} else if ((s37321) == IMM(1)) {
+r37320 = F_Nat_dis__eq(F_List_dlength(0, FLD(FLD(s37317, 0), 1)), F_List_dlength(0, FLD(FLD(s37318, 0), 1)));
 } else { bend_fail("runtime fail-stop"); }
-r37149; });
-if ((s37148) == IMM(0)) {
+r37320; });
+if ((s37319) == IMM(0)) {
 return IMM(0);
-} else if ((s37148) == IMM(1)) {
-{ V t0 = FLD(s37146, 1); V t1 = FLD(s37147, 1); a0 = t0; a1 = t1; goto top; }
+} else if ((s37319) == IMM(1)) {
+{ V t0 = FLD(s37317, 1); V t1 = FLD(s37318, 1); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s37146) == IMM(0) && (s37147) == IMM(0)) {
+} else if ((s37317) == IMM(0) && (s37318) == IMM(0)) {
 return IMM(1);
 } else {
 return IMM(0);
 }
 }
 static V W_Nest_dsame(V *a) { (void)a; return F_Nest_dsame(a[0], a[1]); }
-static V S37157(void) { static V c; return STRC(c, "_nq"); }
-static V S37160(void) { static V c; return STRC(c, "_"); }
+static V S37328(void) { static V c; return STRC(c, "_nq"); }
+static V S37331(void) { static V c; return STRC(c, "_"); }
 static V F_Nest_dctor(V a0, V a1, V a2, V a3, V a4, V a5_) {
 uint32_t a5 = (uint32_t)a5_;
 top:;
-V s37155 = (a0);
-if ((s37155) == IMM(1)) {
-V uo37156[2]; U_Nest_dleaves(a4, a2, F_String_dappend(S37157(), F_String_dappend(F_U32_dshow_dif((a5), F_U32_dis__zero((a5))), S37160())), 0u, uo37156);
-return F_Unb_dwrap(uo37156[1], C2(6, a3, uo37156[0]));
-} else if ((s37155) == IMM(0)) {
+V s37326 = (a0);
+if ((s37326) == IMM(1)) {
+V uo37327[2]; U_Nest_dleaves(a4, a2, F_String_dappend(S37328(), F_String_dappend(F_U32_dshow_dif((a5), F_U32_dis__zero((a5))), S37331())), 0u, uo37327);
+return F_Unb_dwrap(uo37327[1], C2(6, a3, uo37327[0]));
+} else if ((s37326) == IMM(0)) {
 return F_Nest_dopen(C2(6, a1, a2), a3, a4, (a5));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Nest_dctor(V *a) { (void)a; return F_Nest_dctor(a[0], a[1], a[2], a[3], a[4], a[5]); }
-static V S37168(void) { static V c; return STRC(c, "a"); }
-static V S37172(void) { static V c; return STRC(c, "a"); }
-static V S37175(void) { static V c; return STRC(c, "b"); }
-static V S37181(void) { static V c; return STRC(c, "a"); }
-static V S37185(void) { static V c; return STRC(c, "%par"); }
-static V S37188(void) { static V c; return STRC(c, "b"); }
-static V S37193(void) { static V c; return STRC(c, "a"); }
-static V S37195(void) { static V c; return STRC(c, "a"); }
-static V S37199(void) { static V c; return STRC(c, "b"); }
-static V S37202(void) { static V c; return STRC(c, "a"); }
-static V S37205(void) { static V c; return STRC(c, "b"); }
-static V K37210(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
-static V S37212(void) { static V c; return STRC(c, "b"); }
-static V S37216(void) { static V c; return STRC(c, "a"); }
-static V S37219(void) { static V c; return STRC(c, ""); }
-static V S37221(void) { static V c; return STRC(c, "a"); }
-static V S37223(void) { static V c; return STRC(c, "a"); }
-static V S37225(void) { static V c; return STRC(c, "a"); }
-static V S37228(void) { static V c; return STRC(c, "b"); }
-static V S37230(void) { static V c; return STRC(c, "a"); }
+static V S37339(void) { static V c; return STRC(c, "a"); }
+static V S37343(void) { static V c; return STRC(c, "a"); }
+static V S37346(void) { static V c; return STRC(c, "b"); }
+static V S37352(void) { static V c; return STRC(c, "a"); }
+static V S37356(void) { static V c; return STRC(c, "%par"); }
+static V S37359(void) { static V c; return STRC(c, "b"); }
+static V S37364(void) { static V c; return STRC(c, "a"); }
+static V S37366(void) { static V c; return STRC(c, "a"); }
+static V S37370(void) { static V c; return STRC(c, "b"); }
+static V S37373(void) { static V c; return STRC(c, "a"); }
+static V S37376(void) { static V c; return STRC(c, "b"); }
+static V K37381(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
+static V S37383(void) { static V c; return STRC(c, "b"); }
+static V S37387(void) { static V c; return STRC(c, "a"); }
+static V S37390(void) { static V c; return STRC(c, ""); }
+static V S37392(void) { static V c; return STRC(c, "a"); }
+static V S37394(void) { static V c; return STRC(c, "a"); }
+static V S37396(void) { static V c; return STRC(c, "a"); }
+static V S37399(void) { static V c; return STRC(c, "b"); }
+static V S37401(void) { static V c; return STRC(c, "a"); }
 static V D_Nest_dcalls(V *dst, V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s37166 = a0;
-if (IS_N(s37166, 5)) {
-V s37167 = FLD(s37166, 1);
-if ((s37167) == IMM(0)) {
-*dst = F_Nest_dcall_dtop((a4), a1, a2, a3, C2(5, F_Nest_dcalls(FLD(s37166, 0), a1, a2, F_String_dappend(a3, S37168()), IMM(1)), IMM(0)));
+V s37337 = a0;
+if (IS_N(s37337, 5)) {
+V s37338 = FLD(s37337, 1);
+if ((s37338) == IMM(0)) {
+*dst = F_Nest_dcall_dtop((a4), a1, a2, a3, C2(5, F_Nest_dcalls(FLD(s37337, 0), a1, a2, F_String_dappend(a3, S37339()), IMM(1)), IMM(0)));
 return 0;
-} else if (IS_N(s37167, 1)) {
-*dst = F_Nest_dcall_dtop((a4), a1, a2, a3, F_Expr_dpush(F_Nest_dcalls(FLD(s37167, 0), a1, a2, F_String_dappend(a3, S37172()), IMM(1)), F_Nest_dcalls(C2(5, FLD(s37166, 0), FLD(s37167, 1)), a1, a2, F_String_dappend(a3, S37175()), IMM(0))));
-return 0;
-} else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37166, 6)) {
-V s37180 = FLD(s37166, 1);
-if ((s37180) == IMM(0)) {
-*dst = C2(6, FLD(s37166, 0), IMM(0));
-return 0;
-} else if (IS_N(s37180, 1)) {
-*dst = F_Expr_dpush(F_Nest_dcalls(FLD(s37180, 0), a1, a2, F_String_dappend(a3, S37181()), ({ V r37183;
-V s37184 = F_String_deq(FLD(s37166, 0), S37185());
-if ((s37184) == IMM(0)) {
-r37183 = IMM(1);
-} else if ((s37184) == IMM(1)) {
-r37183 = IMM(0);
-} else { bend_fail("runtime fail-stop"); }
-r37183; })), F_Nest_dcalls(C2(6, FLD(s37166, 0), FLD(s37180, 1)), a1, a2, F_String_dappend(a3, S37188()), IMM(0)));
+} else if (IS_N(s37338, 1)) {
+*dst = F_Nest_dcall_dtop((a4), a1, a2, a3, F_Expr_dpush(F_Nest_dcalls(FLD(s37338, 0), a1, a2, F_String_dappend(a3, S37343()), IMM(1)), F_Nest_dcalls(C2(5, FLD(s37337, 0), FLD(s37338, 1)), a1, a2, F_String_dappend(a3, S37346()), IMM(0))));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37166, 7)) {
-{ V dc = CH2(7, FLD(s37166, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37166, 1); V t1 = a1; V t2 = F_Pat_dvars(FLD(s37166, 0), a2); V t3 = F_String_dappend(a3, S37193()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s37337, 6)) {
+V s37351 = FLD(s37337, 1);
+if ((s37351) == IMM(0)) {
+*dst = C2(6, FLD(s37337, 0), IMM(0));
+return 0;
+} else if (IS_N(s37351, 1)) {
+*dst = F_Expr_dpush(F_Nest_dcalls(FLD(s37351, 0), a1, a2, F_String_dappend(a3, S37352()), ({ V r37354;
+V s37355 = F_String_deq(FLD(s37337, 0), S37356());
+if ((s37355) == IMM(0)) {
+r37354 = IMM(1);
+} else if ((s37355) == IMM(1)) {
+r37354 = IMM(0);
+} else { bend_fail("runtime fail-stop"); }
+r37354; })), F_Nest_dcalls(C2(6, FLD(s37337, 0), FLD(s37351, 1)), a1, a2, F_String_dappend(a3, S37359()), IMM(0)));
+return 0;
+} else { bend_fail("runtime fail-stop"); }
+} else if (IS_N(s37337, 7)) {
+{ V dc = CH2(7, FLD(s37337, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37337, 1); V t1 = a1; V t2 = F_Pat_dvars(FLD(s37337, 0), a2); V t3 = F_String_dappend(a3, S37364()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
-} else if (IS_N(s37166, 8)) {
-{ V dc = CH3(8, FLD(s37166, 0), F_Nest_dcalls(FLD(s37166, 1), a1, a2, F_String_dappend(a3, S37195()), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = FLD(s37166, 2); V t1 = a1; V t2 = F_Pat_dvars(FLD(s37166, 0), a2); V t3 = F_String_dappend(a3, S37199()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s37337, 8)) {
+{ V dc = CH3(8, FLD(s37337, 0), F_Nest_dcalls(FLD(s37337, 1), a1, a2, F_String_dappend(a3, S37366()), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = FLD(s37337, 2); V t1 = a1; V t2 = F_Pat_dvars(FLD(s37337, 0), a2); V t3 = F_String_dappend(a3, S37370()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
-} else if (IS_N(s37166, 9)) {
-V s37201 = FLD(s37166, 0);
-if (IS_N(s37201, 1)) {
-*dst = F_Expr_dpush(F_Nest_dcalls(FLD(s37201, 0), a1, a2, F_String_dappend(a3, S37202()), IMM(1)), F_Nest_dcalls(C2(9, FLD(s37201, 1), FLD(s37166, 1)), a1, a2, F_String_dappend(a3, S37205()), IMM(0)));
+} else if (IS_N(s37337, 9)) {
+V s37372 = FLD(s37337, 0);
+if (IS_N(s37372, 1)) {
+*dst = F_Expr_dpush(F_Nest_dcalls(FLD(s37372, 0), a1, a2, F_String_dappend(a3, S37373()), IMM(1)), F_Nest_dcalls(C2(9, FLD(s37372, 1), FLD(s37337, 1)), a1, a2, F_String_dappend(a3, S37376()), IMM(0)));
 return 0;
-} else if ((s37201) == IMM(0)) {
-V s37209 = FLD(s37166, 1);
-if ((s37209) == IMM(0)) {
-*dst = K37210();
+} else if ((s37372) == IMM(0)) {
+V s37380 = FLD(s37337, 1);
+if ((s37380) == IMM(0)) {
+*dst = K37381();
 return 0;
-} else if (IS_N(s37209, 1)) {
-V v37211 = F_Nest_dcalls(C2(9, IMM(0), FLD(s37209, 1)), a1, a2, F_String_dappend(a3, S37212()), IMM(0));
-V s37215 = v37211;
-if (IS_N(s37215, 9)) {
-*dst = C2(9, FLD(s37215, 0), C2(1, F_Nest_dcalls(FLD(s37209, 0), a1, a2, F_String_dappend(a3, S37216()), IMM(1)), FLD(s37215, 1)));
+} else if (IS_N(s37380, 1)) {
+V v37382 = F_Nest_dcalls(C2(9, IMM(0), FLD(s37380, 1)), a1, a2, F_String_dappend(a3, S37383()), IMM(0));
+V s37386 = v37382;
+if (IS_N(s37386, 9)) {
+*dst = C2(9, FLD(s37386, 0), C2(1, F_Nest_dcalls(FLD(s37380, 0), a1, a2, F_String_dappend(a3, S37387()), IMM(1)), FLD(s37386, 1)));
 return 0;
 } else {
-*dst = s37215;
+*dst = s37386;
 return 0;
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37166, 10)) {
-{ V dc = CH2(10, FLD(s37166, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37166, 1); V t1 = a1; V t2 = F_Pat_dvars(C2(1, S37219(), FLD(s37166, 0)), a2); V t3 = F_String_dappend(a3, S37221()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s37337, 10)) {
+{ V dc = CH2(10, FLD(s37337, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37337, 1); V t1 = a1; V t2 = F_Pat_dvars(C2(1, S37390(), FLD(s37337, 0)), a2); V t3 = F_String_dappend(a3, S37392()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
-} else if (IS_N(s37166, 11)) {
-{ V dc = CH2(11, FLD(s37166, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37166, 1); V t1 = a1; V t2 = a2; V t3 = F_String_dappend(a3, S37223()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s37337, 11)) {
+{ V dc = CH2(11, FLD(s37337, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37337, 1); V t1 = a1; V t2 = a2; V t3 = F_String_dappend(a3, S37394()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
-} else if (IS_N(s37166, 12)) {
-{ V dc = CH3(12, FLD(s37166, 0), F_Nest_dcalls(FLD(s37166, 1), a1, a2, F_String_dappend(a3, S37225()), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = FLD(s37166, 2); V t1 = a1; V t2 = a2; V t3 = F_String_dappend(a3, S37228()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s37337, 12)) {
+{ V dc = CH3(12, FLD(s37337, 0), F_Nest_dcalls(FLD(s37337, 1), a1, a2, F_String_dappend(a3, S37396()), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = FLD(s37337, 2); V t1 = a1; V t2 = a2; V t3 = F_String_dappend(a3, S37399()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
-} else if (IS_N(s37166, 13)) {
-{ V dc = CH2(13, BEND_HOLE, FLD(s37166, 1)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = FLD(s37166, 0); V t1 = a1; V t2 = a2; V t3 = F_String_dappend(a3, S37230()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s37337, 13)) {
+{ V dc = CH2(13, BEND_HOLE, FLD(s37337, 1)); *dst = dc; dst = &FLD(dc, 0);
+{ V t0 = FLD(s37337, 0); V t1 = a1; V t2 = a2; V t3 = F_String_dappend(a3, S37401()); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
 } else {
-*dst = s37166;
+*dst = s37337;
 return 0;
 }
 }
@@ -91473,55 +91905,55 @@ static V F_Nest_dcalls(V a0, V a1, V a2, V a3, V a4) { V r; D_Nest_dcalls(&r, a0
 static V W_Nest_dcalls(V *a) { (void)a; return F_Nest_dcalls(a[0], a[1], a[2], a[3], a[4]); }
 static V F_Nest_dcall_dtop(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s37232 = (a0);
-if ((s37232) == IMM(1)) {
+V s37403 = (a0);
+if ((s37403) == IMM(1)) {
 return F_Nest_dcall(a1, a2, a3, a4);
-} else if ((s37232) == IMM(0)) {
+} else if ((s37403) == IMM(0)) {
 return a4;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Nest_dcall_dtop(V *a) { (void)a; return F_Nest_dcall_dtop(a[0], a[1], a[2], a[3], a[4]); }
-static V K37236(void) { static V c; return KONST(c, C2(0, IMM(0), 0u)); }
+static V K37407(void) { static V c; return KONST(c, C2(0, IMM(0), 0u)); }
 static V F_Nest_dcall(V a0, V a1, V a2, V a3) {
 top:;
-V s37234 = a3;
-if (IS_N(s37234, 5) && IS_N(FLD(s37234, 0), 0)) {
-V v37235 = F_Map_dget(K37236(), a0, FLD(FLD(s37234, 0), 0));
-V v37238 = FLD(v37235, 1);
-return F_Nest_dcall_dgo_x37u(FLD(v37238, 0), FLD(v37238, 1), a1, FLD(FLD(s37234, 0), 0), FLD(s37234, 1), a2);
+V s37405 = a3;
+if (IS_N(s37405, 5) && IS_N(FLD(s37405, 0), 0)) {
+V v37406 = F_Map_dget(K37407(), a0, FLD(FLD(s37405, 0), 0));
+V v37409 = FLD(v37406, 1);
+return F_Nest_dcall_dgo_x37u(FLD(v37409, 0), FLD(v37409, 1), a1, FLD(FLD(s37405, 0), 0), FLD(s37405, 1), a2);
 } else {
-return s37234;
+return s37405;
 }
 }
 static V W_Nest_dcall(V *a) { (void)a; return F_Nest_dcall(a[0], a[1], a[2], a[3]); }
 static V F_Nest_dcall_dgo_x37u(V a0, V a1, V a2, V a3, V a4, V a5) {
 top:;
-V s37240 = a0;
-V s37241 = (a1);
+V s37411 = a0;
+V s37412 = (a1);
 {
-V s37242 = ({ V r37243;
-V s37244 = ({ V r37245;
-V s37246 = F_Nest_dnested(s37240);
-if ((s37246) == IMM(0)) {
-r37245 = IMM(0);
-} else if ((s37246) == IMM(1)) {
-V s37248 = F_List_dcontains_x37s539261848x2963157848(a2, a3);
-if ((s37248) == IMM(0)) {
-r37245 = IMM(1);
-} else if ((s37248) == IMM(1)) {
-r37245 = IMM(0);
+V s37413 = ({ V r37414;
+V s37415 = ({ V r37416;
+V s37417 = F_Nest_dnested(s37411);
+if ((s37417) == IMM(0)) {
+r37416 = IMM(0);
+} else if ((s37417) == IMM(1)) {
+V s37419 = F_List_dcontains_x37s539261848x2963157848(a2, a3);
+if ((s37419) == IMM(0)) {
+r37416 = IMM(1);
+} else if ((s37419) == IMM(1)) {
+r37416 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r37245; });
-if ((s37244) == IMM(0)) {
-r37243 = IMM(0);
-} else if ((s37244) == IMM(1)) {
-r37243 = F_Nat_dis__eq(s37241, F_List_dlength(0, a4));
+r37416; });
+if ((s37415) == IMM(0)) {
+r37414 = IMM(0);
+} else if ((s37415) == IMM(1)) {
+r37414 = F_Nat_dis__eq(s37412, F_List_dlength(0, a4));
 } else { bend_fail("runtime fail-stop"); }
-r37243; });
-if ((s37242) == IMM(1)) {
-return F_Nest_drebuild(a3, s37240, a4, a5);
-} else if ((s37242) == IMM(0)) {
+r37414; });
+if ((s37413) == IMM(1)) {
+return F_Nest_drebuild(a3, s37411, a4, a5);
+} else if ((s37413) == IMM(0)) {
 return C2(5, C1(0, a3), a4);
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -91529,46 +91961,46 @@ return C2(5, C1(0, a3), a4);
 static V W_Nest_dcall_dgo_x37u(V *a) { (void)a; return F_Nest_dcall_dgo_x37u(a[0], a[1], a[2], a[3], a[4], a[5]); }
 static V F_Unb_dprogram(V a0, V a1) {
 top:;
-V s37253 = (a0);
-if ((s37253) == IMM(1)) {
+V s37424 = (a0);
+if ((s37424) == IMM(1)) {
 return F_Unb_dprogram_dgo(a1, F_Unb_dtypes(IMM(0), a1, IMM(0)));
-} else if ((s37253) == IMM(0)) {
+} else if ((s37424) == IMM(0)) {
 return a1;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dprogram(V *a) { (void)a; return F_Unb_dprogram(a[0], a[1]); }
 static V F_Unb_dtypes(V a0, V a1, V a2) {
 top:;
-V s37256 = a1;
-if ((s37256) == IMM(0)) {
+V s37427 = a1;
+if ((s37427) == IMM(0)) {
 return a2;
-} else if (IS_N(s37256, 1) && IS_N(FLD(s37256, 0), 3)) {
-{ V t0 = (a0); V t1 = FLD(s37256, 1); V t2 = F_Unb_dtype((a0), FLD(FLD(s37256, 0), 0), FLD(FLD(s37256, 0), 1), FLD(FLD(s37256, 0), 2), a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if (IS_N(s37256, 1)) {
-{ V t0 = (a0); V t1 = FLD(s37256, 1); V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37427, 1) && IS_N(FLD(s37427, 0), 3)) {
+{ V t0 = (a0); V t1 = FLD(s37427, 1); V t2 = F_Unb_dtype((a0), FLD(FLD(s37427, 0), 0), FLD(FLD(s37427, 0), 1), FLD(FLD(s37427, 0), 2), a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37427, 1)) {
+{ V t0 = (a0); V t1 = FLD(s37427, 1); V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dtypes(V *a) { (void)a; return F_Unb_dtypes(a[0], a[1], a[2]); }
-static V S37263(void) { static V c; return STRC(c, "Sigma"); }
-static V S37265(void) { static V c; return STRC(c, "&"); }
-static V S37266(void) { static V c; return STRC(c, "Sigma"); }
+static V S37434(void) { static V c; return STRC(c, "Sigma"); }
+static V S37436(void) { static V c; return STRC(c, "&"); }
+static V S37437(void) { static V c; return STRC(c, "Sigma"); }
 static V F_Unb_dtype(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s37258 = a3;
-if (IS_N(s37258, 1) && (FLD(s37258, 1)) == IMM(0)) {
-return F_Unb_dtype_dput(F_Unb_dfits(FLD(FLD(s37258, 0), 1)), ({ V r37260;
-V s37261 = (a0);
-if ((s37261) == IMM(0)) {
-V s37262 = F_String_deq(a1, S37263());
-if ((s37262) == IMM(0)) {
-r37260 = a1;
-} else if ((s37262) == IMM(1)) {
-r37260 = S37265();
+V s37429 = a3;
+if (IS_N(s37429, 1) && (FLD(s37429, 1)) == IMM(0)) {
+return F_Unb_dtype_dput(F_Unb_dfits(FLD(FLD(s37429, 0), 1)), ({ V r37431;
+V s37432 = (a0);
+if ((s37432) == IMM(0)) {
+V s37433 = F_String_deq(a1, S37434());
+if ((s37433) == IMM(0)) {
+r37431 = a1;
+} else if ((s37433) == IMM(1)) {
+r37431 = S37436();
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s37261) == IMM(1)) {
-r37260 = FLD(FLD(s37258, 0), 0);
+} else if ((s37432) == IMM(1)) {
+r37431 = FLD(FLD(s37429, 0), 0);
 } else { bend_fail("runtime fail-stop"); }
-r37260; }), C2(0, FLD(FLD(s37258, 0), 0), F_Unb_dtys(F_String_deq(a1, S37266()), a2, FLD(FLD(s37258, 0), 1), 0u)), a4);
+r37431; }), C2(0, FLD(FLD(s37429, 0), 0), F_Unb_dtys(F_String_deq(a1, S37437()), a2, FLD(FLD(s37429, 0), 1), 0u)), a4);
 } else {
 return a4;
 }
@@ -91576,57 +92008,57 @@ return a4;
 static V W_Unb_dtype(V *a) { (void)a; return F_Unb_dtype(a[0], a[1], a[2], a[3], a[4]); }
 static V D_Unb_dtys(V *dst, V a0, V a1, V a2, V a3) {
 top:;
-V s37270 = a2;
-if ((s37270) == IMM(0)) {
+V s37441 = a2;
+if ((s37441) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s37270, 1)) {
-V v37271 = ({ V r37272;
-V s37273 = FLD(FLD(s37270, 0), 1);
-if (IS_N(s37273, 14) && (FLD(s37273, 0)) == IMM(0) && IS_N(FLD(s37273, 1), 1) && IS_N(FLD(FLD(s37273, 1), 0), 14) && (FLD(FLD(FLD(s37273, 1), 0), 1)) == IMM(0) && (FLD(FLD(s37273, 1), 1)) == IMM(0)) {
-r37272 = FLD(FLD(FLD(s37273, 1), 0), 0);
+} else if (IS_N(s37441, 1)) {
+V v37442 = ({ V r37443;
+V s37444 = FLD(FLD(s37441, 0), 1);
+if (IS_N(s37444, 14) && (FLD(s37444, 0)) == IMM(0) && IS_N(FLD(s37444, 1), 1) && IS_N(FLD(FLD(s37444, 1), 0), 14) && (FLD(FLD(FLD(s37444, 1), 0), 1)) == IMM(0) && (FLD(FLD(s37444, 1), 1)) == IMM(0)) {
+r37443 = FLD(FLD(FLD(s37444, 1), 0), 0);
 } else {
-r37272 = F_P_dhead(s37273);
+r37443 = F_P_dhead(s37444);
 }
-r37272; });
-{ V dc = CH2(1, ({ V r37275;
-V s37276 = (a0);
-if ((s37276) == IMM(0)) {
-r37275 = F_Unb_dty_dix(a1, v37271, 0u);
-} else if ((s37276) == IMM(1)) {
-r37275 = F_Unb_dty_dmk((a3), v37271);
+r37443; });
+{ V dc = CH2(1, ({ V r37446;
+V s37447 = (a0);
+if ((s37447) == IMM(0)) {
+r37446 = F_Unb_dty_dix(a1, v37442, 0u);
+} else if ((s37447) == IMM(1)) {
+r37446 = F_Unb_dty_dmk((a3), v37442);
 } else { bend_fail("runtime fail-stop"); }
-r37275; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = (a0); V t1 = a1; V t2 = FLD(s37270, 1); V t3 = F_U32_dinc((a3)); a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
+r37446; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = (a0); V t1 = a1; V t2 = FLD(s37441, 1); V t3 = F_U32_dinc((a3)); a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dtys(V a0, V a1, V a2, V a3) { V r; D_Unb_dtys(&r, a0, a1, a2, a3); return r; }
 static V W_Unb_dtys(V *a) { (void)a; return F_Unb_dtys(a[0], a[1], a[2], a[3]); }
-static V S37282(void) { static V c; return STRC(c, "%"); }
-static V S37284(void) { static V c; return STRC(c, ":"); }
+static V S37453(void) { static V c; return STRC(c, "%"); }
+static V S37455(void) { static V c; return STRC(c, ":"); }
 static V F_Unb_dty_dmk(V a0_, V a1) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-V s37280 = F_U32_dis__lt((a0), 10u);
-if ((s37280) == IMM(0)) {
+V s37451 = F_U32_dis__lt((a0), 10u);
+if ((s37451) == IMM(0)) {
 return a1;
-} else if ((s37280) == IMM(1)) {
-return F_String_dappend(S37282(), F_String_dappend(C2(1, F_U32_dadd(48u, (a0)), IMM(0)), F_String_dappend(S37284(), a1)));
+} else if ((s37451) == IMM(1)) {
+return F_String_dappend(S37453(), F_String_dappend(C2(1, F_U32_dadd(48u, (a0)), IMM(0)), F_String_dappend(S37455(), a1)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dty_dmk(V *a) { (void)a; return F_Unb_dty_dmk(a[0], a[1]); }
 static V F_Unb_dty_dix(V a0, V a1, V a2_) {
 uint32_t a2 = (uint32_t)a2_;
 top:;
-V s37288 = a0;
-if ((s37288) == IMM(0)) {
+V s37459 = a0;
+if ((s37459) == IMM(0)) {
 return a1;
-} else if (IS_N(s37288, 1)) {
-V s37289 = F_String_deq(FLD(s37288, 0), a1);
-if ((s37289) == IMM(0)) {
-{ V t0 = FLD(s37288, 1); V t1 = a1; V t2 = F_U32_dinc((a2)); a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s37289) == IMM(1)) {
+} else if (IS_N(s37459, 1)) {
+V s37460 = F_String_deq(FLD(s37459, 0), a1);
+if ((s37460) == IMM(0)) {
+{ V t0 = FLD(s37459, 1); V t1 = a1; V t2 = F_U32_dinc((a2)); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s37460) == IMM(1)) {
 return F_Unb_dty_dmk((a2), a1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -91634,10 +92066,10 @@ return F_Unb_dty_dmk((a2), a1);
 static V W_Unb_dty_dix(V *a) { (void)a; return F_Unb_dty_dix(a[0], a[1], a[2]); }
 static V F_Unb_dtype_dput(V a0, V a1, V a2, V a3) {
 top:;
-V s37293 = (a0);
-if ((s37293) == IMM(1)) {
+V s37464 = (a0);
+if ((s37464) == IMM(1)) {
 return F_Map_dset(0, a3, a1, a2);
-} else if ((s37293) == IMM(0)) {
+} else if ((s37464) == IMM(0)) {
 return a3;
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -91647,69 +92079,69 @@ top:;
 return F_Unb_drun(a0, F_Unb_drets(a1, a0, IMM(0)), F_Unb_dcands_dall(a1, F_Unb_dtypes(IMM(1), a0, IMM(0)), F_Unb_ddone(a0, F_G_dlaws(a0, IMM(0))), a0, IMM(0)));
 }
 static V W_Unb_dprogram_dgo(V *a) { (void)a; return F_Unb_dprogram_dgo(a[0], a[1]); }
-static V S37303(void) { static V c; return STRC(c, "u%"); }
+static V S37474(void) { static V c; return STRC(c, "u%"); }
 static V F_Unb_ddone(V a0, V a1) {
 top:;
-V s37301 = a0;
-if ((s37301) == IMM(0)) {
+V s37472 = a0;
+if ((s37472) == IMM(0)) {
 return a1;
-} else if (IS_N(s37301, 1) && IS_N(FLD(s37301, 0), 0)) {
-{ V t0 = FLD(s37301, 1); V t1 = F_Unb_ddone_dput(F_String_dstarts__with(F_String_dreverse_dgo(FLD(FLD(s37301, 0), 0), IMM(0)), S37303()), F_String_dreverse_dgo(FLD(FLD(s37301, 0), 0), IMM(0)), a1); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s37301, 1)) {
-{ V t0 = FLD(s37301, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s37472, 1) && IS_N(FLD(s37472, 0), 0)) {
+{ V t0 = FLD(s37472, 1); V t1 = F_Unb_ddone_dput(F_String_dstarts__with(F_String_dreverse_dgo(FLD(FLD(s37472, 0), 0), IMM(0)), S37474()), F_String_dreverse_dgo(FLD(FLD(s37472, 0), 0), IMM(0)), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s37472, 1)) {
+{ V t0 = FLD(s37472, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_ddone(V *a) { (void)a; return F_Unb_ddone(a[0], a[1]); }
-static V K37310(void) { static V c; return KONST(c, C3(2, MKS(""), IMM(0), C1(0, MKS("")))); }
+static V K37481(void) { static V c; return KONST(c, C3(2, MKS(""), IMM(0), C1(0, MKS("")))); }
 static V F_Unb_ddone_dput(V a0, V a1, V a2) {
 top:;
-V s37307 = (a0);
-if ((s37307) == IMM(1)) {
-return F_Map_dset(0, a2, F_String_dreverse_dgo(F_String_ddrop_x37s3883869813x8061041(a1), IMM(0)), K37310());
-} else if ((s37307) == IMM(0)) {
+V s37478 = (a0);
+if ((s37478) == IMM(1)) {
+return F_Map_dset(0, a2, F_String_dreverse_dgo(F_String_ddrop_x37s3883869813x8061041(a1), IMM(0)), K37481());
+} else if ((s37478) == IMM(0)) {
 return a2;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_ddone_dput(V *a) { (void)a; return F_Unb_ddone_dput(a[0], a[1], a[2]); }
 static V F_Unb_dcands_dall(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s37312 = a3;
-if ((s37312) == IMM(0)) {
+V s37483 = a3;
+if ((s37483) == IMM(0)) {
 return a4;
-} else if (IS_N(s37312, 1) && IS_N(FLD(s37312, 0), 0)) {
-{ V t0 = a0; V t1 = a1; V t2 = a2; V t3 = FLD(s37312, 1); V t4 = F_Unb_dcand(FLD(FLD(s37312, 0), 0), FLD(FLD(s37312, 0), 3), a2, F_Unb_dcands(a0, a1, F_Ty_dhead(FLD(FLD(s37312, 0), 3)), FLD(FLD(s37312, 0), 2), FLD(FLD(s37312, 0), 1)), a4); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
-} else if (IS_N(s37312, 1)) {
-{ V t0 = a0; V t1 = a1; V t2 = a2; V t3 = FLD(s37312, 1); V t4 = a4; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s37483, 1) && IS_N(FLD(s37483, 0), 0)) {
+{ V t0 = a0; V t1 = a1; V t2 = a2; V t3 = FLD(s37483, 1); V t4 = F_Unb_dcand(FLD(FLD(s37483, 0), 0), FLD(FLD(s37483, 0), 3), a2, F_Unb_dcands(a0, a1, F_Ty_dhead(FLD(FLD(s37483, 0), 3)), FLD(FLD(s37483, 0), 2), FLD(FLD(s37483, 0), 1)), a4); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s37483, 1)) {
+{ V t0 = a0; V t1 = a1; V t2 = a2; V t3 = FLD(s37483, 1); V t4 = a4; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dcands_dall(V *a) { (void)a; return F_Unb_dcands_dall(a[0], a[1], a[2], a[3], a[4]); }
-static V K37323(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
-static V K37325(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
+static V K37494(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
+static V K37496(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
 static V D_Unb_dcands(V *dst, V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s37316 = a4;
-if ((s37316) == IMM(0)) {
+V s37487 = a4;
+if ((s37487) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s37316, 1)) {
-{ V dc = CH2(1, ({ V r37317;
-V s37318 = ({ V r37319;
-V s37320 = F_U32_dis__zero(FLD(FLD(s37316, 0), 1));
-if ((s37320) == IMM(0)) {
-r37319 = F_U32_dis__eq(FLD(FLD(s37316, 0), 1), 2u);
-} else if ((s37320) == IMM(1)) {
-r37319 = IMM(1);
+} else if (IS_N(s37487, 1)) {
+{ V dc = CH2(1, ({ V r37488;
+V s37489 = ({ V r37490;
+V s37491 = F_U32_dis__zero(FLD(FLD(s37487, 0), 1));
+if ((s37491) == IMM(0)) {
+r37490 = F_U32_dis__eq(FLD(FLD(s37487, 0), 1), 2u);
+} else if ((s37491) == IMM(1)) {
+r37490 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37319; });
-if ((s37318) == IMM(0)) {
-r37317 = K37323();
-} else if ((s37318) == IMM(1)) {
-V v37324 = F_Map_dget(K37325(), a0, F_P_dthead_dgo(FLD(FLD(s37316, 0), 2)));
-V v37328 = FLD(v37324, 1);
-r37317 = F_Unb_dcand_done_x37u(FLD(v37328, 0), FLD(v37328, 1), FLD(FLD(s37316, 0), 0), a0, a1, a2, a3);
+r37490; });
+if ((s37489) == IMM(0)) {
+r37488 = K37494();
+} else if ((s37489) == IMM(1)) {
+V v37495 = F_Map_dget(K37496(), a0, F_P_dthead_dgo(FLD(FLD(s37487, 0), 2)));
+V v37499 = FLD(v37495, 1);
+r37488 = F_Unb_dcand_done_x37u(FLD(v37499, 0), FLD(v37499, 1), FLD(FLD(s37487, 0), 0), a0, a1, a2, a3);
 } else { bend_fail("runtime fail-stop"); }
-r37317; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = a1; V t2 = a2; V t3 = a3; V t4 = FLD(s37316, 1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+r37488; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = a1; V t2 = a2; V t3 = a3; V t4 = FLD(s37487, 1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -91717,296 +92149,296 @@ static V F_Unb_dcands(V a0, V a1, V a2, V a3, V a4) { V r; D_Unb_dcands(&r, a0, 
 static V W_Unb_dcands(V *a) { (void)a; return F_Unb_dcands(a[0], a[1], a[2], a[3], a[4]); }
 BEND_UINL V U_Unb_dcand_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V *o) {
 top:;
-V s37330 = ({ V r37331;
-V s37332 = a0;
-if ((s37332) == IMM(0)) {
-r37331 = IMM(0);
-} else if (IS_N(s37332, 1)) {
-r37331 = IMM(1);
+V s37501 = ({ V r37502;
+V s37503 = a0;
+if ((s37503) == IMM(0)) {
+r37502 = IMM(0);
+} else if (IS_N(s37503, 1)) {
+r37502 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37331; });
-if ((s37330) == IMM(1)) {
+r37502; });
+if ((s37501) == IMM(1)) {
 o[0] = a0;
 o[1] = a1;
 return 0;
-} else if ((s37330) == IMM(0)) {
-V uo37333[2]; U_Unb_dinfer_done(a6, a2, a4, uo37333);
-return U_Unb_dcand_dtwo_x37u(uo37333[0], uo37333[1], a2, a3, a5, a6, o);
+} else if ((s37501) == IMM(0)) {
+V uo37504[2]; U_Unb_dinfer_done(a6, a2, a4, uo37504);
+return U_Unb_dcand_dtwo_x37u(uo37504[0], uo37504[1], a2, a3, a5, a6, o);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dcand_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6) { V o[2]; U_Unb_dcand_done_x37u(a0, a1, a2, a3, a4, a5, a6, o); return CN(0, 2, o); }
 static V W_Unb_dcand_done_x37u(V *a) { (void)a; return F_Unb_dcand_done_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); }
-static V K37342(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
+static V K37513(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
 BEND_UINL V U_Unb_dcand_dtwo_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o) {
 top:;
-V s37336 = ({ V r37337;
-V s37338 = a0;
-if ((s37338) == IMM(0)) {
-V s37339 = F_Unb_dtail(a5, a2);
-if ((s37339) == IMM(0)) {
-r37337 = IMM(1);
-} else if ((s37339) == IMM(1)) {
-r37337 = IMM(0);
+V s37507 = ({ V r37508;
+V s37509 = a0;
+if ((s37509) == IMM(0)) {
+V s37510 = F_Unb_dtail(a5, a2);
+if ((s37510) == IMM(0)) {
+r37508 = IMM(1);
+} else if ((s37510) == IMM(1)) {
+r37508 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37338, 1)) {
-r37337 = IMM(1);
+} else if (IS_N(s37509, 1)) {
+r37508 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37337; });
-if ((s37336) == IMM(1)) {
+r37508; });
+if ((s37507) == IMM(1)) {
 o[0] = a0;
 o[1] = a1;
 return 0;
-} else if ((s37336) == IMM(0)) {
-V v37341 = F_Map_dget(K37342(), a3, F_P_dthead_dgo(a4));
-bend_open(FLD(v37341, 1), o, 2, 0);
+} else if ((s37507) == IMM(0)) {
+V v37512 = F_Map_dget(K37513(), a3, F_P_dthead_dgo(a4));
+bend_open(FLD(v37512, 1), o, 2, 0);
 return 0;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dcand_dtwo_x37u(V a0, V a1, V a2, V a3, V a4, V a5) { V o[2]; U_Unb_dcand_dtwo_x37u(a0, a1, a2, a3, a4, a5, o); return CN(0, 2, o); }
 static V W_Unb_dcand_dtwo_x37u(V *a) { (void)a; return F_Unb_dcand_dtwo_x37u(a[0], a[1], a[2], a[3], a[4], a[5]); }
-static V S37359(void) { static V c; return STRC(c, ""); }
+static V S37530(void) { static V c; return STRC(c, ""); }
 static V F_Unb_dtail(V a0, V a1) {
 top:;
-V s37345 = a0;
-if (IS_N(s37345, 0)) {
-return F_String_deq(a1, FLD(s37345, 0));
-} else if (IS_N(s37345, 8)) {
-V s37347 = ({ V r37348;
-V (v37349) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s37345, 0), IMM(0)), a1);
-V s37352 = (v37349);
-if ((s37352) == IMM(0)) {
-r37348 = IMM(1);
-} else if ((s37352) == IMM(1)) {
-r37348 = IMM(0);
+V s37516 = a0;
+if (IS_N(s37516, 0)) {
+return F_String_deq(a1, FLD(s37516, 0));
+} else if (IS_N(s37516, 8)) {
+V s37518 = ({ V r37519;
+V (v37520) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s37516, 0), IMM(0)), a1);
+V s37523 = (v37520);
+if ((s37523) == IMM(0)) {
+r37519 = IMM(1);
+} else if ((s37523) == IMM(1)) {
+r37519 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r37348; });
-if ((s37347) == IMM(0)) {
+r37519; });
+if ((s37518) == IMM(0)) {
 return IMM(0);
-} else if ((s37347) == IMM(1)) {
-{ V t0 = FLD(s37345, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if ((s37518) == IMM(1)) {
+{ V t0 = FLD(s37516, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37345, 9)) {
-V s37353 = FLD(s37345, 1);
-if ((s37353) == IMM(0)) {
+} else if (IS_N(s37516, 9)) {
+V s37524 = FLD(s37516, 1);
+if ((s37524) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s37353, 1)) {
-V s37354 = F_Unb_dtail(FLD(s37353, 0), a1);
-if ((s37354) == IMM(0)) {
-{ V t0 = C2(9, FLD(s37345, 0), FLD(s37353, 1)); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if ((s37354) == IMM(1)) {
+} else if (IS_N(s37524, 1)) {
+V s37525 = F_Unb_dtail(FLD(s37524, 0), a1);
+if ((s37525) == IMM(0)) {
+{ V t0 = C2(9, FLD(s37516, 0), FLD(s37524, 1)); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if ((s37525) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37345, 10)) {
-V s37356 = ({ V r37357;
-V (v37358) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S37359(), FLD(s37345, 0)), IMM(0)), a1);
-V s37362 = (v37358);
-if ((s37362) == IMM(0)) {
-r37357 = IMM(1);
-} else if ((s37362) == IMM(1)) {
-r37357 = IMM(0);
+} else if (IS_N(s37516, 10)) {
+V s37527 = ({ V r37528;
+V (v37529) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S37530(), FLD(s37516, 0)), IMM(0)), a1);
+V s37533 = (v37529);
+if ((s37533) == IMM(0)) {
+r37528 = IMM(1);
+} else if ((s37533) == IMM(1)) {
+r37528 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r37357; });
-if ((s37356) == IMM(0)) {
+r37528; });
+if ((s37527) == IMM(0)) {
 return IMM(0);
-} else if ((s37356) == IMM(1)) {
-{ V t0 = FLD(s37345, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if ((s37527) == IMM(1)) {
+{ V t0 = FLD(s37516, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37345, 13)) {
-{ V t0 = FLD(s37345, 0); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s37516, 13)) {
+{ V t0 = FLD(s37516, 0); V t1 = a1; a0 = t0; a1 = t1; goto top; }
 } else {
 return IMM(0);
 }
 }
 static V W_Unb_dtail(V *a) { (void)a; return F_Unb_dtail(a[0], a[1]); }
-static V S37371(void) { static V c; return STRC(c, ""); }
+static V S37542(void) { static V c; return STRC(c, ""); }
 BEND_UINL V U_Unb_dinfer_done(V a0, V a1, V a2, V *o) {
 top:;
-V uo37363[2]; U_Unb_dinfer(a0, a1, a2, uo37363);
-V s37365 = ({ V r37366;
-V s37367 = ({ V r37368;
-V s37369 = uo37363[0];
-if ((s37369) == IMM(0)) {
-r37368 = IMM(0);
-} else if (IS_N(s37369, 1)) {
-r37368 = IMM(1);
+V uo37534[2]; U_Unb_dinfer(a0, a1, a2, uo37534);
+V s37536 = ({ V r37537;
+V s37538 = ({ V r37539;
+V s37540 = uo37534[0];
+if ((s37540) == IMM(0)) {
+r37539 = IMM(0);
+} else if (IS_N(s37540, 1)) {
+r37539 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37368; });
-if ((s37367) == IMM(0)) {
-r37366 = IMM(0);
-} else if ((s37367) == IMM(1)) {
-r37366 = F_Unb_dclash(a0, a1, uo37363[0]);
+r37539; });
+if ((s37538) == IMM(0)) {
+r37537 = IMM(0);
+} else if ((s37538) == IMM(1)) {
+r37537 = F_Unb_dclash(a0, a1, uo37534[0]);
 } else { bend_fail("runtime fail-stop"); }
-r37366; });
-if ((s37365) == IMM(1)) {
-o[0] = S37371();
+r37537; });
+if ((s37536) == IMM(1)) {
+o[0] = S37542();
 o[1] = IMM(0);
 return 0;
-} else if ((s37365) == IMM(0)) {
-o[0] = uo37363[0];
-o[1] = uo37363[1];
+} else if ((s37536) == IMM(0)) {
+o[0] = uo37534[0];
+o[1] = uo37534[1];
 return 0;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dinfer_done(V a0, V a1, V a2) { V o[2]; U_Unb_dinfer_done(a0, a1, a2, o); return CN(0, 2, o); }
 static V W_Unb_dinfer_done(V *a) { (void)a; return F_Unb_dinfer_done(a[0], a[1], a[2]); }
-static V S37399(void) { static V c; return STRC(c, ""); }
+static V S37570(void) { static V c; return STRC(c, ""); }
 static V F_Unb_dclash(V a0, V a1, V a2) {
 top:;
-V s37372 = a0;
-if (IS_N(s37372, 8)) {
-V s37373 = ({ V r37374;
-V s37375 = F_Unb_dclash_dlet(FLD(s37372, 0), FLD(s37372, 1), a1, a2);
-if ((s37375) == IMM(0)) {
-r37374 = F_Unb_dclash(FLD(s37372, 1), a1, a2);
-} else if ((s37375) == IMM(1)) {
-r37374 = IMM(1);
+V s37543 = a0;
+if (IS_N(s37543, 8)) {
+V s37544 = ({ V r37545;
+V s37546 = F_Unb_dclash_dlet(FLD(s37543, 0), FLD(s37543, 1), a1, a2);
+if ((s37546) == IMM(0)) {
+r37545 = F_Unb_dclash(FLD(s37543, 1), a1, a2);
+} else if ((s37546) == IMM(1)) {
+r37545 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37374; });
-if ((s37373) == IMM(0)) {
-V v37378 = F_Unb_dinfer_dnext(FLD(s37372, 0), FLD(s37372, 1), a1);
-V s37380 = v37378;
-if ((s37380) == IMM(0)) {
+r37545; });
+if ((s37544) == IMM(0)) {
+V v37549 = F_Unb_dinfer_dnext(FLD(s37543, 0), FLD(s37543, 1), a1);
+V s37551 = v37549;
+if ((s37551) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s37380, 1)) {
-{ V t0 = FLD(s37372, 2); V t1 = v37378; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37551, 1)) {
+{ V t0 = FLD(s37543, 2); V t1 = v37549; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s37373) == IMM(1)) {
+} else if ((s37544) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37372, 5)) {
-V s37381 = FLD(s37372, 1);
-if ((s37381) == IMM(0)) {
+} else if (IS_N(s37543, 5)) {
+V s37552 = FLD(s37543, 1);
+if ((s37552) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s37381, 1)) {
-V (v37382) = F_Unb_dclash(FLD(s37381, 0), a1, a2);
-V s37384 = (v37382);
-if ((s37384) == IMM(0)) {
-{ V t0 = C2(5, FLD(s37372, 0), FLD(s37381, 1)); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s37384) == IMM(1)) {
-return IMM(1);
-} else { bend_fail("runtime fail-stop"); }
-} else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37372, 6)) {
-V s37385 = FLD(s37372, 1);
-if ((s37385) == IMM(0)) {
-return IMM(0);
-} else if (IS_N(s37385, 1)) {
-V (v37386) = F_Unb_dclash(FLD(s37385, 0), a1, a2);
-V s37388 = (v37386);
-if ((s37388) == IMM(0)) {
-{ V t0 = C2(6, FLD(s37372, 0), FLD(s37385, 1)); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s37388) == IMM(1)) {
+} else if (IS_N(s37552, 1)) {
+V (v37553) = F_Unb_dclash(FLD(s37552, 0), a1, a2);
+V s37555 = (v37553);
+if ((s37555) == IMM(0)) {
+{ V t0 = C2(5, FLD(s37543, 0), FLD(s37552, 1)); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s37555) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37372, 9)) {
-V s37389 = FLD(s37372, 0);
-if (IS_N(s37389, 1)) {
-V (v37390) = F_Unb_dclash(FLD(s37389, 0), a1, a2);
-V s37392 = (v37390);
-if ((s37392) == IMM(0)) {
-{ V t0 = C2(9, FLD(s37389, 1), FLD(s37372, 1)); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s37392) == IMM(1)) {
-return IMM(1);
-} else { bend_fail("runtime fail-stop"); }
-} else if ((s37389) == IMM(0)) {
-V s37393 = FLD(s37372, 1);
-if ((s37393) == IMM(0)) {
+} else if (IS_N(s37543, 6)) {
+V s37556 = FLD(s37543, 1);
+if ((s37556) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s37393, 1)) {
-V s37394 = F_Unb_dclash(FLD(s37393, 0), a1, a2);
-if ((s37394) == IMM(0)) {
-{ V t0 = C2(9, IMM(0), FLD(s37393, 1)); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s37394) == IMM(1)) {
+} else if (IS_N(s37556, 1)) {
+V (v37557) = F_Unb_dclash(FLD(s37556, 0), a1, a2);
+V s37559 = (v37557);
+if ((s37559) == IMM(0)) {
+{ V t0 = C2(6, FLD(s37543, 0), FLD(s37556, 1)); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s37559) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
+} else if (IS_N(s37543, 9)) {
+V s37560 = FLD(s37543, 0);
+if (IS_N(s37560, 1)) {
+V (v37561) = F_Unb_dclash(FLD(s37560, 0), a1, a2);
+V s37563 = (v37561);
+if ((s37563) == IMM(0)) {
+{ V t0 = C2(9, FLD(s37560, 1), FLD(s37543, 1)); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s37563) == IMM(1)) {
+return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37372, 10)) {
-V s37396 = ({ V r37397;
-V (v37398) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S37399(), FLD(s37372, 0)), IMM(0)), a1);
-V s37402 = (v37398);
-if ((s37402) == IMM(0)) {
-r37397 = IMM(1);
-} else if ((s37402) == IMM(1)) {
-r37397 = IMM(0);
-} else { bend_fail("runtime fail-stop"); }
-r37397; });
-if ((s37396) == IMM(0)) {
+} else if ((s37560) == IMM(0)) {
+V s37564 = FLD(s37543, 1);
+if ((s37564) == IMM(0)) {
 return IMM(0);
-} else if ((s37396) == IMM(1)) {
-{ V t0 = FLD(s37372, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37564, 1)) {
+V s37565 = F_Unb_dclash(FLD(s37564, 0), a1, a2);
+if ((s37565) == IMM(0)) {
+{ V t0 = C2(9, IMM(0), FLD(s37564, 1)); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s37565) == IMM(1)) {
+return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37372, 13)) {
-{ V t0 = FLD(s37372, 0); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else { bend_fail("runtime fail-stop"); }
+} else { bend_fail("runtime fail-stop"); }
+} else if (IS_N(s37543, 10)) {
+V s37567 = ({ V r37568;
+V (v37569) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S37570(), FLD(s37543, 0)), IMM(0)), a1);
+V s37573 = (v37569);
+if ((s37573) == IMM(0)) {
+r37568 = IMM(1);
+} else if ((s37573) == IMM(1)) {
+r37568 = IMM(0);
+} else { bend_fail("runtime fail-stop"); }
+r37568; });
+if ((s37567) == IMM(0)) {
+return IMM(0);
+} else if ((s37567) == IMM(1)) {
+{ V t0 = FLD(s37543, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else { bend_fail("runtime fail-stop"); }
+} else if (IS_N(s37543, 13)) {
+{ V t0 = FLD(s37543, 0); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else {
 return IMM(0);
 }
 }
 static V W_Unb_dclash(V *a) { (void)a; return F_Unb_dclash(a[0], a[1], a[2]); }
-static V S37408(void) { static V c; return STRC(c, ""); }
+static V S37579(void) { static V c; return STRC(c, ""); }
 static V F_Unb_dinfer_dnext(V a0, V a1, V a2) {
 top:;
-V s37403 = a0;
-if (IS_N(s37403, 0)) {
-return F_Unb_dinfer_dalias_dv(a1, a2, FLD(s37403, 0));
+V s37574 = a0;
+if (IS_N(s37574, 0)) {
+return F_Unb_dinfer_dalias_dv(a1, a2, FLD(s37574, 0));
 } else {
-V s37405 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(s37403, IMM(0)), a2);
-if ((s37405) == IMM(0)) {
+V s37576 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(s37574, IMM(0)), a2);
+if ((s37576) == IMM(0)) {
 return a2;
-} else if ((s37405) == IMM(1)) {
-return S37408();
+} else if ((s37576) == IMM(1)) {
+return S37579();
 } else { bend_fail("runtime fail-stop"); }
 }
 }
 static V W_Unb_dinfer_dnext(V *a) { (void)a; return F_Unb_dinfer_dnext(a[0], a[1], a[2]); }
-static V S37414(void) { static V c; return STRC(c, ""); }
-static V S37417(void) { static V c; return STRC(c, ""); }
+static V S37585(void) { static V c; return STRC(c, ""); }
+static V S37588(void) { static V c; return STRC(c, ""); }
 static V F_Unb_dinfer_dalias_dv(V a0, V a1, V a2) {
 top:;
-V s37409 = a0;
-if (IS_N(s37409, 0)) {
-V s37410 = F_String_deq(FLD(s37409, 0), a1);
-if ((s37410) == IMM(0)) {
-V s37412 = F_String_deq(a2, a1);
-if ((s37412) == IMM(0)) {
+V s37580 = a0;
+if (IS_N(s37580, 0)) {
+V s37581 = F_String_deq(FLD(s37580, 0), a1);
+if ((s37581) == IMM(0)) {
+V s37583 = F_String_deq(a2, a1);
+if ((s37583) == IMM(0)) {
 return a1;
-} else if ((s37412) == IMM(1)) {
-return S37414();
+} else if ((s37583) == IMM(1)) {
+return S37585();
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s37410) == IMM(1)) {
+} else if ((s37581) == IMM(1)) {
 return a2;
 } else { bend_fail("runtime fail-stop"); }
 } else {
-V s37415 = F_String_deq(a2, a1);
-if ((s37415) == IMM(0)) {
+V s37586 = F_String_deq(a2, a1);
+if ((s37586) == IMM(0)) {
 return a1;
-} else if ((s37415) == IMM(1)) {
-return S37417();
+} else if ((s37586) == IMM(1)) {
+return S37588();
 } else { bend_fail("runtime fail-stop"); }
 }
 }
 static V W_Unb_dinfer_dalias_dv(V *a) { (void)a; return F_Unb_dinfer_dalias_dv(a[0], a[1], a[2]); }
 static V F_Unb_dclash_dlet(V a0, V a1, V a2, V a3) {
 top:;
-V s37418 = a0;
-if (IS_N(s37418, 1)) {
-V s37419 = ({ V r37420;
-V s37421 = a1;
-if (IS_N(s37421, 0)) {
-r37420 = F_String_deq(a2, FLD(s37421, 0));
+V s37589 = a0;
+if (IS_N(s37589, 1)) {
+V s37590 = ({ V r37591;
+V s37592 = a1;
+if (IS_N(s37592, 0)) {
+r37591 = F_String_deq(a2, FLD(s37592, 0));
 } else {
-r37420 = IMM(0);
+r37591 = IMM(0);
 }
-r37420; });
-if ((s37419) == IMM(0)) {
+r37591; });
+if ((s37590) == IMM(0)) {
 return IMM(0);
-} else if ((s37419) == IMM(1)) {
-V s37423 = F_String_deq(FLD(s37418, 0), a3);
-if ((s37423) == IMM(0)) {
+} else if ((s37590) == IMM(1)) {
+V s37594 = F_String_deq(FLD(s37589, 0), a3);
+if ((s37594) == IMM(0)) {
 return IMM(1);
-} else if ((s37423) == IMM(1)) {
+} else if ((s37594) == IMM(1)) {
 return IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -92015,234 +92447,234 @@ return IMM(0);
 }
 }
 static V W_Unb_dclash_dlet(V *a) { (void)a; return F_Unb_dclash_dlet(a[0], a[1], a[2], a[3]); }
-static V K37435(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
-static V S37449(void) { static V c; return STRC(c, ""); }
-static V S37456(void) { static V c; return STRC(c, ""); }
-static V S37469(void) { static V c; return STRC(c, ""); }
-static V S37481(void) { static V c; return STRC(c, ""); }
-static V S37484(void) { static V c; return STRC(c, ""); }
-static V S37485(void) { static V c; return STRC(c, ""); }
+static V K37606(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
+static V S37620(void) { static V c; return STRC(c, ""); }
+static V S37627(void) { static V c; return STRC(c, ""); }
+static V S37640(void) { static V c; return STRC(c, ""); }
+static V S37652(void) { static V c; return STRC(c, ""); }
+static V S37655(void) { static V c; return STRC(c, ""); }
+static V S37656(void) { static V c; return STRC(c, ""); }
 BEND_UINL V U_Unb_dinfer(V a0, V a1, V a2, V *o) {
 top:;
-V s37425 = a0;
-if (IS_N(s37425, 8)) {
-V v37426 = F_Unb_dinfer_dnext(FLD(s37425, 0), FLD(s37425, 1), a1);
-V uo37428[2]; U_Unb_dinfer_dlet(FLD(s37425, 0), FLD(s37425, 1), a1, a2, uo37428);
-V v37430 = F_Unb_dinfer(FLD(s37425, 1), a1, a2);
-V v37432 = ({ V r37433;
-V s37434 = v37426;
-if ((s37434) == IMM(0)) {
-r37433 = K37435();
-} else if (IS_N(s37434, 1)) {
-r37433 = F_Unb_dinfer(FLD(s37425, 2), v37426, a2);
+V s37596 = a0;
+if (IS_N(s37596, 8)) {
+V v37597 = F_Unb_dinfer_dnext(FLD(s37596, 0), FLD(s37596, 1), a1);
+V uo37599[2]; U_Unb_dinfer_dlet(FLD(s37596, 0), FLD(s37596, 1), a1, a2, uo37599);
+V v37601 = F_Unb_dinfer(FLD(s37596, 1), a1, a2);
+V v37603 = ({ V r37604;
+V s37605 = v37597;
+if ((s37605) == IMM(0)) {
+r37604 = K37606();
+} else if (IS_N(s37605, 1)) {
+r37604 = F_Unb_dinfer(FLD(s37596, 2), v37597, a2);
 } else { bend_fail("runtime fail-stop"); }
-r37433; });
-V v37437 = v37430;
-V v37438 = ({ V r37439;
-V s37440 = FLD(v37437, 0);
-if ((s37440) == IMM(0)) {
-r37439 = IMM(1);
-} else if (IS_N(s37440, 1)) {
-r37439 = IMM(0);
+r37604; });
+V v37608 = v37601;
+V v37609 = ({ V r37610;
+V s37611 = FLD(v37608, 0);
+if ((s37611) == IMM(0)) {
+r37610 = IMM(1);
+} else if (IS_N(s37611, 1)) {
+r37610 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r37439; });
-V v37441 = ({ V r37442;
-V s37443 = v37438;
-if ((s37443) == IMM(0)) {
-r37442 = v37430;
-} else if ((s37443) == IMM(1)) {
-r37442 = v37432;
+r37610; });
+V v37612 = ({ V r37613;
+V s37614 = v37609;
+if ((s37614) == IMM(0)) {
+r37613 = v37601;
+} else if ((s37614) == IMM(1)) {
+r37613 = v37603;
 } else { bend_fail("runtime fail-stop"); }
-r37442; });
-V v37444 = ({ V r37445;
-V s37446 = uo37428[0];
-if ((s37446) == IMM(0)) {
-r37445 = IMM(1);
-} else if (IS_N(s37446, 1)) {
-r37445 = IMM(0);
+r37613; });
+V v37615 = ({ V r37616;
+V s37617 = uo37599[0];
+if ((s37617) == IMM(0)) {
+r37616 = IMM(1);
+} else if (IS_N(s37617, 1)) {
+r37616 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r37445; });
-V s37447 = v37444;
-if ((s37447) == IMM(0)) {
-o[0] = uo37428[0];
-o[1] = uo37428[1];
+r37616; });
+V s37618 = v37615;
+if ((s37618) == IMM(0)) {
+o[0] = uo37599[0];
+o[1] = uo37599[1];
 return 0;
-} else if ((s37447) == IMM(1)) {
-bend_open(v37441, o, 2, 0);
+} else if ((s37618) == IMM(1)) {
+bend_open(v37612, o, 2, 0);
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37425, 5)) {
-V s37448 = FLD(s37425, 1);
-if ((s37448) == IMM(0)) {
-o[0] = S37449();
+} else if (IS_N(s37596, 5)) {
+V s37619 = FLD(s37596, 1);
+if ((s37619) == IMM(0)) {
+o[0] = S37620();
 o[1] = IMM(0);
 return 0;
-} else if (IS_N(s37448, 1)) {
-V uo37450[2]; U_Unb_dinfer(FLD(s37448, 0), a1, a2, uo37450);
-V uo37452[2]; U_Unb_dinfer(C2(5, FLD(s37425, 0), FLD(s37448, 1)), a1, a2, uo37452);
-V s37454 = uo37450[0];
-if ((s37454) == IMM(0)) {
-o[0] = uo37452[0];
-o[1] = uo37452[1];
+} else if (IS_N(s37619, 1)) {
+V uo37621[2]; U_Unb_dinfer(FLD(s37619, 0), a1, a2, uo37621);
+V uo37623[2]; U_Unb_dinfer(C2(5, FLD(s37596, 0), FLD(s37619, 1)), a1, a2, uo37623);
+V s37625 = uo37621[0];
+if ((s37625) == IMM(0)) {
+o[0] = uo37623[0];
+o[1] = uo37623[1];
 return 0;
-} else if (IS_N(s37454, 1)) {
-o[0] = uo37450[0];
-o[1] = uo37450[1];
+} else if (IS_N(s37625, 1)) {
+o[0] = uo37621[0];
+o[1] = uo37621[1];
 return 0;
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37425, 6)) {
-V s37455 = FLD(s37425, 1);
-if ((s37455) == IMM(0)) {
-o[0] = S37456();
+} else if (IS_N(s37596, 6)) {
+V s37626 = FLD(s37596, 1);
+if ((s37626) == IMM(0)) {
+o[0] = S37627();
 o[1] = IMM(0);
 return 0;
-} else if (IS_N(s37455, 1)) {
-V uo37457[2]; U_Unb_dinfer(FLD(s37455, 0), a1, a2, uo37457);
-V uo37459[2]; U_Unb_dinfer(C2(6, FLD(s37425, 0), FLD(s37455, 1)), a1, a2, uo37459);
-V s37461 = uo37457[0];
-if ((s37461) == IMM(0)) {
-o[0] = uo37459[0];
-o[1] = uo37459[1];
+} else if (IS_N(s37626, 1)) {
+V uo37628[2]; U_Unb_dinfer(FLD(s37626, 0), a1, a2, uo37628);
+V uo37630[2]; U_Unb_dinfer(C2(6, FLD(s37596, 0), FLD(s37626, 1)), a1, a2, uo37630);
+V s37632 = uo37628[0];
+if ((s37632) == IMM(0)) {
+o[0] = uo37630[0];
+o[1] = uo37630[1];
 return 0;
-} else if (IS_N(s37461, 1)) {
-o[0] = uo37457[0];
-o[1] = uo37457[1];
-return 0;
-} else { bend_fail("runtime fail-stop"); }
-} else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37425, 9)) {
-V s37462 = FLD(s37425, 0);
-if (IS_N(s37462, 1)) {
-V uo37463[2]; U_Unb_dinfer(FLD(s37462, 0), a1, a2, uo37463);
-V uo37465[2]; U_Unb_dinfer(C2(9, FLD(s37462, 1), FLD(s37425, 1)), a1, a2, uo37465);
-V s37467 = uo37463[0];
-if ((s37467) == IMM(0)) {
-o[0] = uo37465[0];
-o[1] = uo37465[1];
-return 0;
-} else if (IS_N(s37467, 1)) {
-o[0] = uo37463[0];
-o[1] = uo37463[1];
+} else if (IS_N(s37632, 1)) {
+o[0] = uo37628[0];
+o[1] = uo37628[1];
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s37462) == IMM(0)) {
-V s37468 = FLD(s37425, 1);
-if ((s37468) == IMM(0)) {
-o[0] = S37469();
+} else { bend_fail("runtime fail-stop"); }
+} else if (IS_N(s37596, 9)) {
+V s37633 = FLD(s37596, 0);
+if (IS_N(s37633, 1)) {
+V uo37634[2]; U_Unb_dinfer(FLD(s37633, 0), a1, a2, uo37634);
+V uo37636[2]; U_Unb_dinfer(C2(9, FLD(s37633, 1), FLD(s37596, 1)), a1, a2, uo37636);
+V s37638 = uo37634[0];
+if ((s37638) == IMM(0)) {
+o[0] = uo37636[0];
+o[1] = uo37636[1];
+return 0;
+} else if (IS_N(s37638, 1)) {
+o[0] = uo37634[0];
+o[1] = uo37634[1];
+return 0;
+} else { bend_fail("runtime fail-stop"); }
+} else if ((s37633) == IMM(0)) {
+V s37639 = FLD(s37596, 1);
+if ((s37639) == IMM(0)) {
+o[0] = S37640();
 o[1] = IMM(0);
 return 0;
-} else if (IS_N(s37468, 1)) {
-V uo37470[2]; U_Unb_dinfer(FLD(s37468, 0), a1, a2, uo37470);
-V uo37472[2]; U_Unb_dinfer(C2(9, IMM(0), FLD(s37468, 1)), a1, a2, uo37472);
-V s37474 = ({ V r37475;
-V v37476 = ({ V r37477;
-V s37478 = uo37470[0];
-if ((s37478) == IMM(0)) {
-r37477 = IMM(1);
-} else if (IS_N(s37478, 1)) {
-r37477 = IMM(0);
+} else if (IS_N(s37639, 1)) {
+V uo37641[2]; U_Unb_dinfer(FLD(s37639, 0), a1, a2, uo37641);
+V uo37643[2]; U_Unb_dinfer(C2(9, IMM(0), FLD(s37639, 1)), a1, a2, uo37643);
+V s37645 = ({ V r37646;
+V v37647 = ({ V r37648;
+V s37649 = uo37641[0];
+if ((s37649) == IMM(0)) {
+r37648 = IMM(1);
+} else if (IS_N(s37649, 1)) {
+r37648 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r37477; });
-V s37479 = v37476;
-if ((s37479) == IMM(0)) {
-r37475 = IMM(1);
-} else if ((s37479) == IMM(1)) {
-r37475 = IMM(0);
+r37648; });
+V s37650 = v37647;
+if ((s37650) == IMM(0)) {
+r37646 = IMM(1);
+} else if ((s37650) == IMM(1)) {
+r37646 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r37475; });
-if ((s37474) == IMM(1)) {
-o[0] = uo37470[0];
-o[1] = uo37470[1];
+r37646; });
+if ((s37645) == IMM(1)) {
+o[0] = uo37641[0];
+o[1] = uo37641[1];
 return 0;
-} else if ((s37474) == IMM(0)) {
-o[0] = uo37472[0];
-o[1] = uo37472[1];
+} else if ((s37645) == IMM(0)) {
+o[0] = uo37643[0];
+o[1] = uo37643[1];
 return 0;
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37425, 10)) {
-V s37480 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S37481(), FLD(s37425, 0)), IMM(0)), a1);
-if ((s37480) == IMM(0)) {
-{ V t0 = FLD(s37425, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s37480) == IMM(1)) {
-o[0] = S37484();
+} else if (IS_N(s37596, 10)) {
+V s37651 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S37652(), FLD(s37596, 0)), IMM(0)), a1);
+if ((s37651) == IMM(0)) {
+{ V t0 = FLD(s37596, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s37651) == IMM(1)) {
+o[0] = S37655();
 o[1] = IMM(0);
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37425, 13)) {
-{ V t0 = FLD(s37425, 0); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37596, 13)) {
+{ V t0 = FLD(s37596, 0); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else {
-o[0] = S37485();
+o[0] = S37656();
 o[1] = IMM(0);
 return 0;
 }
 }
 static V F_Unb_dinfer(V a0, V a1, V a2) { V o[2]; U_Unb_dinfer(a0, a1, a2, o); return CN(0, 2, o); }
 static V W_Unb_dinfer(V *a) { (void)a; return F_Unb_dinfer(a[0], a[1], a[2]); }
-static V S37489(void) { static V c; return STRC(c, ""); }
+static V S37660(void) { static V c; return STRC(c, ""); }
 BEND_UINL V U_Unb_dinfer_dlet(V a0, V a1, V a2, V a3, V *o) {
 top:;
-V s37486 = a0;
-if (IS_N(s37486, 1)) {
-return U_Unb_dinfer_dv(a1, a2, a3, FLD(s37486, 0), F_List_dlength(0, FLD(s37486, 1)), o);
+V s37657 = a0;
+if (IS_N(s37657, 1)) {
+return U_Unb_dinfer_dv(a1, a2, a3, FLD(s37657, 0), F_List_dlength(0, FLD(s37657, 1)), o);
 } else {
-o[0] = S37489();
+o[0] = S37660();
 o[1] = IMM(0);
 return 0;
 }
 }
 static V F_Unb_dinfer_dlet(V a0, V a1, V a2, V a3) { V o[2]; U_Unb_dinfer_dlet(a0, a1, a2, a3, o); return CN(0, 2, o); }
 static V W_Unb_dinfer_dlet(V *a) { (void)a; return F_Unb_dinfer_dlet(a[0], a[1], a[2], a[3]); }
-static V S37493(void) { static V c; return STRC(c, ""); }
-static V K37495(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
-static V S37500(void) { static V c; return STRC(c, ""); }
+static V S37664(void) { static V c; return STRC(c, ""); }
+static V K37666(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
+static V S37671(void) { static V c; return STRC(c, ""); }
 BEND_UINL V U_Unb_dinfer_dv(V a0, V a1, V a2, V a3, V a4, V *o) {
 top:;
-V s37490 = a0;
-if (IS_N(s37490, 0)) {
-V s37491 = F_String_deq(a1, FLD(s37490, 0));
-if ((s37491) == IMM(0)) {
-o[0] = S37493();
+V s37661 = a0;
+if (IS_N(s37661, 0)) {
+V s37662 = F_String_deq(a1, FLD(s37661, 0));
+if ((s37662) == IMM(0)) {
+o[0] = S37664();
 o[1] = IMM(0);
 return 0;
-} else if ((s37491) == IMM(1)) {
-V v37494 = F_Map_dget(K37495(), a2, F_P_dthead_dgo(a3));
-V v37498 = FLD(v37494, 1);
-return U_Unb_dinfer_dn_x37u(FLD(v37498, 0), FLD(v37498, 1), (a4), o);
+} else if ((s37662) == IMM(1)) {
+V v37665 = F_Map_dget(K37666(), a2, F_P_dthead_dgo(a3));
+V v37669 = FLD(v37665, 1);
+return U_Unb_dinfer_dn_x37u(FLD(v37669, 0), FLD(v37669, 1), (a4), o);
 } else { bend_fail("runtime fail-stop"); }
 } else {
-o[0] = S37500();
+o[0] = S37671();
 o[1] = IMM(0);
 return 0;
 }
 }
 static V F_Unb_dinfer_dv(V a0, V a1, V a2, V a3, V a4) { V o[2]; U_Unb_dinfer_dv(a0, a1, a2, a3, a4, o); return CN(0, 2, o); }
 static V W_Unb_dinfer_dv(V *a) { (void)a; return F_Unb_dinfer_dv(a[0], a[1], a[2], a[3], a[4]); }
-static V S37508(void) { static V c; return STRC(c, ""); }
+static V S37679(void) { static V c; return STRC(c, ""); }
 BEND_UINL V U_Unb_dinfer_dn_x37u(V a0, V a1, V a2, V *o) {
 top:;
-V s37501 = ({ V r37502;
-V s37503 = ({ V r37504;
-V s37505 = a0;
-if ((s37505) == IMM(0)) {
-r37504 = IMM(0);
-} else if (IS_N(s37505, 1)) {
-r37504 = IMM(1);
+V s37672 = ({ V r37673;
+V s37674 = ({ V r37675;
+V s37676 = a0;
+if ((s37676) == IMM(0)) {
+r37675 = IMM(0);
+} else if (IS_N(s37676, 1)) {
+r37675 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37504; });
-if ((s37503) == IMM(0)) {
-r37502 = IMM(0);
-} else if ((s37503) == IMM(1)) {
-r37502 = F_Nat_dis__eq(F_List_dlength(0, a1), (a2));
+r37675; });
+if ((s37674) == IMM(0)) {
+r37673 = IMM(0);
+} else if ((s37674) == IMM(1)) {
+r37673 = F_Nat_dis__eq(F_List_dlength(0, a1), (a2));
 } else { bend_fail("runtime fail-stop"); }
-r37502; });
-if ((s37501) == IMM(0)) {
-o[0] = S37508();
+r37673; });
+if ((s37672) == IMM(0)) {
+o[0] = S37679();
 o[1] = IMM(0);
 return 0;
-} else if ((s37501) == IMM(1)) {
+} else if ((s37672) == IMM(1)) {
 o[0] = a0;
 o[1] = a1;
 return 0;
@@ -92252,34 +92684,34 @@ static V F_Unb_dinfer_dn_x37u(V a0, V a1, V a2) { V o[2]; U_Unb_dinfer_dn_x37u(a
 static V W_Unb_dinfer_dn_x37u(V *a) { (void)a; return F_Unb_dinfer_dn_x37u(a[0], a[1], a[2]); }
 static V F_Unb_dcand(V a0, V a1, V a2, V a3, V a4) {
 top:;
-return F_Unb_dput(({ V r37509;
-V s37510 = F_Unb_dok_ddef(a0, a1, a2);
-if ((s37510) == IMM(0)) {
-r37509 = IMM(0);
-} else if ((s37510) == IMM(1)) {
-r37509 = F_Unb_dany(a3);
+return F_Unb_dput(({ V r37680;
+V s37681 = F_Unb_dok_ddef(a0, a1, a2);
+if ((s37681) == IMM(0)) {
+r37680 = IMM(0);
+} else if ((s37681) == IMM(1)) {
+r37680 = F_Unb_dany(a3);
 } else { bend_fail("runtime fail-stop"); }
-r37509; }), a0, a3, a4);
+r37680; }), a0, a3, a4);
 }
 static V W_Unb_dcand(V *a) { (void)a; return F_Unb_dcand(a[0], a[1], a[2], a[3], a[4]); }
 static __attribute__((noinline)) V H_F_Unb_dany(V a0) {
 top:;
-V s37514 = a0;
-if ((s37514) == IMM(0)) {
+V s37685 = a0;
+if ((s37685) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s37514, 1)) {
-V v37515 = FLD(s37514, 0);
-V s37516 = ({ V r37517;
-V s37518 = FLD(v37515, 0);
-if ((s37518) == IMM(0)) {
-r37517 = IMM(0);
-} else if (IS_N(s37518, 1)) {
-r37517 = IMM(1);
+} else if (IS_N(s37685, 1)) {
+V v37686 = FLD(s37685, 0);
+V s37687 = ({ V r37688;
+V s37689 = FLD(v37686, 0);
+if ((s37689) == IMM(0)) {
+r37688 = IMM(0);
+} else if (IS_N(s37689, 1)) {
+r37688 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37517; });
-if ((s37516) == IMM(0)) {
-{ V t0 = FLD(s37514, 1); a0 = t0; goto top; }
-} else if ((s37516) == IMM(1)) {
+r37688; });
+if ((s37687) == IMM(0)) {
+{ V t0 = FLD(s37685, 1); a0 = t0; goto top; }
+} else if ((s37687) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -92293,28 +92725,28 @@ return H_F_Unb_dany(a0);
 static V W_Unb_dany(V *a) { (void)a; return F_Unb_dany(a[0]); }
 static V F_Unb_dput(V a0, V a1, V a2, V a3) {
 top:;
-V s37519 = (a0);
-if ((s37519) == IMM(1)) {
+V s37690 = (a0);
+if ((s37690) == IMM(1)) {
 return F_Map_dset(0, a3, a1, a2);
-} else if ((s37519) == IMM(0)) {
+} else if ((s37690) == IMM(0)) {
 return a3;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dput(V *a) { (void)a; return F_Unb_dput(a[0], a[1], a[2], a[3]); }
-static V K37526(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
+static V K37697(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
 static V F_Unb_drets(V a0, V a1, V a2) {
 top:;
-V s37521 = a1;
-if ((s37521) == IMM(0)) {
+V s37692 = a1;
+if ((s37692) == IMM(0)) {
 return a2;
-} else if (IS_N(s37521, 1) && IS_N(FLD(s37521, 0), 0)) {
-{ V t0 = a0; V t1 = FLD(s37521, 1); V t2 = F_Map_dset(0, a2, FLD(FLD(s37521, 0), 0), C2(0, ({ V r37522;
-V v37523 = F_Ty_dhead(FLD(FLD(s37521, 0), 3));
-V v37525 = F_Map_dget(K37526(), a0, F_P_dthead_dgo(v37523));
-r37522 = FLD(v37525, 1);
-r37522; }), F_U32_dfrom__nat(F_List_dlength(0, FLD(FLD(s37521, 0), 1))))); a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if (IS_N(s37521, 1)) {
-{ V t0 = a0; V t1 = FLD(s37521, 1); V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37692, 1) && IS_N(FLD(s37692, 0), 0)) {
+{ V t0 = a0; V t1 = FLD(s37692, 1); V t2 = F_Map_dset(0, a2, FLD(FLD(s37692, 0), 0), C2(0, ({ V r37693;
+V v37694 = F_Ty_dhead(FLD(FLD(s37692, 0), 3));
+V v37696 = F_Map_dget(K37697(), a0, F_P_dthead_dgo(v37694));
+r37693 = FLD(v37696, 1);
+r37693; }), F_U32_dfrom__nat(F_List_dlength(0, FLD(FLD(s37692, 0), 1))))); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37692, 1)) {
+{ V t0 = a0; V t1 = FLD(s37692, 1); V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_drets(V *a) { (void)a; return F_Unb_drets(a[0], a[1], a[2]); }
@@ -92323,47 +92755,47 @@ top:;
 return F_Unb_ddecls(a1, F_Unb_dprune(a0, a1, F_Unb_dprune(a0, a1, a2, IMM(0)), IMM(0)), F_Unb_dtypes(IMM(1), a0, IMM(0)), a0);
 }
 static V W_Unb_drun(V *a) { (void)a; return F_Unb_drun(a[0], a[1], a[2]); }
-static V K37542(void) { static V c; return KONST(c, C2(0, C2(0, MKS(""), IMM(0)), 0u)); }
+static V K37713(void) { static V c; return KONST(c, C2(0, C2(0, MKS(""), IMM(0)), 0u)); }
 static V F_Unb_dprune(V a0, V a1, V a2, V a3) {
 top:;
-V s37536 = a0;
-if ((s37536) == IMM(0)) {
+V s37707 = a0;
+if ((s37707) == IMM(0)) {
 return a3;
-} else if (IS_N(s37536, 1) && IS_N(FLD(s37536, 0), 0)) {
-{ V t0 = FLD(s37536, 1); V t1 = a1; V t2 = a2; V t3 = F_Unb_dprune_dput(({ V r37537;
-V v37538 = F_Map_dget(IMM(0), a2, FLD(FLD(s37536, 0), 0));
-r37537 = FLD(v37538, 1);
-r37537; }), FLD(FLD(s37536, 0), 0), FLD(FLD(s37536, 0), 1), FLD(FLD(s37536, 0), 2), ({ V r37540;
-V v37541 = F_Map_dget(K37542(), a1, FLD(FLD(s37536, 0), 0));
-V v37544 = FLD(v37541, 1);
-V v37545 = FLD(v37544, 0);
-r37540 = FLD(v37545, 0);
-r37540; }), a2, a3); a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
-} else if (IS_N(s37536, 1)) {
-{ V t0 = FLD(s37536, 1); V t1 = a1; V t2 = a2; V t3 = a3; a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
+} else if (IS_N(s37707, 1) && IS_N(FLD(s37707, 0), 0)) {
+{ V t0 = FLD(s37707, 1); V t1 = a1; V t2 = a2; V t3 = F_Unb_dprune_dput(({ V r37708;
+V v37709 = F_Map_dget(IMM(0), a2, FLD(FLD(s37707, 0), 0));
+r37708 = FLD(v37709, 1);
+r37708; }), FLD(FLD(s37707, 0), 0), FLD(FLD(s37707, 0), 1), FLD(FLD(s37707, 0), 2), ({ V r37711;
+V v37712 = F_Map_dget(K37713(), a1, FLD(FLD(s37707, 0), 0));
+V v37715 = FLD(v37712, 1);
+V v37716 = FLD(v37715, 0);
+r37711 = FLD(v37716, 0);
+r37711; }), a2, a3); a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
+} else if (IS_N(s37707, 1)) {
+{ V t0 = FLD(s37707, 1); V t1 = a1; V t2 = a2; V t3 = a3; a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dprune(V *a) { (void)a; return F_Unb_dprune(a[0], a[1], a[2], a[3]); }
 static V F_Unb_dprune_dput(V a0, V a1, V a2, V a3, V a4, V a5, V a6) {
 top:;
-V s37547 = a0;
-if ((s37547) == IMM(0)) {
+V s37718 = a0;
+if ((s37718) == IMM(0)) {
 return a6;
-} else if (IS_N(s37547, 1)) {
-return F_Map_dset(0, a6, a1, F_Unb_dprune_dps(a2, C2(1, FLD(s37547, 0), FLD(s37547, 1)), a3, a4, a5));
+} else if (IS_N(s37718, 1)) {
+return F_Map_dset(0, a6, a1, F_Unb_dprune_dps(a2, C2(1, FLD(s37718, 0), FLD(s37718, 1)), a3, a4, a5));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dprune_dput(V *a) { (void)a; return F_Unb_dprune_dput(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); }
 static V D_Unb_dprune_dps(V *dst, V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s37550 = a0;
-V s37551 = a1;
-if (IS_N(s37550, 1) && IS_N(s37551, 1)) {
-{ V dc = CH2(1, ({ V r37552;
-V v37553 = FLD(s37551, 0);
-r37552 = F_Unb_dprune_done_x37u(FLD(FLD(s37550, 0), 0), FLD(v37553, 0), FLD(v37553, 1), a2, a3, a4);
-r37552; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37550, 1); V t1 = FLD(s37551, 1); V t2 = a2; V t3 = a3; V t4 = a4; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+V s37721 = a0;
+V s37722 = a1;
+if (IS_N(s37721, 1) && IS_N(s37722, 1)) {
+{ V dc = CH2(1, ({ V r37723;
+V v37724 = FLD(s37722, 0);
+r37723 = F_Unb_dprune_done_x37u(FLD(FLD(s37721, 0), 0), FLD(v37724, 0), FLD(v37724, 1), a2, a3, a4);
+r37723; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37721, 1); V t1 = FLD(s37722, 1); V t2 = a2; V t3 = a3; V t4 = a4; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
 } else {
 *dst = IMM(0);
@@ -92372,22 +92804,22 @@ return 0;
 }
 static V F_Unb_dprune_dps(V a0, V a1, V a2, V a3, V a4) { V r; D_Unb_dprune_dps(&r, a0, a1, a2, a3, a4); return r; }
 static V W_Unb_dprune_dps(V *a) { (void)a; return F_Unb_dprune_dps(a[0], a[1], a[2], a[3], a[4]); }
-static V S37560(void) { static V c; return STRC(c, ""); }
+static V S37731(void) { static V c; return STRC(c, ""); }
 BEND_UINL V U_Unb_dprune_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o) {
 top:;
-V s37555 = ({ V r37556;
-V s37557 = a1;
-if ((s37557) == IMM(0)) {
-r37556 = IMM(0);
-} else if (IS_N(s37557, 1)) {
-r37556 = F_U32_dis__eq(F_Unb_duse(a3, IMM(1), a0, a1, a4, a5), 1u);
+V s37726 = ({ V r37727;
+V s37728 = a1;
+if ((s37728) == IMM(0)) {
+r37727 = IMM(0);
+} else if (IS_N(s37728, 1)) {
+r37727 = F_U32_dis__eq(F_Unb_duse(a3, IMM(1), a0, a1, a4, a5), 1u);
 } else { bend_fail("runtime fail-stop"); }
-r37556; });
-if ((s37555) == IMM(0)) {
-o[0] = S37560();
+r37727; });
+if ((s37726) == IMM(0)) {
+o[0] = S37731();
 o[1] = IMM(0);
 return 0;
-} else if ((s37555) == IMM(1)) {
+} else if ((s37726) == IMM(1)) {
 o[0] = a1;
 o[1] = a2;
 return 0;
@@ -92395,138 +92827,138 @@ return 0;
 }
 static V F_Unb_dprune_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5) { V o[2]; U_Unb_dprune_done_x37u(a0, a1, a2, a3, a4, a5, o); return CN(0, 2, o); }
 static V W_Unb_dprune_done_x37u(V *a) { (void)a; return F_Unb_dprune_done_x37u(a[0], a[1], a[2], a[3], a[4], a[5]); }
-static V S37618(void) { static V c; return STRC(c, ""); }
+static V S37789(void) { static V c; return STRC(c, ""); }
 static V F_Unb_duse(V a0, V a1, V a2, V a3, V a4, V a5) {
 top:;
-V s37561 = a0;
-if (IS_N(s37561, 0)) {
-V s37562 = F_String_deq(FLD(s37561, 0), a2);
-if ((s37562) == IMM(0)) {
+V s37732 = a0;
+if (IS_N(s37732, 0)) {
+V s37733 = F_String_deq(FLD(s37732, 0), a2);
+if ((s37733) == IMM(0)) {
 return 0u;
-} else if ((s37562) == IMM(1)) {
-V s37564 = ({ V r37565;
-V s37566 = (a1);
-if ((s37566) == IMM(0)) {
-r37565 = IMM(0);
-} else if ((s37566) == IMM(1)) {
-r37565 = F_String_deq(a4, a3);
+} else if ((s37733) == IMM(1)) {
+V s37735 = ({ V r37736;
+V s37737 = (a1);
+if ((s37737) == IMM(0)) {
+r37736 = IMM(0);
+} else if ((s37737) == IMM(1)) {
+r37736 = F_String_deq(a4, a3);
 } else { bend_fail("runtime fail-stop"); }
-r37565; });
-if ((s37564) == IMM(0)) {
+r37736; });
+if ((s37735) == IMM(0)) {
 return 2u;
-} else if ((s37564) == IMM(1)) {
+} else if ((s37735) == IMM(1)) {
 return 1u;
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37561, 5)) {
-V s37568 = FLD(s37561, 1);
-if ((s37568) == IMM(0)) {
-{ V t0 = FLD(s37561, 0); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
-} else if (IS_N(s37568, 1)) {
-return F_U32_dmax(({ uint32_t r37569;
-V s37570 = ({ V r37571;
-V v37572 = FLD(s37568, 0);
-V v37573 = ({ V r37574;
-V s37575 = v37572;
-if (IS_N(s37575, 0)) {
-r37574 = F_String_deq(FLD(s37575, 0), a2);
+} else if (IS_N(s37732, 5)) {
+V s37739 = FLD(s37732, 1);
+if ((s37739) == IMM(0)) {
+{ V t0 = FLD(s37732, 0); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
+} else if (IS_N(s37739, 1)) {
+return F_U32_dmax(({ uint32_t r37740;
+V s37741 = ({ V r37742;
+V v37743 = FLD(s37739, 0);
+V v37744 = ({ V r37745;
+V s37746 = v37743;
+if (IS_N(s37746, 0)) {
+r37745 = F_String_deq(FLD(s37746, 0), a2);
 } else {
-r37574 = IMM(0);
+r37745 = IMM(0);
 }
-r37574; });
-V s37577 = v37573;
-if ((s37577) == IMM(0)) {
-r37571 = IMM(0);
-} else if ((s37577) == IMM(1)) {
-r37571 = F_Unb_dwk(FLD(s37561, 0), a3, a5);
+r37745; });
+V s37748 = v37744;
+if ((s37748) == IMM(0)) {
+r37742 = IMM(0);
+} else if ((s37748) == IMM(1)) {
+r37742 = F_Unb_dwk(FLD(s37732, 0), a3, a5);
 } else { bend_fail("runtime fail-stop"); }
-r37571; });
-if ((s37570) == IMM(0)) {
-r37569 = F_Unb_duse(FLD(s37568, 0), IMM(0), a2, a3, a4, a5);
-} else if ((s37570) == IMM(1)) {
-r37569 = 1u;
+r37742; });
+if ((s37741) == IMM(0)) {
+r37740 = F_Unb_duse(FLD(s37739, 0), IMM(0), a2, a3, a4, a5);
+} else if ((s37741) == IMM(1)) {
+r37740 = 1u;
 } else { bend_fail("runtime fail-stop"); }
-r37569; }), F_Unb_duse(C2(5, FLD(s37561, 0), FLD(s37568, 1)), IMM(0), a2, a3, a4, a5));
+r37740; }), F_Unb_duse(C2(5, FLD(s37732, 0), FLD(s37739, 1)), IMM(0), a2, a3, a4, a5));
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37561, 6)) {
-V s37582 = FLD(s37561, 1);
-if ((s37582) == IMM(0)) {
+} else if (IS_N(s37732, 6)) {
+V s37753 = FLD(s37732, 1);
+if ((s37753) == IMM(0)) {
 return 0u;
-} else if (IS_N(s37582, 1)) {
-return F_U32_dmax(F_Unb_duse(FLD(s37582, 0), IMM(0), a2, a3, a4, a5), F_Unb_duse(C2(6, FLD(s37561, 0), FLD(s37582, 1)), IMM(0), a2, a3, a4, a5));
+} else if (IS_N(s37753, 1)) {
+return F_U32_dmax(F_Unb_duse(FLD(s37753, 0), IMM(0), a2, a3, a4, a5), F_Unb_duse(C2(6, FLD(s37732, 0), FLD(s37753, 1)), IMM(0), a2, a3, a4, a5));
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37561, 7)) {
-V s37586 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s37561, 0), IMM(0)), a2);
-if ((s37586) == IMM(0)) {
-{ V t0 = FLD(s37561, 1); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
-} else if ((s37586) == IMM(1)) {
+} else if (IS_N(s37732, 7)) {
+V s37757 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s37732, 0), IMM(0)), a2);
+if ((s37757) == IMM(0)) {
+{ V t0 = FLD(s37732, 1); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
+} else if ((s37757) == IMM(1)) {
 return 0u;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37561, 8)) {
-return F_U32_dmax(({ uint32_t r37589;
-V v37590 = FLD(s37561, 1);
-V s37591 = ({ V r37592;
-V s37593 = v37590;
-if (IS_N(s37593, 0)) {
-V v37594 = a2;
-r37592 = F_String_deq(FLD(s37593, 0), v37594);
+} else if (IS_N(s37732, 8)) {
+return F_U32_dmax(({ uint32_t r37760;
+V v37761 = FLD(s37732, 1);
+V s37762 = ({ V r37763;
+V s37764 = v37761;
+if (IS_N(s37764, 0)) {
+V v37765 = a2;
+r37763 = F_String_deq(FLD(s37764, 0), v37765);
 } else {
-r37592 = IMM(0);
+r37763 = IMM(0);
 }
-r37592; });
-if ((s37591) == IMM(0)) {
-r37589 = F_Unb_duse(FLD(s37561, 1), IMM(0), a2, a3, a4, a5);
-} else if ((s37591) == IMM(1)) {
-r37589 = 1u;
+r37763; });
+if ((s37762) == IMM(0)) {
+r37760 = F_Unb_duse(FLD(s37732, 1), IMM(0), a2, a3, a4, a5);
+} else if ((s37762) == IMM(1)) {
+r37760 = 1u;
 } else { bend_fail("runtime fail-stop"); }
-r37589; }), ({ uint32_t r37597;
-V s37598 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s37561, 0), IMM(0)), a2);
-if ((s37598) == IMM(0)) {
-r37597 = F_Unb_duse(FLD(s37561, 2), (a1), a2, a3, a4, a5);
-} else if ((s37598) == IMM(1)) {
-r37597 = 0u;
+r37760; }), ({ uint32_t r37768;
+V s37769 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s37732, 0), IMM(0)), a2);
+if ((s37769) == IMM(0)) {
+r37768 = F_Unb_duse(FLD(s37732, 2), (a1), a2, a3, a4, a5);
+} else if ((s37769) == IMM(1)) {
+r37768 = 0u;
 } else { bend_fail("runtime fail-stop"); }
-r37597; }));
-} else if (IS_N(s37561, 9)) {
-V s37603 = FLD(s37561, 0);
-if (IS_N(s37603, 1)) {
-return F_U32_dmax(({ uint32_t r37604;
-V v37605 = FLD(s37603, 0);
-V s37606 = ({ V r37607;
-V s37608 = v37605;
-if (IS_N(s37608, 0)) {
-r37607 = F_String_deq(FLD(s37608, 0), a2);
+r37768; }));
+} else if (IS_N(s37732, 9)) {
+V s37774 = FLD(s37732, 0);
+if (IS_N(s37774, 1)) {
+return F_U32_dmax(({ uint32_t r37775;
+V v37776 = FLD(s37774, 0);
+V s37777 = ({ V r37778;
+V s37779 = v37776;
+if (IS_N(s37779, 0)) {
+r37778 = F_String_deq(FLD(s37779, 0), a2);
 } else {
-r37607 = IMM(0);
+r37778 = IMM(0);
 }
-r37607; });
-if ((s37606) == IMM(0)) {
-r37604 = F_Unb_duse(FLD(s37603, 0), IMM(0), a2, a3, a4, a5);
-} else if ((s37606) == IMM(1)) {
-r37604 = 1u;
+r37778; });
+if ((s37777) == IMM(0)) {
+r37775 = F_Unb_duse(FLD(s37774, 0), IMM(0), a2, a3, a4, a5);
+} else if ((s37777) == IMM(1)) {
+r37775 = 1u;
 } else { bend_fail("runtime fail-stop"); }
-r37604; }), F_Unb_duse(C2(9, FLD(s37603, 1), FLD(s37561, 1)), (a1), a2, a3, a4, a5));
-} else if ((s37603) == IMM(0)) {
-V s37613 = FLD(s37561, 1);
-if ((s37613) == IMM(0)) {
+r37775; }), F_Unb_duse(C2(9, FLD(s37774, 1), FLD(s37732, 1)), (a1), a2, a3, a4, a5));
+} else if ((s37774) == IMM(0)) {
+V s37784 = FLD(s37732, 1);
+if ((s37784) == IMM(0)) {
 return 0u;
-} else if (IS_N(s37613, 1)) {
-return F_U32_dmax(F_Unb_duse(FLD(s37613, 0), (a1), a2, a3, a4, a5), F_Unb_duse(C2(9, IMM(0), FLD(s37613, 1)), (a1), a2, a3, a4, a5));
+} else if (IS_N(s37784, 1)) {
+return F_U32_dmax(F_Unb_duse(FLD(s37784, 0), (a1), a2, a3, a4, a5), F_Unb_duse(C2(9, IMM(0), FLD(s37784, 1)), (a1), a2, a3, a4, a5));
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37561, 10)) {
-V s37617 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S37618(), FLD(s37561, 0)), IMM(0)), a2);
-if ((s37617) == IMM(0)) {
-{ V t0 = FLD(s37561, 1); V t1 = (a1); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
-} else if ((s37617) == IMM(1)) {
+} else if (IS_N(s37732, 10)) {
+V s37788 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S37789(), FLD(s37732, 0)), IMM(0)), a2);
+if ((s37788) == IMM(0)) {
+{ V t0 = FLD(s37732, 1); V t1 = (a1); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
+} else if ((s37788) == IMM(1)) {
 return 0u;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37561, 11)) {
-{ V t0 = FLD(s37561, 1); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
-} else if (IS_N(s37561, 12)) {
-return F_U32_dmax(F_Unb_duse(FLD(s37561, 1), IMM(0), a2, a3, a4, a5), F_Unb_duse(FLD(s37561, 2), IMM(0), a2, a3, a4, a5));
-} else if (IS_N(s37561, 13)) {
-{ V t0 = FLD(s37561, 0); V t1 = (a1); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
+} else if (IS_N(s37732, 11)) {
+{ V t0 = FLD(s37732, 1); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
+} else if (IS_N(s37732, 12)) {
+return F_U32_dmax(F_Unb_duse(FLD(s37732, 1), IMM(0), a2, a3, a4, a5), F_Unb_duse(FLD(s37732, 2), IMM(0), a2, a3, a4, a5));
+} else if (IS_N(s37732, 13)) {
+{ V t0 = FLD(s37732, 0); V t1 = (a1); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
 } else {
 return 0u;
 }
@@ -92534,13 +92966,13 @@ return 0u;
 static V W_Unb_duse(V *a) { (void)a; return F_Unb_duse(a[0], a[1], a[2], a[3], a[4], a[5]); }
 static V F_Unb_dwk(V a0, V a1, V a2) {
 top:;
-V s37624 = a0;
-if (IS_N(s37624, 0)) {
-return F_Unb_dhas_dctor(({ V r37625;
-V v37626 = FLD(s37624, 0);
-V v37627 = F_Map_dget(IMM(0), a2, v37626);
-r37625 = FLD(v37627, 1);
-r37625; }), a1);
+V s37795 = a0;
+if (IS_N(s37795, 0)) {
+return F_Unb_dhas_dctor(({ V r37796;
+V v37797 = FLD(s37795, 0);
+V v37798 = F_Map_dget(IMM(0), a2, v37797);
+r37796 = FLD(v37798, 1);
+r37796; }), a1);
 } else {
 return IMM(0);
 }
@@ -92548,14 +92980,14 @@ return IMM(0);
 static V W_Unb_dwk(V *a) { (void)a; return F_Unb_dwk(a[0], a[1], a[2]); }
 static V F_Unb_dhas_dctor(V a0, V a1) {
 top:;
-V s37630 = a0;
-if ((s37630) == IMM(0)) {
+V s37801 = a0;
+if ((s37801) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s37630, 1)) {
-V s37631 = F_String_deq(FLD(FLD(s37630, 0), 0), a1);
-if ((s37631) == IMM(0)) {
-{ V t0 = FLD(s37630, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if ((s37631) == IMM(1)) {
+} else if (IS_N(s37801, 1)) {
+V s37802 = F_String_deq(FLD(FLD(s37801, 0), 0), a1);
+if ((s37802) == IMM(0)) {
+{ V t0 = FLD(s37801, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if ((s37802) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -92563,24 +92995,24 @@ return IMM(1);
 static V W_Unb_dhas_dctor(V *a) { (void)a; return F_Unb_dhas_dctor(a[0], a[1]); }
 static V F_Unb_ddecls(V a0, V a1, V a2, V a3) {
 top:;
-V s37633 = a3;
-if ((s37633) == IMM(0)) {
+V s37804 = a3;
+if ((s37804) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s37633, 1)) {
-return F_List_dappend(0, F_Unb_ddecl(a0, a1, a2, FLD(s37633, 0)), F_Unb_ddecls(a0, a1, a2, FLD(s37633, 1)));
+} else if (IS_N(s37804, 1)) {
+return F_List_dappend(0, F_Unb_ddecl(a0, a1, a2, FLD(s37804, 0)), F_Unb_ddecls(a0, a1, a2, FLD(s37804, 1)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_ddecls(V *a) { (void)a; return F_Unb_ddecls(a[0], a[1], a[2], a[3]); }
 static V F_Unb_ddecl(V a0, V a1, V a2, V a3) {
 top:;
-V s37637 = a3;
-if (IS_N(s37637, 0)) {
-return F_Unb_ddecl_dgo(({ V r37638;
-V v37639 = F_Map_dget(IMM(0), a1, FLD(s37637, 0));
-r37638 = FLD(v37639, 1);
-r37638; }), a0, a1, a2, FLD(s37637, 0), FLD(s37637, 1), FLD(s37637, 2), FLD(s37637, 3));
+V s37808 = a3;
+if (IS_N(s37808, 0)) {
+return F_Unb_ddecl_dgo(({ V r37809;
+V v37810 = F_Map_dget(IMM(0), a1, FLD(s37808, 0));
+r37809 = FLD(v37810, 1);
+r37809; }), a0, a1, a2, FLD(s37808, 0), FLD(s37808, 1), FLD(s37808, 2), FLD(s37808, 3));
 } else {
-return C2(1, s37637, IMM(0));
+return C2(1, s37808, IMM(0));
 }
 }
 static V W_Unb_ddecl(V *a) { (void)a; return F_Unb_ddecl(a[0], a[1], a[2], a[3]); }
@@ -92589,30 +93021,30 @@ top:;
 return F_Unb_ddecl_dpick(F_Unb_dany(a0), a0, a1, a2, a3, a4, a5, a6, a7);
 }
 static V W_Unb_ddecl_dgo(V *a) { (void)a; return F_Unb_ddecl_dgo(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]); }
-static V K37648(void) { static V c; return KONST(c, C2(0, C2(0, MKS(""), IMM(0)), 0u)); }
-static V S37654(void) { static V c; return STRC(c, "%u"); }
-static V K37664(void) { static V c; return KONST(c, C2(0, C2(0, MKS(""), IMM(0)), 0u)); }
+static V K37819(void) { static V c; return KONST(c, C2(0, C2(0, MKS(""), IMM(0)), 0u)); }
+static V S37825(void) { static V c; return STRC(c, "%u"); }
+static V K37835(void) { static V c; return KONST(c, C2(0, C2(0, MKS(""), IMM(0)), 0u)); }
 static V F_Unb_ddecl_dpick(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V a8) {
 top:;
-V s37644 = (a0);
-if ((s37644) == IMM(1)) {
-V v37645 = F_Unb_dfix(a2, ({ V r37646;
-V v37647 = F_Map_dget(K37648(), a2, a5);
-V v37650 = FLD(v37647, 1);
-V v37651 = FLD(v37650, 0);
-r37646 = FLD(v37651, 0);
-r37646; }), a3, a4, F_Unb_dsubs(a6, a1, a7));
-return C2(1, C4(0, F_String_dappend(a5, S37654()), F_Unb_dtyped(F_Unb_dparams(a6, a1), v37645), v37645, a8), C2(1, C4(0, a5, a6, ({ V r37658;
-V uo37659[2]; U_Unb_dwrapper(a6, a1, uo37659);
-r37658 = F_Unb_dcall_dfin_x37u(a5, uo37659[0], uo37659[1]);
-r37658; }), a8), IMM(0)));
-} else if ((s37644) == IMM(0)) {
-return C2(1, C4(0, a5, a6, F_Unb_dfix(a2, ({ V r37662;
-V v37663 = F_Map_dget(K37664(), a2, a5);
-V v37666 = FLD(v37663, 1);
-V v37667 = FLD(v37666, 0);
-r37662 = FLD(v37667, 0);
-r37662; }), a3, a4, a7), a8), IMM(0));
+V s37815 = (a0);
+if ((s37815) == IMM(1)) {
+V v37816 = F_Unb_dfix(a2, ({ V r37817;
+V v37818 = F_Map_dget(K37819(), a2, a5);
+V v37821 = FLD(v37818, 1);
+V v37822 = FLD(v37821, 0);
+r37817 = FLD(v37822, 0);
+r37817; }), a3, a4, F_Unb_dsubs(a6, a1, a7));
+return C2(1, C4(0, F_String_dappend(a5, S37825()), F_Unb_dtyped(F_Unb_dparams(a6, a1), v37816), v37816, a8), C2(1, C4(0, a5, a6, ({ V r37829;
+V uo37830[2]; U_Unb_dwrapper(a6, a1, uo37830);
+r37829 = F_Unb_dcall_dfin_x37u(a5, uo37830[0], uo37830[1]);
+r37829; }), a8), IMM(0)));
+} else if ((s37815) == IMM(0)) {
+return C2(1, C4(0, a5, a6, F_Unb_dfix(a2, ({ V r37833;
+V v37834 = F_Map_dget(K37835(), a2, a5);
+V v37837 = FLD(v37834, 1);
+V v37838 = FLD(v37837, 0);
+r37833 = FLD(v37838, 0);
+r37833; }), a3, a4, a7), a8), IMM(0));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_ddecl_dpick(V *a) { (void)a; return F_Unb_ddecl_dpick(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8]); }
@@ -92621,119 +93053,119 @@ top:;
 return F_Unb_dcalls(F_Unb_dknown(a3, F_Unb_dlvars(F_Unb_dflet(a4, a0, 0u), IMM(1), a0, a1, a2, IMM(0)), IMM(1)), a2, IMM(0), 0u, IMM(1));
 }
 static V W_Unb_dfix(V *a) { (void)a; return F_Unb_dfix(a[0], a[1], a[2], a[3], a[4]); }
-static V S37679(void) { static V c; return STRC(c, "_uf"); }
-static V S37684(void) { static V c; return STRC(c, "_"); }
-static V K37707(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
+static V S37850(void) { static V c; return STRC(c, "_uf"); }
+static V S37855(void) { static V c; return STRC(c, "_"); }
+static V K37878(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
 static V D_Unb_dflet(V *dst, V a0, V a1, V a2) {
 top:;
-V s37673 = a0;
-if (IS_N(s37673, 5)) {
-V s37674 = FLD(s37673, 1);
-if ((s37674) == IMM(0)) {
+V s37844 = a0;
+if (IS_N(s37844, 5)) {
+V s37845 = FLD(s37844, 1);
+if ((s37845) == IMM(0)) {
 { V dc = CH2(5, BEND_HOLE, IMM(0)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = FLD(s37673, 0); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
+{ V t0 = FLD(s37844, 0); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37674, 1)) {
-V v37675 = F_Unb_dflet(FLD(s37674, 0), a1, F_U32_dinc((a2)));
-*dst = F_Unb_dpull_done(F_Unb_dflat_dtail(v37675, a1), v37675, F_String_dappend(S37679(), F_String_dappend(({ V r37680;
-V (v37681) = (a2);
-r37680 = F_U32_dshow_dif((v37681), F_U32_dis__zero((v37681)));
-r37680; }), F_String_dappend(S37684(), ({ V r37685;
-uint32_t (u37686) = F_U32_dfrom__nat(F_List_dlength(0, FLD(s37674, 1)));
-r37685 = F_U32_dshow_dif((u37686), F_U32_dis__zero((u37686)));
-r37685; })))), F_Unb_dflet(C2(5, FLD(s37673, 0), FLD(s37674, 1)), a1, (a2)));
+} else if (IS_N(s37845, 1)) {
+V v37846 = F_Unb_dflet(FLD(s37845, 0), a1, F_U32_dinc((a2)));
+*dst = F_Unb_dpull_done(F_Unb_dflat_dtail(v37846, a1), v37846, F_String_dappend(S37850(), F_String_dappend(({ V r37851;
+V (v37852) = (a2);
+r37851 = F_U32_dshow_dif((v37852), F_U32_dis__zero((v37852)));
+r37851; }), F_String_dappend(S37855(), ({ V r37856;
+uint32_t (u37857) = F_U32_dfrom__nat(F_List_dlength(0, FLD(s37845, 1)));
+r37856 = F_U32_dshow_dif((u37857), F_U32_dis__zero((u37857)));
+r37856; })))), F_Unb_dflet(C2(5, FLD(s37844, 0), FLD(s37845, 1)), a1, (a2)));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37673, 6)) {
-V s37696 = FLD(s37673, 1);
-if ((s37696) == IMM(0)) {
-*dst = C2(6, FLD(s37673, 0), IMM(0));
+} else if (IS_N(s37844, 6)) {
+V s37867 = FLD(s37844, 1);
+if ((s37867) == IMM(0)) {
+*dst = C2(6, FLD(s37844, 0), IMM(0));
 return 0;
-} else if (IS_N(s37696, 1)) {
-*dst = F_Expr_dpush(F_Unb_dflet(FLD(s37696, 0), a1, F_U32_dinc((a2))), F_Unb_dflet(C2(6, FLD(s37673, 0), FLD(s37696, 1)), a1, (a2)));
+} else if (IS_N(s37867, 1)) {
+*dst = F_Expr_dpush(F_Unb_dflet(FLD(s37867, 0), a1, F_U32_dinc((a2))), F_Unb_dflet(C2(6, FLD(s37844, 0), FLD(s37867, 1)), a1, (a2)));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37673, 7)) {
-{ V dc = CH2(7, FLD(s37673, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37673, 1); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37844, 7)) {
+{ V dc = CH2(7, FLD(s37844, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37844, 1); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37673, 8)) {
-{ V dc = CH3(8, FLD(s37673, 0), F_Unb_dflet(FLD(s37673, 1), a1, (a2)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = FLD(s37673, 2); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37844, 8)) {
+{ V dc = CH3(8, FLD(s37844, 0), F_Unb_dflet(FLD(s37844, 1), a1, (a2)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = FLD(s37844, 2); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37673, 9)) {
-V s37702 = FLD(s37673, 0);
-if (IS_N(s37702, 1)) {
-*dst = F_Expr_dpush(F_Unb_dflet(FLD(s37702, 0), a1, (a2)), F_Unb_dflet(C2(9, FLD(s37702, 1), FLD(s37673, 1)), a1, (a2)));
+} else if (IS_N(s37844, 9)) {
+V s37873 = FLD(s37844, 0);
+if (IS_N(s37873, 1)) {
+*dst = F_Expr_dpush(F_Unb_dflet(FLD(s37873, 0), a1, (a2)), F_Unb_dflet(C2(9, FLD(s37873, 1), FLD(s37844, 1)), a1, (a2)));
 return 0;
-} else if ((s37702) == IMM(0)) {
-V s37706 = FLD(s37673, 1);
-if ((s37706) == IMM(0)) {
-*dst = K37707();
+} else if ((s37873) == IMM(0)) {
+V s37877 = FLD(s37844, 1);
+if ((s37877) == IMM(0)) {
+*dst = K37878();
 return 0;
-} else if (IS_N(s37706, 1)) {
-V v37708 = F_Unb_dflet(C2(9, IMM(0), FLD(s37706, 1)), a1, (a2));
-V s37710 = v37708;
-if (IS_N(s37710, 9)) {
-*dst = C2(9, FLD(s37710, 0), C2(1, F_Unb_dflet(FLD(s37706, 0), a1, (a2)), FLD(s37710, 1)));
+} else if (IS_N(s37877, 1)) {
+V v37879 = F_Unb_dflet(C2(9, IMM(0), FLD(s37877, 1)), a1, (a2));
+V s37881 = v37879;
+if (IS_N(s37881, 9)) {
+*dst = C2(9, FLD(s37881, 0), C2(1, F_Unb_dflet(FLD(s37877, 0), a1, (a2)), FLD(s37881, 1)));
 return 0;
 } else {
-*dst = s37710;
+*dst = s37881;
 return 0;
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37673, 10)) {
-{ V dc = CH2(10, FLD(s37673, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37673, 1); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37844, 10)) {
+{ V dc = CH2(10, FLD(s37844, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37844, 1); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37673, 11)) {
-{ V dc = CH2(11, FLD(s37673, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37673, 1); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37844, 11)) {
+{ V dc = CH2(11, FLD(s37844, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37844, 1); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37673, 12)) {
-{ V dc = CH3(12, FLD(s37673, 0), F_Unb_dflet(FLD(s37673, 1), a1, (a2)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = FLD(s37673, 2); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37844, 12)) {
+{ V dc = CH3(12, FLD(s37844, 0), F_Unb_dflet(FLD(s37844, 1), a1, (a2)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = FLD(s37844, 2); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37673, 13)) {
-{ V dc = CH2(13, BEND_HOLE, FLD(s37673, 1)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = FLD(s37673, 0); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s37844, 13)) {
+{ V dc = CH2(13, BEND_HOLE, FLD(s37844, 1)); *dst = dc; dst = &FLD(dc, 0);
+{ V t0 = FLD(s37844, 0); V t1 = a1; V t2 = (a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
 } else {
-*dst = s37673;
+*dst = s37844;
 return 0;
 }
 }
 static V F_Unb_dflet(V a0, V a1, V a2) { V r; D_Unb_dflet(&r, a0, a1, a2); return r; }
 static V W_Unb_dflet(V *a) { (void)a; return F_Unb_dflet(a[0], a[1], a[2]); }
-static V K37716(void) { static V c; return KONST(c, C2(0, C2(0, MKS(""), IMM(0)), 0u)); }
+static V K37887(void) { static V c; return KONST(c, C2(0, C2(0, MKS(""), IMM(0)), 0u)); }
 static V F_Unb_dflat_dtail(V a0, V a1) {
 top:;
-V s37713 = a0;
-if (IS_N(s37713, 8)) {
-{ V t0 = FLD(s37713, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s37713, 5)) {
-V s37714 = FLD(s37713, 0);
-if (IS_N(s37714, 0)) {
-V v37715 = F_Map_dget(K37716(), a1, FLD(s37714, 0));
-V v37718 = FLD(v37715, 1);
-V s37719 = ({ V r37720;
-V v37721 = v37718;
-V v37722 = FLD(v37721, 0);
-V s37723 = FLD(v37722, 0);
-if ((s37723) == IMM(0)) {
-r37720 = IMM(0);
-} else if (IS_N(s37723, 1)) {
-r37720 = IMM(1);
+V s37884 = a0;
+if (IS_N(s37884, 8)) {
+{ V t0 = FLD(s37884, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s37884, 5)) {
+V s37885 = FLD(s37884, 0);
+if (IS_N(s37885, 0)) {
+V v37886 = F_Map_dget(K37887(), a1, FLD(s37885, 0));
+V v37889 = FLD(v37886, 1);
+V s37890 = ({ V r37891;
+V v37892 = v37889;
+V v37893 = FLD(v37892, 0);
+V s37894 = FLD(v37893, 0);
+if ((s37894) == IMM(0)) {
+r37891 = IMM(0);
+} else if (IS_N(s37894, 1)) {
+r37891 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37720; });
-if ((s37719) == IMM(0)) {
+r37891; });
+if ((s37890) == IMM(0)) {
 return IMM(0);
-} else if ((s37719) == IMM(1)) {
-return F_U32_dis__eq(({ V r37724;
-V v37725 = v37718;
-r37724 = FLD(v37725, 1);
-r37724; }), F_U32_dfrom__nat(F_List_dlength(0, FLD(s37713, 1))));
+} else if ((s37890) == IMM(1)) {
+return F_U32_dis__eq(({ V r37895;
+V v37896 = v37889;
+r37895 = FLD(v37896, 1);
+r37895; }), F_U32_dfrom__nat(F_List_dlength(0, FLD(s37884, 1))));
 } else { bend_fail("runtime fail-stop"); }
 } else {
 return IMM(0);
@@ -92745,131 +93177,131 @@ return IMM(0);
 static V W_Unb_dflat_dtail(V *a) { (void)a; return F_Unb_dflat_dtail(a[0], a[1]); }
 static V F_Unb_dpull_done(V a0, V a1, V a2, V a3) {
 top:;
-V v37729 = ({ V r37730;
-V s37731 = F_Unb_datom(a1);
-if ((s37731) == IMM(0)) {
-r37730 = IMM(1);
-} else if ((s37731) == IMM(1)) {
-r37730 = IMM(0);
+V v37900 = ({ V r37901;
+V s37902 = F_Unb_datom(a1);
+if ((s37902) == IMM(0)) {
+r37901 = IMM(1);
+} else if ((s37902) == IMM(1)) {
+r37901 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r37730; });
-V v37733 = ({ V r37734;
-V v37735 = ({ V r37736;
-V s37737 = a3;
-if (IS_N(s37737, 8)) {
-r37736 = IMM(1);
+r37901; });
+V v37904 = ({ V r37905;
+V v37906 = ({ V r37907;
+V s37908 = a3;
+if (IS_N(s37908, 8)) {
+r37907 = IMM(1);
 } else {
-r37736 = IMM(0);
+r37907 = IMM(0);
 }
-r37736; });
-V s37738 = v37735;
-if ((s37738) == IMM(0)) {
-r37734 = IMM(0);
-} else if ((s37738) == IMM(1)) {
-r37734 = v37729;
+r37907; });
+V s37909 = v37906;
+if ((s37909) == IMM(0)) {
+r37905 = IMM(0);
+} else if ((s37909) == IMM(1)) {
+r37905 = v37900;
 } else { bend_fail("runtime fail-stop"); }
-r37734; });
-V s37739 = ({ V r37740;
-V (v37741) = (a0);
-V s37742 = (v37741);
-if ((s37742) == IMM(0)) {
-r37740 = v37733;
-} else if ((s37742) == IMM(1)) {
-r37740 = IMM(1);
+r37905; });
+V s37910 = ({ V r37911;
+V (v37912) = (a0);
+V s37913 = (v37912);
+if ((s37913) == IMM(0)) {
+r37911 = v37904;
+} else if ((s37913) == IMM(1)) {
+r37911 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37740; });
-if ((s37739) == IMM(1)) {
+r37911; });
+if ((s37910) == IMM(1)) {
 return F_Unb_dfloat(C1(0, a2), a1, F_Unb_dpush_ddeep(C1(0, a2), a3));
-} else if ((s37739) == IMM(0)) {
+} else if ((s37910) == IMM(0)) {
 return F_Unb_dpush_ddeep(a1, a3);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dpull_done(V *a) { (void)a; return F_Unb_dpull_done(a[0], a[1], a[2], a[3]); }
 static V D_Unb_dpush_ddeep(V *dst, V a0, V a1) {
 top:;
-V s37746 = a1;
-if (IS_N(s37746, 8)) {
-{ V dc = CH3(8, FLD(s37746, 0), FLD(s37746, 1), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = a0; V t1 = FLD(s37746, 2); a0 = t0; a1 = t1; goto top; }
+V s37917 = a1;
+if (IS_N(s37917, 8)) {
+{ V dc = CH3(8, FLD(s37917, 0), FLD(s37917, 1), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = a0; V t1 = FLD(s37917, 2); a0 = t0; a1 = t1; goto top; }
 }
 } else {
-*dst = F_Expr_dpush(a0, s37746);
+*dst = F_Expr_dpush(a0, s37917);
 return 0;
 }
 }
 static V F_Unb_dpush_ddeep(V a0, V a1) { V r; D_Unb_dpush_ddeep(&r, a0, a1); return r; }
 static V W_Unb_dpush_ddeep(V *a) { (void)a; return F_Unb_dpush_ddeep(a[0], a[1]); }
-static V K37767(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
-static V S37772(void) { static V c; return STRC(c, ""); }
+static V K37938(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
+static V S37943(void) { static V c; return STRC(c, ""); }
 static V D_Unb_dlvars(V *dst, V a0, V a1, V a2, V a3, V a4, V a5) {
 top:;
-V s37748 = a0;
-if (IS_N(s37748, 5)) {
-V s37749 = FLD(s37748, 1);
-if ((s37749) == IMM(0)) {
+V s37919 = a0;
+if (IS_N(s37919, 5)) {
+V s37920 = FLD(s37919, 1);
+if ((s37920) == IMM(0)) {
 { V dc = CH2(5, BEND_HOLE, IMM(0)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = FLD(s37748, 0); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
+{ V t0 = FLD(s37919, 0); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
 }
-} else if (IS_N(s37749, 1)) {
-*dst = F_Expr_dpush(F_Unb_dlvars(FLD(s37749, 0), IMM(0), a2, a3, a4, a5), F_Unb_dlvars(C2(5, FLD(s37748, 0), FLD(s37749, 1)), IMM(0), a2, a3, a4, a5));
+} else if (IS_N(s37920, 1)) {
+*dst = F_Expr_dpush(F_Unb_dlvars(FLD(s37920, 0), IMM(0), a2, a3, a4, a5), F_Unb_dlvars(C2(5, FLD(s37919, 0), FLD(s37920, 1)), IMM(0), a2, a3, a4, a5));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37748, 6)) {
-V s37753 = FLD(s37748, 1);
-if ((s37753) == IMM(0)) {
-*dst = C2(6, FLD(s37748, 0), IMM(0));
+} else if (IS_N(s37919, 6)) {
+V s37924 = FLD(s37919, 1);
+if ((s37924) == IMM(0)) {
+*dst = C2(6, FLD(s37919, 0), IMM(0));
 return 0;
-} else if (IS_N(s37753, 1)) {
-*dst = F_Expr_dpush(F_Unb_dlvars(FLD(s37753, 0), IMM(0), a2, a3, a4, a5), F_Unb_dlvars(C2(6, FLD(s37748, 0), FLD(s37753, 1)), IMM(0), a2, a3, a4, a5));
+} else if (IS_N(s37924, 1)) {
+*dst = F_Expr_dpush(F_Unb_dlvars(FLD(s37924, 0), IMM(0), a2, a3, a4, a5), F_Unb_dlvars(C2(6, FLD(s37919, 0), FLD(s37924, 1)), IMM(0), a2, a3, a4, a5));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37748, 7)) {
-{ V dc = CH2(7, FLD(s37748, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37748, 1); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = F_Pat_dvars(FLD(s37748, 0), a5); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
+} else if (IS_N(s37919, 7)) {
+{ V dc = CH2(7, FLD(s37919, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37919, 1); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = F_Pat_dvars(FLD(s37919, 0), a5); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
 }
-} else if (IS_N(s37748, 8)) {
-*dst = F_Unb_dlvar((a1), FLD(s37748, 0), a2, a3, a4, a5, F_Unb_dlvars(FLD(s37748, 1), IMM(0), a2, a3, a4, a5), F_Unb_dlvars(FLD(s37748, 2), (a1), a2, a3, a4, F_Pat_dvars(FLD(s37748, 0), a5)));
+} else if (IS_N(s37919, 8)) {
+*dst = F_Unb_dlvar((a1), FLD(s37919, 0), a2, a3, a4, a5, F_Unb_dlvars(FLD(s37919, 1), IMM(0), a2, a3, a4, a5), F_Unb_dlvars(FLD(s37919, 2), (a1), a2, a3, a4, F_Pat_dvars(FLD(s37919, 0), a5)));
 return 0;
-} else if (IS_N(s37748, 9)) {
-V s37762 = FLD(s37748, 0);
-if (IS_N(s37762, 1)) {
-*dst = F_Expr_dpush(F_Unb_dlvars(FLD(s37762, 0), IMM(0), a2, a3, a4, a5), F_Unb_dlvars(C2(9, FLD(s37762, 1), FLD(s37748, 1)), (a1), a2, a3, a4, a5));
+} else if (IS_N(s37919, 9)) {
+V s37933 = FLD(s37919, 0);
+if (IS_N(s37933, 1)) {
+*dst = F_Expr_dpush(F_Unb_dlvars(FLD(s37933, 0), IMM(0), a2, a3, a4, a5), F_Unb_dlvars(C2(9, FLD(s37933, 1), FLD(s37919, 1)), (a1), a2, a3, a4, a5));
 return 0;
-} else if ((s37762) == IMM(0)) {
-V s37766 = FLD(s37748, 1);
-if ((s37766) == IMM(0)) {
-*dst = K37767();
+} else if ((s37933) == IMM(0)) {
+V s37937 = FLD(s37919, 1);
+if ((s37937) == IMM(0)) {
+*dst = K37938();
 return 0;
-} else if (IS_N(s37766, 1)) {
-V v37768 = F_Unb_dlvars(C2(9, IMM(0), FLD(s37766, 1)), (a1), a2, a3, a4, a5);
-V s37770 = v37768;
-if (IS_N(s37770, 9)) {
-*dst = C2(9, FLD(s37770, 0), C2(1, F_Unb_dlvars(FLD(s37766, 0), (a1), a2, a3, a4, a5), FLD(s37770, 1)));
+} else if (IS_N(s37937, 1)) {
+V v37939 = F_Unb_dlvars(C2(9, IMM(0), FLD(s37937, 1)), (a1), a2, a3, a4, a5);
+V s37941 = v37939;
+if (IS_N(s37941, 9)) {
+*dst = C2(9, FLD(s37941, 0), C2(1, F_Unb_dlvars(FLD(s37937, 0), (a1), a2, a3, a4, a5), FLD(s37941, 1)));
 return 0;
 } else {
-*dst = s37770;
+*dst = s37941;
 return 0;
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37748, 10)) {
-{ V dc = CH2(10, FLD(s37748, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37748, 1); V t1 = (a1); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = F_Pat_dvars(C2(1, S37772(), FLD(s37748, 0)), a5); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
+} else if (IS_N(s37919, 10)) {
+{ V dc = CH2(10, FLD(s37919, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37919, 1); V t1 = (a1); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = F_Pat_dvars(C2(1, S37943(), FLD(s37919, 0)), a5); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
 }
-} else if (IS_N(s37748, 11)) {
-{ V dc = CH2(11, FLD(s37748, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37748, 1); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
+} else if (IS_N(s37919, 11)) {
+{ V dc = CH2(11, FLD(s37919, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s37919, 1); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
 }
-} else if (IS_N(s37748, 12)) {
-{ V dc = CH3(12, FLD(s37748, 0), F_Unb_dlvars(FLD(s37748, 1), IMM(0), a2, a3, a4, a5), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = FLD(s37748, 2); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
+} else if (IS_N(s37919, 12)) {
+{ V dc = CH3(12, FLD(s37919, 0), F_Unb_dlvars(FLD(s37919, 1), IMM(0), a2, a3, a4, a5), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = FLD(s37919, 2); V t1 = IMM(0); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
 }
-} else if (IS_N(s37748, 13)) {
-{ V dc = CH2(13, BEND_HOLE, FLD(s37748, 1)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = FLD(s37748, 0); V t1 = (a1); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
+} else if (IS_N(s37919, 13)) {
+{ V dc = CH2(13, BEND_HOLE, FLD(s37919, 1)); *dst = dc; dst = &FLD(dc, 0);
+{ V t0 = FLD(s37919, 0); V t1 = (a1); V t2 = a2; V t3 = a3; V t4 = a4; V t5 = a5; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; goto top; }
 }
 } else {
-*dst = s37748;
+*dst = s37919;
 return 0;
 }
 }
@@ -92877,197 +93309,197 @@ static V F_Unb_dlvars(V a0, V a1, V a2, V a3, V a4, V a5) { V r; D_Unb_dlvars(&r
 static V W_Unb_dlvars(V *a) { (void)a; return F_Unb_dlvars(a[0], a[1], a[2], a[3], a[4], a[5]); }
 static V F_Unb_dlvar(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7) {
 top:;
-V s37775 = a1;
-if (IS_N(s37775, 0)) {
-return F_Unb_dlvar_dcall((a0), FLD(s37775, 0), a2, a3, a4, a5, a6, a7);
+V s37946 = a1;
+if (IS_N(s37946, 0)) {
+return F_Unb_dlvar_dcall((a0), FLD(s37946, 0), a2, a3, a4, a5, a6, a7);
 } else {
-return C3(8, s37775, a6, a7);
+return C3(8, s37946, a6, a7);
 }
 }
 static V W_Unb_dlvar(V *a) { (void)a; return F_Unb_dlvar(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]); }
-static V K37781(void) { static V c; return KONST(c, C2(0, C2(0, MKS(""), IMM(0)), 0u)); }
+static V K37952(void) { static V c; return KONST(c, C2(0, C2(0, MKS(""), IMM(0)), 0u)); }
 static V F_Unb_dlvar_dcall(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7) {
 top:;
-V s37777 = a6;
-if (IS_N(s37777, 5) && IS_N(FLD(s37777, 0), 0)) {
-V v37778 = ({ V r37779;
-V v37780 = F_Map_dget(K37781(), a2, FLD(FLD(s37777, 0), 0));
-r37779 = FLD(v37780, 1);
-r37779; });
-V v37783 = ({ V r37784;
-V s37785 = ({ V r37786;
-V v37787 = v37778;
-V v37788 = FLD(v37787, 0);
-V s37789 = ({ V r37790;
-V v37791 = ({ V r37792;
-V s37793 = FLD(v37788, 0);
-if ((s37793) == IMM(0)) {
-r37792 = IMM(1);
-} else if (IS_N(s37793, 1)) {
-r37792 = IMM(0);
+V s37948 = a6;
+if (IS_N(s37948, 5) && IS_N(FLD(s37948, 0), 0)) {
+V v37949 = ({ V r37950;
+V v37951 = F_Map_dget(K37952(), a2, FLD(FLD(s37948, 0), 0));
+r37950 = FLD(v37951, 1);
+r37950; });
+V v37954 = ({ V r37955;
+V s37956 = ({ V r37957;
+V v37958 = v37949;
+V v37959 = FLD(v37958, 0);
+V s37960 = ({ V r37961;
+V v37962 = ({ V r37963;
+V s37964 = FLD(v37959, 0);
+if ((s37964) == IMM(0)) {
+r37963 = IMM(1);
+} else if (IS_N(s37964, 1)) {
+r37963 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r37792; });
-V s37794 = v37791;
-if ((s37794) == IMM(0)) {
-r37790 = IMM(1);
-} else if ((s37794) == IMM(1)) {
-r37790 = IMM(0);
+r37963; });
+V s37965 = v37962;
+if ((s37965) == IMM(0)) {
+r37961 = IMM(1);
+} else if ((s37965) == IMM(1)) {
+r37961 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r37790; });
-if ((s37789) == IMM(0)) {
-r37786 = IMM(0);
-} else if ((s37789) == IMM(1)) {
-V v37795 = FLD(FLD(s37777, 0), 0);
-V (v37796) = F_List_dcontains_x37s539261848x2963157848(a5, v37795);
-V s37798 = (v37796);
-if ((s37798) == IMM(0)) {
-r37786 = IMM(1);
-} else if ((s37798) == IMM(1)) {
-r37786 = IMM(0);
-} else { bend_fail("runtime fail-stop"); }
-} else { bend_fail("runtime fail-stop"); }
-r37786; });
-if ((s37785) == IMM(0)) {
-r37784 = IMM(0);
-} else if ((s37785) == IMM(1)) {
-V s37799 = F_U32_dis__eq(({ V r37800;
-V v37801 = v37778;
-r37800 = FLD(v37801, 1);
-r37800; }), F_U32_dfrom__nat(F_List_dlength(0, FLD(s37777, 1))));
-if ((s37799) == IMM(0)) {
-r37784 = IMM(0);
-} else if ((s37799) == IMM(1)) {
-r37784 = F_U32_dis__eq(F_Unb_duse(a7, (a0), a1, ({ V r37805;
-V v37806 = v37778;
-V v37807 = FLD(v37806, 0);
-r37805 = FLD(v37807, 0);
-r37805; }), a3, a4), 1u);
+r37961; });
+if ((s37960) == IMM(0)) {
+r37957 = IMM(0);
+} else if ((s37960) == IMM(1)) {
+V v37966 = FLD(FLD(s37948, 0), 0);
+V (v37967) = F_List_dcontains_x37s539261848x2963157848(a5, v37966);
+V s37969 = (v37967);
+if ((s37969) == IMM(0)) {
+r37957 = IMM(1);
+} else if ((s37969) == IMM(1)) {
+r37957 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r37784; });
-V (v37810) = F_List_dlength(0, a5);
-V v37812 = v37778;
-V v37813 = FLD(v37812, 0);
-return F_Unb_dlvar_dgo_x37u(v37783, a1, (v37810), FLD(v37813, 0), FLD(v37813, 1), C2(5, C1(0, FLD(FLD(s37777, 0), 0)), FLD(s37777, 1)), a7);
+r37957; });
+if ((s37956) == IMM(0)) {
+r37955 = IMM(0);
+} else if ((s37956) == IMM(1)) {
+V s37970 = F_U32_dis__eq(({ V r37971;
+V v37972 = v37949;
+r37971 = FLD(v37972, 1);
+r37971; }), F_U32_dfrom__nat(F_List_dlength(0, FLD(s37948, 1))));
+if ((s37970) == IMM(0)) {
+r37955 = IMM(0);
+} else if ((s37970) == IMM(1)) {
+r37955 = F_U32_dis__eq(F_Unb_duse(a7, (a0), a1, ({ V r37976;
+V v37977 = v37949;
+V v37978 = FLD(v37977, 0);
+r37976 = FLD(v37978, 0);
+r37976; }), a3, a4), 1u);
+} else { bend_fail("runtime fail-stop"); }
+} else { bend_fail("runtime fail-stop"); }
+r37955; });
+V (v37981) = F_List_dlength(0, a5);
+V v37983 = v37949;
+V v37984 = FLD(v37983, 0);
+return F_Unb_dlvar_dgo_x37u(v37954, a1, (v37981), FLD(v37984, 0), FLD(v37984, 1), C2(5, C1(0, FLD(FLD(s37948, 0), 0)), FLD(s37948, 1)), a7);
 } else {
-return C3(8, C1(0, a1), s37777, a7);
+return C3(8, C1(0, a1), s37948, a7);
 }
 }
 static V W_Unb_dlvar_dcall(V *a) { (void)a; return F_Unb_dlvar_dcall(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]); }
-static V S37817(void) { static V c; return STRC(c, "_ubl_"); }
-static V S37818(void) { static V c; return STRC(c, "_"); }
-static V S37820(void) { static V c; return STRC(c, "_"); }
+static V S37988(void) { static V c; return STRC(c, "_ubl_"); }
+static V S37989(void) { static V c; return STRC(c, "_"); }
+static V S37991(void) { static V c; return STRC(c, "_"); }
 static V F_Unb_dlvar_dgo_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6) {
 top:;
-V s37815 = (a0);
-if ((s37815) == IMM(1)) {
-V v37816 = F_Unb_dnames(F_String_dappend(S37817(), F_String_dappend(a1, F_String_dappend(S37818(), F_String_dappend(F_Nat_dshow((a2)), S37820())))), a4, 0u);
-return C3(8, C2(1, a3, F_Unb_dpvars(v37816)), a5, F_Unb_dsub(a6, a1, C2(6, a3, F_Unb_dvars(v37816))));
-} else if ((s37815) == IMM(0)) {
+V s37986 = (a0);
+if ((s37986) == IMM(1)) {
+V v37987 = F_Unb_dnames(F_String_dappend(S37988(), F_String_dappend(a1, F_String_dappend(S37989(), F_String_dappend(F_Nat_dshow((a2)), S37991())))), a4, 0u);
+return C3(8, C2(1, a3, F_Unb_dpvars(v37987)), a5, F_Unb_dsub(a6, a1, C2(6, a3, F_Unb_dvars(v37987))));
+} else if ((s37986) == IMM(0)) {
 return C3(8, C1(0, a1), a5, a6);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dlvar_dgo_x37u(V *a) { (void)a; return F_Unb_dlvar_dgo_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); }
-static V K37855(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
-static V S37862(void) { static V c; return STRC(c, ""); }
+static V K38026(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
+static V S38033(void) { static V c; return STRC(c, ""); }
 static V D_Unb_dsub(V *dst, V a0, V a1, V a2) {
 top:;
-V s37829 = a0;
-if (IS_N(s37829, 0)) {
-V s37830 = F_String_deq(FLD(s37829, 0), a1);
-if ((s37830) == IMM(0)) {
-*dst = C1(0, FLD(s37829, 0));
+V s38000 = a0;
+if (IS_N(s38000, 0)) {
+V s38001 = F_String_deq(FLD(s38000, 0), a1);
+if ((s38001) == IMM(0)) {
+*dst = C1(0, FLD(s38000, 0));
 return 0;
-} else if ((s37830) == IMM(1)) {
+} else if ((s38001) == IMM(1)) {
 *dst = a2;
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37829, 5)) {
-V s37832 = FLD(s37829, 1);
-if ((s37832) == IMM(0)) {
+} else if (IS_N(s38000, 5)) {
+V s38003 = FLD(s38000, 1);
+if ((s38003) == IMM(0)) {
 { V dc = CH2(5, BEND_HOLE, IMM(0)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = FLD(s37829, 0); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+{ V t0 = FLD(s38000, 0); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37832, 1)) {
-*dst = F_Expr_dpush(F_Unb_dsub(FLD(s37832, 0), a1, a2), F_Unb_dsub(C2(5, FLD(s37829, 0), FLD(s37832, 1)), a1, a2));
+} else if (IS_N(s38003, 1)) {
+*dst = F_Expr_dpush(F_Unb_dsub(FLD(s38003, 0), a1, a2), F_Unb_dsub(C2(5, FLD(s38000, 0), FLD(s38003, 1)), a1, a2));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37829, 6)) {
-V s37836 = FLD(s37829, 1);
-if ((s37836) == IMM(0)) {
-*dst = C2(6, FLD(s37829, 0), IMM(0));
+} else if (IS_N(s38000, 6)) {
+V s38007 = FLD(s38000, 1);
+if ((s38007) == IMM(0)) {
+*dst = C2(6, FLD(s38000, 0), IMM(0));
 return 0;
-} else if (IS_N(s37836, 1)) {
-*dst = F_Expr_dpush(F_Unb_dsub(FLD(s37836, 0), a1, a2), F_Unb_dsub(C2(6, FLD(s37829, 0), FLD(s37836, 1)), a1, a2));
+} else if (IS_N(s38007, 1)) {
+*dst = F_Expr_dpush(F_Unb_dsub(FLD(s38007, 0), a1, a2), F_Unb_dsub(C2(6, FLD(s38000, 0), FLD(s38007, 1)), a1, a2));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37829, 7)) {
-*dst = C2(7, FLD(s37829, 0), ({ V r37840;
-V s37841 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s37829, 0), IMM(0)), a1);
-if ((s37841) == IMM(0)) {
-r37840 = F_Unb_dsub(FLD(s37829, 1), a1, a2);
-} else if ((s37841) == IMM(1)) {
-r37840 = FLD(s37829, 1);
+} else if (IS_N(s38000, 7)) {
+*dst = C2(7, FLD(s38000, 0), ({ V r38011;
+V s38012 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s38000, 0), IMM(0)), a1);
+if ((s38012) == IMM(0)) {
+r38011 = F_Unb_dsub(FLD(s38000, 1), a1, a2);
+} else if ((s38012) == IMM(1)) {
+r38011 = FLD(s38000, 1);
 } else { bend_fail("runtime fail-stop"); }
-r37840; }));
+r38011; }));
 return 0;
-} else if (IS_N(s37829, 8)) {
-{ V dc = CH3(8, FLD(s37829, 0), BEND_HOLE, ({ V r37845;
-V s37846 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s37829, 0), IMM(0)), a1);
-if ((s37846) == IMM(0)) {
-r37845 = F_Unb_dsub(FLD(s37829, 2), a1, a2);
-} else if ((s37846) == IMM(1)) {
-r37845 = FLD(s37829, 2);
+} else if (IS_N(s38000, 8)) {
+{ V dc = CH3(8, FLD(s38000, 0), BEND_HOLE, ({ V r38016;
+V s38017 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s38000, 0), IMM(0)), a1);
+if ((s38017) == IMM(0)) {
+r38016 = F_Unb_dsub(FLD(s38000, 2), a1, a2);
+} else if ((s38017) == IMM(1)) {
+r38016 = FLD(s38000, 2);
 } else { bend_fail("runtime fail-stop"); }
-r37845; })); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37829, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+r38016; })); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s38000, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37829, 9)) {
-V s37850 = FLD(s37829, 0);
-if (IS_N(s37850, 1)) {
-*dst = F_Expr_dpush(F_Unb_dsub(FLD(s37850, 0), a1, a2), F_Unb_dsub(C2(9, FLD(s37850, 1), FLD(s37829, 1)), a1, a2));
+} else if (IS_N(s38000, 9)) {
+V s38021 = FLD(s38000, 0);
+if (IS_N(s38021, 1)) {
+*dst = F_Expr_dpush(F_Unb_dsub(FLD(s38021, 0), a1, a2), F_Unb_dsub(C2(9, FLD(s38021, 1), FLD(s38000, 1)), a1, a2));
 return 0;
-} else if ((s37850) == IMM(0)) {
-V s37854 = FLD(s37829, 1);
-if ((s37854) == IMM(0)) {
-*dst = K37855();
+} else if ((s38021) == IMM(0)) {
+V s38025 = FLD(s38000, 1);
+if ((s38025) == IMM(0)) {
+*dst = K38026();
 return 0;
-} else if (IS_N(s37854, 1)) {
-V v37856 = F_Unb_dsub(C2(9, IMM(0), FLD(s37854, 1)), a1, a2);
-V s37858 = v37856;
-if (IS_N(s37858, 9)) {
-*dst = C2(9, FLD(s37858, 0), C2(1, F_Unb_dsub(FLD(s37854, 0), a1, a2), FLD(s37858, 1)));
+} else if (IS_N(s38025, 1)) {
+V v38027 = F_Unb_dsub(C2(9, IMM(0), FLD(s38025, 1)), a1, a2);
+V s38029 = v38027;
+if (IS_N(s38029, 9)) {
+*dst = C2(9, FLD(s38029, 0), C2(1, F_Unb_dsub(FLD(s38025, 0), a1, a2), FLD(s38029, 1)));
 return 0;
 } else {
-*dst = s37858;
+*dst = s38029;
 return 0;
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37829, 10)) {
-*dst = C2(10, FLD(s37829, 0), ({ V r37860;
-V s37861 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S37862(), FLD(s37829, 0)), IMM(0)), a1);
-if ((s37861) == IMM(0)) {
-r37860 = F_Unb_dsub(FLD(s37829, 1), a1, a2);
-} else if ((s37861) == IMM(1)) {
-r37860 = FLD(s37829, 1);
+} else if (IS_N(s38000, 10)) {
+*dst = C2(10, FLD(s38000, 0), ({ V r38031;
+V s38032 = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S38033(), FLD(s38000, 0)), IMM(0)), a1);
+if ((s38032) == IMM(0)) {
+r38031 = F_Unb_dsub(FLD(s38000, 1), a1, a2);
+} else if ((s38032) == IMM(1)) {
+r38031 = FLD(s38000, 1);
 } else { bend_fail("runtime fail-stop"); }
-r37860; }));
+r38031; }));
 return 0;
-} else if (IS_N(s37829, 11)) {
-{ V dc = CH2(11, FLD(s37829, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37829, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s38000, 11)) {
+{ V dc = CH2(11, FLD(s38000, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s38000, 1); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37829, 12)) {
-{ V dc = CH3(12, FLD(s37829, 0), F_Unb_dsub(FLD(s37829, 1), a1, a2), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = FLD(s37829, 2); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s38000, 12)) {
+{ V dc = CH3(12, FLD(s38000, 0), F_Unb_dsub(FLD(s38000, 1), a1, a2), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = FLD(s38000, 2); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37829, 13)) {
-{ V dc = CH2(13, BEND_HOLE, FLD(s37829, 1)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = FLD(s37829, 0); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s38000, 13)) {
+{ V dc = CH2(13, BEND_HOLE, FLD(s38000, 1)); *dst = dc; dst = &FLD(dc, 0);
+{ V t0 = FLD(s38000, 0); V t1 = a1; V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
 } else {
-*dst = s37829;
+*dst = s38000;
 return 0;
 }
 }
@@ -93075,96 +93507,96 @@ static V F_Unb_dsub(V a0, V a1, V a2) { V r; D_Unb_dsub(&r, a0, a1, a2); return 
 static V W_Unb_dsub(V *a) { (void)a; return F_Unb_dsub(a[0], a[1], a[2]); }
 static V D_Unb_dnames(V *dst, V a0, V a1, V a2) {
 top:;
-V s37867 = a1;
-if ((s37867) == IMM(0)) {
+V s38038 = a1;
+if ((s38038) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s37867, 1)) {
+} else if (IS_N(s38038, 1)) {
 { V dc = CH2(1, F_String_dappend(a0, F_U32_dshow_dif((a2), F_U32_dis__zero((a2)))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s37867, 1); V t2 = F_U32_dinc((a2)); a0 = t0; a1 = t1; a2 = t2; goto top; }
+{ V t0 = a0; V t1 = FLD(s38038, 1); V t2 = F_U32_dinc((a2)); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dnames(V a0, V a1, V a2) { V r; D_Unb_dnames(&r, a0, a1, a2); return r; }
 static V W_Unb_dnames(V *a) { (void)a; return F_Unb_dnames(a[0], a[1], a[2]); }
-static V K37896(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
+static V K38067(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
 static V D_Unb_dknown(V *dst, V a0, V a1, V a2) {
 top:;
-V s37872 = a1;
-if (IS_N(s37872, 5)) {
-V s37873 = FLD(s37872, 1);
-if ((s37873) == IMM(0)) {
+V s38043 = a1;
+if (IS_N(s38043, 5)) {
+V s38044 = FLD(s38043, 1);
+if ((s38044) == IMM(0)) {
 { V dc = CH2(5, BEND_HOLE, IMM(0)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = a0; V t1 = FLD(s37872, 0); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+{ V t0 = a0; V t1 = FLD(s38043, 0); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37873, 1)) {
-*dst = F_Expr_dpush(F_Unb_dknown(a0, FLD(s37873, 0), IMM(1)), F_Unb_dknown(a0, C2(5, FLD(s37872, 0), FLD(s37873, 1)), IMM(0)));
+} else if (IS_N(s38044, 1)) {
+*dst = F_Expr_dpush(F_Unb_dknown(a0, FLD(s38044, 0), IMM(1)), F_Unb_dknown(a0, C2(5, FLD(s38043, 0), FLD(s38044, 1)), IMM(0)));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37872, 6)) {
-V s37877 = FLD(s37872, 1);
-if ((s37877) == IMM(0)) {
-*dst = C2(6, FLD(s37872, 0), IMM(0));
+} else if (IS_N(s38043, 6)) {
+V s38048 = FLD(s38043, 1);
+if ((s38048) == IMM(0)) {
+*dst = C2(6, FLD(s38043, 0), IMM(0));
 return 0;
-} else if (IS_N(s37877, 1)) {
-*dst = F_Expr_dpush(F_Unb_dknown(a0, FLD(s37877, 0), IMM(1)), F_Unb_dknown(a0, C2(6, FLD(s37872, 0), FLD(s37877, 1)), IMM(0)));
+} else if (IS_N(s38048, 1)) {
+*dst = F_Expr_dpush(F_Unb_dknown(a0, FLD(s38048, 0), IMM(1)), F_Unb_dknown(a0, C2(6, FLD(s38043, 0), FLD(s38048, 1)), IMM(0)));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37872, 7)) {
-{ V dc = CH2(7, FLD(s37872, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s37872, 1); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s38043, 7)) {
+{ V dc = CH2(7, FLD(s38043, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s38043, 1); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37872, 8)) {
-*dst = F_Unb_dlet(a0, FLD(s37872, 0), F_Unb_dknown(a0, FLD(s37872, 1), IMM(1)), F_Unb_dknown(a0, FLD(s37872, 2), IMM(1)));
+} else if (IS_N(s38043, 8)) {
+*dst = F_Unb_dlet(a0, FLD(s38043, 0), F_Unb_dknown(a0, FLD(s38043, 1), IMM(1)), F_Unb_dknown(a0, FLD(s38043, 2), IMM(1)));
 return 0;
-} else if (IS_N(s37872, 9)) {
-V s37884 = FLD(s37872, 0);
-if (IS_N(s37884, 1)) {
-V s37885 = (a2);
-if ((s37885) == IMM(1)) {
-V v37886 = F_Expr_dpush(F_Unb_dknown(a0, FLD(s37884, 0), IMM(1)), F_Unb_dknown(a0, C2(9, FLD(s37884, 1), FLD(s37872, 1)), IMM(0)));
-*dst = F_Unb_dmat(a0, v37886);
+} else if (IS_N(s38043, 9)) {
+V s38055 = FLD(s38043, 0);
+if (IS_N(s38055, 1)) {
+V s38056 = (a2);
+if ((s38056) == IMM(1)) {
+V v38057 = F_Expr_dpush(F_Unb_dknown(a0, FLD(s38055, 0), IMM(1)), F_Unb_dknown(a0, C2(9, FLD(s38055, 1), FLD(s38043, 1)), IMM(0)));
+*dst = F_Unb_dmat(a0, v38057);
 return 0;
-} else if ((s37885) == IMM(0)) {
-V v37891 = F_Expr_dpush(F_Unb_dknown(a0, FLD(s37884, 0), IMM(1)), F_Unb_dknown(a0, C2(9, FLD(s37884, 1), FLD(s37872, 1)), IMM(0)));
-*dst = v37891;
+} else if ((s38056) == IMM(0)) {
+V v38062 = F_Expr_dpush(F_Unb_dknown(a0, FLD(s38055, 0), IMM(1)), F_Unb_dknown(a0, C2(9, FLD(s38055, 1), FLD(s38043, 1)), IMM(0)));
+*dst = v38062;
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s37884) == IMM(0)) {
-V s37895 = FLD(s37872, 1);
-if ((s37895) == IMM(0)) {
-*dst = K37896();
+} else if ((s38055) == IMM(0)) {
+V s38066 = FLD(s38043, 1);
+if ((s38066) == IMM(0)) {
+*dst = K38067();
 return 0;
-} else if (IS_N(s37895, 1)) {
-V v37897 = F_Unb_dknown(a0, C2(9, IMM(0), FLD(s37895, 1)), IMM(0));
-V s37899 = v37897;
-if (IS_N(s37899, 9)) {
-*dst = C2(9, FLD(s37899, 0), C2(1, F_Unb_dknown(a0, FLD(s37895, 0), IMM(1)), FLD(s37899, 1)));
+} else if (IS_N(s38066, 1)) {
+V v38068 = F_Unb_dknown(a0, C2(9, IMM(0), FLD(s38066, 1)), IMM(0));
+V s38070 = v38068;
+if (IS_N(s38070, 9)) {
+*dst = C2(9, FLD(s38070, 0), C2(1, F_Unb_dknown(a0, FLD(s38066, 0), IMM(1)), FLD(s38070, 1)));
 return 0;
 } else {
-*dst = s37899;
+*dst = s38070;
 return 0;
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s37872, 10)) {
-{ V dc = CH2(10, FLD(s37872, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s37872, 1); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s38043, 10)) {
+{ V dc = CH2(10, FLD(s38043, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s38043, 1); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37872, 11)) {
-{ V dc = CH2(11, FLD(s37872, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s37872, 1); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s38043, 11)) {
+{ V dc = CH2(11, FLD(s38043, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s38043, 1); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37872, 12)) {
-{ V dc = CH3(12, FLD(s37872, 0), F_Unb_dknown(a0, FLD(s37872, 1), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = a0; V t1 = FLD(s37872, 2); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s38043, 12)) {
+{ V dc = CH3(12, FLD(s38043, 0), F_Unb_dknown(a0, FLD(s38043, 1), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = a0; V t1 = FLD(s38043, 2); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
-} else if (IS_N(s37872, 13)) {
-{ V dc = CH2(13, BEND_HOLE, FLD(s37872, 1)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = a0; V t1 = FLD(s37872, 0); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s38043, 13)) {
+{ V dc = CH2(13, BEND_HOLE, FLD(s38043, 1)); *dst = dc; dst = &FLD(dc, 0);
+{ V t0 = a0; V t1 = FLD(s38043, 0); V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
 } else {
-*dst = s37872;
+*dst = s38043;
 return 0;
 }
 }
@@ -93172,31 +93604,31 @@ static V F_Unb_dknown(V a0, V a1, V a2) { V r; D_Unb_dknown(&r, a0, a1, a2); ret
 static V W_Unb_dknown(V *a) { (void)a; return F_Unb_dknown(a[0], a[1], a[2]); }
 static V F_Unb_dmat(V a0, V a1) {
 top:;
-V s37902 = a1;
-if (IS_N(s37902, 9)) {
-V v37903 = F_Unb_dshape(a0, FLD(s37902, 0));
-return C2(9, F_Unb_dscrs(v37903, FLD(s37902, 0)), F_Unb_dcases(v37903, FLD(s37902, 1)));
+V s38073 = a1;
+if (IS_N(s38073, 9)) {
+V v38074 = F_Unb_dshape(a0, FLD(s38073, 0));
+return C2(9, F_Unb_dscrs(v38074, FLD(s38073, 0)), F_Unb_dcases(v38074, FLD(s38073, 1)));
 } else {
-return s37902;
+return s38073;
 }
 }
 static V W_Unb_dmat(V *a) { (void)a; return F_Unb_dmat(a[0], a[1]); }
 static V D_Unb_dcases(V *dst, V a0, V a1) {
 top:;
-V s37907 = a1;
-if ((s37907) == IMM(0)) {
+V s38078 = a1;
+if ((s38078) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s37907, 1) && IS_N(FLD(s37907, 0), 10)) {
-{ V dc = CH2(1, ({ V r37908;
-V uo37909[2]; U_Unb_dpats(a0, FLD(FLD(s37907, 0), 0), 0u, uo37909);
-r37908 = C2(10, uo37909[0], F_Unb_dwrap(uo37909[1], FLD(FLD(s37907, 0), 1)));
-r37908; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s37907, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38078, 1) && IS_N(FLD(s38078, 0), 10)) {
+{ V dc = CH2(1, ({ V r38079;
+V uo38080[2]; U_Unb_dpats(a0, FLD(FLD(s38078, 0), 0), 0u, uo38080);
+r38079 = C2(10, uo38080[0], F_Unb_dwrap(uo38080[1], FLD(FLD(s38078, 0), 1)));
+r38079; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s38078, 1); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s37907, 1)) {
-{ V dc = CH2(1, FLD(s37907, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s37907, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38078, 1)) {
+{ V dc = CH2(1, FLD(s38078, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s38078, 1); a0 = t0; a1 = t1; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -93205,23 +93637,23 @@ static V W_Unb_dcases(V *a) { (void)a; return F_Unb_dcases(a[0], a[1]); }
 BEND_UINL V U_Unb_dpats(V a0, V a1, V a2_, V *o) {
 uint32_t a2 = (uint32_t)a2_;
 top:;
-V s37912 = a0;
-V s37913 = a1;
-if (IS_N(s37912, 1) && IS_N(s37913, 1)) {
-V v37914 = FLD(s37912, 0);
-V v37915 = ({ V r37916;
-V s37917 = FLD(v37914, 0);
-if ((s37917) == IMM(0)) {
-r37916 = IMM(0);
-} else if (IS_N(s37917, 1)) {
-r37916 = IMM(1);
+V s38083 = a0;
+V s38084 = a1;
+if (IS_N(s38083, 1) && IS_N(s38084, 1)) {
+V v38085 = FLD(s38083, 0);
+V v38086 = ({ V r38087;
+V s38088 = FLD(v38085, 0);
+if ((s38088) == IMM(0)) {
+r38087 = IMM(0);
+} else if (IS_N(s38088, 1)) {
+r38087 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37916; });
-V uo37918[2]; U_Unb_dpats(FLD(s37912, 1), FLD(s37913, 1), F_U32_dinc((a2)), uo37918);
-V v37921 = FLD(s37912, 0);
-return U_Unb_dpat_done_x37u(v37915, FLD(s37913, 0), FLD(v37921, 0), FLD(v37921, 1), (a2), uo37918[0], uo37918[1], o);
+r38087; });
+V uo38089[2]; U_Unb_dpats(FLD(s38083, 1), FLD(s38084, 1), F_U32_dinc((a2)), uo38089);
+V v38092 = FLD(s38083, 0);
+return U_Unb_dpat_done_x37u(v38086, FLD(s38084, 0), FLD(v38092, 0), FLD(v38092, 1), (a2), uo38089[0], uo38089[1], o);
 } else {
-o[0] = s37913;
+o[0] = s38084;
 o[1] = IMM(0);
 return 0;
 }
@@ -93231,10 +93663,10 @@ static V W_Unb_dpats(V *a) { (void)a; return F_Unb_dpats(a[0], a[1], a[2]); }
 BEND_UINL V U_Unb_dpat_done_x37u(V a0, V a1, V a2, V a3, V a4_, V a5, V a6, V *o) {
 uint32_t a4 = (uint32_t)a4_;
 top:;
-V s37923 = (a0);
-if ((s37923) == IMM(1)) {
+V s38094 = (a0);
+if ((s38094) == IMM(1)) {
 return U_Unb_dpat_x37u(a1, a2, a3, (a4), a5, a6, o);
-} else if ((s37923) == IMM(0)) {
+} else if ((s38094) == IMM(0)) {
 o[0] = C2(1, a1, a5);
 o[1] = a6;
 return 0;
@@ -93242,20 +93674,20 @@ return 0;
 }
 static V F_Unb_dpat_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6) { V o[2]; U_Unb_dpat_done_x37u(a0, a1, a2, a3, a4, a5, a6, o); return CN(0, 2, o); }
 static V W_Unb_dpat_done_x37u(V *a) { (void)a; return F_Unb_dpat_done_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); }
-static V S37927(void) { static V c; return STRC(c, "_"); }
-static V S37930(void) { static V c; return STRC(c, "_"); }
+static V S38098(void) { static V c; return STRC(c, "_"); }
+static V S38101(void) { static V c; return STRC(c, "_"); }
 BEND_UINL V U_Unb_dpat_x37u(V a0, V a1, V a2, V a3_, V a4, V a5, V *o) {
 uint32_t a3 = (uint32_t)a3_;
 top:;
-V s37925 = a0;
-if (IS_N(s37925, 1)) {
-o[0] = F_List_dappend(0, FLD(s37925, 1), a4);
+V s38096 = a0;
+if (IS_N(s38096, 1)) {
+o[0] = F_List_dappend(0, FLD(s38096, 1), a4);
 o[1] = a5;
 return 0;
-} else if (IS_N(s37925, 0)) {
-return U_Unb_dpat_dbind_x37u(F_String_deq(FLD(s37925, 0), S37927()), FLD(s37925, 0), a1, a2, (a3), a4, a5, o);
+} else if (IS_N(s38096, 0)) {
+return U_Unb_dpat_dbind_x37u(F_String_deq(FLD(s38096, 0), S38098()), FLD(s38096, 0), a1, a2, (a3), a4, a5, o);
 } else {
-return U_Unb_dpat_dbind_x37s2959766054x2142777092_x37u(S37930(), a1, a2, (a3), a4, a5, o);
+return U_Unb_dpat_dbind_x37s2959766054x2142777092_x37u(S38101(), a1, a2, (a3), a4, a5, o);
 }
 }
 static V F_Unb_dpat_x37u(V a0, V a1, V a2, V a3, V a4, V a5) { V o[2]; U_Unb_dpat_x37u(a0, a1, a2, a3, a4, a5, o); return CN(0, 2, o); }
@@ -93275,42 +93707,42 @@ return 0;
 }
 static V F_Unb_dpat_dwild_x37u(V a0, V a1, V a2) { V o[2]; U_Unb_dpat_dwild_x37u(a0, a1, a2, o); return CN(0, 2, o); }
 static V W_Unb_dpat_dwild_x37u(V *a) { (void)a; return F_Unb_dpat_dwild_x37u(a[0], a[1], a[2]); }
-static V K37935(void) { static V c; return KONST(c, C1(0, MKS("_"))); }
+static V K38106(void) { static V c; return KONST(c, C1(0, MKS("_"))); }
 static V F_List_dappend_x37f223258139x4205306309(V a0, V a2, V a3) {
 top:;
-V s37934 = a3;
-if ((s37934) == IMM(0)) {
+V s38105 = a3;
+if ((s38105) == IMM(0)) {
 return a2;
-} else if (IS_N(s37934, 1)) {
-return C2(1, K37935(), F_List_dappend(a0, F_Unb_dwild(FLD(s37934, 1)), a2));
+} else if (IS_N(s38105, 1)) {
+return C2(1, K38106(), F_List_dappend(a0, F_Unb_dwild(FLD(s38105, 1)), a2));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_List_dappend_x37f223258139x4205306309(V *a) { (void)a; return F_List_dappend_x37f223258139x4205306309(a[0], a[2], a[3]); }
-static V K37939(void) { static V c; return KONST(c, C1(0, MKS("_"))); }
+static V K38110(void) { static V c; return KONST(c, C1(0, MKS("_"))); }
 static V D_Unb_dwild(V *dst, V a0) {
 top:;
-V s37938 = a0;
-if ((s37938) == IMM(0)) {
+V s38109 = a0;
+if ((s38109) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s37938, 1)) {
-{ V dc = CH2(1, K37939(), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s37938, 1); a0 = t0; goto top; }
+} else if (IS_N(s38109, 1)) {
+{ V dc = CH2(1, K38110(), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s38109, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dwild(V a0) { V r; D_Unb_dwild(&r, a0); return r; }
 static V W_Unb_dwild(V *a) { (void)a; return F_Unb_dwild(a[0]); }
-static V S37942(void) { static V c; return STRC(c, "_ubm"); }
-static V S37945(void) { static V c; return STRC(c, "_"); }
+static V S38113(void) { static V c; return STRC(c, "_ubm"); }
+static V S38116(void) { static V c; return STRC(c, "_"); }
 BEND_UINL V U_Unb_dpat_dbind_x37u(V a0, V a1, V a2, V a3, V a4_, V a5, V a6, V *o) {
 uint32_t a4 = (uint32_t)a4_;
 top:;
-V s37940 = (a0);
-if ((s37940) == IMM(1)) {
+V s38111 = (a0);
+if ((s38111) == IMM(1)) {
 return U_Unb_dpat_dwild_x37u(a3, a5, a6, o);
-} else if ((s37940) == IMM(0)) {
-return U_Unb_dpat_drebox_x37u(a1, a2, F_Unb_dnames(F_String_dappend(S37942(), F_String_dappend(F_U32_dshow_dif((a4), F_U32_dis__zero((a4))), S37945())), a3, 0u), a5, a6, o);
+} else if ((s38111) == IMM(0)) {
+return U_Unb_dpat_drebox_x37u(a1, a2, F_Unb_dnames(F_String_dappend(S38113(), F_String_dappend(F_U32_dshow_dif((a4), F_U32_dis__zero((a4))), S38116())), a3, 0u), a5, a6, o);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dpat_dbind_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6) { V o[2]; U_Unb_dpat_dbind_x37u(a0, a1, a2, a3, a4, a5, a6, o); return CN(0, 2, o); }
@@ -93325,99 +93757,99 @@ static V F_Unb_dpat_drebox_x37u(V a0, V a1, V a2, V a3, V a4) { V o[2]; U_Unb_dp
 static V W_Unb_dpat_drebox_x37u(V *a) { (void)a; return F_Unb_dpat_drebox_x37u(a[0], a[1], a[2], a[3], a[4]); }
 static V F_List_dappend_x37f2031930785x4255399295(V a0, V a2, V a3) {
 top:;
-V s37952 = a3;
-if ((s37952) == IMM(0)) {
+V s38123 = a3;
+if ((s38123) == IMM(0)) {
 return a2;
-} else if (IS_N(s37952, 1)) {
-return C2(1, C1(0, FLD(s37952, 0)), F_List_dappend(a0, F_Unb_dpvars(FLD(s37952, 1)), a2));
+} else if (IS_N(s38123, 1)) {
+return C2(1, C1(0, FLD(s38123, 0)), F_List_dappend(a0, F_Unb_dpvars(FLD(s38123, 1)), a2));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_List_dappend_x37f2031930785x4255399295(V *a) { (void)a; return F_List_dappend_x37f2031930785x4255399295(a[0], a[2], a[3]); }
 static V F_Unb_dscrs(V a0, V a1) {
 top:;
-V s37955 = a0;
-V s37956 = a1;
-if (IS_N(s37955, 1) && IS_N(s37956, 1)) {
-return F_Unb_dscrs_done(({ V r37957;
-V v37958 = FLD(s37955, 0);
-V v37959 = FLD(v37958, 0);
-V s37960 = v37959;
-if ((s37960) == IMM(0)) {
-r37957 = IMM(0);
-} else if (IS_N(s37960, 1)) {
-r37957 = IMM(1);
+V s38126 = a0;
+V s38127 = a1;
+if (IS_N(s38126, 1) && IS_N(s38127, 1)) {
+return F_Unb_dscrs_done(({ V r38128;
+V v38129 = FLD(s38126, 0);
+V v38130 = FLD(v38129, 0);
+V s38131 = v38130;
+if ((s38131) == IMM(0)) {
+r38128 = IMM(0);
+} else if (IS_N(s38131, 1)) {
+r38128 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37957; }), FLD(s37956, 0), F_Unb_dscrs(FLD(s37955, 1), FLD(s37956, 1)));
+r38128; }), FLD(s38127, 0), F_Unb_dscrs(FLD(s38126, 1), FLD(s38127, 1)));
 } else {
-return s37956;
+return s38127;
 }
 }
 static V W_Unb_dscrs(V *a) { (void)a; return F_Unb_dscrs(a[0], a[1]); }
 static V F_Unb_dscrs_done(V a0, V a1, V a2) {
 top:;
-V s37963 = (a0);
-if ((s37963) == IMM(1)) {
-return F_List_dappend(0, ({ V r37964;
-V s37965 = a1;
-if (IS_N(s37965, 6)) {
-r37964 = FLD(s37965, 1);
+V s38134 = (a0);
+if ((s38134) == IMM(1)) {
+return F_List_dappend(0, ({ V r38135;
+V s38136 = a1;
+if (IS_N(s38136, 6)) {
+r38135 = FLD(s38136, 1);
 } else {
-r37964 = C2(1, s37965, IMM(0));
+r38135 = C2(1, s38136, IMM(0));
 }
-r37964; }), a2);
-} else if ((s37963) == IMM(0)) {
+r38135; }), a2);
+} else if ((s38134) == IMM(0)) {
 return C2(1, a1, a2);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dscrs_done(V *a) { (void)a; return F_Unb_dscrs_done(a[0], a[1], a[2]); }
-static V K37971(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
-static V K37976(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
+static V K38142(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
+static V K38147(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
 static V D_Unb_dshape(V *dst, V a0, V a1) {
 top:;
-V s37967 = a1;
-if ((s37967) == IMM(0)) {
+V s38138 = a1;
+if ((s38138) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s37967, 1) && IS_N(FLD(s37967, 0), 6)) {
-{ V dc = CH2(1, ({ V r37968;
-V v37969 = FLD(FLD(s37967, 0), 0);
-V v37970 = F_Map_dget(K37971(), a0, F_P_dthead_dgo(v37969));
-V v37974 = FLD(v37970, 1);
-r37968 = F_Unb_dshape_done_x37u(FLD(v37974, 0), FLD(v37974, 1), FLD(FLD(s37967, 0), 1));
-r37968; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s37967, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38138, 1) && IS_N(FLD(s38138, 0), 6)) {
+{ V dc = CH2(1, ({ V r38139;
+V v38140 = FLD(FLD(s38138, 0), 0);
+V v38141 = F_Map_dget(K38142(), a0, F_P_dthead_dgo(v38140));
+V v38145 = FLD(v38141, 1);
+r38139 = F_Unb_dshape_done_x37u(FLD(v38145, 0), FLD(v38145, 1), FLD(FLD(s38138, 0), 1));
+r38139; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s38138, 1); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s37967, 1)) {
-{ V dc = CH2(1, K37976(), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s37967, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38138, 1)) {
+{ V dc = CH2(1, K38147(), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s38138, 1); a0 = t0; a1 = t1; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dshape(V a0, V a1) { V r; D_Unb_dshape(&r, a0, a1); return r; }
 static V W_Unb_dshape(V *a) { (void)a; return F_Unb_dshape(a[0], a[1]); }
-static V S37985(void) { static V c; return STRC(c, ""); }
+static V S38156(void) { static V c; return STRC(c, ""); }
 BEND_UINL V U_Unb_dshape_done_x37u(V a0, V a1, V a2, V *o) {
 top:;
-V s37977 = ({ V r37978;
-V s37979 = ({ V r37980;
-V s37981 = a0;
-if ((s37981) == IMM(0)) {
-r37980 = IMM(0);
-} else if (IS_N(s37981, 1)) {
-r37980 = IMM(1);
+V s38148 = ({ V r38149;
+V s38150 = ({ V r38151;
+V s38152 = a0;
+if ((s38152) == IMM(0)) {
+r38151 = IMM(0);
+} else if (IS_N(s38152, 1)) {
+r38151 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r37980; });
-if ((s37979) == IMM(0)) {
-r37978 = IMM(0);
-} else if ((s37979) == IMM(1)) {
-r37978 = F_Nat_dis__eq(F_List_dlength(0, a1), F_List_dlength(0, a2));
+r38151; });
+if ((s38150) == IMM(0)) {
+r38149 = IMM(0);
+} else if ((s38150) == IMM(1)) {
+r38149 = F_Nat_dis__eq(F_List_dlength(0, a1), F_List_dlength(0, a2));
 } else { bend_fail("runtime fail-stop"); }
-r37978; });
-if ((s37977) == IMM(0)) {
-o[0] = S37985();
+r38149; });
+if ((s38148) == IMM(0)) {
+o[0] = S38156();
 o[1] = IMM(0);
 return 0;
-} else if ((s37977) == IMM(1)) {
+} else if ((s38148) == IMM(1)) {
 o[0] = a0;
 o[1] = a1;
 return 0;
@@ -93427,82 +93859,82 @@ static V F_Unb_dshape_done_x37u(V a0, V a1, V a2) { V o[2]; U_Unb_dshape_done_x3
 static V W_Unb_dshape_done_x37u(V *a) { (void)a; return F_Unb_dshape_done_x37u(a[0], a[1], a[2]); }
 static V F_Unb_dlet(V a0, V a1, V a2, V a3) {
 top:;
-V s37986 = a1;
-if (IS_N(s37986, 1)) {
-return F_Unb_dlet_dctor(a0, FLD(s37986, 0), FLD(s37986, 1), a2, a3);
+V s38157 = a1;
+if (IS_N(s38157, 1)) {
+return F_Unb_dlet_dctor(a0, FLD(s38157, 0), FLD(s38157, 1), a2, a3);
 } else {
-return C3(8, s37986, a2, a3);
+return C3(8, s38157, a2, a3);
 }
 }
 static V W_Unb_dlet(V *a) { (void)a; return F_Unb_dlet(a[0], a[1], a[2], a[3]); }
-static V K37995(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
+static V K38166(void) { static V c; return KONST(c, C2(0, MKS(""), IMM(0))); }
 static V F_Unb_dlet_dctor(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s37988 = a3;
-if (IS_N(s37988, 6)) {
-return F_Unb_dlet_dgo(({ V r37989;
-V s37990 = ({ V r37991;
-V v37992 = a1;
-r37991 = F_String_deq(FLD(s37988, 0), v37992);
-r37991; });
-if ((s37990) == IMM(0)) {
-r37989 = IMM(0);
-} else if ((s37990) == IMM(1)) {
-V v37994 = F_Map_dget(K37995(), a0, F_P_dthead_dgo(a1));
-V v37998 = FLD(v37994, 1);
-V uo37999[2]; U_Unb_dshape_done_x37u(FLD(v37998, 0), FLD(v37998, 1), FLD(s37988, 1), uo37999);
-V v38001 = ({ V r38002;
-V s38003 = uo37999[0];
-if ((s38003) == IMM(0)) {
-r38002 = IMM(1);
-} else if (IS_N(s38003, 1)) {
-r38002 = IMM(0);
+V s38159 = a3;
+if (IS_N(s38159, 6)) {
+return F_Unb_dlet_dgo(({ V r38160;
+V s38161 = ({ V r38162;
+V v38163 = a1;
+r38162 = F_String_deq(FLD(s38159, 0), v38163);
+r38162; });
+if ((s38161) == IMM(0)) {
+r38160 = IMM(0);
+} else if ((s38161) == IMM(1)) {
+V v38165 = F_Map_dget(K38166(), a0, F_P_dthead_dgo(a1));
+V v38169 = FLD(v38165, 1);
+V uo38170[2]; U_Unb_dshape_done_x37u(FLD(v38169, 0), FLD(v38169, 1), FLD(s38159, 1), uo38170);
+V v38172 = ({ V r38173;
+V s38174 = uo38170[0];
+if ((s38174) == IMM(0)) {
+r38173 = IMM(1);
+} else if (IS_N(s38174, 1)) {
+r38173 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r38002; });
-V s38004 = v38001;
-if ((s38004) == IMM(0)) {
-r37989 = IMM(1);
-} else if ((s38004) == IMM(1)) {
-r37989 = IMM(0);
+r38173; });
+V s38175 = v38172;
+if ((s38175) == IMM(0)) {
+r38160 = IMM(1);
+} else if ((s38175) == IMM(1)) {
+r38160 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r37989; }), a1, a2, C2(6, FLD(s37988, 0), FLD(s37988, 1)), a4);
+r38160; }), a1, a2, C2(6, FLD(s38159, 0), FLD(s38159, 1)), a4);
 } else {
-return C3(8, C2(1, a1, a2), s37988, a4);
+return C3(8, C2(1, a1, a2), s38159, a4);
 }
 }
 static V W_Unb_dlet_dctor(V *a) { (void)a; return F_Unb_dlet_dctor(a[0], a[1], a[2], a[3], a[4]); }
 static V F_Unb_dlet_dgo(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s38006 = (a0);
-if ((s38006) == IMM(1)) {
-V v38007 = ({ V r38008;
-V s38009 = a3;
-if (IS_N(s38009, 6)) {
-r38008 = FLD(s38009, 1);
+V s38177 = (a0);
+if ((s38177) == IMM(1)) {
+V v38178 = ({ V r38179;
+V s38180 = a3;
+if (IS_N(s38180, 6)) {
+r38179 = FLD(s38180, 1);
 } else {
-r38008 = C2(1, s38009, IMM(0));
+r38179 = C2(1, s38180, IMM(0));
 }
-r38008; });
-return F_Unb_dlet_dhit(F_Unb_dalias_dok(a2, v38007), a2, v38007, a4);
-} else if ((s38006) == IMM(0)) {
+r38179; });
+return F_Unb_dlet_dhit(F_Unb_dalias_dok(a2, v38178), a2, v38178, a4);
+} else if ((s38177) == IMM(0)) {
 return C3(8, C2(1, a1, a2), a3, a4);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dlet_dgo(V *a) { (void)a; return F_Unb_dlet_dgo(a[0], a[1], a[2], a[3], a[4]); }
-static V S38015(void) { static V c; return STRC(c, "_ub"); }
+static V S38186(void) { static V c; return STRC(c, "_ub"); }
 static V F_Unb_dalias_dok(V a0, V a1) {
 top:;
-V s38012 = a0;
-V s38013 = a1;
-if (IS_N(s38012, 1) && IS_N(FLD(s38012, 0), 0) && IS_N(s38013, 1) && IS_N(FLD(s38013, 0), 0)) {
-V s38014 = F_String_dstarts__with(FLD(FLD(s38013, 0), 0), S38015());
-if ((s38014) == IMM(0)) {
+V s38183 = a0;
+V s38184 = a1;
+if (IS_N(s38183, 1) && IS_N(FLD(s38183, 0), 0) && IS_N(s38184, 1) && IS_N(FLD(s38184, 0), 0)) {
+V s38185 = F_String_dstarts__with(FLD(FLD(s38184, 0), 0), S38186());
+if ((s38185) == IMM(0)) {
 return IMM(0);
-} else if ((s38014) == IMM(1)) {
-{ V t0 = FLD(s38012, 1); V t1 = FLD(s38013, 1); a0 = t0; a1 = t1; goto top; }
+} else if ((s38185) == IMM(1)) {
+{ V t0 = FLD(s38183, 1); V t1 = FLD(s38184, 1); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s38012) == IMM(0) && (s38013) == IMM(0)) {
+} else if ((s38183) == IMM(0) && (s38184) == IMM(0)) {
 return IMM(1);
 } else {
 return IMM(0);
@@ -93511,162 +93943,162 @@ return IMM(0);
 static V W_Unb_dalias_dok(V *a) { (void)a; return F_Unb_dalias_dok(a[0], a[1]); }
 static V F_Unb_dlet_dhit(V a0, V a1, V a2, V a3) {
 top:;
-V s38017 = (a0);
-if ((s38017) == IMM(1)) {
+V s38188 = (a0);
+if ((s38188) == IMM(1)) {
 return F_Unb_dalias_dsub(a1, a2, a3);
-} else if ((s38017) == IMM(0)) {
+} else if ((s38188) == IMM(0)) {
 return C2(9, a2, C2(1, C2(10, a1, a3), IMM(0)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dlet_dhit(V *a) { (void)a; return F_Unb_dlet_dhit(a[0], a[1], a[2], a[3]); }
 static V F_Unb_dalias_dsub(V a0, V a1, V a2) {
 top:;
-V s38019 = a0;
-V s38020 = a1;
-if (IS_N(s38019, 1) && IS_N(FLD(s38019, 0), 0) && IS_N(s38020, 1) && IS_N(FLD(s38020, 0), 0)) {
-{ V t0 = FLD(s38019, 1); V t1 = FLD(s38020, 1); V t2 = F_Unb_dsub(a2, FLD(FLD(s38019, 0), 0), C1(0, FLD(FLD(s38020, 0), 0))); a0 = t0; a1 = t1; a2 = t2; goto top; }
+V s38190 = a0;
+V s38191 = a1;
+if (IS_N(s38190, 1) && IS_N(FLD(s38190, 0), 0) && IS_N(s38191, 1) && IS_N(FLD(s38191, 0), 0)) {
+{ V t0 = FLD(s38190, 1); V t1 = FLD(s38191, 1); V t2 = F_Unb_dsub(a2, FLD(FLD(s38190, 0), 0), C1(0, FLD(FLD(s38191, 0), 0))); a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else {
 return a2;
 }
 }
 static V W_Unb_dalias_dsub(V *a) { (void)a; return F_Unb_dalias_dsub(a[0], a[1], a[2]); }
-static V K38050(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
-static V S38056(void) { static V c; return STRC(c, ""); }
+static V K38221(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
+static V S38227(void) { static V c; return STRC(c, ""); }
 static V D_Unb_dcalls(V *dst, V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s38022 = a0;
-if (IS_N(s38022, 5)) {
-V s38023 = FLD(s38022, 1);
-if ((s38023) == IMM(0)) {
-*dst = F_Unb_dcall_dtop((a4), a1, a2, (a3), C2(5, F_Unb_dcalls(FLD(s38022, 0), a1, a2, F_U32_dinc((a3)), IMM(1)), IMM(0)));
+V s38193 = a0;
+if (IS_N(s38193, 5)) {
+V s38194 = FLD(s38193, 1);
+if ((s38194) == IMM(0)) {
+*dst = F_Unb_dcall_dtop((a4), a1, a2, (a3), C2(5, F_Unb_dcalls(FLD(s38193, 0), a1, a2, F_U32_dinc((a3)), IMM(1)), IMM(0)));
 return 0;
-} else if (IS_N(s38023, 1)) {
-*dst = F_Unb_dcall_dtop((a4), a1, a2, (a3), F_Expr_dpush(F_Unb_dcalls(FLD(s38023, 0), a1, a2, F_U32_dinc((a3)), IMM(1)), F_Unb_dcalls(C2(5, FLD(s38022, 0), FLD(s38023, 1)), a1, a2, (a3), IMM(0))));
-return 0;
-} else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38022, 6)) {
-V s38032 = FLD(s38022, 1);
-if ((s38032) == IMM(0)) {
-*dst = C2(6, FLD(s38022, 0), IMM(0));
-return 0;
-} else if (IS_N(s38032, 1)) {
-*dst = F_Expr_dpush(F_Unb_dcalls(FLD(s38032, 0), a1, a2, F_U32_dinc((a3)), IMM(1)), F_Unb_dcalls(C2(6, FLD(s38022, 0), FLD(s38032, 1)), a1, a2, (a3), IMM(0)));
+} else if (IS_N(s38194, 1)) {
+*dst = F_Unb_dcall_dtop((a4), a1, a2, (a3), F_Expr_dpush(F_Unb_dcalls(FLD(s38194, 0), a1, a2, F_U32_dinc((a3)), IMM(1)), F_Unb_dcalls(C2(5, FLD(s38193, 0), FLD(s38194, 1)), a1, a2, (a3), IMM(0))));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38022, 7)) {
-{ V dc = CH2(7, FLD(s38022, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s38022, 1); V t1 = a1; V t2 = F_Pat_dvars(FLD(s38022, 0), a2); V t3 = F_U32_dinc((a3)); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s38193, 6)) {
+V s38203 = FLD(s38193, 1);
+if ((s38203) == IMM(0)) {
+*dst = C2(6, FLD(s38193, 0), IMM(0));
+return 0;
+} else if (IS_N(s38203, 1)) {
+*dst = F_Expr_dpush(F_Unb_dcalls(FLD(s38203, 0), a1, a2, F_U32_dinc((a3)), IMM(1)), F_Unb_dcalls(C2(6, FLD(s38193, 0), FLD(s38203, 1)), a1, a2, (a3), IMM(0)));
+return 0;
+} else { bend_fail("runtime fail-stop"); }
+} else if (IS_N(s38193, 7)) {
+{ V dc = CH2(7, FLD(s38193, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s38193, 1); V t1 = a1; V t2 = F_Pat_dvars(FLD(s38193, 0), a2); V t3 = F_U32_dinc((a3)); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
-} else if (IS_N(s38022, 8)) {
-*dst = F_Unb_dfloat_x37f3185338815x716553847(FLD(s38022, 0), F_Unb_dcalls(FLD(s38022, 2), a1, F_Pat_dvars(FLD(s38022, 0), a2), F_U32_dinc((a3)), IMM(1)), FLD(s38022, 1), a1, a2, F_U32_dinc((a3)), IMM(1));
+} else if (IS_N(s38193, 8)) {
+*dst = F_Unb_dfloat_x37f3185338815x716553847(FLD(s38193, 0), F_Unb_dcalls(FLD(s38193, 2), a1, F_Pat_dvars(FLD(s38193, 0), a2), F_U32_dinc((a3)), IMM(1)), FLD(s38193, 1), a1, a2, F_U32_dinc((a3)), IMM(1));
 return 0;
-} else if (IS_N(s38022, 9)) {
-V s38044 = FLD(s38022, 0);
-if (IS_N(s38044, 1)) {
-*dst = F_Expr_dpush(F_Unb_dcalls(FLD(s38044, 0), a1, a2, F_U32_dinc((a3)), IMM(1)), F_Unb_dcalls(C2(9, FLD(s38044, 1), FLD(s38022, 1)), a1, a2, (a3), IMM(0)));
+} else if (IS_N(s38193, 9)) {
+V s38215 = FLD(s38193, 0);
+if (IS_N(s38215, 1)) {
+*dst = F_Expr_dpush(F_Unb_dcalls(FLD(s38215, 0), a1, a2, F_U32_dinc((a3)), IMM(1)), F_Unb_dcalls(C2(9, FLD(s38215, 1), FLD(s38193, 1)), a1, a2, (a3), IMM(0)));
 return 0;
-} else if ((s38044) == IMM(0)) {
-V s38049 = FLD(s38022, 1);
-if ((s38049) == IMM(0)) {
-*dst = K38050();
+} else if ((s38215) == IMM(0)) {
+V s38220 = FLD(s38193, 1);
+if ((s38220) == IMM(0)) {
+*dst = K38221();
 return 0;
-} else if (IS_N(s38049, 1)) {
-V v38051 = F_Unb_dcalls(C2(9, IMM(0), FLD(s38049, 1)), a1, a2, (a3), IMM(0));
-V s38053 = v38051;
-if (IS_N(s38053, 9)) {
-*dst = C2(9, FLD(s38053, 0), C2(1, F_Unb_dcalls(FLD(s38049, 0), a1, a2, F_U32_dinc((a3)), IMM(1)), FLD(s38053, 1)));
+} else if (IS_N(s38220, 1)) {
+V v38222 = F_Unb_dcalls(C2(9, IMM(0), FLD(s38220, 1)), a1, a2, (a3), IMM(0));
+V s38224 = v38222;
+if (IS_N(s38224, 9)) {
+*dst = C2(9, FLD(s38224, 0), C2(1, F_Unb_dcalls(FLD(s38220, 0), a1, a2, F_U32_dinc((a3)), IMM(1)), FLD(s38224, 1)));
 return 0;
 } else {
-*dst = s38053;
+*dst = s38224;
 return 0;
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38022, 10)) {
-{ V dc = CH2(10, FLD(s38022, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s38022, 1); V t1 = a1; V t2 = F_Pat_dvars(C2(1, S38056(), FLD(s38022, 0)), a2); V t3 = F_U32_dinc((a3)); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s38193, 10)) {
+{ V dc = CH2(10, FLD(s38193, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s38193, 1); V t1 = a1; V t2 = F_Pat_dvars(C2(1, S38227(), FLD(s38193, 0)), a2); V t3 = F_U32_dinc((a3)); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
-} else if (IS_N(s38022, 11)) {
-{ V dc = CH2(11, FLD(s38022, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s38022, 1); V t1 = a1; V t2 = a2; V t3 = F_U32_dinc((a3)); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s38193, 11)) {
+{ V dc = CH2(11, FLD(s38193, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s38193, 1); V t1 = a1; V t2 = a2; V t3 = F_U32_dinc((a3)); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
-} else if (IS_N(s38022, 12)) {
-{ V dc = CH3(12, FLD(s38022, 0), F_Unb_dcalls(FLD(s38022, 1), a1, a2, F_U32_dinc((a3)), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = FLD(s38022, 2); V t1 = a1; V t2 = a2; V t3 = F_U32_dinc((a3)); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s38193, 12)) {
+{ V dc = CH3(12, FLD(s38193, 0), F_Unb_dcalls(FLD(s38193, 1), a1, a2, F_U32_dinc((a3)), IMM(1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = FLD(s38193, 2); V t1 = a1; V t2 = a2; V t3 = F_U32_dinc((a3)); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
-} else if (IS_N(s38022, 13)) {
-{ V dc = CH2(13, BEND_HOLE, FLD(s38022, 1)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = FLD(s38022, 0); V t1 = a1; V t2 = a2; V t3 = F_U32_dinc((a3)); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if (IS_N(s38193, 13)) {
+{ V dc = CH2(13, BEND_HOLE, FLD(s38193, 1)); *dst = dc; dst = &FLD(dc, 0);
+{ V t0 = FLD(s38193, 0); V t1 = a1; V t2 = a2; V t3 = F_U32_dinc((a3)); V t4 = IMM(1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
 }
 } else {
-*dst = s38022;
+*dst = s38193;
 return 0;
 }
 }
 static V F_Unb_dcalls(V a0, V a1, V a2, V a3, V a4) { V r; D_Unb_dcalls(&r, a0, a1, a2, a3, a4); return r; }
 static V W_Unb_dcalls(V *a) { (void)a; return F_Unb_dcalls(a[0], a[1], a[2], a[3], a[4]); }
-static V K38098(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
-static V S38105(void) { static V c; return STRC(c, ""); }
+static V K38269(void) { static V c; return KONST(c, C2(9, IMM(0), IMM(0))); }
+static V S38276(void) { static V c; return STRC(c, ""); }
 static V F_Unb_dfloat_x37f3185338815x716553847(V a0, V a1, V a2, V a3, V a4, V a5_, V a6) {
 uint32_t a5 = (uint32_t)a5_;
 top:;
-V s38064 = a2;
-if (IS_N(s38064, 5)) {
-V s38065 = FLD(s38064, 1);
-if ((s38065) == IMM(0)) {
-return F_Unb_dfloat(a0, F_Unb_dcall_dtop((a6), a3, a4, (a5), C2(5, F_Unb_dcalls(FLD(s38064, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), IMM(0))), a1);
-} else if (IS_N(s38065, 1)) {
-return F_Unb_dfloat(a0, F_Unb_dcall_dtop((a6), a3, a4, (a5), F_Expr_dpush(F_Unb_dcalls(FLD(s38065, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), F_Unb_dcalls(C2(5, FLD(s38064, 0), FLD(s38065, 1)), a3, a4, (a5), IMM(0)))), a1);
+V s38235 = a2;
+if (IS_N(s38235, 5)) {
+V s38236 = FLD(s38235, 1);
+if ((s38236) == IMM(0)) {
+return F_Unb_dfloat(a0, F_Unb_dcall_dtop((a6), a3, a4, (a5), C2(5, F_Unb_dcalls(FLD(s38235, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), IMM(0))), a1);
+} else if (IS_N(s38236, 1)) {
+return F_Unb_dfloat(a0, F_Unb_dcall_dtop((a6), a3, a4, (a5), F_Expr_dpush(F_Unb_dcalls(FLD(s38236, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), F_Unb_dcalls(C2(5, FLD(s38235, 0), FLD(s38236, 1)), a3, a4, (a5), IMM(0)))), a1);
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38064, 6)) {
-V s38076 = FLD(s38064, 1);
-if ((s38076) == IMM(0)) {
-return C3(8, a0, C2(6, FLD(s38064, 0), IMM(0)), a1);
-} else if (IS_N(s38076, 1)) {
-return F_Unb_dfloat(a0, F_Expr_dpush(F_Unb_dcalls(FLD(s38076, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), F_Unb_dcalls(C2(6, FLD(s38064, 0), FLD(s38076, 1)), a3, a4, (a5), IMM(0))), a1);
+} else if (IS_N(s38235, 6)) {
+V s38247 = FLD(s38235, 1);
+if ((s38247) == IMM(0)) {
+return C3(8, a0, C2(6, FLD(s38235, 0), IMM(0)), a1);
+} else if (IS_N(s38247, 1)) {
+return F_Unb_dfloat(a0, F_Expr_dpush(F_Unb_dcalls(FLD(s38247, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), F_Unb_dcalls(C2(6, FLD(s38235, 0), FLD(s38247, 1)), a3, a4, (a5), IMM(0))), a1);
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38064, 7)) {
-return C3(8, a0, C2(7, FLD(s38064, 0), F_Unb_dcalls(FLD(s38064, 1), a3, F_Pat_dvars(FLD(s38064, 0), a4), F_U32_dinc((a5)), IMM(1))), a1);
-} else if (IS_N(s38064, 8)) {
-return F_Unb_dfloat(a0, F_Unb_dfloat_x37f3185338815x716553847(FLD(s38064, 0), F_Unb_dcalls(FLD(s38064, 2), a3, F_Pat_dvars(FLD(s38064, 0), a4), F_U32_dinc((a5)), IMM(1)), FLD(s38064, 1), a3, a4, F_U32_dinc((a5)), IMM(1)), a1);
-} else if (IS_N(s38064, 9)) {
-V s38091 = FLD(s38064, 0);
-if (IS_N(s38091, 1)) {
-return F_Unb_dfloat(a0, F_Expr_dpush(F_Unb_dcalls(FLD(s38091, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), F_Unb_dcalls(C2(9, FLD(s38091, 1), FLD(s38064, 1)), a3, a4, (a5), IMM(0))), a1);
-} else if ((s38091) == IMM(0)) {
-V s38097 = FLD(s38064, 1);
-if ((s38097) == IMM(0)) {
-return C3(8, a0, K38098(), a1);
-} else if (IS_N(s38097, 1)) {
-V v38099 = F_Unb_dcalls(C2(9, IMM(0), FLD(s38097, 1)), a3, a4, (a5), IMM(0));
-V s38101 = v38099;
-if (IS_N(s38101, 9)) {
-return C3(8, a0, C2(9, FLD(s38101, 0), C2(1, F_Unb_dcalls(FLD(s38097, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), FLD(s38101, 1))), a1);
+} else if (IS_N(s38235, 7)) {
+return C3(8, a0, C2(7, FLD(s38235, 0), F_Unb_dcalls(FLD(s38235, 1), a3, F_Pat_dvars(FLD(s38235, 0), a4), F_U32_dinc((a5)), IMM(1))), a1);
+} else if (IS_N(s38235, 8)) {
+return F_Unb_dfloat(a0, F_Unb_dfloat_x37f3185338815x716553847(FLD(s38235, 0), F_Unb_dcalls(FLD(s38235, 2), a3, F_Pat_dvars(FLD(s38235, 0), a4), F_U32_dinc((a5)), IMM(1)), FLD(s38235, 1), a3, a4, F_U32_dinc((a5)), IMM(1)), a1);
+} else if (IS_N(s38235, 9)) {
+V s38262 = FLD(s38235, 0);
+if (IS_N(s38262, 1)) {
+return F_Unb_dfloat(a0, F_Expr_dpush(F_Unb_dcalls(FLD(s38262, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), F_Unb_dcalls(C2(9, FLD(s38262, 1), FLD(s38235, 1)), a3, a4, (a5), IMM(0))), a1);
+} else if ((s38262) == IMM(0)) {
+V s38268 = FLD(s38235, 1);
+if ((s38268) == IMM(0)) {
+return C3(8, a0, K38269(), a1);
+} else if (IS_N(s38268, 1)) {
+V v38270 = F_Unb_dcalls(C2(9, IMM(0), FLD(s38268, 1)), a3, a4, (a5), IMM(0));
+V s38272 = v38270;
+if (IS_N(s38272, 9)) {
+return C3(8, a0, C2(9, FLD(s38272, 0), C2(1, F_Unb_dcalls(FLD(s38268, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), FLD(s38272, 1))), a1);
 } else {
-return F_Unb_dfloat(a0, s38101, a1);
+return F_Unb_dfloat(a0, s38272, a1);
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38064, 10)) {
-return C3(8, a0, C2(10, FLD(s38064, 0), F_Unb_dcalls(FLD(s38064, 1), a3, F_Pat_dvars(C2(1, S38105(), FLD(s38064, 0)), a4), F_U32_dinc((a5)), IMM(1))), a1);
-} else if (IS_N(s38064, 11)) {
-return C3(8, a0, C2(11, FLD(s38064, 0), F_Unb_dcalls(FLD(s38064, 1), a3, a4, F_U32_dinc((a5)), IMM(1))), a1);
-} else if (IS_N(s38064, 12)) {
-return C3(8, a0, C3(12, FLD(s38064, 0), F_Unb_dcalls(FLD(s38064, 1), a3, a4, F_U32_dinc((a5)), IMM(1)), F_Unb_dcalls(FLD(s38064, 2), a3, a4, F_U32_dinc((a5)), IMM(1))), a1);
-} else if (IS_N(s38064, 13)) {
-return C3(8, a0, C2(13, F_Unb_dcalls(FLD(s38064, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), FLD(s38064, 1)), a1);
+} else if (IS_N(s38235, 10)) {
+return C3(8, a0, C2(10, FLD(s38235, 0), F_Unb_dcalls(FLD(s38235, 1), a3, F_Pat_dvars(C2(1, S38276(), FLD(s38235, 0)), a4), F_U32_dinc((a5)), IMM(1))), a1);
+} else if (IS_N(s38235, 11)) {
+return C3(8, a0, C2(11, FLD(s38235, 0), F_Unb_dcalls(FLD(s38235, 1), a3, a4, F_U32_dinc((a5)), IMM(1))), a1);
+} else if (IS_N(s38235, 12)) {
+return C3(8, a0, C3(12, FLD(s38235, 0), F_Unb_dcalls(FLD(s38235, 1), a3, a4, F_U32_dinc((a5)), IMM(1)), F_Unb_dcalls(FLD(s38235, 2), a3, a4, F_U32_dinc((a5)), IMM(1))), a1);
+} else if (IS_N(s38235, 13)) {
+return C3(8, a0, C2(13, F_Unb_dcalls(FLD(s38235, 0), a3, a4, F_U32_dinc((a5)), IMM(1)), FLD(s38235, 1)), a1);
 } else {
-return F_Unb_dfloat(a0, s38064, a1);
+return F_Unb_dfloat(a0, s38235, a1);
 }
 }
 static V W_Unb_dfloat_x37f3185338815x716553847(V *a) { (void)a; return F_Unb_dfloat_x37f3185338815x716553847(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); }
 static V F_Unb_dcall_dtop(V a0, V a1, V a2, V a3_, V a4) {
 uint32_t a3 = (uint32_t)a3_;
 top:;
-V s38118 = (a0);
-if ((s38118) == IMM(1)) {
+V s38289 = (a0);
+if ((s38289) == IMM(1)) {
 return F_Unb_dcall(a1, a2, (a3), a4);
-} else if ((s38118) == IMM(0)) {
+} else if ((s38289) == IMM(0)) {
 return a4;
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -93674,130 +94106,130 @@ static V W_Unb_dcall_dtop(V *a) { (void)a; return F_Unb_dcall_dtop(a[0], a[1], a
 static V F_Unb_dcall(V a0, V a1, V a2_, V a3) {
 uint32_t a2 = (uint32_t)a2_;
 top:;
-V s38120 = a3;
-if (IS_N(s38120, 5) && IS_N(FLD(s38120, 0), 0)) {
-return F_Unb_dcall_dus(({ V r38121;
-V v38122 = F_Map_dget(IMM(0), a0, FLD(FLD(s38120, 0), 0));
-r38121 = FLD(v38122, 1);
-r38121; }), a1, FLD(FLD(s38120, 0), 0), FLD(s38120, 1), (a2));
+V s38291 = a3;
+if (IS_N(s38291, 5) && IS_N(FLD(s38291, 0), 0)) {
+return F_Unb_dcall_dus(({ V r38292;
+V v38293 = F_Map_dget(IMM(0), a0, FLD(FLD(s38291, 0), 0));
+r38292 = FLD(v38293, 1);
+r38292; }), a1, FLD(FLD(s38291, 0), 0), FLD(s38291, 1), (a2));
 } else {
-return s38120;
+return s38291;
 }
 }
 static V W_Unb_dcall(V *a) { (void)a; return F_Unb_dcall(a[0], a[1], a[2], a[3]); }
 static V F_Unb_dcall_dus(V a0, V a1, V a2, V a3, V a4_) {
 uint32_t a4 = (uint32_t)a4_;
 top:;
-return F_Unb_dcall_dpick(({ V r38125;
-V s38126 = ({ V r38127;
-V s38128 = F_Unb_dany(a0);
-if ((s38128) == IMM(0)) {
-r38127 = IMM(0);
-} else if ((s38128) == IMM(1)) {
-V s38130 = F_List_dcontains_x37s539261848x2963157848(a1, a2);
-if ((s38130) == IMM(0)) {
-r38127 = IMM(1);
-} else if ((s38130) == IMM(1)) {
-r38127 = IMM(0);
+return F_Unb_dcall_dpick(({ V r38296;
+V s38297 = ({ V r38298;
+V s38299 = F_Unb_dany(a0);
+if ((s38299) == IMM(0)) {
+r38298 = IMM(0);
+} else if ((s38299) == IMM(1)) {
+V s38301 = F_List_dcontains_x37s539261848x2963157848(a1, a2);
+if ((s38301) == IMM(0)) {
+r38298 = IMM(1);
+} else if ((s38301) == IMM(1)) {
+r38298 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r38127; });
-if ((s38126) == IMM(0)) {
-r38125 = IMM(0);
-} else if ((s38126) == IMM(1)) {
-r38125 = F_Nat_dis__eq(F_List_dlength(0, a0), F_List_dlength(0, a3));
+r38298; });
+if ((s38297) == IMM(0)) {
+r38296 = IMM(0);
+} else if ((s38297) == IMM(1)) {
+r38296 = F_Nat_dis__eq(F_List_dlength(0, a0), F_List_dlength(0, a3));
 } else { bend_fail("runtime fail-stop"); }
-r38125; }), a0, a2, a3, (a4));
+r38296; }), a0, a2, a3, (a4));
 }
 static V W_Unb_dcall_dus(V *a) { (void)a; return F_Unb_dcall_dus(a[0], a[1], a[2], a[3], a[4]); }
 static V F_Unb_dcall_dpick(V a0, V a1, V a2, V a3, V a4_) {
 uint32_t a4 = (uint32_t)a4_;
 top:;
-V s38136 = (a0);
-if ((s38136) == IMM(1)) {
-V uo38137[2]; U_Unb_dcargs(a1, a3, (a4), 0u, uo38137);
-return F_Unb_dcall_dfin_x37u(a2, uo38137[0], uo38137[1]);
-} else if ((s38136) == IMM(0)) {
+V s38307 = (a0);
+if ((s38307) == IMM(1)) {
+V uo38308[2]; U_Unb_dcargs(a1, a3, (a4), 0u, uo38308);
+return F_Unb_dcall_dfin_x37u(a2, uo38308[0], uo38308[1]);
+} else if ((s38307) == IMM(0)) {
 return C2(5, C1(0, a2), a3);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dcall_dpick(V *a) { (void)a; return F_Unb_dcall_dpick(a[0], a[1], a[2], a[3], a[4]); }
-static V S38140(void) { static V c; return STRC(c, "%u"); }
+static V S38311(void) { static V c; return STRC(c, "%u"); }
 static V F_Unb_dcall_dfin_x37u(V a0, V a1, V a2) {
 top:;
-return F_Unb_dwrap(a2, C2(5, C1(0, F_String_dappend(a0, S38140())), a1));
+return F_Unb_dwrap(a2, C2(5, C1(0, F_String_dappend(a0, S38311())), a1));
 }
 static V W_Unb_dcall_dfin_x37u(V *a) { (void)a; return F_Unb_dcall_dfin_x37u(a[0], a[1], a[2]); }
-static V S38146(void) { static V c; return STRC(c, "_ub"); }
-static V S38151(void) { static V c; return STRC(c, "_"); }
-static V S38156(void) { static V c; return STRC(c, "_"); }
+static V S38317(void) { static V c; return STRC(c, "_ub"); }
+static V S38322(void) { static V c; return STRC(c, "_"); }
+static V S38327(void) { static V c; return STRC(c, "_"); }
 BEND_UINL V U_Unb_dcargs(V a0, V a1, V a2_, V a3_, V *o) {
 uint32_t a2 = (uint32_t)a2_;
 uint32_t a3 = (uint32_t)a3_;
 top:;
-V s38143 = a0;
-V s38144 = a1;
-if (IS_N(s38143, 1) && IS_N(s38144, 1)) {
-V v38145 = F_String_dappend(S38146(), F_String_dappend(({ V r38147;
-V (v38148) = (a2);
-r38147 = F_U32_dshow_dif((v38148), F_U32_dis__zero((v38148)));
-r38147; }), F_String_dappend(S38151(), F_String_dappend(({ V r38152;
-V (v38153) = (a3);
-r38152 = F_U32_dshow_dif((v38153), F_U32_dis__zero((v38153)));
-r38152; }), S38156()))));
-V v38161 = FLD(s38143, 0);
-V v38162 = ({ V r38163;
-V s38164 = FLD(v38161, 0);
-if ((s38164) == IMM(0)) {
-r38163 = IMM(0);
-} else if (IS_N(s38164, 1)) {
-r38163 = IMM(1);
+V s38314 = a0;
+V s38315 = a1;
+if (IS_N(s38314, 1) && IS_N(s38315, 1)) {
+V v38316 = F_String_dappend(S38317(), F_String_dappend(({ V r38318;
+V (v38319) = (a2);
+r38318 = F_U32_dshow_dif((v38319), F_U32_dis__zero((v38319)));
+r38318; }), F_String_dappend(S38322(), F_String_dappend(({ V r38323;
+V (v38324) = (a3);
+r38323 = F_U32_dshow_dif((v38324), F_U32_dis__zero((v38324)));
+r38323; }), S38327()))));
+V v38332 = FLD(s38314, 0);
+V v38333 = ({ V r38334;
+V s38335 = FLD(v38332, 0);
+if ((s38335) == IMM(0)) {
+r38334 = IMM(0);
+} else if (IS_N(s38335, 1)) {
+r38334 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r38163; });
-V v38165 = F_Unb_dnames(v38145, ({ V r38166;
-V v38167 = FLD(s38143, 0);
-r38166 = FLD(v38167, 1);
-r38166; }), 0u);
-V uo38169[2]; U_Unb_dcargs(FLD(s38143, 1), FLD(s38144, 1), (a2), F_U32_dinc((a3)), uo38169);
-V v38172 = FLD(s38143, 0);
-return U_Unb_darg_x37u(v38162, FLD(s38144, 0), FLD(v38172, 0), FLD(v38172, 1), v38145, v38165, uo38169[0], uo38169[1], o);
+r38334; });
+V v38336 = F_Unb_dnames(v38316, ({ V r38337;
+V v38338 = FLD(s38314, 0);
+r38337 = FLD(v38338, 1);
+r38337; }), 0u);
+V uo38340[2]; U_Unb_dcargs(FLD(s38314, 1), FLD(s38315, 1), (a2), F_U32_dinc((a3)), uo38340);
+V v38343 = FLD(s38314, 0);
+return U_Unb_darg_x37u(v38333, FLD(s38315, 0), FLD(v38343, 0), FLD(v38343, 1), v38316, v38336, uo38340[0], uo38340[1], o);
 } else {
-o[0] = s38144;
+o[0] = s38315;
 o[1] = IMM(0);
 return 0;
 }
 }
 static V F_Unb_dcargs(V a0, V a1, V a2, V a3) { V o[2]; U_Unb_dcargs(a0, a1, a2, a3, o); return CN(0, 2, o); }
 static V W_Unb_dcargs(V *a) { (void)a; return F_Unb_dcargs(a[0], a[1], a[2], a[3]); }
-static V S38177(void) { static V c; return STRC(c, "k"); }
+static V S38348(void) { static V c; return STRC(c, "k"); }
 BEND_UINL V U_Unb_darg_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V *o) {
 top:;
-V s38174 = (a0);
-if ((s38174) == IMM(1)) {
+V s38345 = (a0);
+if ((s38345) == IMM(1)) {
 return U_Unb_darg_dflat_x37u(a1, a2, F_List_dlength(0, a3), a5, a6, a7, o);
-} else if ((s38174) == IMM(0)) {
-return U_Unb_darg_dkeep_x37u(a1, F_String_dappend(a4, S38177()), a6, a7, o);
+} else if ((s38345) == IMM(0)) {
+return U_Unb_darg_dkeep_x37u(a1, F_String_dappend(a4, S38348()), a6, a7, o);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_darg_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7) { V o[2]; U_Unb_darg_x37u(a0, a1, a2, a3, a4, a5, a6, a7, o); return CN(0, 2, o); }
 static V W_Unb_darg_x37u(V *a) { (void)a; return F_Unb_darg_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]); }
 BEND_UINL V U_Unb_dwrapper(V a0, V a1, V *o) {
 top:;
-V s38180 = a0;
-V s38181 = a1;
-if (IS_N(s38180, 1) && IS_N(s38181, 1)) {
-V v38182 = FLD(s38181, 0);
-V v38183 = ({ V r38184;
-V s38185 = FLD(v38182, 0);
-if ((s38185) == IMM(0)) {
-r38184 = IMM(0);
-} else if (IS_N(s38185, 1)) {
-r38184 = IMM(1);
+V s38351 = a0;
+V s38352 = a1;
+if (IS_N(s38351, 1) && IS_N(s38352, 1)) {
+V v38353 = FLD(s38352, 0);
+V v38354 = ({ V r38355;
+V s38356 = FLD(v38353, 0);
+if ((s38356) == IMM(0)) {
+r38355 = IMM(0);
+} else if (IS_N(s38356, 1)) {
+r38355 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r38184; });
-V uo38186[2]; U_Unb_dwrapper(FLD(s38180, 1), FLD(s38181, 1), uo38186);
-V v38188 = FLD(s38181, 0);
-return U_Unb_dwrapper_done_x37u(v38183, FLD(FLD(s38180, 0), 0), FLD(v38188, 0), FLD(v38188, 1), uo38186[0], uo38186[1], o);
+r38355; });
+V uo38357[2]; U_Unb_dwrapper(FLD(s38351, 1), FLD(s38352, 1), uo38357);
+V v38359 = FLD(s38352, 0);
+return U_Unb_dwrapper_done_x37u(v38354, FLD(FLD(s38351, 0), 0), FLD(v38359, 0), FLD(v38359, 1), uo38357[0], uo38357[1], o);
 } else {
 o[0] = IMM(0);
 o[1] = IMM(0);
@@ -93808,10 +94240,10 @@ static V F_Unb_dwrapper(V a0, V a1) { V o[2]; U_Unb_dwrapper(a0, a1, o); return 
 static V W_Unb_dwrapper(V *a) { (void)a; return F_Unb_dwrapper(a[0], a[1]); }
 BEND_UINL V U_Unb_dwrapper_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V *o) {
 top:;
-V s38190 = (a0);
-if ((s38190) == IMM(1)) {
+V s38361 = (a0);
+if ((s38361) == IMM(1)) {
 return U_Unb_darg_dopen_x37u(a2, C1(0, a1), F_Unb_dfields_x37u(a1, a2, a3), a4, a5, o);
-} else if ((s38190) == IMM(0)) {
+} else if ((s38361) == IMM(0)) {
 o[0] = C2(1, C1(0, a1), a4);
 o[1] = a5;
 return 0;
@@ -93819,95 +94251,95 @@ return 0;
 }
 static V F_Unb_dwrapper_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5) { V o[2]; U_Unb_dwrapper_done_x37u(a0, a1, a2, a3, a4, a5, o); return CN(0, 2, o); }
 static V W_Unb_dwrapper_done_x37u(V *a) { (void)a; return F_Unb_dwrapper_done_x37u(a[0], a[1], a[2], a[3], a[4], a[5]); }
-static V S38193(void) { static V c; return STRC(c, "_ub_"); }
-static V S38194(void) { static V c; return STRC(c, "_"); }
+static V S38364(void) { static V c; return STRC(c, "_ub_"); }
+static V S38365(void) { static V c; return STRC(c, "_"); }
 static V F_Unb_dfields_x37u(V a0, V a1, V a2) {
 top:;
-return F_Unb_dnames(F_String_dappend(S38193(), F_String_dappend(a0, S38194())), a2, 0u);
+return F_Unb_dnames(F_String_dappend(S38364(), F_String_dappend(a0, S38365())), a2, 0u);
 }
 static V W_Unb_dfields_x37u(V *a) { (void)a; return F_Unb_dfields_x37u(a[0], a[1], a[2]); }
 static V F_Unb_dparams(V a0, V a1) {
 top:;
-V s38198 = a0;
-V s38199 = a1;
-if (IS_N(s38198, 1) && IS_N(s38199, 1)) {
-return F_List_dappend(0, ({ V r38200;
-V v38201 = FLD(s38199, 0);
-V v38202 = ({ V r38203;
-V s38204 = FLD(v38201, 0);
-if ((s38204) == IMM(0)) {
-r38203 = IMM(0);
-} else if (IS_N(s38204, 1)) {
-r38203 = IMM(1);
+V s38369 = a0;
+V s38370 = a1;
+if (IS_N(s38369, 1) && IS_N(s38370, 1)) {
+return F_List_dappend(0, ({ V r38371;
+V v38372 = FLD(s38370, 0);
+V v38373 = ({ V r38374;
+V s38375 = FLD(v38372, 0);
+if ((s38375) == IMM(0)) {
+r38374 = IMM(0);
+} else if (IS_N(s38375, 1)) {
+r38374 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r38203; });
-V v38205 = FLD(s38199, 0);
-r38200 = F_Unb_dparam_x37u(v38202, FLD(s38198, 0), FLD(v38205, 0), FLD(v38205, 1));
-r38200; }), F_Unb_dparams(FLD(s38198, 1), FLD(s38199, 1)));
+r38374; });
+V v38376 = FLD(s38370, 0);
+r38371 = F_Unb_dparam_x37u(v38373, FLD(s38369, 0), FLD(v38376, 0), FLD(v38376, 1));
+r38371; }), F_Unb_dparams(FLD(s38369, 1), FLD(s38370, 1)));
 } else {
-return s38198;
+return s38369;
 }
 }
 static V W_Unb_dparams(V *a) { (void)a; return F_Unb_dparams(a[0], a[1]); }
 static V F_Unb_dparam_x37u(V a0, V a1, V a2, V a3) {
 top:;
-V s38209 = (a0);
-if ((s38209) == IMM(1)) {
-V v38210 = a1;
-return F_Unb_dparams_dof(F_Unb_dfields_x37u(FLD(v38210, 0), a2, a3), FLD(v38210, 1), F_Unb_dtys_dsub(F_P_dtargs(FLD(v38210, 2)), a3));
-} else if ((s38209) == IMM(0)) {
+V s38380 = (a0);
+if ((s38380) == IMM(1)) {
+V v38381 = a1;
+return F_Unb_dparams_dof(F_Unb_dfields_x37u(FLD(v38381, 0), a2, a3), FLD(v38381, 1), F_Unb_dtys_dsub(F_P_dtargs(FLD(v38381, 2)), a3));
+} else if ((s38380) == IMM(0)) {
 return C2(1, a1, IMM(0));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dparam_x37u(V *a) { (void)a; return F_Unb_dparam_x37u(a[0], a[1], a[2], a[3]); }
 static V F_P_dtargs(V a0) {
 top:;
-V v38215 = F_P_dtargs_dgo(a0);
-V v38217 = v38215;
-V s38218 = v38217;
-if ((s38218) == IMM(0)) {
+V v38386 = F_P_dtargs_dgo(a0);
+V v38388 = v38386;
+V s38389 = v38388;
+if ((s38389) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s38218, 1)) {
-return F_String_dsplit(v38215, 44u);
+} else if (IS_N(s38389, 1)) {
+return F_String_dsplit(v38386, 44u);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_P_dtargs(V *a) { (void)a; return F_P_dtargs(a[0]); }
-static V S38221(void) { static V c; return STRC(c, ""); }
+static V S38392(void) { static V c; return STRC(c, ""); }
 static V F_P_dtargs_dgo(V a0) {
 top:;
-V s38220 = a0;
-if ((s38220) == IMM(0)) {
-return S38221();
-} else if (IS_N(s38220, 1)) {
-V (v38222) = F_U32_dis__eq(({ V r38223;
-V s38224 = FLD(s38220, 0);
+V s38391 = a0;
+if ((s38391) == IMM(0)) {
+return S38392();
+} else if (IS_N(s38391, 1)) {
+V (v38393) = F_U32_dis__eq(({ V r38394;
+V s38395 = FLD(s38391, 0);
 {
-r38223 = s38224;
+r38394 = s38395;
 }
-r38223; }), 60u);
-V s38226 = (v38222);
-if ((s38226) == IMM(0)) {
-{ V t0 = FLD(s38220, 1); a0 = t0; goto top; }
-} else if ((s38226) == IMM(1)) {
-return F_P_dtargs_dinit(FLD(s38220, 1));
+r38394; }), 60u);
+V s38397 = (v38393);
+if ((s38397) == IMM(0)) {
+{ V t0 = FLD(s38391, 1); a0 = t0; goto top; }
+} else if ((s38397) == IMM(1)) {
+return F_P_dtargs_dinit(FLD(s38391, 1));
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_P_dtargs_dgo(V *a) { (void)a; return F_P_dtargs_dgo(a[0]); }
-static V S38229(void) { static V c; return STRC(c, ""); }
-static V S38230(void) { static V c; return STRC(c, ""); }
+static V S38400(void) { static V c; return STRC(c, ""); }
+static V S38401(void) { static V c; return STRC(c, ""); }
 static V D_P_dtargs_dinit(V *dst, V a0) {
 top:;
-V s38228 = a0;
-if ((s38228) == IMM(0)) {
-*dst = S38229();
+V s38399 = a0;
+if ((s38399) == IMM(0)) {
+*dst = S38400();
 return 0;
-} else if (IS_N(s38228, 1) && (FLD(s38228, 1)) == IMM(0)) {
-*dst = S38230();
+} else if (IS_N(s38399, 1) && (FLD(s38399, 1)) == IMM(0)) {
+*dst = S38401();
 return 0;
-} else if (IS_N(s38228, 1)) {
-{ V dc = CH2(1, FLD(s38228, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s38228, 1); a0 = t0; goto top; }
+} else if (IS_N(s38399, 1)) {
+{ V dc = CH2(1, FLD(s38399, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s38399, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -93915,13 +94347,13 @@ static V F_P_dtargs_dinit(V a0) { V r; D_P_dtargs_dinit(&r, a0); return r; }
 static V W_P_dtargs_dinit(V *a) { (void)a; return F_P_dtargs_dinit(a[0]); }
 static V D_Unb_dtys_dsub(V *dst, V a0, V a1) {
 top:;
-V s38231 = a1;
-if ((s38231) == IMM(0)) {
+V s38402 = a1;
+if ((s38402) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s38231, 1)) {
-{ V dc = CH2(1, F_Unb_dty_dsub(a0, FLD(s38231, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s38231, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38402, 1)) {
+{ V dc = CH2(1, F_Unb_dty_dsub(a0, FLD(s38402, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s38402, 1); a0 = t0; a1 = t1; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -93929,35 +94361,35 @@ static V F_Unb_dtys_dsub(V a0, V a1) { V r; D_Unb_dtys_dsub(&r, a0, a1); return 
 static V W_Unb_dtys_dsub(V *a) { (void)a; return F_Unb_dtys_dsub(a[0], a[1]); }
 static V F_Unb_dty_dsub(V a0, V a1) {
 top:;
-V s38233 = a1;
-if (IS_N(s38233, 1) && (FLD(s38233, 0)) == 37 && IS_N(FLD(s38233, 1), 1) && IS_N(FLD(FLD(s38233, 1), 1), 1) && (FLD(FLD(FLD(s38233, 1), 1), 0)) == 58) {
-return F_Unb_dty_darg(a0, F_U32_dsub(({ V r38234;
-V s38235 = FLD(FLD(s38233, 1), 0);
+V s38404 = a1;
+if (IS_N(s38404, 1) && (FLD(s38404, 0)) == 37 && IS_N(FLD(s38404, 1), 1) && IS_N(FLD(FLD(s38404, 1), 1), 1) && (FLD(FLD(FLD(s38404, 1), 1), 0)) == 58) {
+return F_Unb_dty_darg(a0, F_U32_dsub(({ V r38405;
+V s38406 = FLD(FLD(s38404, 1), 0);
 {
-r38234 = s38235;
+r38405 = s38406;
 }
-r38234; }), 48u), FLD(FLD(FLD(s38233, 1), 1), 1));
+r38405; }), 48u), FLD(FLD(FLD(s38404, 1), 1), 1));
 } else {
-return s38233;
+return s38404;
 }
 }
 static V W_Unb_dty_dsub(V *a) { (void)a; return F_Unb_dty_dsub(a[0], a[1]); }
 static V F_Unb_dty_darg(V a0, V a1_, V a2) {
 uint32_t a1 = (uint32_t)a1_;
 top:;
-V s38238 = a0;
-if ((s38238) == IMM(0)) {
+V s38409 = a0;
+if ((s38409) == IMM(0)) {
 return a2;
-} else if (IS_N(s38238, 1)) {
-V s38239 = F_U32_dis__zero((a1));
-if ((s38239) == IMM(0)) {
-{ V t0 = FLD(s38238, 1); V t1 = F_U32_dsub((a1), 1u); V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s38239) == IMM(1)) {
-V s38242 = F_Gen_dscalar_dty(FLD(s38238, 0));
-if ((s38242) == IMM(0)) {
+} else if (IS_N(s38409, 1)) {
+V s38410 = F_U32_dis__zero((a1));
+if ((s38410) == IMM(0)) {
+{ V t0 = FLD(s38409, 1); V t1 = F_U32_dsub((a1), 1u); V t2 = a2; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s38410) == IMM(1)) {
+V s38413 = F_Gen_dscalar_dty(FLD(s38409, 0));
+if ((s38413) == IMM(0)) {
 return a2;
-} else if ((s38242) == IMM(1)) {
-return FLD(s38238, 0);
+} else if ((s38413) == IMM(1)) {
+return FLD(s38409, 0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -93965,11 +94397,11 @@ return FLD(s38238, 0);
 static V W_Unb_dty_darg(V *a) { (void)a; return F_Unb_dty_darg(a[0], a[1], a[2]); }
 static V D_Unb_dparams_dof(V *dst, V a0, V a1, V a2) {
 top:;
-V s38244 = a0;
-V s38245 = a2;
-if (IS_N(s38244, 1) && IS_N(s38245, 1)) {
-{ V dc = CH2(1, C3(0, FLD(s38244, 0), (a1), FLD(s38245, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s38244, 1); V t1 = (a1); V t2 = FLD(s38245, 1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+V s38415 = a0;
+V s38416 = a2;
+if (IS_N(s38415, 1) && IS_N(s38416, 1)) {
+{ V dc = CH2(1, C3(0, FLD(s38415, 0), (a1), FLD(s38416, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s38415, 1); V t1 = (a1); V t2 = FLD(s38416, 1); a0 = t0; a1 = t1; a2 = t2; goto top; }
 }
 } else {
 *dst = IMM(0);
@@ -93978,169 +94410,169 @@ return 0;
 }
 static V F_Unb_dparams_dof(V a0, V a1, V a2) { V r; D_Unb_dparams_dof(&r, a0, a1, a2); return r; }
 static V W_Unb_dparams_dof(V *a) { (void)a; return F_Unb_dparams_dof(a[0], a[1], a[2]); }
-static V S38254(void) { static V c; return STRC(c, "U32"); }
+static V S38425(void) { static V c; return STRC(c, "U32"); }
 static V D_Unb_dtyped(V *dst, V a0, V a1) {
 top:;
-V s38246 = a0;
-if ((s38246) == IMM(0)) {
+V s38417 = a0;
+if ((s38417) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s38246, 1)) {
-{ V dc = CH2(1, C3(0, FLD(FLD(s38246, 0), 0), FLD(FLD(s38246, 0), 1), ({ V r38247;
-V s38248 = ({ V r38249;
-V s38250 = F_Nat_dis__eq(F_String_dlength(FLD(FLD(s38246, 0), 2)), 1u);
-if ((s38250) == IMM(0)) {
-r38249 = IMM(0);
-} else if ((s38250) == IMM(1)) {
-r38249 = F_Unb_du32(a1, FLD(FLD(s38246, 0), 0), IMM(1));
+} else if (IS_N(s38417, 1)) {
+{ V dc = CH2(1, C3(0, FLD(FLD(s38417, 0), 0), FLD(FLD(s38417, 0), 1), ({ V r38418;
+V s38419 = ({ V r38420;
+V s38421 = F_Nat_dis__eq(F_String_dlength(FLD(FLD(s38417, 0), 2)), 1u);
+if ((s38421) == IMM(0)) {
+r38420 = IMM(0);
+} else if ((s38421) == IMM(1)) {
+r38420 = F_Unb_du32(a1, FLD(FLD(s38417, 0), 0), IMM(1));
 } else { bend_fail("runtime fail-stop"); }
-r38249; });
-if ((s38248) == IMM(0)) {
-r38247 = FLD(FLD(s38246, 0), 2);
-} else if ((s38248) == IMM(1)) {
-r38247 = S38254();
+r38420; });
+if ((s38419) == IMM(0)) {
+r38418 = FLD(FLD(s38417, 0), 2);
+} else if ((s38419) == IMM(1)) {
+r38418 = S38425();
 } else { bend_fail("runtime fail-stop"); }
-r38247; })), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s38246, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+r38418; })), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s38417, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Unb_dtyped(V a0, V a1) { V r; D_Unb_dtyped(&r, a0, a1); return r; }
 static V W_Unb_dtyped(V *a) { (void)a; return F_Unb_dtyped(a[0], a[1]); }
-static V S38298(void) { static V c; return STRC(c, ""); }
+static V S38469(void) { static V c; return STRC(c, ""); }
 static V F_Unb_du32(V a0, V a1, V a2) {
 top:;
-V s38255 = a0;
-if (IS_N(s38255, 5)) {
-V s38256 = FLD(s38255, 1);
-if ((s38256) == IMM(0)) {
-{ V t0 = FLD(s38255, 0); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if (IS_N(s38256, 1)) {
-V (v38257) = F_Unb_du32_dcall(FLD(s38255, 0), C2(1, FLD(s38256, 0), FLD(s38256, 1)), a1);
-V v38259 = ({ V r38260;
-V (v38261) = (a2);
-V s38262 = (v38261);
-if ((s38262) == IMM(0)) {
-r38260 = IMM(0);
-} else if ((s38262) == IMM(1)) {
-r38260 = (v38257);
+V s38426 = a0;
+if (IS_N(s38426, 5)) {
+V s38427 = FLD(s38426, 1);
+if ((s38427) == IMM(0)) {
+{ V t0 = FLD(s38426, 0); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s38427, 1)) {
+V (v38428) = F_Unb_du32_dcall(FLD(s38426, 0), C2(1, FLD(s38427, 0), FLD(s38427, 1)), a1);
+V v38430 = ({ V r38431;
+V (v38432) = (a2);
+V s38433 = (v38432);
+if ((s38433) == IMM(0)) {
+r38431 = IMM(0);
+} else if ((s38433) == IMM(1)) {
+r38431 = (v38428);
 } else { bend_fail("runtime fail-stop"); }
-r38260; });
-V (v38263) = F_Unb_du32(FLD(s38256, 0), a1, IMM(1));
-V v38265 = v38259;
-V v38266 = ({ V r38267;
-V s38268 = v38265;
-if ((s38268) == IMM(0)) {
-r38267 = (v38263);
-} else if ((s38268) == IMM(1)) {
-r38267 = IMM(1);
+r38431; });
+V (v38434) = F_Unb_du32(FLD(s38427, 0), a1, IMM(1));
+V v38436 = v38430;
+V v38437 = ({ V r38438;
+V s38439 = v38436;
+if ((s38439) == IMM(0)) {
+r38438 = (v38434);
+} else if ((s38439) == IMM(1)) {
+r38438 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r38267; });
-V s38269 = v38266;
-if ((s38269) == IMM(0)) {
-{ V t0 = C2(5, FLD(s38255, 0), FLD(s38256, 1)); V t1 = a1; V t2 = IMM(0); a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s38269) == IMM(1)) {
+r38438; });
+V s38440 = v38437;
+if ((s38440) == IMM(0)) {
+{ V t0 = C2(5, FLD(s38426, 0), FLD(s38427, 1)); V t1 = a1; V t2 = IMM(0); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s38440) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38255, 6)) {
-V s38270 = FLD(s38255, 1);
-if ((s38270) == IMM(0)) {
+} else if (IS_N(s38426, 6)) {
+V s38441 = FLD(s38426, 1);
+if ((s38441) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s38270, 1)) {
-V (v38271) = F_Unb_du32(FLD(s38270, 0), a1, IMM(1));
-V s38273 = (v38271);
-if ((s38273) == IMM(0)) {
-{ V t0 = C2(6, FLD(s38255, 0), FLD(s38270, 1)); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s38273) == IMM(1)) {
+} else if (IS_N(s38441, 1)) {
+V (v38442) = F_Unb_du32(FLD(s38441, 0), a1, IMM(1));
+V s38444 = (v38442);
+if ((s38444) == IMM(0)) {
+{ V t0 = C2(6, FLD(s38426, 0), FLD(s38441, 1)); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s38444) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38255, 7)) {
-V s38274 = ({ V r38275;
-V (v38276) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s38255, 0), IMM(0)), a1);
-V s38279 = (v38276);
-if ((s38279) == IMM(0)) {
-r38275 = IMM(1);
-} else if ((s38279) == IMM(1)) {
-r38275 = IMM(0);
+} else if (IS_N(s38426, 7)) {
+V s38445 = ({ V r38446;
+V (v38447) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s38426, 0), IMM(0)), a1);
+V s38450 = (v38447);
+if ((s38450) == IMM(0)) {
+r38446 = IMM(1);
+} else if ((s38450) == IMM(1)) {
+r38446 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r38275; });
-if ((s38274) == IMM(0)) {
+r38446; });
+if ((s38445) == IMM(0)) {
 return IMM(0);
-} else if ((s38274) == IMM(1)) {
-{ V t0 = FLD(s38255, 1); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s38445) == IMM(1)) {
+{ V t0 = FLD(s38426, 1); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38255, 8)) {
-V s38280 = F_Unb_du32(FLD(s38255, 1), a1, IMM(1));
-if ((s38280) == IMM(0)) {
-V s38282 = ({ V r38283;
-V (v38284) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s38255, 0), IMM(0)), a1);
-V s38287 = (v38284);
-if ((s38287) == IMM(0)) {
-r38283 = IMM(1);
-} else if ((s38287) == IMM(1)) {
-r38283 = IMM(0);
+} else if (IS_N(s38426, 8)) {
+V s38451 = F_Unb_du32(FLD(s38426, 1), a1, IMM(1));
+if ((s38451) == IMM(0)) {
+V s38453 = ({ V r38454;
+V (v38455) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(FLD(s38426, 0), IMM(0)), a1);
+V s38458 = (v38455);
+if ((s38458) == IMM(0)) {
+r38454 = IMM(1);
+} else if ((s38458) == IMM(1)) {
+r38454 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r38283; });
-if ((s38282) == IMM(0)) {
+r38454; });
+if ((s38453) == IMM(0)) {
 return IMM(0);
-} else if ((s38282) == IMM(1)) {
-{ V t0 = FLD(s38255, 2); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s38453) == IMM(1)) {
+{ V t0 = FLD(s38426, 2); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s38280) == IMM(1)) {
+} else if ((s38451) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38255, 9)) {
-V s38288 = FLD(s38255, 0);
-if (IS_N(s38288, 1)) {
-V (v38289) = F_Unb_du32(FLD(s38288, 0), a1, IMM(1));
-V s38291 = (v38289);
-if ((s38291) == IMM(0)) {
-{ V t0 = C2(9, FLD(s38288, 1), FLD(s38255, 1)); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s38291) == IMM(1)) {
+} else if (IS_N(s38426, 9)) {
+V s38459 = FLD(s38426, 0);
+if (IS_N(s38459, 1)) {
+V (v38460) = F_Unb_du32(FLD(s38459, 0), a1, IMM(1));
+V s38462 = (v38460);
+if ((s38462) == IMM(0)) {
+{ V t0 = C2(9, FLD(s38459, 1), FLD(s38426, 1)); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s38462) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s38288) == IMM(0)) {
-V s38292 = FLD(s38255, 1);
-if ((s38292) == IMM(0)) {
+} else if ((s38459) == IMM(0)) {
+V s38463 = FLD(s38426, 1);
+if ((s38463) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s38292, 1)) {
-V s38293 = F_Unb_du32(FLD(s38292, 0), a1, IMM(1));
-if ((s38293) == IMM(0)) {
-{ V t0 = C2(9, IMM(0), FLD(s38292, 1)); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s38293) == IMM(1)) {
+} else if (IS_N(s38463, 1)) {
+V s38464 = F_Unb_du32(FLD(s38463, 0), a1, IMM(1));
+if ((s38464) == IMM(0)) {
+{ V t0 = C2(9, IMM(0), FLD(s38463, 1)); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s38464) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38255, 10)) {
-V s38295 = ({ V r38296;
-V (v38297) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S38298(), FLD(s38255, 0)), IMM(0)), a1);
-V s38301 = (v38297);
-if ((s38301) == IMM(0)) {
-r38296 = IMM(1);
-} else if ((s38301) == IMM(1)) {
-r38296 = IMM(0);
+} else if (IS_N(s38426, 10)) {
+V s38466 = ({ V r38467;
+V (v38468) = F_List_dcontains_x37s539261848x2963157848(F_Pat_dvars(C2(1, S38469(), FLD(s38426, 0)), IMM(0)), a1);
+V s38472 = (v38468);
+if ((s38472) == IMM(0)) {
+r38467 = IMM(1);
+} else if ((s38472) == IMM(1)) {
+r38467 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r38296; });
-if ((s38295) == IMM(0)) {
+r38467; });
+if ((s38466) == IMM(0)) {
 return IMM(0);
-} else if ((s38295) == IMM(1)) {
-{ V t0 = FLD(s38255, 1); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s38466) == IMM(1)) {
+{ V t0 = FLD(s38426, 1); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38255, 11)) {
-{ V t0 = FLD(s38255, 1); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if (IS_N(s38255, 12)) {
-V (v38302) = F_Unb_du32(FLD(s38255, 1), a1, IMM(1));
-V s38304 = (v38302);
-if ((s38304) == IMM(0)) {
-{ V t0 = FLD(s38255, 2); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
-} else if ((s38304) == IMM(1)) {
+} else if (IS_N(s38426, 11)) {
+{ V t0 = FLD(s38426, 1); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s38426, 12)) {
+V (v38473) = F_Unb_du32(FLD(s38426, 1), a1, IMM(1));
+V s38475 = (v38473);
+if ((s38475) == IMM(0)) {
+{ V t0 = FLD(s38426, 2); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if ((s38475) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38255, 13)) {
-{ V t0 = FLD(s38255, 0); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s38426, 13)) {
+{ V t0 = FLD(s38426, 0); V t1 = a1; V t2 = IMM(1); a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else {
 return IMM(0);
 }
@@ -94148,81 +94580,81 @@ return IMM(0);
 static V W_Unb_du32(V *a) { (void)a; return F_Unb_du32(a[0], a[1], a[2]); }
 static V F_Unb_du32_dcall(V a0, V a1, V a2) {
 top:;
-V s38305 = a0;
-if (IS_N(s38305, 0)) {
-return F_Unb_du32_darg(FLD(s38305, 0), a1, a2);
+V s38476 = a0;
+if (IS_N(s38476, 0)) {
+return F_Unb_du32_darg(FLD(s38476, 0), a1, a2);
 } else {
 return IMM(0);
 }
 }
 static V W_Unb_du32_dcall(V *a) { (void)a; return F_Unb_du32_dcall(a[0], a[1], a[2]); }
-static V K38320(void) { static V c; return KONST(c, C2(1, MKS("U32.shln"), C2(1, MKS("U32.shrn"), C2(1, MKS("U32.pow"), IMM(0))))); }
-static V K38329(void) { static V c; return KONST(c, C2(1, MKS("Array.get"), C2(1, MKS("Array.set"), C2(1, MKS("Array.swap"), C2(1, MKS("Array.get%w"), C2(1, MKS("Array.set%w"), C2(1, MKS("Array.swap%w"), IMM(0)))))))); }
+static V K38491(void) { static V c; return KONST(c, C2(1, MKS("U32.shln"), C2(1, MKS("U32.shrn"), C2(1, MKS("U32.pow"), IMM(0))))); }
+static V K38500(void) { static V c; return KONST(c, C2(1, MKS("Array.get"), C2(1, MKS("Array.set"), C2(1, MKS("Array.swap"), C2(1, MKS("Array.get%w"), C2(1, MKS("Array.set%w"), C2(1, MKS("Array.swap%w"), IMM(0)))))))); }
 static V F_Unb_du32_darg(V a0, V a1, V a2) {
 top:;
-V s38307 = ({ V r38308;
-V s38309 = ({ V r38310;
-V s38311 = ({ V r38312;
-V v38313 = a0;
-r38312 = F_List_dcontains_x37s539261848x2963157848(F_Unb_du32_dfs(), v38313);
-r38312; });
-if ((s38311) == IMM(0)) {
-r38310 = IMM(0);
-} else if ((s38311) == IMM(1)) {
-r38310 = F_Unb_du32_dargs(a1, a2);
+V s38478 = ({ V r38479;
+V s38480 = ({ V r38481;
+V s38482 = ({ V r38483;
+V v38484 = a0;
+r38483 = F_List_dcontains_x37s539261848x2963157848(F_Unb_du32_dfs(), v38484);
+r38483; });
+if ((s38482) == IMM(0)) {
+r38481 = IMM(0);
+} else if ((s38482) == IMM(1)) {
+r38481 = F_Unb_du32_dargs(a1, a2);
 } else { bend_fail("runtime fail-stop"); }
-r38310; });
-if ((s38309) == IMM(0)) {
-V s38317 = ({ V r38318;
-V v38319 = a0;
-r38318 = F_List_dcontains_x37s539261848x2963157848(K38320(), v38319);
-r38318; });
-if ((s38317) == IMM(0)) {
-r38308 = IMM(0);
-} else if ((s38317) == IMM(1)) {
-V s38322 = a1;
-if ((s38322) == IMM(0)) {
-r38308 = IMM(0);
-} else if (IS_N(s38322, 1)) {
-V v38323 = a2;
-V s38324 = FLD(s38322, 0);
-if (IS_N(s38324, 0)) {
-r38308 = F_String_deq(FLD(s38324, 0), v38323);
+r38481; });
+if ((s38480) == IMM(0)) {
+V s38488 = ({ V r38489;
+V v38490 = a0;
+r38489 = F_List_dcontains_x37s539261848x2963157848(K38491(), v38490);
+r38489; });
+if ((s38488) == IMM(0)) {
+r38479 = IMM(0);
+} else if ((s38488) == IMM(1)) {
+V s38493 = a1;
+if ((s38493) == IMM(0)) {
+r38479 = IMM(0);
+} else if (IS_N(s38493, 1)) {
+V v38494 = a2;
+V s38495 = FLD(s38493, 0);
+if (IS_N(s38495, 0)) {
+r38479 = F_String_deq(FLD(s38495, 0), v38494);
 } else {
-r38308 = IMM(0);
+r38479 = IMM(0);
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s38309) == IMM(1)) {
-r38308 = IMM(1);
+} else if ((s38480) == IMM(1)) {
+r38479 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r38308; });
-if ((s38307) == IMM(0)) {
-V s38326 = ({ V r38327;
-V v38328 = a0;
-r38327 = F_List_dcontains_x37s539261848x2963157848(K38329(), v38328);
-r38327; });
-if ((s38326) == IMM(0)) {
+r38479; });
+if ((s38478) == IMM(0)) {
+V s38497 = ({ V r38498;
+V v38499 = a0;
+r38498 = F_List_dcontains_x37s539261848x2963157848(K38500(), v38499);
+r38498; });
+if ((s38497) == IMM(0)) {
 return IMM(0);
-} else if ((s38326) == IMM(1)) {
-V s38331 = a1;
-if ((s38331) == IMM(0)) {
+} else if ((s38497) == IMM(1)) {
+V s38502 = a1;
+if ((s38502) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s38331, 1)) {
-V v38332 = FLD(s38331, 1);
-V s38333 = v38332;
-if ((s38333) == IMM(0)) {
+} else if (IS_N(s38502, 1)) {
+V v38503 = FLD(s38502, 1);
+V s38504 = v38503;
+if ((s38504) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s38333, 1)) {
-V v38334 = FLD(s38333, 1);
-V s38335 = v38334;
-if ((s38335) == IMM(0)) {
+} else if (IS_N(s38504, 1)) {
+V v38505 = FLD(s38504, 1);
+V s38506 = v38505;
+if ((s38506) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s38335, 1)) {
-V v38336 = a2;
-V s38337 = FLD(s38335, 0);
-if (IS_N(s38337, 0)) {
-return F_String_deq(FLD(s38337, 0), v38336);
+} else if (IS_N(s38506, 1)) {
+V v38507 = a2;
+V s38508 = FLD(s38506, 0);
+if (IS_N(s38508, 0)) {
+return F_String_deq(FLD(s38508, 0), v38507);
 } else {
 return IMM(0);
 }
@@ -94230,59 +94662,59 @@ return IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s38307) == IMM(1)) {
+} else if ((s38478) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_du32_darg(V *a) { (void)a; return F_Unb_du32_darg(a[0], a[1], a[2]); }
 static V F_Unb_du32_dargs(V a0, V a1) {
 top:;
-V s38339 = a0;
-if ((s38339) == IMM(0)) {
+V s38510 = a0;
+if ((s38510) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s38339, 1)) {
-V v38340 = a1;
-V v38341 = ({ V r38342;
-V s38343 = FLD(s38339, 0);
-if (IS_N(s38343, 0)) {
-r38342 = F_String_deq(FLD(s38343, 0), v38340);
+} else if (IS_N(s38510, 1)) {
+V v38511 = a1;
+V v38512 = ({ V r38513;
+V s38514 = FLD(s38510, 0);
+if (IS_N(s38514, 0)) {
+r38513 = F_String_deq(FLD(s38514, 0), v38511);
 } else {
-r38342 = IMM(0);
+r38513 = IMM(0);
 }
-r38342; });
-V s38345 = v38341;
-if ((s38345) == IMM(0)) {
-{ V t0 = FLD(s38339, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if ((s38345) == IMM(1)) {
+r38513; });
+V s38516 = v38512;
+if ((s38516) == IMM(0)) {
+{ V t0 = FLD(s38510, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if ((s38516) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_du32_dargs(V *a) { (void)a; return F_Unb_du32_dargs(a[0], a[1]); }
-static V K38346(void) { static V c; return KONST(c, C2(1, MKS("U32.inc"), C2(1, MKS("U32.add"), C2(1, MKS("U32.sub"), C2(1, MKS("U32.mul"), C2(1, MKS("U32.div"), C2(1, MKS("U32.mod"), C2(1, MKS("U32.not"), C2(1, MKS("U32.and"), C2(1, MKS("U32.or"), C2(1, MKS("U32.xor"), C2(1, MKS("U32.shl"), C2(1, MKS("U32.shr"), C2(1, MKS("U32.min"), C2(1, MKS("U32.max"), C2(1, MKS("U32.is_eq"), C2(1, MKS("U32.is_ne"), C2(1, MKS("U32.is_lt"), C2(1, MKS("U32.is_le"), C2(1, MKS("U32.is_gt"), C2(1, MKS("U32.is_ge"), C2(1, MKS("U32.is_zero"), C2(1, MKS("U32.is_even"), C2(1, MKS("U32.to_nat"), C2(1, MKS("U32.to_f32"), C2(1, MKS("U32.show"), C2(1, MKS("U32.log2"), IMM(0)))))))))))))))))))))))))))); }
+static V K38517(void) { static V c; return KONST(c, C2(1, MKS("U32.inc"), C2(1, MKS("U32.add"), C2(1, MKS("U32.sub"), C2(1, MKS("U32.mul"), C2(1, MKS("U32.div"), C2(1, MKS("U32.mod"), C2(1, MKS("U32.not"), C2(1, MKS("U32.and"), C2(1, MKS("U32.or"), C2(1, MKS("U32.xor"), C2(1, MKS("U32.shl"), C2(1, MKS("U32.shr"), C2(1, MKS("U32.min"), C2(1, MKS("U32.max"), C2(1, MKS("U32.is_eq"), C2(1, MKS("U32.is_ne"), C2(1, MKS("U32.is_lt"), C2(1, MKS("U32.is_le"), C2(1, MKS("U32.is_gt"), C2(1, MKS("U32.is_ge"), C2(1, MKS("U32.is_zero"), C2(1, MKS("U32.is_even"), C2(1, MKS("U32.to_nat"), C2(1, MKS("U32.to_f32"), C2(1, MKS("U32.show"), C2(1, MKS("U32.log2"), IMM(0)))))))))))))))))))))))))))); }
 static V F_Unb_du32_dfs(void) {
 top:;
-return K38346();
+return K38517();
 }
 static V W_Unb_du32_dfs(V *a) { (void)a; return F_Unb_du32_dfs(); }
 static V F_Unb_dsubs(V a0, V a1, V a2) {
 top:;
-V s38347 = a0;
-V s38348 = a1;
-if (IS_N(s38347, 1) && IS_N(s38348, 1)) {
-{ V t0 = FLD(s38347, 1); V t1 = FLD(s38348, 1); V t2 = ({ V r38349;
-V v38350 = FLD(s38348, 0);
-V v38351 = ({ V r38352;
-V s38353 = FLD(v38350, 0);
-if ((s38353) == IMM(0)) {
-r38352 = IMM(0);
-} else if (IS_N(s38353, 1)) {
-r38352 = IMM(1);
+V s38518 = a0;
+V s38519 = a1;
+if (IS_N(s38518, 1) && IS_N(s38519, 1)) {
+{ V t0 = FLD(s38518, 1); V t1 = FLD(s38519, 1); V t2 = ({ V r38520;
+V v38521 = FLD(s38519, 0);
+V v38522 = ({ V r38523;
+V s38524 = FLD(v38521, 0);
+if ((s38524) == IMM(0)) {
+r38523 = IMM(0);
+} else if (IS_N(s38524, 1)) {
+r38523 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r38352; });
-V v38354 = FLD(s38348, 0);
-r38349 = F_Unb_dsub_dif_x37u(v38351, FLD(FLD(s38347, 0), 0), FLD(v38354, 0), FLD(v38354, 1), a2);
-r38349; }); a0 = t0; a1 = t1; a2 = t2; goto top; }
+r38523; });
+V v38525 = FLD(s38519, 0);
+r38520 = F_Unb_dsub_dif_x37u(v38522, FLD(FLD(s38518, 0), 0), FLD(v38525, 0), FLD(v38525, 1), a2);
+r38520; }); a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else {
 return a2;
 }
@@ -94290,175 +94722,175 @@ return a2;
 static V W_Unb_dsubs(V *a) { (void)a; return F_Unb_dsubs(a[0], a[1], a[2]); }
 static V F_Unb_dsub_dif_x37u(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s38356 = (a0);
-if ((s38356) == IMM(1)) {
+V s38527 = (a0);
+if ((s38527) == IMM(1)) {
 return F_Unb_dsub(a4, a1, C2(6, a2, F_Unb_dvars(F_Unb_dfields_x37u(a1, a2, a3))));
-} else if ((s38356) == IMM(0)) {
+} else if ((s38527) == IMM(0)) {
 return a4;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Unb_dsub_dif_x37u(V *a) { (void)a; return F_Unb_dsub_dif_x37u(a[0], a[1], a[2], a[3], a[4]); }
 static V F_RO_dprogram(V a0, V a1) {
 top:;
-V s38360 = (a0);
-if ((s38360) == IMM(1)) {
-V uo38361[4]; U_G_dnew(a1, uo38361);
-return F_RO_ddecls_x37u(uo38361[0], uo38361[1], uo38361[2], uo38361[3], a1);
-} else if ((s38360) == IMM(0)) {
+V s38531 = (a0);
+if ((s38531) == IMM(1)) {
+V uo38532[4]; U_G_dnew(a1, uo38532);
+return F_RO_ddecls_x37u(uo38532[0], uo38532[1], uo38532[2], uo38532[3], a1);
+} else if ((s38531) == IMM(0)) {
 return a1;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_RO_dprogram(V *a) { (void)a; return F_RO_dprogram(a[0], a[1]); }
 static V F_RO_ddecls_x37u(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s38364 = a4;
-if ((s38364) == IMM(0)) {
+V s38535 = a4;
+if ((s38535) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s38364, 1)) {
-return F_List_dappend(0, F_RO_done_x37u(a0, a1, a2, a3, FLD(s38364, 0)), F_RO_ddecls_x37u(a0, a1, a2, a3, FLD(s38364, 1)));
+} else if (IS_N(s38535, 1)) {
+return F_List_dappend(0, F_RO_done_x37u(a0, a1, a2, a3, FLD(s38535, 0)), F_RO_ddecls_x37u(a0, a1, a2, a3, FLD(s38535, 1)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_RO_ddecls_x37u(V *a) { (void)a; return F_RO_ddecls_x37u(a[0], a[1], a[2], a[3], a[4]); }
-static V S38378(void) { static V c; return STRC(c, "%bseq"); }
+static V S38549(void) { static V c; return STRC(c, "%bseq"); }
 static V F_RO_done_x37u(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s38368 = a4;
-if (IS_N(s38368, 0)) {
-V uo38369[2]; U_G_ddef_x37u(a0, a1, a2, a3, FLD(s38368, 0), uo38369);
-V s38371 = ({ V r38372;
-V s38373 = F_U32_dis__zero(uo38369[0]);
-if ((s38373) == IMM(0)) {
-r38372 = IMM(0);
-} else if ((s38373) == IMM(1)) {
-V s38375 = F_RO_dcand(FLD(s38368, 1));
-if ((s38375) == IMM(0)) {
-r38372 = IMM(0);
-} else if ((s38375) == IMM(1)) {
-r38372 = F_Expr_dhas__par(FLD(s38368, 2));
+V s38539 = a4;
+if (IS_N(s38539, 0)) {
+V uo38540[2]; U_G_ddef_x37u(a0, a1, a2, a3, FLD(s38539, 0), uo38540);
+V s38542 = ({ V r38543;
+V s38544 = F_U32_dis__zero(uo38540[0]);
+if ((s38544) == IMM(0)) {
+r38543 = IMM(0);
+} else if ((s38544) == IMM(1)) {
+V s38546 = F_RO_dcand(FLD(s38539, 1));
+if ((s38546) == IMM(0)) {
+r38543 = IMM(0);
+} else if ((s38546) == IMM(1)) {
+r38543 = F_Expr_dhas__par(FLD(s38539, 2));
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r38372; });
-if ((s38371) == IMM(0)) {
-return C2(1, C4(0, FLD(s38368, 0), FLD(s38368, 1), FLD(s38368, 2), FLD(s38368, 3)), IMM(0));
-} else if ((s38371) == IMM(1)) {
-return C2(1, C4(0, FLD(s38368, 0), FLD(s38368, 1), FLD(s38368, 2), FLD(s38368, 3)), C2(1, C4(0, F_String_dappend(FLD(s38368, 0), S38378()), FLD(s38368, 1), F_RO_dgo(1000000u, C4(0, FLD(s38368, 0), F_List_dlength(0, FLD(s38368, 1)), FLD(s38368, 2), F_Bor_dnames(FLD(s38368, 1)))), FLD(s38368, 3)), IMM(0)));
+r38543; });
+if ((s38542) == IMM(0)) {
+return C2(1, C4(0, FLD(s38539, 0), FLD(s38539, 1), FLD(s38539, 2), FLD(s38539, 3)), IMM(0));
+} else if ((s38542) == IMM(1)) {
+return C2(1, C4(0, FLD(s38539, 0), FLD(s38539, 1), FLD(s38539, 2), FLD(s38539, 3)), C2(1, C4(0, F_String_dappend(FLD(s38539, 0), S38549()), FLD(s38539, 1), F_RO_dgo(1000000u, C4(0, FLD(s38539, 0), F_List_dlength(0, FLD(s38539, 1)), FLD(s38539, 2), F_Bor_dnames(FLD(s38539, 1)))), FLD(s38539, 3)), IMM(0)));
 } else { bend_fail("runtime fail-stop"); }
 } else {
-return C2(1, s38368, IMM(0));
+return C2(1, s38539, IMM(0));
 }
 }
 static V W_RO_done_x37u(V *a) { (void)a; return F_RO_done_x37u(a[0], a[1], a[2], a[3], a[4]); }
-static V S38391(void) { static V c; return STRC(c, "%par"); }
-static V S38411(void) { static V c; return STRC(c, "%bseq"); }
-static V S38415(void) { static V c; return STRC(c, ""); }
+static V S38562(void) { static V c; return STRC(c, "%par"); }
+static V S38582(void) { static V c; return STRC(c, "%bseq"); }
+static V S38586(void) { static V c; return STRC(c, ""); }
 static V D_RO_dgo(V *dst, V a0, V a1) {
 top:;
-V s38383 = (a0);
-if ((s38383) == 0) {
-V s38384 = a1;
-if (IS_N(s38384, 0)) {
-*dst = FLD(s38384, 2);
+V s38554 = (a0);
+if ((s38554) == 0) {
+V s38555 = a1;
+if (IS_N(s38555, 0)) {
+*dst = FLD(s38555, 2);
 return 0;
-} else if (IS_N(s38384, 1)) {
-*dst = FLD(s38384, 2);
+} else if (IS_N(s38555, 1)) {
+*dst = FLD(s38555, 2);
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s38383) != 0) {
-V s38385 = a1;
-if (IS_N(s38385, 0)) {
-V s38386 = FLD(s38385, 2);
-if (IS_N(s38386, 8)) {
-V s38387 = ({ V r38388;
-V s38389 = FLD(s38386, 0);
-if (IS_N(s38389, 1)) {
-V v38390 = S38391();
-r38388 = F_String_deq(FLD(s38389, 0), v38390);
+} else if ((s38554) != 0) {
+V s38556 = a1;
+if (IS_N(s38556, 0)) {
+V s38557 = FLD(s38556, 2);
+if (IS_N(s38557, 8)) {
+V s38558 = ({ V r38559;
+V s38560 = FLD(s38557, 0);
+if (IS_N(s38560, 1)) {
+V v38561 = S38562();
+r38559 = F_String_deq(FLD(s38560, 0), v38561);
 } else {
-r38388 = IMM(0);
+r38559 = IMM(0);
 }
-r38388; });
-if ((s38387) == IMM(0)) {
-{ V dc = CH3(8, FLD(s38386, 0), F_RO_dgo(nat_subk(s38383, 1), C4(0, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 1), FLD(s38385, 3))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = nat_subk(s38383, 1); V t1 = C4(0, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 2), F_Pat_dvars(FLD(s38386, 0), FLD(s38385, 3))); a0 = t0; a1 = t1; goto top; }
+r38559; });
+if ((s38558) == IMM(0)) {
+{ V dc = CH3(8, FLD(s38557, 0), F_RO_dgo(nat_subk(s38554, 1), C4(0, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 1), FLD(s38556, 3))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = nat_subk(s38554, 1); V t1 = C4(0, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 2), F_Pat_dvars(FLD(s38557, 0), FLD(s38556, 3))); a0 = t0; a1 = t1; goto top; }
 }
-} else if ((s38387) == IMM(1)) {
-*dst = F_Anf_dpar(FLD(s38386, 0), F_RO_dgo(nat_subk(s38383, 1), C4(0, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 1), FLD(s38385, 3))), F_RO_dgo(nat_subk(s38383, 1), C4(0, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 2), F_Pat_dvars(FLD(s38386, 0), FLD(s38385, 3)))));
+} else if ((s38558) == IMM(1)) {
+*dst = F_Anf_dpar(FLD(s38557, 0), F_RO_dgo(nat_subk(s38554, 1), C4(0, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 1), FLD(s38556, 3))), F_RO_dgo(nat_subk(s38554, 1), C4(0, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 2), F_Pat_dvars(FLD(s38557, 0), FLD(s38556, 3)))));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s38386, 5) && IS_N(FLD(s38386, 0), 0)) {
-{ V dc = CH2(5, C1(0, ({ V r38399;
-V s38400 = ({ V r38401;
-V s38402 = ({ V r38403;
-V s38404 = F_String_deq(FLD(FLD(s38386, 0), 0), FLD(s38385, 0));
-if ((s38404) == IMM(0)) {
-r38403 = IMM(0);
-} else if ((s38404) == IMM(1)) {
-V s38406 = F_List_dcontains_x37s539261848x2963157848(FLD(s38385, 3), FLD(FLD(s38386, 0), 0));
-if ((s38406) == IMM(0)) {
-r38403 = IMM(1);
-} else if ((s38406) == IMM(1)) {
-r38403 = IMM(0);
+} else if (IS_N(s38557, 5) && IS_N(FLD(s38557, 0), 0)) {
+{ V dc = CH2(5, C1(0, ({ V r38570;
+V s38571 = ({ V r38572;
+V s38573 = ({ V r38574;
+V s38575 = F_String_deq(FLD(FLD(s38557, 0), 0), FLD(s38556, 0));
+if ((s38575) == IMM(0)) {
+r38574 = IMM(0);
+} else if ((s38575) == IMM(1)) {
+V s38577 = F_List_dcontains_x37s539261848x2963157848(FLD(s38556, 3), FLD(FLD(s38557, 0), 0));
+if ((s38577) == IMM(0)) {
+r38574 = IMM(1);
+} else if ((s38577) == IMM(1)) {
+r38574 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r38403; });
-if ((s38402) == IMM(0)) {
-r38401 = IMM(0);
-} else if ((s38402) == IMM(1)) {
-r38401 = F_Nat_dis__eq(FLD(s38385, 1), F_List_dlength(0, FLD(s38386, 1)));
+r38574; });
+if ((s38573) == IMM(0)) {
+r38572 = IMM(0);
+} else if ((s38573) == IMM(1)) {
+r38572 = F_Nat_dis__eq(FLD(s38556, 1), F_List_dlength(0, FLD(s38557, 1)));
 } else { bend_fail("runtime fail-stop"); }
-r38401; });
-if ((s38400) == IMM(0)) {
-r38399 = FLD(FLD(s38386, 0), 0);
-} else if ((s38400) == IMM(1)) {
-V v38410 = FLD(FLD(s38386, 0), 0);
-r38399 = F_String_dappend(v38410, S38411());
+r38572; });
+if ((s38571) == IMM(0)) {
+r38570 = FLD(FLD(s38557, 0), 0);
+} else if ((s38571) == IMM(1)) {
+V v38581 = FLD(FLD(s38557, 0), 0);
+r38570 = F_String_dappend(v38581, S38582());
 } else { bend_fail("runtime fail-stop"); }
-r38399; })), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = nat_subk(s38383, 1); V t1 = C4(1, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 1), FLD(s38385, 3)); a0 = t0; a1 = t1; goto top; }
+r38570; })), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = nat_subk(s38554, 1); V t1 = C4(1, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 1), FLD(s38556, 3)); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s38386, 5)) {
-{ V dc = CH2(5, F_RO_dgo(nat_subk(s38383, 1), C4(0, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 0), FLD(s38385, 3))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = nat_subk(s38383, 1); V t1 = C4(1, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 1), FLD(s38385, 3)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38557, 5)) {
+{ V dc = CH2(5, F_RO_dgo(nat_subk(s38554, 1), C4(0, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 0), FLD(s38556, 3))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = nat_subk(s38554, 1); V t1 = C4(1, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 1), FLD(s38556, 3)); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s38386, 6)) {
-{ V dc = CH2(6, FLD(s38386, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = nat_subk(s38383, 1); V t1 = C4(1, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 1), FLD(s38385, 3)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38557, 6)) {
+{ V dc = CH2(6, FLD(s38557, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = nat_subk(s38554, 1); V t1 = C4(1, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 1), FLD(s38556, 3)); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s38386, 9)) {
-{ V dc = CH2(9, F_RO_dgo(nat_subk(s38383, 1), C4(1, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 0), FLD(s38385, 3))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = nat_subk(s38383, 1); V t1 = C4(1, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 1), FLD(s38385, 3)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38557, 9)) {
+{ V dc = CH2(9, F_RO_dgo(nat_subk(s38554, 1), C4(1, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 0), FLD(s38556, 3))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = nat_subk(s38554, 1); V t1 = C4(1, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 1), FLD(s38556, 3)); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s38386, 10)) {
-{ V dc = CH2(10, FLD(s38386, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = nat_subk(s38383, 1); V t1 = C4(0, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 1), F_Pat_dvars(C2(1, S38415(), FLD(s38386, 0)), FLD(s38385, 3))); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38557, 10)) {
+{ V dc = CH2(10, FLD(s38557, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = nat_subk(s38554, 1); V t1 = C4(0, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 1), F_Pat_dvars(C2(1, S38586(), FLD(s38557, 0)), FLD(s38556, 3))); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s38386, 7)) {
-*dst = C2(7, FLD(s38386, 0), FLD(s38386, 1));
+} else if (IS_N(s38557, 7)) {
+*dst = C2(7, FLD(s38557, 0), FLD(s38557, 1));
 return 0;
-} else if (IS_N(s38386, 11)) {
-{ V dc = CH2(11, FLD(s38386, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = nat_subk(s38383, 1); V t1 = C4(0, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 1), FLD(s38385, 3)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38557, 11)) {
+{ V dc = CH2(11, FLD(s38557, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = nat_subk(s38554, 1); V t1 = C4(0, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 1), FLD(s38556, 3)); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s38386, 12)) {
-{ V dc = CH3(12, FLD(s38386, 0), F_RO_dgo(nat_subk(s38383, 1), C4(0, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 1), FLD(s38385, 3))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = nat_subk(s38383, 1); V t1 = C4(0, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 2), FLD(s38385, 3)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38557, 12)) {
+{ V dc = CH3(12, FLD(s38557, 0), F_RO_dgo(nat_subk(s38554, 1), C4(0, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 1), FLD(s38556, 3))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = nat_subk(s38554, 1); V t1 = C4(0, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 2), FLD(s38556, 3)); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s38386, 13)) {
-{ V dc = CH2(13, BEND_HOLE, FLD(s38386, 1)); *dst = dc; dst = &FLD(dc, 0);
-{ V t0 = nat_subk(s38383, 1); V t1 = C4(0, FLD(s38385, 0), FLD(s38385, 1), FLD(s38386, 0), FLD(s38385, 3)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38557, 13)) {
+{ V dc = CH2(13, BEND_HOLE, FLD(s38557, 1)); *dst = dc; dst = &FLD(dc, 0);
+{ V t0 = nat_subk(s38554, 1); V t1 = C4(0, FLD(s38556, 0), FLD(s38556, 1), FLD(s38557, 0), FLD(s38556, 3)); a0 = t0; a1 = t1; goto top; }
 }
 } else {
-*dst = s38386;
+*dst = s38557;
 return 0;
 }
-} else if (IS_N(s38385, 1)) {
-V s38418 = FLD(s38385, 2);
-if ((s38418) == IMM(0)) {
+} else if (IS_N(s38556, 1)) {
+V s38589 = FLD(s38556, 2);
+if ((s38589) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s38418, 1)) {
-{ V dc = CH2(1, F_RO_dgo(nat_subk(s38383, 1), C4(0, FLD(s38385, 0), FLD(s38385, 1), FLD(s38418, 0), FLD(s38385, 3))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = nat_subk(s38383, 1); V t1 = C4(1, FLD(s38385, 0), FLD(s38385, 1), FLD(s38418, 1), FLD(s38385, 3)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s38589, 1)) {
+{ V dc = CH2(1, F_RO_dgo(nat_subk(s38554, 1), C4(0, FLD(s38556, 0), FLD(s38556, 1), FLD(s38589, 0), FLD(s38556, 3))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = nat_subk(s38554, 1); V t1 = C4(1, FLD(s38556, 0), FLD(s38556, 1), FLD(s38589, 1), FLD(s38556, 3)); a0 = t0; a1 = t1; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -94468,26 +94900,26 @@ static V F_RO_dgo(V a0, V a1) { V r; D_RO_dgo(&r, a0, a1); return r; }
 static V W_RO_dgo(V *a) { (void)a; return F_RO_dgo(a[0], a[1]); }
 static __attribute__((noinline)) V H_F_RO_dcand(V a0) {
 top:;
-V s38420 = a0;
-if ((s38420) == IMM(0)) {
+V s38591 = a0;
+if ((s38591) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s38420, 1)) {
-V s38421 = ({ V r38422;
-V s38423 = F_U32_dis__eq(FLD(FLD(s38420, 0), 1), 2u);
-if ((s38423) == IMM(0)) {
-r38422 = IMM(0);
-} else if ((s38423) == IMM(1)) {
-V s38425 = F_Gen_dscalar_dty(FLD(FLD(s38420, 0), 2));
-if ((s38425) == IMM(0)) {
-r38422 = IMM(1);
-} else if ((s38425) == IMM(1)) {
-r38422 = IMM(0);
+} else if (IS_N(s38591, 1)) {
+V s38592 = ({ V r38593;
+V s38594 = F_U32_dis__eq(FLD(FLD(s38591, 0), 1), 2u);
+if ((s38594) == IMM(0)) {
+r38593 = IMM(0);
+} else if ((s38594) == IMM(1)) {
+V s38596 = F_Gen_dscalar_dty(FLD(FLD(s38591, 0), 2));
+if ((s38596) == IMM(0)) {
+r38593 = IMM(1);
+} else if ((s38596) == IMM(1)) {
+r38593 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r38422; });
-if ((s38421) == IMM(0)) {
-{ V t0 = FLD(s38420, 1); a0 = t0; goto top; }
-} else if ((s38421) == IMM(1)) {
+r38593; });
+if ((s38592) == IMM(0)) {
+{ V t0 = FLD(s38591, 1); a0 = t0; goto top; }
+} else if ((s38592) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -94499,153 +94931,153 @@ return IMM(0);
 return H_F_RO_dcand(a0);
 }
 static V W_RO_dcand(V *a) { (void)a; return F_RO_dcand(a[0]); }
-static V S38430(void) { static V c; return STRC(c, "\012"); }
-static V S38434(void) { static V c; return STRC(c, "bendc: compilation failed"); }
-static V L38433(V *a) {
-return F_IO_ddie(1u, S38434());
+static V S38601(void) { static V c; return STRC(c, "\012"); }
+static V S38605(void) { static V c; return STRC(c, "bendc: compilation failed"); }
+static V L38604(V *a) {
+return F_IO_ddie(1u, S38605());
 }
 static V F_Main_demit_djs_x37u(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s38427 = a4;
-if ((s38427) == IMM(0)) {
+V s38598 = a4;
+if ((s38598) == IMM(0)) {
 return F_Main_demit_djs_dok(a0, a1, a2, a3);
-} else if (IS_N(s38427, 1)) {
-return F_IO_dbind(F_IO_dprint__err(F_String_djoin(F_List_dreverse_dgo(0, C2(1, FLD(s38427, 0), FLD(s38427, 1)), IMM(0)), S38430())), mk_clo(L38433, 1, 0, 0));
+} else if (IS_N(s38598, 1)) {
+return F_IO_dbind(F_IO_dprint__err(F_String_djoin(F_List_dreverse_dgo(0, C2(1, FLD(s38598, 0), FLD(s38598, 1)), IMM(0)), S38601())), mk_clo(L38604, 1, 0, 0));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Main_demit_djs_x37u(V *a) { (void)a; return F_Main_demit_djs_x37u(a[0], a[1], a[2], a[3], a[4]); }
-static V S38441(void) { static V c; return STRC(c, ""); }
-static V S38444(void) { static V c; return STRC(c, "\012const EFF = {\012"); }
-static V S38445(void) { static V c; return STRC(c, "};\012\012"); }
-static V L38443(V *a) {
-return F_IO_dwrite(F_String_dappend(a[1], F_String_dappend(S38444(), F_String_dappend(a[2], F_String_dappend(S38445(), a[0])))));
+static V S38612(void) { static V c; return STRC(c, ""); }
+static V S38615(void) { static V c; return STRC(c, "\012const EFF = {\012"); }
+static V S38616(void) { static V c; return STRC(c, "};\012\012"); }
+static V L38614(V *a) {
+return F_IO_dwrite(F_String_dappend(a[1], F_String_dappend(S38615(), F_String_dappend(a[2], F_String_dappend(S38616(), a[0])))));
 }
 static V F_Main_demit_djs_dok(V a0, V a1, V a2, V a3) {
 top:;
-return F_IO_dbind(F_Main_djs_deffs(F_Gen_ddedup(F_Main_djs_dpaths_dgo(a2), IMM(0)), a2, a0, F_Set_dfrom__list_dgo(F_Mod_dnames(a0, IMM(0)), IMM(0)), S38441()), mk_clo(L38443, 3, 2, (V[]){a3, a1}));
+return F_IO_dbind(F_Main_djs_deffs(F_Gen_ddedup(F_Main_djs_dpaths_dgo(a2), IMM(0)), a2, a0, F_Set_dfrom__list_dgo(F_Mod_dnames(a0, IMM(0)), IMM(0)), S38612()), mk_clo(L38614, 3, 2, (V[]){a3, a1}));
 }
 static V W_Main_demit_djs_dok(V *a) { (void)a; return F_Main_demit_djs_dok(a[0], a[1], a[2], a[3]); }
 static V D_Main_djs_dpaths_dgo(V *dst, V a0) {
 top:;
-V s38452 = a0;
-if ((s38452) == IMM(0)) {
+V s38623 = a0;
+if ((s38623) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s38452, 1)) {
-{ V dc = CH2(1, ({ V r38453;
-V uo38454[2]; U_Str_dsplit__tab(FLD(s38452, 0), uo38454);
-r38453 = uo38454[0];
-r38453; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s38452, 1); a0 = t0; goto top; }
+} else if (IS_N(s38623, 1)) {
+{ V dc = CH2(1, ({ V r38624;
+V uo38625[2]; U_Str_dsplit__tab(FLD(s38623, 0), uo38625);
+r38624 = uo38625[0];
+r38624; }), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s38623, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Main_djs_dpaths_dgo(V a0) { V r; D_Main_djs_dpaths_dgo(&r, a0); return r; }
 static V W_Main_djs_dpaths_dgo(V *a) { (void)a; return F_Main_djs_dpaths_dgo(a[0]); }
-static V S38457(void) { static V c; return STRC(c, ""); }
-static V S38458(void) { static V c; return STRC(c, ""); }
-static V S38461(void) { static V c; return STRC(c, ""); }
+static V S38628(void) { static V c; return STRC(c, ""); }
+static V S38629(void) { static V c; return STRC(c, ""); }
+static V S38632(void) { static V c; return STRC(c, ""); }
 BEND_UINL V U_Str_dsplit__tab(V a0, V *o) {
 top:;
-V s38456 = a0;
-if ((s38456) == IMM(0)) {
-o[0] = S38457();
-o[1] = S38458();
+V s38627 = a0;
+if ((s38627) == IMM(0)) {
+o[0] = S38628();
+o[1] = S38629();
 return 0;
-} else if (IS_N(s38456, 1)) {
-V s38459 = F_U32_dis__eq(FLD(s38456, 0), 9u);
-if ((s38459) == IMM(1)) {
-o[0] = S38461();
-o[1] = FLD(s38456, 1);
+} else if (IS_N(s38627, 1)) {
+V s38630 = F_U32_dis__eq(FLD(s38627, 0), 9u);
+if ((s38630) == IMM(1)) {
+o[0] = S38632();
+o[1] = FLD(s38627, 1);
 return 0;
-} else if ((s38459) == IMM(0)) {
-V uo38462[2]; U_Str_dsplit__tab(FLD(s38456, 1), uo38462);
-o[0] = C2(1, FLD(s38456, 0), uo38462[0]);
-o[1] = uo38462[1];
+} else if ((s38630) == IMM(0)) {
+V uo38633[2]; U_Str_dsplit__tab(FLD(s38627, 1), uo38633);
+o[0] = C2(1, FLD(s38627, 0), uo38633[0]);
+o[1] = uo38633[1];
 return 0;
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Str_dsplit__tab(V a0) { V o[2]; U_Str_dsplit__tab(a0, o); return CN(0, 2, o); }
 static V W_Str_dsplit__tab(V *a) { (void)a; return F_Str_dsplit__tab(a[0]); }
-static V L38467(V *a) {
+static V L38638(V *a) {
 return F_Main_djs_deffs(a[5], a[4], a[3], a[2], F_String_dappend(a[1], F_Main_djs_dwrap(F_Main_dids_dsrc(a[3], a[2], IMM(1), a[0], a[6]), F_Main_djs_dhosts(a[4], a[0]))));
 }
 static V F_Main_djs_deffs(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s38464 = a0;
-if ((s38464) == IMM(0)) {
+V s38635 = a0;
+if ((s38635) == IMM(0)) {
 return F_IO_dpure(a4);
-} else if (IS_N(s38464, 1)) {
-return F_IO_dbind(F_IO_dread__file(FLD(s38464, 0)), mk_clo(L38467, 7, 6, (V[]){FLD(s38464, 0), a4, a3, a2, a1, FLD(s38464, 1)}));
+} else if (IS_N(s38635, 1)) {
+return F_IO_dbind(F_IO_dread__file(FLD(s38635, 0)), mk_clo(L38638, 7, 6, (V[]){FLD(s38635, 0), a4, a3, a2, a1, FLD(s38635, 1)}));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Main_djs_deffs(V *a) { (void)a; return F_Main_djs_deffs(a[0], a[1], a[2], a[3], a[4]); }
 static V F_Main_djs_dhosts(V a0, V a1) {
 top:;
-V s38474 = a0;
-if ((s38474) == IMM(0)) {
+V s38645 = a0;
+if ((s38645) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s38474, 1)) {
-V v38475 = F_Main_djs_dhosts(FLD(s38474, 1), a1);
-V uo38477[2]; U_Str_dsplit__tab(FLD(s38474, 0), uo38477);
-V s38479 = F_String_deq(uo38477[0], a1);
-if ((s38479) == IMM(1)) {
-return C2(1, uo38477[1], v38475);
-} else if ((s38479) == IMM(0)) {
-return v38475;
+} else if (IS_N(s38645, 1)) {
+V v38646 = F_Main_djs_dhosts(FLD(s38645, 1), a1);
+V uo38648[2]; U_Str_dsplit__tab(FLD(s38645, 0), uo38648);
+V s38650 = F_String_deq(uo38648[0], a1);
+if ((s38650) == IMM(1)) {
+return C2(1, uo38648[1], v38646);
+} else if ((s38650) == IMM(0)) {
+return v38646;
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Main_djs_dhosts(V *a) { (void)a; return F_Main_djs_dhosts(a[0], a[1]); }
-static V S38481(void) { static V c; return STRC(c, "...(() => {\012const R = {};\012const io_eff = (k, run, need) => { R[k.toLowerCase().replaceAll(\042.\042, \042_\042)] = "); }
-static V S38482(void) { static V c; return STRC(c, "{ run, need }; };\012"); }
-static V S38483(void) { static V c; return STRC(c, "\012return {\012"); }
-static V S38485(void) { static V c; return STRC(c, "};\012})(),\012"); }
+static V S38652(void) { static V c; return STRC(c, "...(() => {\012const R = {};\012const io_eff = (k, run, need) => { R[k.toLowerCase().replaceAll(\042.\042, \042_\042)] = "); }
+static V S38653(void) { static V c; return STRC(c, "{ run, need }; };\012"); }
+static V S38654(void) { static V c; return STRC(c, "\012return {\012"); }
+static V S38656(void) { static V c; return STRC(c, "};\012})(),\012"); }
 static V F_Main_djs_dwrap(V a0, V a1) {
 top:;
-return F_String_dappend(S38481(), F_String_dappend(S38482(), F_String_dappend(a0, F_String_dappend(S38483(), F_String_dappend(F_Main_djs_dentries(a1), S38485())))));
+return F_String_dappend(S38652(), F_String_dappend(S38653(), F_String_dappend(a0, F_String_dappend(S38654(), F_String_dappend(F_Main_djs_dentries(a1), S38656())))));
 }
 static V W_Main_djs_dwrap(V *a) { (void)a; return F_Main_djs_dwrap(a[0], a[1]); }
-static V S38492(void) { static V c; return STRC(c, ""); }
+static V S38663(void) { static V c; return STRC(c, ""); }
 static V F_Main_djs_dentries(V a0) {
 top:;
-V s38491 = a0;
-if ((s38491) == IMM(0)) {
-return S38492();
-} else if (IS_N(s38491, 1)) {
-return F_String_dappend(F_Main_djs_dentry(FLD(s38491, 0)), F_Main_djs_dentries(FLD(s38491, 1)));
+V s38662 = a0;
+if ((s38662) == IMM(0)) {
+return S38663();
+} else if (IS_N(s38662, 1)) {
+return F_String_dappend(F_Main_djs_dentry(FLD(s38662, 0)), F_Main_djs_dentries(FLD(s38662, 1)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Main_djs_dentries(V *a) { (void)a; return F_Main_djs_dentries(a[0]); }
-static V S38496(void) { static V c; return STRC(c, "  [\042"); }
-static V S38497(void) { static V c; return STRC(c, "\042]: R[\042"); }
-static V S38498(void) { static V c; return STRC(c, "\042] \077\077 { run: typeof "); }
-static V S38499(void) { static V c; return STRC(c, " === \042function\042 \077 "); }
-static V S38500(void) { static V c; return STRC(c, " : undefined, need: typeof "); }
-static V S38501(void) { static V c; return STRC(c, "_need === \042function\042 \077 "); }
-static V S38502(void) { static V c; return STRC(c, "_need : undefined },\012"); }
+static V S38667(void) { static V c; return STRC(c, "  [\042"); }
+static V S38668(void) { static V c; return STRC(c, "\042]: R[\042"); }
+static V S38669(void) { static V c; return STRC(c, "\042] \077\077 { run: typeof "); }
+static V S38670(void) { static V c; return STRC(c, " === \042function\042 \077 "); }
+static V S38671(void) { static V c; return STRC(c, " : undefined, need: typeof "); }
+static V S38672(void) { static V c; return STRC(c, "_need === \042function\042 \077 "); }
+static V S38673(void) { static V c; return STRC(c, "_need : undefined },\012"); }
 static V F_Main_djs_dentry(V a0) {
 top:;
-return F_String_dappend(S38496(), F_String_dappend(a0, F_String_dappend(S38497(), F_String_dappend(a0, F_String_dappend(S38498(), F_String_dappend(a0, F_String_dappend(S38499(), F_String_dappend(a0, F_String_dappend(S38500(), F_String_dappend(a0, F_String_dappend(S38501(), F_String_dappend(a0, S38502()))))))))))));
+return F_String_dappend(S38667(), F_String_dappend(a0, F_String_dappend(S38668(), F_String_dappend(a0, F_String_dappend(S38669(), F_String_dappend(a0, F_String_dappend(S38670(), F_String_dappend(a0, F_String_dappend(S38671(), F_String_dappend(a0, F_String_dappend(S38672(), F_String_dappend(a0, S38673()))))))))))));
 }
 static V W_Main_djs_dentry(V *a) { (void)a; return F_Main_djs_dentry(a[0]); }
-static V K38519(void) { static V c; return KONST(c, CN(0, 7, (V[]){0u, IMM(0), IMM(0), IMM(0), IMM(0), IMM(0), IMM(0)})); }
+static V K38690(void) { static V c; return KONST(c, CN(0, 7, (V[]){0u, IMM(0), IMM(0), IMM(0), IMM(0), IMM(0), IMM(0)})); }
 BEND_UINL V U_J_dprogram_dgo(V a0, V *o) {
 top:;
-V v38515 = apply(F_J_dprogram_dm(C2(0, F_G_dnew(a0), F_J_dinfo(a0, IMM(0)))), K38519());
-V v38520 = FLD(v38515, 1);
-return U_J_dprogram_dfin_x37u_x37u(FLD(v38515, 0), FLD(v38520, 0), FLD(v38520, 1), FLD(v38520, 2), FLD(v38520, 3), FLD(v38520, 4), FLD(v38520, 5), FLD(v38520, 6), o);
+V v38686 = apply(F_J_dprogram_dm(C2(0, F_G_dnew(a0), F_J_dinfo(a0, IMM(0)))), K38690());
+V v38691 = FLD(v38686, 1);
+return U_J_dprogram_dfin_x37u_x37u(FLD(v38686, 0), FLD(v38691, 0), FLD(v38691, 1), FLD(v38691, 2), FLD(v38691, 3), FLD(v38691, 4), FLD(v38691, 5), FLD(v38691, 6), o);
 }
 static V F_J_dprogram_dgo(V a0) { V o[4]; U_J_dprogram_dgo(a0, o); return CN(0, 4, o); }
 static V W_J_dprogram_dgo(V *a) { (void)a; return F_J_dprogram_dgo(a[0]); }
-static V S38525(void) { static V c; return STRC(c, "\012"); }
+static V S38696(void) { static V c; return STRC(c, "\012"); }
 BEND_UINL V U_J_dprogram_dfin_x37u_x37u(V a0, V a1_, V a2, V a3, V a4, V a5, V a6, V a7, V *o) {
 uint32_t a1 = (uint32_t)a1_;
 top:;
 o[0] = F_RtJs_dsrc();
 o[1] = F_Gen_ddedup(F_List_dreverse_dgo_x37f2317285865x3828926571(0, IMM(0), a7), IMM(0));
-o[2] = F_Doc_dgo_x37f2587222478x2871727720(IMM(0), C2(1, a3, C2(1, C1(1, F_String_dappend(S38525(), a0)), IMM(0))));
+o[2] = F_Doc_dgo_x37f2587222478x2871727720(IMM(0), C2(1, a3, C2(1, C1(1, F_String_dappend(S38696(), a0)), IMM(0))));
 o[3] = a5;
 return 0;
 }
@@ -94656,1072 +95088,1072 @@ top:;
 return F_String_dappend(F_RtJs_dsrc_dp0(), F_String_dappend(F_RtJs_dsrc_dp1(), F_String_dappend(F_RtJs_dsrc_dp2(), F_String_dappend(F_RtJs_dsrc_dp3(), F_String_dappend(F_RtJs_dsrc_dp4(), F_String_dappend(F_RtJs_dsrc_dp5(), F_String_dappend(F_RtJs_dsrc_dp6(), F_String_dappend(F_RtJs_dsrc_dp7(), F_String_dappend(F_RtJs_dsrc_dp8(), F_RtJs_dsrc_dp9())))))))));
 }
 static V W_RtJs_dsrc(V *a) { (void)a; return F_RtJs_dsrc(); }
-static V S38547(void) { static V c; return STRC(c, "      break;\012"); }
-static V S38548(void) { static V c; return STRC(c, "    } else if (argv[i] === \042--bend-help\042) {\012"); }
-static V S38549(void) { static V c; return STRC(c, "      io_out(1, io_bytes(\042usage: \042 + process.argv[1] + \042 [arguments]\134n\042));\012"); }
-static V S38550(void) { static V c; return STRC(c, "      process.exit(0);\012"); }
-static V S38551(void) { static V c; return STRC(c, "    } else if (argv[i] === \042--threads\042 || argv[i] === \042--gpu\042) {\012"); }
-static V S38552(void) { static V c; return STRC(c, "      i += 1;\012"); }
-static V S38553(void) { static V c; return STRC(c, "    } else {\012"); }
-static V S38554(void) { static V c; return STRC(c, "      cli_args.push(argv[i]);\012"); }
-static V S38555(void) { static V c; return STRC(c, "    }\012"); }
-static V S38556(void) { static V c; return STRC(c, "  }\012"); }
-static V S38557(void) { static V c; return STRC(c, "}\012"); }
-static V S38558(void) { static V c; return STRC(c, "\012"); }
-static V S38559(void) { static V c; return STRC(c, "function bend_run(main) {\012"); }
-static V S38560(void) { static V c; return STRC(c, "  cli(process.argv.slice(1));\012"); }
-static V S38561(void) { static V c; return STRC(c, "  let code;\012"); }
-static V S38562(void) { static V c; return STRC(c, "  try {\012"); }
-static V S38563(void) { static V c; return STRC(c, "    code = io_run(main());\012"); }
-static V S38564(void) { static V c; return STRC(c, "  } catch (e) {\012"); }
-static V S38565(void) { static V c; return STRC(c, "    io_errs(e instanceof RangeError \077 \042bend: memory fault (machine stack overflow\077)\042 : String(e));\012"); }
-static V S38566(void) { static V c; return STRC(c, "    code = 1;\012"); }
-static V S38567(void) { static V c; return STRC(c, "  }\012"); }
-static V S38568(void) { static V c; return STRC(c, "  process.exit(code);\012"); }
-static V S38569(void) { static V c; return STRC(c, "}\012"); }
-static V S38570(void) { static V c; return STRC(c, "\012"); }
-static V S38571(void) { static V c; return STRC(c, "function bend_run_value(main, show) {\012"); }
-static V S38572(void) { static V c; return STRC(c, "  cli(process.argv.slice(1));\012"); }
-static V S38573(void) { static V c; return STRC(c, "  try {\012"); }
-static V S38574(void) { static V c; return STRC(c, "    io_out(1, io_bytes(show(main()) + \042\134n\042));\012"); }
-static V S38575(void) { static V c; return STRC(c, "  } catch (e) {\012"); }
-static V S38576(void) { static V c; return STRC(c, "    io_errs(e instanceof RangeError \077 \042bend: memory fault (machine stack overflow\077)\042 : String(e));\012"); }
-static V S38577(void) { static V c; return STRC(c, "    process.exit(1);\012"); }
-static V S38578(void) { static V c; return STRC(c, "  }\012"); }
-static V S38579(void) { static V c; return STRC(c, "  process.exit(0);\012"); }
-static V S38580(void) { static V c; return STRC(c, "}\012"); }
-static V S38581(void) { static V c; return STRC(c, "\012"); }
+static V S38718(void) { static V c; return STRC(c, "      break;\012"); }
+static V S38719(void) { static V c; return STRC(c, "    } else if (argv[i] === \042--bend-help\042) {\012"); }
+static V S38720(void) { static V c; return STRC(c, "      io_out(1, io_bytes(\042usage: \042 + process.argv[1] + \042 [arguments]\134n\042));\012"); }
+static V S38721(void) { static V c; return STRC(c, "      process.exit(0);\012"); }
+static V S38722(void) { static V c; return STRC(c, "    } else if (argv[i] === \042--threads\042 || argv[i] === \042--gpu\042) {\012"); }
+static V S38723(void) { static V c; return STRC(c, "      i += 1;\012"); }
+static V S38724(void) { static V c; return STRC(c, "    } else {\012"); }
+static V S38725(void) { static V c; return STRC(c, "      cli_args.push(argv[i]);\012"); }
+static V S38726(void) { static V c; return STRC(c, "    }\012"); }
+static V S38727(void) { static V c; return STRC(c, "  }\012"); }
+static V S38728(void) { static V c; return STRC(c, "}\012"); }
+static V S38729(void) { static V c; return STRC(c, "\012"); }
+static V S38730(void) { static V c; return STRC(c, "function bend_run(main) {\012"); }
+static V S38731(void) { static V c; return STRC(c, "  cli(process.argv.slice(1));\012"); }
+static V S38732(void) { static V c; return STRC(c, "  let code;\012"); }
+static V S38733(void) { static V c; return STRC(c, "  try {\012"); }
+static V S38734(void) { static V c; return STRC(c, "    code = io_run(main());\012"); }
+static V S38735(void) { static V c; return STRC(c, "  } catch (e) {\012"); }
+static V S38736(void) { static V c; return STRC(c, "    io_errs(e instanceof RangeError \077 \042bend: memory fault (machine stack overflow\077)\042 : String(e));\012"); }
+static V S38737(void) { static V c; return STRC(c, "    code = 1;\012"); }
+static V S38738(void) { static V c; return STRC(c, "  }\012"); }
+static V S38739(void) { static V c; return STRC(c, "  process.exit(code);\012"); }
+static V S38740(void) { static V c; return STRC(c, "}\012"); }
+static V S38741(void) { static V c; return STRC(c, "\012"); }
+static V S38742(void) { static V c; return STRC(c, "function bend_run_value(main, show) {\012"); }
+static V S38743(void) { static V c; return STRC(c, "  cli(process.argv.slice(1));\012"); }
+static V S38744(void) { static V c; return STRC(c, "  try {\012"); }
+static V S38745(void) { static V c; return STRC(c, "    io_out(1, io_bytes(show(main()) + \042\134n\042));\012"); }
+static V S38746(void) { static V c; return STRC(c, "  } catch (e) {\012"); }
+static V S38747(void) { static V c; return STRC(c, "    io_errs(e instanceof RangeError \077 \042bend: memory fault (machine stack overflow\077)\042 : String(e));\012"); }
+static V S38748(void) { static V c; return STRC(c, "    process.exit(1);\012"); }
+static V S38749(void) { static V c; return STRC(c, "  }\012"); }
+static V S38750(void) { static V c; return STRC(c, "  process.exit(0);\012"); }
+static V S38751(void) { static V c; return STRC(c, "}\012"); }
+static V S38752(void) { static V c; return STRC(c, "\012"); }
 static V F_RtJs_dsrc_dp9(void) {
 top:;
-return F_String_dappend(S38547(), F_String_dappend(S38548(), F_String_dappend(S38549(), F_String_dappend(S38550(), F_String_dappend(S38551(), F_String_dappend(S38552(), F_String_dappend(S38553(), F_String_dappend(S38554(), F_String_dappend(S38555(), F_String_dappend(S38556(), F_String_dappend(S38557(), F_String_dappend(S38558(), F_String_dappend(S38559(), F_String_dappend(S38560(), F_String_dappend(S38561(), F_String_dappend(S38562(), F_String_dappend(S38563(), F_String_dappend(S38564(), F_String_dappend(S38565(), F_String_dappend(S38566(), F_String_dappend(S38567(), F_String_dappend(S38568(), F_String_dappend(S38569(), F_String_dappend(S38570(), F_String_dappend(S38571(), F_String_dappend(S38572(), F_String_dappend(S38573(), F_String_dappend(S38574(), F_String_dappend(S38575(), F_String_dappend(S38576(), F_String_dappend(S38577(), F_String_dappend(S38578(), F_String_dappend(S38579(), F_String_dappend(S38580(), S38581()))))))))))))))))))))))))))))))))));
+return F_String_dappend(S38718(), F_String_dappend(S38719(), F_String_dappend(S38720(), F_String_dappend(S38721(), F_String_dappend(S38722(), F_String_dappend(S38723(), F_String_dappend(S38724(), F_String_dappend(S38725(), F_String_dappend(S38726(), F_String_dappend(S38727(), F_String_dappend(S38728(), F_String_dappend(S38729(), F_String_dappend(S38730(), F_String_dappend(S38731(), F_String_dappend(S38732(), F_String_dappend(S38733(), F_String_dappend(S38734(), F_String_dappend(S38735(), F_String_dappend(S38736(), F_String_dappend(S38737(), F_String_dappend(S38738(), F_String_dappend(S38739(), F_String_dappend(S38740(), F_String_dappend(S38741(), F_String_dappend(S38742(), F_String_dappend(S38743(), F_String_dappend(S38744(), F_String_dappend(S38745(), F_String_dappend(S38746(), F_String_dappend(S38747(), F_String_dappend(S38748(), F_String_dappend(S38749(), F_String_dappend(S38750(), F_String_dappend(S38751(), S38752()))))))))))))))))))))))))))))))))));
 }
 static V W_RtJs_dsrc_dp9(V *a) { (void)a; return F_RtJs_dsrc_dp9(); }
-static V S38616(void) { static V c; return STRC(c, "      }\012"); }
-static V S38617(void) { static V c; return STRC(c, "      const x = op.run(...op.args, op.kont);\012"); }
-static V S38618(void) { static V c; return STRC(c, "      if (x === undefined) break;\012"); }
-static V S38619(void) { static V c; return STRC(c, "      op = op.kont(x);\012"); }
-static V S38620(void) { static V c; return STRC(c, "    }\012"); }
-static V S38621(void) { static V c; return STRC(c, "  }\012"); }
-static V S38622(void) { static V c; return STRC(c, "}\012"); }
-static V S38623(void) { static V c; return STRC(c, "\012"); }
-static V S38624(void) { static V c; return STRC(c, "// A request for effect e with arguments args, continued by k.\012"); }
-static V S38625(void) { static V c; return STRC(c, "function io_req(e, name, args, k) {\012"); }
-static V S38626(void) { static V c; return STRC(c, "  return { $: \042$REQ\042, name, run: e\077.run, need: e\077.need, args, kont: k };\012"); }
-static V S38627(void) { static V c; return STRC(c, "}\012"); }
-static V S38628(void) { static V c; return STRC(c, "\012"); }
-static V S38629(void) { static V c; return STRC(c, "// k, checking first that the value a host effect answers has one of its\012"); }
-static V S38630(void) { static V c; return STRC(c, "// type's tags (Bend 2.0.32 fail-stops there, #1105).\012"); }
-static V S38631(void) { static V c; return STRC(c, "function io_tags(ty, tags, k) {\012"); }
-static V S38632(void) { static V c; return STRC(c, "  return (x) => {\012"); }
-static V S38633(void) { static V c; return STRC(c, "    if (!tags.includes(x\077.$)) {\012"); }
-static V S38634(void) { static V c; return STRC(c, "      bend_fail(ty + \042 has no tag \042 + x\077.$ + \042 (its tags: \042 + tags.join(\042, \042) + \042); a tag names its\042 +\012"); }
-static V S38635(void) { static V c; return STRC(c, "        \042 constructor as the loading file sees it, which a later version will make the same everywhere (#1105)\042);\012"); }
-static V S38636(void) { static V c; return STRC(c, "    }\012"); }
-static V S38637(void) { static V c; return STRC(c, "    return k(x);\012"); }
-static V S38638(void) { static V c; return STRC(c, "  };\012"); }
-static V S38639(void) { static V c; return STRC(c, "}\012"); }
-static V S38640(void) { static V c; return STRC(c, "\012"); }
-static V S38641(void) { static V c; return STRC(c, "// Chan\012"); }
-static V S38642(void) { static V c; return STRC(c, "// ----\012"); }
-static V S38643(void) { static V c; return STRC(c, "\012"); }
-static V S38644(void) { static V c; return STRC(c, "const CHAN_RECV = Symbol();\012"); }
-static V S38645(void) { static V c; return STRC(c, "\012"); }
-static V S38646(void) { static V c; return STRC(c, "function chan_wake(row, x) {\012"); }
-static V S38647(void) { static V c; return STRC(c, "  const w = row.wait.shift();\012"); }
-static V S38648(void) { static V c; return STRC(c, "  io_push(w.cont, x, false);\012"); }
-static V S38649(void) { static V c; return STRC(c, "  return w.item;\012"); }
-static V S38650(void) { static V c; return STRC(c, "}\012"); }
-static V S38651(void) { static V c; return STRC(c, "\012"); }
-static V S38652(void) { static V c; return STRC(c, "function chan_take(row) {\012"); }
-static V S38653(void) { static V c; return STRC(c, "  const v = row.ring.shift();\012"); }
-static V S38654(void) { static V c; return STRC(c, "  if (row.wait.length > 0) row.ring.push(chan_wake(row, true));\012"); }
-static V S38655(void) { static V c; return STRC(c, "  return v;\012"); }
-static V S38656(void) { static V c; return STRC(c, "}\012"); }
-static V S38657(void) { static V c; return STRC(c, "\012"); }
-static V S38658(void) { static V c; return STRC(c, "function chan_shut(row) {\012"); }
-static V S38659(void) { static V c; return STRC(c, "  row.shut = true;\012"); }
-static V S38660(void) { static V c; return STRC(c, "  while (row.wait.length > 0) {\012"); }
-static V S38661(void) { static V c; return STRC(c, "    chan_wake(row, row.wait[0].item === CHAN_RECV \077 { $: \042None\042 } : false);\012"); }
-static V S38662(void) { static V c; return STRC(c, "  }\012"); }
-static V S38663(void) { static V c; return STRC(c, "}\012"); }
-static V S38664(void) { static V c; return STRC(c, "\012"); }
-static V S38665(void) { static V c; return STRC(c, "// Entry points\012"); }
-static V S38666(void) { static V c; return STRC(c, "// ============\012"); }
-static V S38667(void) { static V c; return STRC(c, "\012"); }
-static V S38668(void) { static V c; return STRC(c, "let cli_args = [];\012"); }
-static V S38669(void) { static V c; return STRC(c, "\012"); }
-static V S38670(void) { static V c; return STRC(c, "// IO.args starts with the program as invoked (the JS file).\012"); }
-static V S38671(void) { static V c; return STRC(c, "function cli(argv) {\012"); }
-static V S38672(void) { static V c; return STRC(c, "  cli_args.push(argv[0]);\012"); }
-static V S38673(void) { static V c; return STRC(c, "  for (let i = 1; i < argv.length; i += 1) {\012"); }
-static V S38674(void) { static V c; return STRC(c, "    if (argv[i] === \042--\042) {\012"); }
-static V S38675(void) { static V c; return STRC(c, "      cli_args.push(...argv.slice(i + 1));\012"); }
+static V S38787(void) { static V c; return STRC(c, "      }\012"); }
+static V S38788(void) { static V c; return STRC(c, "      const x = op.run(...op.args, op.kont);\012"); }
+static V S38789(void) { static V c; return STRC(c, "      if (x === undefined) break;\012"); }
+static V S38790(void) { static V c; return STRC(c, "      op = op.kont(x);\012"); }
+static V S38791(void) { static V c; return STRC(c, "    }\012"); }
+static V S38792(void) { static V c; return STRC(c, "  }\012"); }
+static V S38793(void) { static V c; return STRC(c, "}\012"); }
+static V S38794(void) { static V c; return STRC(c, "\012"); }
+static V S38795(void) { static V c; return STRC(c, "// A request for effect e with arguments args, continued by k.\012"); }
+static V S38796(void) { static V c; return STRC(c, "function io_req(e, name, args, k) {\012"); }
+static V S38797(void) { static V c; return STRC(c, "  return { $: \042$REQ\042, name, run: e\077.run, need: e\077.need, args, kont: k };\012"); }
+static V S38798(void) { static V c; return STRC(c, "}\012"); }
+static V S38799(void) { static V c; return STRC(c, "\012"); }
+static V S38800(void) { static V c; return STRC(c, "// k, checking first that the value a host effect answers has one of its\012"); }
+static V S38801(void) { static V c; return STRC(c, "// type's tags (Bend 2.0.32 fail-stops there, #1105).\012"); }
+static V S38802(void) { static V c; return STRC(c, "function io_tags(ty, tags, k) {\012"); }
+static V S38803(void) { static V c; return STRC(c, "  return (x) => {\012"); }
+static V S38804(void) { static V c; return STRC(c, "    if (!tags.includes(x\077.$)) {\012"); }
+static V S38805(void) { static V c; return STRC(c, "      bend_fail(ty + \042 has no tag \042 + x\077.$ + \042 (its tags: \042 + tags.join(\042, \042) + \042); a tag names its\042 +\012"); }
+static V S38806(void) { static V c; return STRC(c, "        \042 constructor as the loading file sees it, which a later version will make the same everywhere (#1105)\042);\012"); }
+static V S38807(void) { static V c; return STRC(c, "    }\012"); }
+static V S38808(void) { static V c; return STRC(c, "    return k(x);\012"); }
+static V S38809(void) { static V c; return STRC(c, "  };\012"); }
+static V S38810(void) { static V c; return STRC(c, "}\012"); }
+static V S38811(void) { static V c; return STRC(c, "\012"); }
+static V S38812(void) { static V c; return STRC(c, "// Chan\012"); }
+static V S38813(void) { static V c; return STRC(c, "// ----\012"); }
+static V S38814(void) { static V c; return STRC(c, "\012"); }
+static V S38815(void) { static V c; return STRC(c, "const CHAN_RECV = Symbol();\012"); }
+static V S38816(void) { static V c; return STRC(c, "\012"); }
+static V S38817(void) { static V c; return STRC(c, "function chan_wake(row, x) {\012"); }
+static V S38818(void) { static V c; return STRC(c, "  const w = row.wait.shift();\012"); }
+static V S38819(void) { static V c; return STRC(c, "  io_push(w.cont, x, false);\012"); }
+static V S38820(void) { static V c; return STRC(c, "  return w.item;\012"); }
+static V S38821(void) { static V c; return STRC(c, "}\012"); }
+static V S38822(void) { static V c; return STRC(c, "\012"); }
+static V S38823(void) { static V c; return STRC(c, "function chan_take(row) {\012"); }
+static V S38824(void) { static V c; return STRC(c, "  const v = row.ring.shift();\012"); }
+static V S38825(void) { static V c; return STRC(c, "  if (row.wait.length > 0) row.ring.push(chan_wake(row, true));\012"); }
+static V S38826(void) { static V c; return STRC(c, "  return v;\012"); }
+static V S38827(void) { static V c; return STRC(c, "}\012"); }
+static V S38828(void) { static V c; return STRC(c, "\012"); }
+static V S38829(void) { static V c; return STRC(c, "function chan_shut(row) {\012"); }
+static V S38830(void) { static V c; return STRC(c, "  row.shut = true;\012"); }
+static V S38831(void) { static V c; return STRC(c, "  while (row.wait.length > 0) {\012"); }
+static V S38832(void) { static V c; return STRC(c, "    chan_wake(row, row.wait[0].item === CHAN_RECV \077 { $: \042None\042 } : false);\012"); }
+static V S38833(void) { static V c; return STRC(c, "  }\012"); }
+static V S38834(void) { static V c; return STRC(c, "}\012"); }
+static V S38835(void) { static V c; return STRC(c, "\012"); }
+static V S38836(void) { static V c; return STRC(c, "// Entry points\012"); }
+static V S38837(void) { static V c; return STRC(c, "// ============\012"); }
+static V S38838(void) { static V c; return STRC(c, "\012"); }
+static V S38839(void) { static V c; return STRC(c, "let cli_args = [];\012"); }
+static V S38840(void) { static V c; return STRC(c, "\012"); }
+static V S38841(void) { static V c; return STRC(c, "// IO.args starts with the program as invoked (the JS file).\012"); }
+static V S38842(void) { static V c; return STRC(c, "function cli(argv) {\012"); }
+static V S38843(void) { static V c; return STRC(c, "  cli_args.push(argv[0]);\012"); }
+static V S38844(void) { static V c; return STRC(c, "  for (let i = 1; i < argv.length; i += 1) {\012"); }
+static V S38845(void) { static V c; return STRC(c, "    if (argv[i] === \042--\042) {\012"); }
+static V S38846(void) { static V c; return STRC(c, "      cli_args.push(...argv.slice(i + 1));\012"); }
 static V F_RtJs_dsrc_dp8(void) {
 top:;
-return F_String_dappend(S38616(), F_String_dappend(S38617(), F_String_dappend(S38618(), F_String_dappend(S38619(), F_String_dappend(S38620(), F_String_dappend(S38621(), F_String_dappend(S38622(), F_String_dappend(S38623(), F_String_dappend(S38624(), F_String_dappend(S38625(), F_String_dappend(S38626(), F_String_dappend(S38627(), F_String_dappend(S38628(), F_String_dappend(S38629(), F_String_dappend(S38630(), F_String_dappend(S38631(), F_String_dappend(S38632(), F_String_dappend(S38633(), F_String_dappend(S38634(), F_String_dappend(S38635(), F_String_dappend(S38636(), F_String_dappend(S38637(), F_String_dappend(S38638(), F_String_dappend(S38639(), F_String_dappend(S38640(), F_String_dappend(S38641(), F_String_dappend(S38642(), F_String_dappend(S38643(), F_String_dappend(S38644(), F_String_dappend(S38645(), F_String_dappend(S38646(), F_String_dappend(S38647(), F_String_dappend(S38648(), F_String_dappend(S38649(), F_String_dappend(S38650(), F_String_dappend(S38651(), F_String_dappend(S38652(), F_String_dappend(S38653(), F_String_dappend(S38654(), F_String_dappend(S38655(), F_String_dappend(S38656(), F_String_dappend(S38657(), F_String_dappend(S38658(), F_String_dappend(S38659(), F_String_dappend(S38660(), F_String_dappend(S38661(), F_String_dappend(S38662(), F_String_dappend(S38663(), F_String_dappend(S38664(), F_String_dappend(S38665(), F_String_dappend(S38666(), F_String_dappend(S38667(), F_String_dappend(S38668(), F_String_dappend(S38669(), F_String_dappend(S38670(), F_String_dappend(S38671(), F_String_dappend(S38672(), F_String_dappend(S38673(), F_String_dappend(S38674(), S38675())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+return F_String_dappend(S38787(), F_String_dappend(S38788(), F_String_dappend(S38789(), F_String_dappend(S38790(), F_String_dappend(S38791(), F_String_dappend(S38792(), F_String_dappend(S38793(), F_String_dappend(S38794(), F_String_dappend(S38795(), F_String_dappend(S38796(), F_String_dappend(S38797(), F_String_dappend(S38798(), F_String_dappend(S38799(), F_String_dappend(S38800(), F_String_dappend(S38801(), F_String_dappend(S38802(), F_String_dappend(S38803(), F_String_dappend(S38804(), F_String_dappend(S38805(), F_String_dappend(S38806(), F_String_dappend(S38807(), F_String_dappend(S38808(), F_String_dappend(S38809(), F_String_dappend(S38810(), F_String_dappend(S38811(), F_String_dappend(S38812(), F_String_dappend(S38813(), F_String_dappend(S38814(), F_String_dappend(S38815(), F_String_dappend(S38816(), F_String_dappend(S38817(), F_String_dappend(S38818(), F_String_dappend(S38819(), F_String_dappend(S38820(), F_String_dappend(S38821(), F_String_dappend(S38822(), F_String_dappend(S38823(), F_String_dappend(S38824(), F_String_dappend(S38825(), F_String_dappend(S38826(), F_String_dappend(S38827(), F_String_dappend(S38828(), F_String_dappend(S38829(), F_String_dappend(S38830(), F_String_dappend(S38831(), F_String_dappend(S38832(), F_String_dappend(S38833(), F_String_dappend(S38834(), F_String_dappend(S38835(), F_String_dappend(S38836(), F_String_dappend(S38837(), F_String_dappend(S38838(), F_String_dappend(S38839(), F_String_dappend(S38840(), F_String_dappend(S38841(), F_String_dappend(S38842(), F_String_dappend(S38843(), F_String_dappend(S38844(), F_String_dappend(S38845(), S38846())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
 }
 static V W_RtJs_dsrc_dp8(V *a) { (void)a; return F_RtJs_dsrc_dp8(); }
-static V S38735(void) { static V c; return STRC(c, "    const tv = new BigInt64Array([BigInt(ms / 1000 | 0), BigInt(ms % 1000 * 1000)]);\012"); }
-static V S38736(void) { static V c; return STRC(c, "    const sys = io_sys();\012"); }
-static V S38737(void) { static V c; return STRC(c, "    sys.select(top + 1, sys.ptr(set), sys.ptr(set, len), null, ms < 0 \077 null : sys.ptr(tv));\012"); }
-static V S38738(void) { static V c; return STRC(c, "    io.ready = (w) => set[at(w)] & 1 << (w.fd & 7);\012"); }
-static V S38739(void) { static V c; return STRC(c, "  }\012"); }
-static V S38740(void) { static V c; return STRC(c, "  const now = performance.now();\012"); }
-static V S38741(void) { static V c; return STRC(c, "  io.waits = io.waits.filter((w) => {\012"); }
-static V S38742(void) { static V c; return STRC(c, "    const ready = w.at <= now || (w.fd !== undefined && io.ready !== undefined && io.ready(w));\012"); }
-static V S38743(void) { static V c; return STRC(c, "    if (ready) io_push(io_wake, w, false);\012"); }
-static V S38744(void) { static V c; return STRC(c, "    return !ready;\012"); }
-static V S38745(void) { static V c; return STRC(c, "  });\012"); }
-static V S38746(void) { static V c; return STRC(c, "  io.ready = undefined;\012"); }
-static V S38747(void) { static V c; return STRC(c, "}\012"); }
-static V S38748(void) { static V c; return STRC(c, "\012"); }
-static V S38749(void) { static V c; return STRC(c, "// Resumes k with more's value; undefined means re-parked.\012"); }
-static V S38750(void) { static V c; return STRC(c, "function io_wake(w) {\012"); }
-static V S38751(void) { static V c; return STRC(c, "  const x = w.more();\012"); }
-static V S38752(void) { static V c; return STRC(c, "  return x === undefined \077 undefined : w.k(x);\012"); }
-static V S38753(void) { static V c; return STRC(c, "}\012"); }
-static V S38754(void) { static V c; return STRC(c, "\012"); }
-static V S38755(void) { static V c; return STRC(c, "// Parks for read/write (out) or a deadline at (performance.now()).\012"); }
-static V S38756(void) { static V c; return STRC(c, "function io_park_on(fd, out, k, more, at) {\012"); }
-static V S38757(void) { static V c; return STRC(c, "  globalThis.BEND_IO.waits.push({ fd, out, k, more, at });\012"); }
-static V S38758(void) { static V c; return STRC(c, "}\012"); }
-static V S38759(void) { static V c; return STRC(c, "\012"); }
-static V S38760(void) { static V c; return STRC(c, "function io_run(m) {\012"); }
-static V S38761(void) { static V c; return STRC(c, "  const io = { runs: [], live: 0, waits: [] };\012"); }
-static V S38762(void) { static V c; return STRC(c, "  globalThis.BEND_IO = io;\012"); }
-static V S38763(void) { static V c; return STRC(c, "  io_push(m(null), (x) => ({ $: \042Emit\042, value: x }), true);\012"); }
-static V S38764(void) { static V c; return STRC(c, "  for (;;) {\012"); }
-static V S38765(void) { static V c; return STRC(c, "    if (io.runs.length === 0) {\012"); }
-static V S38766(void) { static V c; return STRC(c, "      if (io.live === 0) return 0;\012"); }
-static V S38767(void) { static V c; return STRC(c, "      if (io.waits.length === 0) {\012"); }
-static V S38768(void) { static V c; return STRC(c, "        io_errs(\042bend: deadlock: every computation waits on a channel\042);\012"); }
-static V S38769(void) { static V c; return STRC(c, "        return 1;\012"); }
-static V S38770(void) { static V c; return STRC(c, "      }\012"); }
-static V S38771(void) { static V c; return STRC(c, "      io_wait(io);\012"); }
-static V S38772(void) { static V c; return STRC(c, "      continue;\012"); }
-static V S38773(void) { static V c; return STRC(c, "    }\012"); }
-static V S38774(void) { static V c; return STRC(c, "    const s = io.runs.shift();\012"); }
-static V S38775(void) { static V c; return STRC(c, "    let op = s.fun(s.arg);\012"); }
-static V S38776(void) { static V c; return STRC(c, "    // An IO value from an effect (IO.spawn's) takes its erased type first.\012"); }
-static V S38777(void) { static V c; return STRC(c, "    if (typeof op === \042function\042) op = op(s.arg);\012"); }
-static V S38778(void) { static V c; return STRC(c, "    while (op !== undefined) {\012"); }
-static V S38779(void) { static V c; return STRC(c, "      if (op.$ === \042Emit\042) {\012"); }
-static V S38780(void) { static V c; return STRC(c, "        io.live -= 1;\012"); }
-static V S38781(void) { static V c; return STRC(c, "        break;\012"); }
-static V S38782(void) { static V c; return STRC(c, "      }\012"); }
-static V S38783(void) { static V c; return STRC(c, "      if (op.$ === \042Halt\042) {\012"); }
-static V S38784(void) { static V c; return STRC(c, "        io_errs(op.message);\012"); }
-static V S38785(void) { static V c; return STRC(c, "        return op.code;\012"); }
-static V S38786(void) { static V c; return STRC(c, "      }\012"); }
-static V S38787(void) { static V c; return STRC(c, "      if (op.run === undefined) bend_fail(\042an effect with no JS implementation: \042 + op.name);\012"); }
-static V S38788(void) { static V c; return STRC(c, "      const need = op.need\077.() \077\077 {};\012"); }
-static V S38789(void) { static V c; return STRC(c, "      if (need.time || need.read) {\012"); }
-static V S38790(void) { static V c; return STRC(c, "        const o = op;\012"); }
-static V S38791(void) { static V c; return STRC(c, "        const more = () => o.run(...o.args, o.kont);\012"); }
-static V S38792(void) { static V c; return STRC(c, "        io_park_on(need.read \077 op.args[0] : undefined, false, op.kont, more,\012"); }
-static V S38793(void) { static V c; return STRC(c, "          need.read \077 undefined : performance.now() + Number(op.args[0]));\012"); }
-static V S38794(void) { static V c; return STRC(c, "        break;\012"); }
+static V S38906(void) { static V c; return STRC(c, "    const tv = new BigInt64Array([BigInt(ms / 1000 | 0), BigInt(ms % 1000 * 1000)]);\012"); }
+static V S38907(void) { static V c; return STRC(c, "    const sys = io_sys();\012"); }
+static V S38908(void) { static V c; return STRC(c, "    sys.select(top + 1, sys.ptr(set), sys.ptr(set, len), null, ms < 0 \077 null : sys.ptr(tv));\012"); }
+static V S38909(void) { static V c; return STRC(c, "    io.ready = (w) => set[at(w)] & 1 << (w.fd & 7);\012"); }
+static V S38910(void) { static V c; return STRC(c, "  }\012"); }
+static V S38911(void) { static V c; return STRC(c, "  const now = performance.now();\012"); }
+static V S38912(void) { static V c; return STRC(c, "  io.waits = io.waits.filter((w) => {\012"); }
+static V S38913(void) { static V c; return STRC(c, "    const ready = w.at <= now || (w.fd !== undefined && io.ready !== undefined && io.ready(w));\012"); }
+static V S38914(void) { static V c; return STRC(c, "    if (ready) io_push(io_wake, w, false);\012"); }
+static V S38915(void) { static V c; return STRC(c, "    return !ready;\012"); }
+static V S38916(void) { static V c; return STRC(c, "  });\012"); }
+static V S38917(void) { static V c; return STRC(c, "  io.ready = undefined;\012"); }
+static V S38918(void) { static V c; return STRC(c, "}\012"); }
+static V S38919(void) { static V c; return STRC(c, "\012"); }
+static V S38920(void) { static V c; return STRC(c, "// Resumes k with more's value; undefined means re-parked.\012"); }
+static V S38921(void) { static V c; return STRC(c, "function io_wake(w) {\012"); }
+static V S38922(void) { static V c; return STRC(c, "  const x = w.more();\012"); }
+static V S38923(void) { static V c; return STRC(c, "  return x === undefined \077 undefined : w.k(x);\012"); }
+static V S38924(void) { static V c; return STRC(c, "}\012"); }
+static V S38925(void) { static V c; return STRC(c, "\012"); }
+static V S38926(void) { static V c; return STRC(c, "// Parks for read/write (out) or a deadline at (performance.now()).\012"); }
+static V S38927(void) { static V c; return STRC(c, "function io_park_on(fd, out, k, more, at) {\012"); }
+static V S38928(void) { static V c; return STRC(c, "  globalThis.BEND_IO.waits.push({ fd, out, k, more, at });\012"); }
+static V S38929(void) { static V c; return STRC(c, "}\012"); }
+static V S38930(void) { static V c; return STRC(c, "\012"); }
+static V S38931(void) { static V c; return STRC(c, "function io_run(m) {\012"); }
+static V S38932(void) { static V c; return STRC(c, "  const io = { runs: [], live: 0, waits: [] };\012"); }
+static V S38933(void) { static V c; return STRC(c, "  globalThis.BEND_IO = io;\012"); }
+static V S38934(void) { static V c; return STRC(c, "  io_push(m(null), (x) => ({ $: \042Emit\042, value: x }), true);\012"); }
+static V S38935(void) { static V c; return STRC(c, "  for (;;) {\012"); }
+static V S38936(void) { static V c; return STRC(c, "    if (io.runs.length === 0) {\012"); }
+static V S38937(void) { static V c; return STRC(c, "      if (io.live === 0) return 0;\012"); }
+static V S38938(void) { static V c; return STRC(c, "      if (io.waits.length === 0) {\012"); }
+static V S38939(void) { static V c; return STRC(c, "        io_errs(\042bend: deadlock: every computation waits on a channel\042);\012"); }
+static V S38940(void) { static V c; return STRC(c, "        return 1;\012"); }
+static V S38941(void) { static V c; return STRC(c, "      }\012"); }
+static V S38942(void) { static V c; return STRC(c, "      io_wait(io);\012"); }
+static V S38943(void) { static V c; return STRC(c, "      continue;\012"); }
+static V S38944(void) { static V c; return STRC(c, "    }\012"); }
+static V S38945(void) { static V c; return STRC(c, "    const s = io.runs.shift();\012"); }
+static V S38946(void) { static V c; return STRC(c, "    let op = s.fun(s.arg);\012"); }
+static V S38947(void) { static V c; return STRC(c, "    // An IO value from an effect (IO.spawn's) takes its erased type first.\012"); }
+static V S38948(void) { static V c; return STRC(c, "    if (typeof op === \042function\042) op = op(s.arg);\012"); }
+static V S38949(void) { static V c; return STRC(c, "    while (op !== undefined) {\012"); }
+static V S38950(void) { static V c; return STRC(c, "      if (op.$ === \042Emit\042) {\012"); }
+static V S38951(void) { static V c; return STRC(c, "        io.live -= 1;\012"); }
+static V S38952(void) { static V c; return STRC(c, "        break;\012"); }
+static V S38953(void) { static V c; return STRC(c, "      }\012"); }
+static V S38954(void) { static V c; return STRC(c, "      if (op.$ === \042Halt\042) {\012"); }
+static V S38955(void) { static V c; return STRC(c, "        io_errs(op.message);\012"); }
+static V S38956(void) { static V c; return STRC(c, "        return op.code;\012"); }
+static V S38957(void) { static V c; return STRC(c, "      }\012"); }
+static V S38958(void) { static V c; return STRC(c, "      if (op.run === undefined) bend_fail(\042an effect with no JS implementation: \042 + op.name);\012"); }
+static V S38959(void) { static V c; return STRC(c, "      const need = op.need\077.() \077\077 {};\012"); }
+static V S38960(void) { static V c; return STRC(c, "      if (need.time || need.read) {\012"); }
+static V S38961(void) { static V c; return STRC(c, "        const o = op;\012"); }
+static V S38962(void) { static V c; return STRC(c, "        const more = () => o.run(...o.args, o.kont);\012"); }
+static V S38963(void) { static V c; return STRC(c, "        io_park_on(need.read \077 op.args[0] : undefined, false, op.kont, more,\012"); }
+static V S38964(void) { static V c; return STRC(c, "          need.read \077 undefined : performance.now() + Number(op.args[0]));\012"); }
+static V S38965(void) { static V c; return STRC(c, "        break;\012"); }
 static V F_RtJs_dsrc_dp7(void) {
 top:;
-return F_String_dappend(S38735(), F_String_dappend(S38736(), F_String_dappend(S38737(), F_String_dappend(S38738(), F_String_dappend(S38739(), F_String_dappend(S38740(), F_String_dappend(S38741(), F_String_dappend(S38742(), F_String_dappend(S38743(), F_String_dappend(S38744(), F_String_dappend(S38745(), F_String_dappend(S38746(), F_String_dappend(S38747(), F_String_dappend(S38748(), F_String_dappend(S38749(), F_String_dappend(S38750(), F_String_dappend(S38751(), F_String_dappend(S38752(), F_String_dappend(S38753(), F_String_dappend(S38754(), F_String_dappend(S38755(), F_String_dappend(S38756(), F_String_dappend(S38757(), F_String_dappend(S38758(), F_String_dappend(S38759(), F_String_dappend(S38760(), F_String_dappend(S38761(), F_String_dappend(S38762(), F_String_dappend(S38763(), F_String_dappend(S38764(), F_String_dappend(S38765(), F_String_dappend(S38766(), F_String_dappend(S38767(), F_String_dappend(S38768(), F_String_dappend(S38769(), F_String_dappend(S38770(), F_String_dappend(S38771(), F_String_dappend(S38772(), F_String_dappend(S38773(), F_String_dappend(S38774(), F_String_dappend(S38775(), F_String_dappend(S38776(), F_String_dappend(S38777(), F_String_dappend(S38778(), F_String_dappend(S38779(), F_String_dappend(S38780(), F_String_dappend(S38781(), F_String_dappend(S38782(), F_String_dappend(S38783(), F_String_dappend(S38784(), F_String_dappend(S38785(), F_String_dappend(S38786(), F_String_dappend(S38787(), F_String_dappend(S38788(), F_String_dappend(S38789(), F_String_dappend(S38790(), F_String_dappend(S38791(), F_String_dappend(S38792(), F_String_dappend(S38793(), S38794())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+return F_String_dappend(S38906(), F_String_dappend(S38907(), F_String_dappend(S38908(), F_String_dappend(S38909(), F_String_dappend(S38910(), F_String_dappend(S38911(), F_String_dappend(S38912(), F_String_dappend(S38913(), F_String_dappend(S38914(), F_String_dappend(S38915(), F_String_dappend(S38916(), F_String_dappend(S38917(), F_String_dappend(S38918(), F_String_dappend(S38919(), F_String_dappend(S38920(), F_String_dappend(S38921(), F_String_dappend(S38922(), F_String_dappend(S38923(), F_String_dappend(S38924(), F_String_dappend(S38925(), F_String_dappend(S38926(), F_String_dappend(S38927(), F_String_dappend(S38928(), F_String_dappend(S38929(), F_String_dappend(S38930(), F_String_dappend(S38931(), F_String_dappend(S38932(), F_String_dappend(S38933(), F_String_dappend(S38934(), F_String_dappend(S38935(), F_String_dappend(S38936(), F_String_dappend(S38937(), F_String_dappend(S38938(), F_String_dappend(S38939(), F_String_dappend(S38940(), F_String_dappend(S38941(), F_String_dappend(S38942(), F_String_dappend(S38943(), F_String_dappend(S38944(), F_String_dappend(S38945(), F_String_dappend(S38946(), F_String_dappend(S38947(), F_String_dappend(S38948(), F_String_dappend(S38949(), F_String_dappend(S38950(), F_String_dappend(S38951(), F_String_dappend(S38952(), F_String_dappend(S38953(), F_String_dappend(S38954(), F_String_dappend(S38955(), F_String_dappend(S38956(), F_String_dappend(S38957(), F_String_dappend(S38958(), F_String_dappend(S38959(), F_String_dappend(S38960(), F_String_dappend(S38961(), F_String_dappend(S38962(), F_String_dappend(S38963(), F_String_dappend(S38964(), S38965())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
 }
 static V W_RtJs_dsrc_dp7(V *a) { (void)a; return F_RtJs_dsrc_dp7(); }
-static V S38854(void) { static V c; return STRC(c, "function io_done(value) {\012"); }
-static V S38855(void) { static V c; return STRC(c, "  return { $: \042Done\042, value };\012"); }
-static V S38856(void) { static V c; return STRC(c, "}\012"); }
-static V S38857(void) { static V c; return STRC(c, "\012"); }
-static V S38858(void) { static V c; return STRC(c, "function io_tup(...xs) {\012"); }
-static V S38859(void) { static V c; return STRC(c, "  return xs.reduceRight((snd, fst) => ({ $: \042Tuple\042, fst, snd }));\012"); }
-static V S38860(void) { static V c; return STRC(c, "}\012"); }
-static V S38861(void) { static V c; return STRC(c, "\012"); }
-static V S38862(void) { static V c; return STRC(c, "function io_bytes(text) {\012"); }
-static V S38863(void) { static V c; return STRC(c, "  return new TextEncoder().encode(text);\012"); }
-static V S38864(void) { static V c; return STRC(c, "}\012"); }
-static V S38865(void) { static V c; return STRC(c, "\012"); }
-static V S38866(void) { static V c; return STRC(c, "function io_text(b, n) {\012"); }
-static V S38867(void) { static V c; return STRC(c, "  return new TextDecoder(\042utf-8\042, { ignoreBOM: true }).decode(b.subarray(0, n));\012"); }
-static V S38868(void) { static V c; return STRC(c, "}\012"); }
-static V S38869(void) { static V c; return STRC(c, "\012"); }
-static V S38870(void) { static V c; return STRC(c, "// Bytes cross as they are (0..255), one List cell each, with no UTF-8 in\012"); }
-static V S38871(void) { static V c; return STRC(c, "// either direction; io_unlist answers null if a value is past 255.\012"); }
-static V S38872(void) { static V c; return STRC(c, "function io_list(b, n) {\012"); }
-static V S38873(void) { static V c; return STRC(c, "  let xs = { $: \042Nil\042 };\012"); }
-static V S38874(void) { static V c; return STRC(c, "  for (let i = n; i > 0; i -= 1) xs = { $: \042Con\042, head: b[i - 1], tail: xs };\012"); }
-static V S38875(void) { static V c; return STRC(c, "  return xs;\012"); }
-static V S38876(void) { static V c; return STRC(c, "}\012"); }
-static V S38877(void) { static V c; return STRC(c, "\012"); }
-static V S38878(void) { static V c; return STRC(c, "function io_unlist(xs) {\012"); }
-static V S38879(void) { static V c; return STRC(c, "  const b = [];\012"); }
-static V S38880(void) { static V c; return STRC(c, "  for (; xs.$ === \042Con\042; xs = xs.tail) b.push(xs.head);\012"); }
-static V S38881(void) { static V c; return STRC(c, "  return b.some((x) => x > 255) \077 null : Uint8Array.from(b);\012"); }
-static V S38882(void) { static V c; return STRC(c, "}\012"); }
-static V S38883(void) { static V c; return STRC(c, "\012"); }
-static V S38884(void) { static V c; return STRC(c, "function io_addr(host, port) {\012"); }
-static V S38885(void) { static V c; return STRC(c, "  const part = host.split(\042.\042);\012"); }
-static V S38886(void) { static V c; return STRC(c, "  const deci = (p) => /^(0|[1-9]\134d{0,2})$/.test(p) && Number(p) < 256;\012"); }
-static V S38887(void) { static V c; return STRC(c, "  if (port > 65535 || part.length !== 4 || !part.every(deci)) return null;\012"); }
-static V S38888(void) { static V c; return STRC(c, "  const b = new Uint8Array(16);\012"); }
-static V S38889(void) { static V c; return STRC(c, "  const head = io_sys().mac \077 [16, 2] : [2, 0];\012"); }
-static V S38890(void) { static V c; return STRC(c, "  b.set([...head, port >> 8, port & 255, ...part.map(Number)]);\012"); }
-static V S38891(void) { static V c; return STRC(c, "  return b;\012"); }
-static V S38892(void) { static V c; return STRC(c, "}\012"); }
-static V S38893(void) { static V c; return STRC(c, "\012"); }
-static V S38894(void) { static V c; return STRC(c, "// A computation to run: fun applied to arg is its next request.\012"); }
-static V S38895(void) { static V c; return STRC(c, "function io_push(fun, arg, fresh) {\012"); }
-static V S38896(void) { static V c; return STRC(c, "  const io = globalThis.BEND_IO;\012"); }
-static V S38897(void) { static V c; return STRC(c, "  io.runs.push({ fun, arg });\012"); }
-static V S38898(void) { static V c; return STRC(c, "  io.live += fresh \077 1 : 0;\012"); }
-static V S38899(void) { static V c; return STRC(c, "}\012"); }
-static V S38900(void) { static V c; return STRC(c, "\012"); }
-static V S38901(void) { static V c; return STRC(c, "function io_wait(io) {\012"); }
-static V S38902(void) { static V c; return STRC(c, "  const soon = io.waits.reduce((m, w) => Math.min(m, w.at \077\077 m), Infinity);\012"); }
-static V S38903(void) { static V c; return STRC(c, "  const ms = soon === Infinity \077 -1 : Math.max(0, Math.ceil(soon - performance.now()));\012"); }
-static V S38904(void) { static V c; return STRC(c, "  const fds = io.waits.filter((w) => w.fd !== undefined);\012"); }
-static V S38905(void) { static V c; return STRC(c, "  if (fds.length === 0) {\012"); }
-static V S38906(void) { static V c; return STRC(c, "    // Only deadlines: sleep until the first one.\012"); }
-static V S38907(void) { static V c; return STRC(c, "    if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);\012"); }
-static V S38908(void) { static V c; return STRC(c, "  } else {\012"); }
-static V S38909(void) { static V c; return STRC(c, "    const top = fds.reduce((m, w) => Math.max(m, w.fd), 0);\012"); }
-static V S38910(void) { static V c; return STRC(c, "    const len = (top >> 6 << 3) + 8;\012"); }
-static V S38911(void) { static V c; return STRC(c, "    const set = new Uint8Array(2 * len);\012"); }
-static V S38912(void) { static V c; return STRC(c, "    const at = (w) => (w.out \077 len : 0) + (w.fd >> 3);\012"); }
-static V S38913(void) { static V c; return STRC(c, "    for (const w of fds) set[at(w)] |= 1 << (w.fd & 7);\012"); }
-static V F_RtJs_dsrc_dp6(void) {
-top:;
-return F_String_dappend(S38854(), F_String_dappend(S38855(), F_String_dappend(S38856(), F_String_dappend(S38857(), F_String_dappend(S38858(), F_String_dappend(S38859(), F_String_dappend(S38860(), F_String_dappend(S38861(), F_String_dappend(S38862(), F_String_dappend(S38863(), F_String_dappend(S38864(), F_String_dappend(S38865(), F_String_dappend(S38866(), F_String_dappend(S38867(), F_String_dappend(S38868(), F_String_dappend(S38869(), F_String_dappend(S38870(), F_String_dappend(S38871(), F_String_dappend(S38872(), F_String_dappend(S38873(), F_String_dappend(S38874(), F_String_dappend(S38875(), F_String_dappend(S38876(), F_String_dappend(S38877(), F_String_dappend(S38878(), F_String_dappend(S38879(), F_String_dappend(S38880(), F_String_dappend(S38881(), F_String_dappend(S38882(), F_String_dappend(S38883(), F_String_dappend(S38884(), F_String_dappend(S38885(), F_String_dappend(S38886(), F_String_dappend(S38887(), F_String_dappend(S38888(), F_String_dappend(S38889(), F_String_dappend(S38890(), F_String_dappend(S38891(), F_String_dappend(S38892(), F_String_dappend(S38893(), F_String_dappend(S38894(), F_String_dappend(S38895(), F_String_dappend(S38896(), F_String_dappend(S38897(), F_String_dappend(S38898(), F_String_dappend(S38899(), F_String_dappend(S38900(), F_String_dappend(S38901(), F_String_dappend(S38902(), F_String_dappend(S38903(), F_String_dappend(S38904(), F_String_dappend(S38905(), F_String_dappend(S38906(), F_String_dappend(S38907(), F_String_dappend(S38908(), F_String_dappend(S38909(), F_String_dappend(S38910(), F_String_dappend(S38911(), F_String_dappend(S38912(), S38913())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
-}
-static V W_RtJs_dsrc_dp6(V *a) { (void)a; return F_RtJs_dsrc_dp6(); }
-static V S38973(void) { static V c; return STRC(c, "}\012"); }
-static V S38974(void) { static V c; return STRC(c, "const pr_u32 = (v) => String(v);\012"); }
-static V S38975(void) { static V c; return STRC(c, "const pr_nat = (v) => v + \042n\042;\012"); }
-static V S38976(void) { static V c; return STRC(c, "const pr_f32 = (v) => f32_show(v).replace(/^-\077\134d+(\077=e|$)/, \042$&.0\042);\012"); }
-static V S38977(void) { static V c; return STRC(c, "const pr_char = (v) => \042'\042 + show_chr(v.codePointAt(0), \042'\042) + \042'\042;\012"); }
-static V S38978(void) { static V c; return STRC(c, "const pr_str = (v) => '\042' + [...v].map((c) => show_chr(c.codePointAt(0), '\042')).join(\042\042) + '\042';\012"); }
-static V S38979(void) { static V c; return STRC(c, "\012"); }
-static V S38980(void) { static V c; return STRC(c, "// Effects\012"); }
-static V S38981(void) { static V c; return STRC(c, "// =======\012"); }
-static V S38982(void) { static V c; return STRC(c, "\012"); }
-static V S38983(void) { static V c; return STRC(c, "function io_out(fd, data) {\012"); }
-static V S38984(void) { static V c; return STRC(c, "  const fs = require(\042fs\042);\012"); }
-static V S38985(void) { static V c; return STRC(c, "  let at = 0;\012"); }
-static V S38986(void) { static V c; return STRC(c, "  while (at < data.length) {\012"); }
-static V S38987(void) { static V c; return STRC(c, "    try {\012"); }
-static V S38988(void) { static V c; return STRC(c, "      at += fs.writeSync(fd, data, at, data.length - at);\012"); }
-static V S38989(void) { static V c; return STRC(c, "    } catch (e) {\012"); }
-static V S38990(void) { static V c; return STRC(c, "      if (e.code === \042EAGAIN\042 || e.code === \042EINTR\042) continue;\012"); }
-static V S38991(void) { static V c; return STRC(c, "      process.exit(1);\012"); }
-static V S38992(void) { static V c; return STRC(c, "    }\012"); }
-static V S38993(void) { static V c; return STRC(c, "  }\012"); }
-static V S38994(void) { static V c; return STRC(c, "}\012"); }
-static V S38995(void) { static V c; return STRC(c, "\012"); }
-static V S38996(void) { static V c; return STRC(c, "function io_errs(message) {\012"); }
-static V S38997(void) { static V c; return STRC(c, "  io_out(2, io_bytes(message + \042\134n\042));\012"); }
-static V S38998(void) { static V c; return STRC(c, "}\012"); }
-static V S38999(void) { static V c; return STRC(c, "\012"); }
-static V S39000(void) { static V c; return STRC(c, "// libc through bun:ffi (the effects that make system calls need Bun).\012"); }
-static V S39001(void) { static V c; return STRC(c, "function io_sys() {\012"); }
-static V S39002(void) { static V c; return STRC(c, "  if (globalThis.BEND_SYS === undefined) {\012"); }
-static V S39003(void) { static V c; return STRC(c, "    const ffi = require(\042bun:ffi\042);\012"); }
-static V S39004(void) { static V c; return STRC(c, "    const mac = process.platform === \042darwin\042;\012"); }
-static V S39005(void) { static V c; return STRC(c, "    const err = mac \077 \042__error\042 : \042__errno_location\042;\012"); }
-static V S39006(void) { static V c; return STRC(c, "    const sel = mac \077 \042select$DARWIN_EXTSN\042 : \042select\042;\012"); }
-static V S39007(void) { static V c; return STRC(c, "    const T = { i: \042i32\042, u: \042u32\042, U: \042u64\042, I: \042i64\042, p: \042ptr\042, c: \042cstring\042 };\012"); }
-static V S39008(void) { static V c; return STRC(c, "    const vari = mac && process.arch === \042arm64\042;\012"); }
-static V S39009(void) { static V c; return STRC(c, "    const decls = (\042socket:iii>i bind:ipu>i listen:ii>i connect:ipu>i accept:ipp>i send:ipUi>I\042 +\012"); }
-static V S39010(void) { static V c; return STRC(c, "      \042 recv:ipUi>I read:ipU>I pread:ipUI>I sendto:ipUipu>I recvfrom:ipUipp>I close:i>i\042 +\012"); }
-static V S39011(void) { static V c; return STRC(c, "      \042 setsockopt:iiipu>i \042 + sel + \042:ipppp>i\042 + (vari \077 \042 fcntl:iiiiiiiii>i\042 : \042 fcntl:iii>i\042) +\012"); }
-static V S39012(void) { static V c; return STRC(c, "      \042 getsockopt:iiipp>i strerror:i>c \042 + err + \042:>p\042).split(\042 \042);\012"); }
-static V S39013(void) { static V c; return STRC(c, "    const lib = ffi.dlopen(mac \077 \042libSystem.dylib\042 : \042libc.so.6\042, Object.fromEntries(decls.map((s) => {\012"); }
-static V S39014(void) { static V c; return STRC(c, "      const [name, args, ret] = s.split(/[:>]/);\012"); }
-static V S39015(void) { static V c; return STRC(c, "      return [name, { args: [...args].map((a) => T[a]), returns: T[ret] }];\012"); }
-static V S39016(void) { static V c; return STRC(c, "    }))).symbols;\012"); }
-static V S39017(void) { static V c; return STRC(c, "    const fcntl = (fd, cmd, arg) => (vari \077 lib.fcntl(fd, cmd, 0, 0, 0, 0, 0, 0, arg) : lib.fcntl(fd, cmd, arg));\012"); }
-static V S39018(void) { static V c; return STRC(c, "    globalThis.BEND_SYS = { ...lib, fcntl, select: lib[sel], ptr: ffi.ptr, mac,\012"); }
-static V S39019(void) { static V c; return STRC(c, "      errno: () => ffi.read.i32(lib[err](), 0) };\012"); }
-static V S39020(void) { static V c; return STRC(c, "  }\012"); }
-static V S39021(void) { static V c; return STRC(c, "  return globalThis.BEND_SYS;\012"); }
-static V S39022(void) { static V c; return STRC(c, "}\012"); }
-static V S39023(void) { static V c; return STRC(c, "\012"); }
-static V S39024(void) { static V c; return STRC(c, "function io_fail(code) {\012"); }
-static V S39025(void) { static V c; return STRC(c, "  let text = \042error \042 + code;\012"); }
-static V S39026(void) { static V c; return STRC(c, "  try {\012"); }
-static V S39027(void) { static V c; return STRC(c, "    text = String(io_sys().strerror(code));\012"); }
-static V S39028(void) { static V c; return STRC(c, "  } catch (e) {\012"); }
-static V S39029(void) { static V c; return STRC(c, "  }\012"); }
-static V S39030(void) { static V c; return STRC(c, "  return { $: \042Fail\042, error: io_tup(code >>> 0, text) };\012"); }
+static V S39025(void) { static V c; return STRC(c, "function io_done(value) {\012"); }
+static V S39026(void) { static V c; return STRC(c, "  return { $: \042Done\042, value };\012"); }
+static V S39027(void) { static V c; return STRC(c, "}\012"); }
+static V S39028(void) { static V c; return STRC(c, "\012"); }
+static V S39029(void) { static V c; return STRC(c, "function io_tup(...xs) {\012"); }
+static V S39030(void) { static V c; return STRC(c, "  return xs.reduceRight((snd, fst) => ({ $: \042Tuple\042, fst, snd }));\012"); }
 static V S39031(void) { static V c; return STRC(c, "}\012"); }
 static V S39032(void) { static V c; return STRC(c, "\012"); }
+static V S39033(void) { static V c; return STRC(c, "function io_bytes(text) {\012"); }
+static V S39034(void) { static V c; return STRC(c, "  return new TextEncoder().encode(text);\012"); }
+static V S39035(void) { static V c; return STRC(c, "}\012"); }
+static V S39036(void) { static V c; return STRC(c, "\012"); }
+static V S39037(void) { static V c; return STRC(c, "function io_text(b, n) {\012"); }
+static V S39038(void) { static V c; return STRC(c, "  return new TextDecoder(\042utf-8\042, { ignoreBOM: true }).decode(b.subarray(0, n));\012"); }
+static V S39039(void) { static V c; return STRC(c, "}\012"); }
+static V S39040(void) { static V c; return STRC(c, "\012"); }
+static V S39041(void) { static V c; return STRC(c, "// Bytes cross as they are (0..255), one List cell each, with no UTF-8 in\012"); }
+static V S39042(void) { static V c; return STRC(c, "// either direction; io_unlist answers null if a value is past 255.\012"); }
+static V S39043(void) { static V c; return STRC(c, "function io_list(b, n) {\012"); }
+static V S39044(void) { static V c; return STRC(c, "  let xs = { $: \042Nil\042 };\012"); }
+static V S39045(void) { static V c; return STRC(c, "  for (let i = n; i > 0; i -= 1) xs = { $: \042Con\042, head: b[i - 1], tail: xs };\012"); }
+static V S39046(void) { static V c; return STRC(c, "  return xs;\012"); }
+static V S39047(void) { static V c; return STRC(c, "}\012"); }
+static V S39048(void) { static V c; return STRC(c, "\012"); }
+static V S39049(void) { static V c; return STRC(c, "function io_unlist(xs) {\012"); }
+static V S39050(void) { static V c; return STRC(c, "  const b = [];\012"); }
+static V S39051(void) { static V c; return STRC(c, "  for (; xs.$ === \042Con\042; xs = xs.tail) b.push(xs.head);\012"); }
+static V S39052(void) { static V c; return STRC(c, "  return b.some((x) => x > 255) \077 null : Uint8Array.from(b);\012"); }
+static V S39053(void) { static V c; return STRC(c, "}\012"); }
+static V S39054(void) { static V c; return STRC(c, "\012"); }
+static V S39055(void) { static V c; return STRC(c, "function io_addr(host, port) {\012"); }
+static V S39056(void) { static V c; return STRC(c, "  const part = host.split(\042.\042);\012"); }
+static V S39057(void) { static V c; return STRC(c, "  const deci = (p) => /^(0|[1-9]\134d{0,2})$/.test(p) && Number(p) < 256;\012"); }
+static V S39058(void) { static V c; return STRC(c, "  if (port > 65535 || part.length !== 4 || !part.every(deci)) return null;\012"); }
+static V S39059(void) { static V c; return STRC(c, "  const b = new Uint8Array(16);\012"); }
+static V S39060(void) { static V c; return STRC(c, "  const head = io_sys().mac \077 [16, 2] : [2, 0];\012"); }
+static V S39061(void) { static V c; return STRC(c, "  b.set([...head, port >> 8, port & 255, ...part.map(Number)]);\012"); }
+static V S39062(void) { static V c; return STRC(c, "  return b;\012"); }
+static V S39063(void) { static V c; return STRC(c, "}\012"); }
+static V S39064(void) { static V c; return STRC(c, "\012"); }
+static V S39065(void) { static V c; return STRC(c, "// A computation to run: fun applied to arg is its next request.\012"); }
+static V S39066(void) { static V c; return STRC(c, "function io_push(fun, arg, fresh) {\012"); }
+static V S39067(void) { static V c; return STRC(c, "  const io = globalThis.BEND_IO;\012"); }
+static V S39068(void) { static V c; return STRC(c, "  io.runs.push({ fun, arg });\012"); }
+static V S39069(void) { static V c; return STRC(c, "  io.live += fresh \077 1 : 0;\012"); }
+static V S39070(void) { static V c; return STRC(c, "}\012"); }
+static V S39071(void) { static V c; return STRC(c, "\012"); }
+static V S39072(void) { static V c; return STRC(c, "function io_wait(io) {\012"); }
+static V S39073(void) { static V c; return STRC(c, "  const soon = io.waits.reduce((m, w) => Math.min(m, w.at \077\077 m), Infinity);\012"); }
+static V S39074(void) { static V c; return STRC(c, "  const ms = soon === Infinity \077 -1 : Math.max(0, Math.ceil(soon - performance.now()));\012"); }
+static V S39075(void) { static V c; return STRC(c, "  const fds = io.waits.filter((w) => w.fd !== undefined);\012"); }
+static V S39076(void) { static V c; return STRC(c, "  if (fds.length === 0) {\012"); }
+static V S39077(void) { static V c; return STRC(c, "    // Only deadlines: sleep until the first one.\012"); }
+static V S39078(void) { static V c; return STRC(c, "    if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);\012"); }
+static V S39079(void) { static V c; return STRC(c, "  } else {\012"); }
+static V S39080(void) { static V c; return STRC(c, "    const top = fds.reduce((m, w) => Math.max(m, w.fd), 0);\012"); }
+static V S39081(void) { static V c; return STRC(c, "    const len = (top >> 6 << 3) + 8;\012"); }
+static V S39082(void) { static V c; return STRC(c, "    const set = new Uint8Array(2 * len);\012"); }
+static V S39083(void) { static V c; return STRC(c, "    const at = (w) => (w.out \077 len : 0) + (w.fd >> 3);\012"); }
+static V S39084(void) { static V c; return STRC(c, "    for (const w of fds) set[at(w)] |= 1 << (w.fd & 7);\012"); }
+static V F_RtJs_dsrc_dp6(void) {
+top:;
+return F_String_dappend(S39025(), F_String_dappend(S39026(), F_String_dappend(S39027(), F_String_dappend(S39028(), F_String_dappend(S39029(), F_String_dappend(S39030(), F_String_dappend(S39031(), F_String_dappend(S39032(), F_String_dappend(S39033(), F_String_dappend(S39034(), F_String_dappend(S39035(), F_String_dappend(S39036(), F_String_dappend(S39037(), F_String_dappend(S39038(), F_String_dappend(S39039(), F_String_dappend(S39040(), F_String_dappend(S39041(), F_String_dappend(S39042(), F_String_dappend(S39043(), F_String_dappend(S39044(), F_String_dappend(S39045(), F_String_dappend(S39046(), F_String_dappend(S39047(), F_String_dappend(S39048(), F_String_dappend(S39049(), F_String_dappend(S39050(), F_String_dappend(S39051(), F_String_dappend(S39052(), F_String_dappend(S39053(), F_String_dappend(S39054(), F_String_dappend(S39055(), F_String_dappend(S39056(), F_String_dappend(S39057(), F_String_dappend(S39058(), F_String_dappend(S39059(), F_String_dappend(S39060(), F_String_dappend(S39061(), F_String_dappend(S39062(), F_String_dappend(S39063(), F_String_dappend(S39064(), F_String_dappend(S39065(), F_String_dappend(S39066(), F_String_dappend(S39067(), F_String_dappend(S39068(), F_String_dappend(S39069(), F_String_dappend(S39070(), F_String_dappend(S39071(), F_String_dappend(S39072(), F_String_dappend(S39073(), F_String_dappend(S39074(), F_String_dappend(S39075(), F_String_dappend(S39076(), F_String_dappend(S39077(), F_String_dappend(S39078(), F_String_dappend(S39079(), F_String_dappend(S39080(), F_String_dappend(S39081(), F_String_dappend(S39082(), F_String_dappend(S39083(), S39084())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+}
+static V W_RtJs_dsrc_dp6(V *a) { (void)a; return F_RtJs_dsrc_dp6(); }
+static V S39144(void) { static V c; return STRC(c, "}\012"); }
+static V S39145(void) { static V c; return STRC(c, "const pr_u32 = (v) => String(v);\012"); }
+static V S39146(void) { static V c; return STRC(c, "const pr_nat = (v) => v + \042n\042;\012"); }
+static V S39147(void) { static V c; return STRC(c, "const pr_f32 = (v) => f32_show(v).replace(/^-\077\134d+(\077=e|$)/, \042$&.0\042);\012"); }
+static V S39148(void) { static V c; return STRC(c, "const pr_char = (v) => \042'\042 + show_chr(v.codePointAt(0), \042'\042) + \042'\042;\012"); }
+static V S39149(void) { static V c; return STRC(c, "const pr_str = (v) => '\042' + [...v].map((c) => show_chr(c.codePointAt(0), '\042')).join(\042\042) + '\042';\012"); }
+static V S39150(void) { static V c; return STRC(c, "\012"); }
+static V S39151(void) { static V c; return STRC(c, "// Effects\012"); }
+static V S39152(void) { static V c; return STRC(c, "// =======\012"); }
+static V S39153(void) { static V c; return STRC(c, "\012"); }
+static V S39154(void) { static V c; return STRC(c, "function io_out(fd, data) {\012"); }
+static V S39155(void) { static V c; return STRC(c, "  const fs = require(\042fs\042);\012"); }
+static V S39156(void) { static V c; return STRC(c, "  let at = 0;\012"); }
+static V S39157(void) { static V c; return STRC(c, "  while (at < data.length) {\012"); }
+static V S39158(void) { static V c; return STRC(c, "    try {\012"); }
+static V S39159(void) { static V c; return STRC(c, "      at += fs.writeSync(fd, data, at, data.length - at);\012"); }
+static V S39160(void) { static V c; return STRC(c, "    } catch (e) {\012"); }
+static V S39161(void) { static V c; return STRC(c, "      if (e.code === \042EAGAIN\042 || e.code === \042EINTR\042) continue;\012"); }
+static V S39162(void) { static V c; return STRC(c, "      process.exit(1);\012"); }
+static V S39163(void) { static V c; return STRC(c, "    }\012"); }
+static V S39164(void) { static V c; return STRC(c, "  }\012"); }
+static V S39165(void) { static V c; return STRC(c, "}\012"); }
+static V S39166(void) { static V c; return STRC(c, "\012"); }
+static V S39167(void) { static V c; return STRC(c, "function io_errs(message) {\012"); }
+static V S39168(void) { static V c; return STRC(c, "  io_out(2, io_bytes(message + \042\134n\042));\012"); }
+static V S39169(void) { static V c; return STRC(c, "}\012"); }
+static V S39170(void) { static V c; return STRC(c, "\012"); }
+static V S39171(void) { static V c; return STRC(c, "// libc through bun:ffi (the effects that make system calls need Bun).\012"); }
+static V S39172(void) { static V c; return STRC(c, "function io_sys() {\012"); }
+static V S39173(void) { static V c; return STRC(c, "  if (globalThis.BEND_SYS === undefined) {\012"); }
+static V S39174(void) { static V c; return STRC(c, "    const ffi = require(\042bun:ffi\042);\012"); }
+static V S39175(void) { static V c; return STRC(c, "    const mac = process.platform === \042darwin\042;\012"); }
+static V S39176(void) { static V c; return STRC(c, "    const err = mac \077 \042__error\042 : \042__errno_location\042;\012"); }
+static V S39177(void) { static V c; return STRC(c, "    const sel = mac \077 \042select$DARWIN_EXTSN\042 : \042select\042;\012"); }
+static V S39178(void) { static V c; return STRC(c, "    const T = { i: \042i32\042, u: \042u32\042, U: \042u64\042, I: \042i64\042, p: \042ptr\042, c: \042cstring\042 };\012"); }
+static V S39179(void) { static V c; return STRC(c, "    const vari = mac && process.arch === \042arm64\042;\012"); }
+static V S39180(void) { static V c; return STRC(c, "    const decls = (\042socket:iii>i bind:ipu>i listen:ii>i connect:ipu>i accept:ipp>i send:ipUi>I\042 +\012"); }
+static V S39181(void) { static V c; return STRC(c, "      \042 recv:ipUi>I read:ipU>I pread:ipUI>I sendto:ipUipu>I recvfrom:ipUipp>I close:i>i\042 +\012"); }
+static V S39182(void) { static V c; return STRC(c, "      \042 setsockopt:iiipu>i \042 + sel + \042:ipppp>i\042 + (vari \077 \042 fcntl:iiiiiiiii>i\042 : \042 fcntl:iii>i\042) +\012"); }
+static V S39183(void) { static V c; return STRC(c, "      \042 getsockopt:iiipp>i strerror:i>c \042 + err + \042:>p\042).split(\042 \042);\012"); }
+static V S39184(void) { static V c; return STRC(c, "    const lib = ffi.dlopen(mac \077 \042libSystem.dylib\042 : \042libc.so.6\042, Object.fromEntries(decls.map((s) => {\012"); }
+static V S39185(void) { static V c; return STRC(c, "      const [name, args, ret] = s.split(/[:>]/);\012"); }
+static V S39186(void) { static V c; return STRC(c, "      return [name, { args: [...args].map((a) => T[a]), returns: T[ret] }];\012"); }
+static V S39187(void) { static V c; return STRC(c, "    }))).symbols;\012"); }
+static V S39188(void) { static V c; return STRC(c, "    const fcntl = (fd, cmd, arg) => (vari \077 lib.fcntl(fd, cmd, 0, 0, 0, 0, 0, 0, arg) : lib.fcntl(fd, cmd, arg));\012"); }
+static V S39189(void) { static V c; return STRC(c, "    globalThis.BEND_SYS = { ...lib, fcntl, select: lib[sel], ptr: ffi.ptr, mac,\012"); }
+static V S39190(void) { static V c; return STRC(c, "      errno: () => ffi.read.i32(lib[err](), 0) };\012"); }
+static V S39191(void) { static V c; return STRC(c, "  }\012"); }
+static V S39192(void) { static V c; return STRC(c, "  return globalThis.BEND_SYS;\012"); }
+static V S39193(void) { static V c; return STRC(c, "}\012"); }
+static V S39194(void) { static V c; return STRC(c, "\012"); }
+static V S39195(void) { static V c; return STRC(c, "function io_fail(code) {\012"); }
+static V S39196(void) { static V c; return STRC(c, "  let text = \042error \042 + code;\012"); }
+static V S39197(void) { static V c; return STRC(c, "  try {\012"); }
+static V S39198(void) { static V c; return STRC(c, "    text = String(io_sys().strerror(code));\012"); }
+static V S39199(void) { static V c; return STRC(c, "  } catch (e) {\012"); }
+static V S39200(void) { static V c; return STRC(c, "  }\012"); }
+static V S39201(void) { static V c; return STRC(c, "  return { $: \042Fail\042, error: io_tup(code >>> 0, text) };\012"); }
+static V S39202(void) { static V c; return STRC(c, "}\012"); }
+static V S39203(void) { static V c; return STRC(c, "\012"); }
 static V F_RtJs_dsrc_dp5(void) {
 top:;
-return F_String_dappend(S38973(), F_String_dappend(S38974(), F_String_dappend(S38975(), F_String_dappend(S38976(), F_String_dappend(S38977(), F_String_dappend(S38978(), F_String_dappend(S38979(), F_String_dappend(S38980(), F_String_dappend(S38981(), F_String_dappend(S38982(), F_String_dappend(S38983(), F_String_dappend(S38984(), F_String_dappend(S38985(), F_String_dappend(S38986(), F_String_dappend(S38987(), F_String_dappend(S38988(), F_String_dappend(S38989(), F_String_dappend(S38990(), F_String_dappend(S38991(), F_String_dappend(S38992(), F_String_dappend(S38993(), F_String_dappend(S38994(), F_String_dappend(S38995(), F_String_dappend(S38996(), F_String_dappend(S38997(), F_String_dappend(S38998(), F_String_dappend(S38999(), F_String_dappend(S39000(), F_String_dappend(S39001(), F_String_dappend(S39002(), F_String_dappend(S39003(), F_String_dappend(S39004(), F_String_dappend(S39005(), F_String_dappend(S39006(), F_String_dappend(S39007(), F_String_dappend(S39008(), F_String_dappend(S39009(), F_String_dappend(S39010(), F_String_dappend(S39011(), F_String_dappend(S39012(), F_String_dappend(S39013(), F_String_dappend(S39014(), F_String_dappend(S39015(), F_String_dappend(S39016(), F_String_dappend(S39017(), F_String_dappend(S39018(), F_String_dappend(S39019(), F_String_dappend(S39020(), F_String_dappend(S39021(), F_String_dappend(S39022(), F_String_dappend(S39023(), F_String_dappend(S39024(), F_String_dappend(S39025(), F_String_dappend(S39026(), F_String_dappend(S39027(), F_String_dappend(S39028(), F_String_dappend(S39029(), F_String_dappend(S39030(), F_String_dappend(S39031(), S39032())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+return F_String_dappend(S39144(), F_String_dappend(S39145(), F_String_dappend(S39146(), F_String_dappend(S39147(), F_String_dappend(S39148(), F_String_dappend(S39149(), F_String_dappend(S39150(), F_String_dappend(S39151(), F_String_dappend(S39152(), F_String_dappend(S39153(), F_String_dappend(S39154(), F_String_dappend(S39155(), F_String_dappend(S39156(), F_String_dappend(S39157(), F_String_dappend(S39158(), F_String_dappend(S39159(), F_String_dappend(S39160(), F_String_dappend(S39161(), F_String_dappend(S39162(), F_String_dappend(S39163(), F_String_dappend(S39164(), F_String_dappend(S39165(), F_String_dappend(S39166(), F_String_dappend(S39167(), F_String_dappend(S39168(), F_String_dappend(S39169(), F_String_dappend(S39170(), F_String_dappend(S39171(), F_String_dappend(S39172(), F_String_dappend(S39173(), F_String_dappend(S39174(), F_String_dappend(S39175(), F_String_dappend(S39176(), F_String_dappend(S39177(), F_String_dappend(S39178(), F_String_dappend(S39179(), F_String_dappend(S39180(), F_String_dappend(S39181(), F_String_dappend(S39182(), F_String_dappend(S39183(), F_String_dappend(S39184(), F_String_dappend(S39185(), F_String_dappend(S39186(), F_String_dappend(S39187(), F_String_dappend(S39188(), F_String_dappend(S39189(), F_String_dappend(S39190(), F_String_dappend(S39191(), F_String_dappend(S39192(), F_String_dappend(S39193(), F_String_dappend(S39194(), F_String_dappend(S39195(), F_String_dappend(S39196(), F_String_dappend(S39197(), F_String_dappend(S39198(), F_String_dappend(S39199(), F_String_dappend(S39200(), F_String_dappend(S39201(), F_String_dappend(S39202(), S39203())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
 }
 static V W_RtJs_dsrc_dp5(V *a) { (void)a; return F_RtJs_dsrc_dp5(); }
-static V S39092(void) { static V c; return STRC(c, "const F_F32_dcos = (a) => fr(Math.cos(a));\012"); }
-static V S39093(void) { static V c; return STRC(c, "const F_F32_dtan = (a) => fr(Math.tan(a));\012"); }
-static V S39094(void) { static V c; return STRC(c, "const F_F32_dasin = (a) => fr(Math.asin(a));\012"); }
-static V S39095(void) { static V c; return STRC(c, "const F_F32_dacos = (a) => fr(Math.acos(a));\012"); }
-static V S39096(void) { static V c; return STRC(c, "const F_F32_datan = (a) => fr(Math.atan(a));\012"); }
-static V S39097(void) { static V c; return STRC(c, "const F_F32_dsinh = (a) => fr(Math.sinh(a));\012"); }
-static V S39098(void) { static V c; return STRC(c, "const F_F32_dcosh = (a) => fr(Math.cosh(a));\012"); }
-static V S39099(void) { static V c; return STRC(c, "const F_F32_dtanh = (a) => fr(Math.tanh(a));\012"); }
-static V S39100(void) { static V c; return STRC(c, "const F_F32_dfloor = (a) => fr(Math.floor(a));\012"); }
-static V S39101(void) { static V c; return STRC(c, "const F_F32_dceil = (a) => fr(Math.ceil(a));\012"); }
-static V S39102(void) { static V c; return STRC(c, "const F_F32_dtrunc = (a) => fr(Math.trunc(a));\012"); }
-static V S39103(void) { static V c; return STRC(c, "const F_F32_dbits = (a) => new Uint32Array(new Float32Array([a]).buffer)[0];\012"); }
-static V S39104(void) { static V c; return STRC(c, "const f32_of_bits = (u) => new Float32Array(new Uint32Array([u]).buffer)[0];\012"); }
-static V S39105(void) { static V c; return STRC(c, "const word_con = (b, r) => ((r << 1) | (b \077 1 : 0)) >>> 0;\012"); }
-static V S39106(void) { static V c; return STRC(c, "const F_F32_dto__u32 = (a) => (!(a > 0) || a >= 4294967296 \077 0 : Math.trunc(a) >>> 0);\012"); }
-static V S39107(void) { static V c; return STRC(c, "\012"); }
-static V S39108(void) { static V c; return STRC(c, "// The shortest text that reads back.\012"); }
-static V S39109(void) { static V c; return STRC(c, "function f32_show(x) {\012"); }
-static V S39110(void) { static V c; return STRC(c, "  if (x !== x) return \042nan\042;\012"); }
-static V S39111(void) { static V c; return STRC(c, "  if (!Number.isFinite(x)) return x < 0 \077 \042-inf\042 : \042inf\042;\012"); }
-static V S39112(void) { static V c; return STRC(c, "  if (Object.is(x, -0)) return \042-0\042;\012"); }
-static V S39113(void) { static V c; return STRC(c, "  let s = \042x\042;\012"); }
-static V S39114(void) { static V c; return STRC(c, "  for (let p = 1; p <= 9 && Math.fround(Number(s)) !== x; p += 1) {\012"); }
-static V S39115(void) { static V c; return STRC(c, "    s = String(Number(x.toExponential(p - 1)));\012"); }
-static V S39116(void) { static V c; return STRC(c, "  }\012"); }
-static V S39117(void) { static V c; return STRC(c, "  return s;\012"); }
-static V S39118(void) { static V c; return STRC(c, "}\012"); }
-static V S39119(void) { static V c; return STRC(c, "const F_F32_dshow = (a) => f32_show(a);\012"); }
-static V S39120(void) { static V c; return STRC(c, "\012"); }
-static V S39121(void) { static V c; return STRC(c, "// The binary32 nearest the decimal s, rounded once (as strtof): through\012"); }
-static V S39122(void) { static V c; return STRC(c, "// binary64 alone, a text whose binary64 is a binary32 midpoint would round\012"); }
-static V S39123(void) { static V c; return STRC(c, "// to the even side, not the text's (Bend 2.0.32's f32_round).\012"); }
-static V S39124(void) { static V c; return STRC(c, "function f32_round(s) {\012"); }
-static V S39125(void) { static V c; return STRC(c, "  const d = Number(s);\012"); }
-static V S39126(void) { static V c; return STRC(c, "  const a = Math.abs(d);\012"); }
-static V S39127(void) { static V c; return STRC(c, "  const f = Math.fround(a);\012"); }
-static V S39128(void) { static V c; return STRC(c, "  const g = 2 * a - Math.min(f, 2 ** 128);\012"); }
-static V S39129(void) { static V c; return STRC(c, "  if (g === f || Math.fround(g) !== g || g === Infinity) return Math.sign(d) * f;\012"); }
-static V S39130(void) { static V c; return STRC(c, "  let k = 0;\012"); }
-static V S39131(void) { static V c; return STRC(c, "  while (a * 2 ** k % 1 !== 0) k += 1;\012"); }
-static V S39132(void) { static V c; return STRC(c, "  const [, i, r, e] = /(\134d*)\134.\077(\134d*)(\077:e([+-]\077\134d+))\077$/i.exec(s);\012"); }
-static V S39133(void) { static V c; return STRC(c, "  const n = Number(e \077\077 0) - r.length;\012"); }
-static V S39134(void) { static V c; return STRC(c, "  const x = BigInt(i + r) * 2n ** BigInt(k) * 10n ** BigInt(Math.max(n, 0));\012"); }
-static V S39135(void) { static V c; return STRC(c, "  const y = BigInt(a * 2 ** k) * 10n ** BigInt(Math.max(-n, 0));\012"); }
-static V S39136(void) { static V c; return STRC(c, "  return Math.sign(d) * (x === y || x > y !== g > f \077 f : g);\012"); }
-static V S39137(void) { static V c; return STRC(c, "}\012"); }
-static V S39138(void) { static V c; return STRC(c, "\012"); }
-static V S39139(void) { static V c; return STRC(c, "function F_F32_dread(s) {\012"); }
-static V S39140(void) { static V c; return STRC(c, "  const re = /^\134s*[+-]\077((\134d+\134.\077\134d*|\134.\134d+)(e[+-]\077\134d+)\077|inf(inity)\077|nan)$/i;\012"); }
-static V S39141(void) { static V c; return STRC(c, "  return re.test(s) \077 { $: \042Some\042, value: f32_round(s.replace(/inf\134w*/i, \042Infinity\042)) } : { $: \042None\042 };\012"); }
-static V S39142(void) { static V c; return STRC(c, "}\012"); }
-static V S39143(void) { static V c; return STRC(c, "\012"); }
-static V S39144(void) { static V c; return STRC(c, "// Printing values (a main that is not IO)\012"); }
-static V S39145(void) { static V c; return STRC(c, "// =======================================\012"); }
-static V S39146(void) { static V c; return STRC(c, "\012"); }
-static V S39147(void) { static V c; return STRC(c, "function show_chr(c, q) {\012"); }
-static V S39148(void) { static V c; return STRC(c, "  const k = { 10: \042n\042, 9: \042t\042, 13: \042r\042, 0: \0420\042, 92: \042\134\134\042 }[c] \077\077 (c === q.codePointAt(0) \077 q : null);\012"); }
-static V S39149(void) { static V c; return STRC(c, "  return k !== null \077 \042\134\134\042 + k\012"); }
-static V S39150(void) { static V c; return STRC(c, "    : c < 32 || c === 127 || (c >= 0xD800 && c <= 0xDFFF) \077 \042\134\134u{\042 + c.toString(16) + \042}\042\012"); }
-static V S39151(void) { static V c; return STRC(c, "    : String.fromCodePoint(c);\012"); }
+static V S39263(void) { static V c; return STRC(c, "const F_F32_dcos = (a) => fr(Math.cos(a));\012"); }
+static V S39264(void) { static V c; return STRC(c, "const F_F32_dtan = (a) => fr(Math.tan(a));\012"); }
+static V S39265(void) { static V c; return STRC(c, "const F_F32_dasin = (a) => fr(Math.asin(a));\012"); }
+static V S39266(void) { static V c; return STRC(c, "const F_F32_dacos = (a) => fr(Math.acos(a));\012"); }
+static V S39267(void) { static V c; return STRC(c, "const F_F32_datan = (a) => fr(Math.atan(a));\012"); }
+static V S39268(void) { static V c; return STRC(c, "const F_F32_dsinh = (a) => fr(Math.sinh(a));\012"); }
+static V S39269(void) { static V c; return STRC(c, "const F_F32_dcosh = (a) => fr(Math.cosh(a));\012"); }
+static V S39270(void) { static V c; return STRC(c, "const F_F32_dtanh = (a) => fr(Math.tanh(a));\012"); }
+static V S39271(void) { static V c; return STRC(c, "const F_F32_dfloor = (a) => fr(Math.floor(a));\012"); }
+static V S39272(void) { static V c; return STRC(c, "const F_F32_dceil = (a) => fr(Math.ceil(a));\012"); }
+static V S39273(void) { static V c; return STRC(c, "const F_F32_dtrunc = (a) => fr(Math.trunc(a));\012"); }
+static V S39274(void) { static V c; return STRC(c, "const F_F32_dbits = (a) => new Uint32Array(new Float32Array([a]).buffer)[0];\012"); }
+static V S39275(void) { static V c; return STRC(c, "const f32_of_bits = (u) => new Float32Array(new Uint32Array([u]).buffer)[0];\012"); }
+static V S39276(void) { static V c; return STRC(c, "const word_con = (b, r) => ((r << 1) | (b \077 1 : 0)) >>> 0;\012"); }
+static V S39277(void) { static V c; return STRC(c, "const F_F32_dto__u32 = (a) => (!(a > 0) || a >= 4294967296 \077 0 : Math.trunc(a) >>> 0);\012"); }
+static V S39278(void) { static V c; return STRC(c, "\012"); }
+static V S39279(void) { static V c; return STRC(c, "// The shortest text that reads back.\012"); }
+static V S39280(void) { static V c; return STRC(c, "function f32_show(x) {\012"); }
+static V S39281(void) { static V c; return STRC(c, "  if (x !== x) return \042nan\042;\012"); }
+static V S39282(void) { static V c; return STRC(c, "  if (!Number.isFinite(x)) return x < 0 \077 \042-inf\042 : \042inf\042;\012"); }
+static V S39283(void) { static V c; return STRC(c, "  if (Object.is(x, -0)) return \042-0\042;\012"); }
+static V S39284(void) { static V c; return STRC(c, "  let s = \042x\042;\012"); }
+static V S39285(void) { static V c; return STRC(c, "  for (let p = 1; p <= 9 && Math.fround(Number(s)) !== x; p += 1) {\012"); }
+static V S39286(void) { static V c; return STRC(c, "    s = String(Number(x.toExponential(p - 1)));\012"); }
+static V S39287(void) { static V c; return STRC(c, "  }\012"); }
+static V S39288(void) { static V c; return STRC(c, "  return s;\012"); }
+static V S39289(void) { static V c; return STRC(c, "}\012"); }
+static V S39290(void) { static V c; return STRC(c, "const F_F32_dshow = (a) => f32_show(a);\012"); }
+static V S39291(void) { static V c; return STRC(c, "\012"); }
+static V S39292(void) { static V c; return STRC(c, "// The binary32 nearest the decimal s, rounded once (as strtof): through\012"); }
+static V S39293(void) { static V c; return STRC(c, "// binary64 alone, a text whose binary64 is a binary32 midpoint would round\012"); }
+static V S39294(void) { static V c; return STRC(c, "// to the even side, not the text's (Bend 2.0.32's f32_round).\012"); }
+static V S39295(void) { static V c; return STRC(c, "function f32_round(s) {\012"); }
+static V S39296(void) { static V c; return STRC(c, "  const d = Number(s);\012"); }
+static V S39297(void) { static V c; return STRC(c, "  const a = Math.abs(d);\012"); }
+static V S39298(void) { static V c; return STRC(c, "  const f = Math.fround(a);\012"); }
+static V S39299(void) { static V c; return STRC(c, "  const g = 2 * a - Math.min(f, 2 ** 128);\012"); }
+static V S39300(void) { static V c; return STRC(c, "  if (g === f || Math.fround(g) !== g || g === Infinity) return Math.sign(d) * f;\012"); }
+static V S39301(void) { static V c; return STRC(c, "  let k = 0;\012"); }
+static V S39302(void) { static V c; return STRC(c, "  while (a * 2 ** k % 1 !== 0) k += 1;\012"); }
+static V S39303(void) { static V c; return STRC(c, "  const [, i, r, e] = /(\134d*)\134.\077(\134d*)(\077:e([+-]\077\134d+))\077$/i.exec(s);\012"); }
+static V S39304(void) { static V c; return STRC(c, "  const n = Number(e \077\077 0) - r.length;\012"); }
+static V S39305(void) { static V c; return STRC(c, "  const x = BigInt(i + r) * 2n ** BigInt(k) * 10n ** BigInt(Math.max(n, 0));\012"); }
+static V S39306(void) { static V c; return STRC(c, "  const y = BigInt(a * 2 ** k) * 10n ** BigInt(Math.max(-n, 0));\012"); }
+static V S39307(void) { static V c; return STRC(c, "  return Math.sign(d) * (x === y || x > y !== g > f \077 f : g);\012"); }
+static V S39308(void) { static V c; return STRC(c, "}\012"); }
+static V S39309(void) { static V c; return STRC(c, "\012"); }
+static V S39310(void) { static V c; return STRC(c, "function F_F32_dread(s) {\012"); }
+static V S39311(void) { static V c; return STRC(c, "  const re = /^\134s*[+-]\077((\134d+\134.\077\134d*|\134.\134d+)(e[+-]\077\134d+)\077|inf(inity)\077|nan)$/i;\012"); }
+static V S39312(void) { static V c; return STRC(c, "  return re.test(s) \077 { $: \042Some\042, value: f32_round(s.replace(/inf\134w*/i, \042Infinity\042)) } : { $: \042None\042 };\012"); }
+static V S39313(void) { static V c; return STRC(c, "}\012"); }
+static V S39314(void) { static V c; return STRC(c, "\012"); }
+static V S39315(void) { static V c; return STRC(c, "// Printing values (a main that is not IO)\012"); }
+static V S39316(void) { static V c; return STRC(c, "// =======================================\012"); }
+static V S39317(void) { static V c; return STRC(c, "\012"); }
+static V S39318(void) { static V c; return STRC(c, "function show_chr(c, q) {\012"); }
+static V S39319(void) { static V c; return STRC(c, "  const k = { 10: \042n\042, 9: \042t\042, 13: \042r\042, 0: \0420\042, 92: \042\134\134\042 }[c] \077\077 (c === q.codePointAt(0) \077 q : null);\012"); }
+static V S39320(void) { static V c; return STRC(c, "  return k !== null \077 \042\134\134\042 + k\012"); }
+static V S39321(void) { static V c; return STRC(c, "    : c < 32 || c === 127 || (c >= 0xD800 && c <= 0xDFFF) \077 \042\134\134u{\042 + c.toString(16) + \042}\042\012"); }
+static V S39322(void) { static V c; return STRC(c, "    : String.fromCodePoint(c);\012"); }
 static V F_RtJs_dsrc_dp4(void) {
 top:;
-return F_String_dappend(S39092(), F_String_dappend(S39093(), F_String_dappend(S39094(), F_String_dappend(S39095(), F_String_dappend(S39096(), F_String_dappend(S39097(), F_String_dappend(S39098(), F_String_dappend(S39099(), F_String_dappend(S39100(), F_String_dappend(S39101(), F_String_dappend(S39102(), F_String_dappend(S39103(), F_String_dappend(S39104(), F_String_dappend(S39105(), F_String_dappend(S39106(), F_String_dappend(S39107(), F_String_dappend(S39108(), F_String_dappend(S39109(), F_String_dappend(S39110(), F_String_dappend(S39111(), F_String_dappend(S39112(), F_String_dappend(S39113(), F_String_dappend(S39114(), F_String_dappend(S39115(), F_String_dappend(S39116(), F_String_dappend(S39117(), F_String_dappend(S39118(), F_String_dappend(S39119(), F_String_dappend(S39120(), F_String_dappend(S39121(), F_String_dappend(S39122(), F_String_dappend(S39123(), F_String_dappend(S39124(), F_String_dappend(S39125(), F_String_dappend(S39126(), F_String_dappend(S39127(), F_String_dappend(S39128(), F_String_dappend(S39129(), F_String_dappend(S39130(), F_String_dappend(S39131(), F_String_dappend(S39132(), F_String_dappend(S39133(), F_String_dappend(S39134(), F_String_dappend(S39135(), F_String_dappend(S39136(), F_String_dappend(S39137(), F_String_dappend(S39138(), F_String_dappend(S39139(), F_String_dappend(S39140(), F_String_dappend(S39141(), F_String_dappend(S39142(), F_String_dappend(S39143(), F_String_dappend(S39144(), F_String_dappend(S39145(), F_String_dappend(S39146(), F_String_dappend(S39147(), F_String_dappend(S39148(), F_String_dappend(S39149(), F_String_dappend(S39150(), S39151())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+return F_String_dappend(S39263(), F_String_dappend(S39264(), F_String_dappend(S39265(), F_String_dappend(S39266(), F_String_dappend(S39267(), F_String_dappend(S39268(), F_String_dappend(S39269(), F_String_dappend(S39270(), F_String_dappend(S39271(), F_String_dappend(S39272(), F_String_dappend(S39273(), F_String_dappend(S39274(), F_String_dappend(S39275(), F_String_dappend(S39276(), F_String_dappend(S39277(), F_String_dappend(S39278(), F_String_dappend(S39279(), F_String_dappend(S39280(), F_String_dappend(S39281(), F_String_dappend(S39282(), F_String_dappend(S39283(), F_String_dappend(S39284(), F_String_dappend(S39285(), F_String_dappend(S39286(), F_String_dappend(S39287(), F_String_dappend(S39288(), F_String_dappend(S39289(), F_String_dappend(S39290(), F_String_dappend(S39291(), F_String_dappend(S39292(), F_String_dappend(S39293(), F_String_dappend(S39294(), F_String_dappend(S39295(), F_String_dappend(S39296(), F_String_dappend(S39297(), F_String_dappend(S39298(), F_String_dappend(S39299(), F_String_dappend(S39300(), F_String_dappend(S39301(), F_String_dappend(S39302(), F_String_dappend(S39303(), F_String_dappend(S39304(), F_String_dappend(S39305(), F_String_dappend(S39306(), F_String_dappend(S39307(), F_String_dappend(S39308(), F_String_dappend(S39309(), F_String_dappend(S39310(), F_String_dappend(S39311(), F_String_dappend(S39312(), F_String_dappend(S39313(), F_String_dappend(S39314(), F_String_dappend(S39315(), F_String_dappend(S39316(), F_String_dappend(S39317(), F_String_dappend(S39318(), F_String_dappend(S39319(), F_String_dappend(S39320(), F_String_dappend(S39321(), S39322())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
 }
 static V W_RtJs_dsrc_dp4(V *a) { (void)a; return F_RtJs_dsrc_dp4(); }
-static V S39211(void) { static V c; return STRC(c, "\012"); }
-static V S39212(void) { static V c; return STRC(c, "function array_half(a, hi) {\012"); }
-static V S39213(void) { static V c; return STRC(c, "  const h = a.length >> 1;\012"); }
-static V S39214(void) { static V c; return STRC(c, "  return hi \077 a.slice(h) : a.slice(0, h);\012"); }
-static V S39215(void) { static V c; return STRC(c, "}\012"); }
-static V S39216(void) { static V c; return STRC(c, "\012"); }
-static V S39217(void) { static V c; return STRC(c, "function array_rmw(a, i, f) {\012"); }
-static V S39218(void) { static V c; return STRC(c, "  const at = i % a.length;\012"); }
-static V S39219(void) { static V c; return STRC(c, "  const old = a[at];\012"); }
-static V S39220(void) { static V c; return STRC(c, "  a[at] = f(old);\012"); }
-static V S39221(void) { static V c; return STRC(c, "  return { $: \042Tuple\042, fst: a, snd: old };\012"); }
-static V S39222(void) { static V c; return STRC(c, "}\012"); }
-static V S39223(void) { static V c; return STRC(c, "\012"); }
-static V S39224(void) { static V c; return STRC(c, "const F_Array_dsize = (a) => ({ $: \042Tuple\042, fst: a, snd: a.length >>> 0 });\012"); }
-static V S39225(void) { static V c; return STRC(c, "// The checker's memo cells (check.bend's memo.*): a cell's term and its value.\012"); }
-static V S39226(void) { static V c; return STRC(c, "const F_Chk_dmemo_dnew = (t) => [undefined, undefined];\012"); }
-static V S39227(void) { static V c; return STRC(c, "const F_Chk_dmemo_dhas = (m, v) => m[0] !== undefined && m[0] === v;\012"); }
-static V S39228(void) { static V c; return STRC(c, "const F_Chk_dmemo_dget = (m) => m[1];\012"); }
-static V S39229(void) { static V c; return STRC(c, "const F_Chk_dmemo_dset = (m, v, x) => (m[1] = x, m[0] = v, x);\012"); }
-static V S39230(void) { static V c; return STRC(c, "const F_Chk_dmemo_dsame = (m, n) => m === n;\012"); }
-static V S39231(void) { static V c; return STRC(c, "const F_Chk_dmemo_dlink = (same, m, n) => (same && m[0] !== undefined && n[0] !== undefined && (m[1] = n[1]), same);\012"); }
-static V S39232(void) { static V c; return STRC(c, "const F_Array_dget = (a, i) => ({ $: \042Tuple\042, fst: a, snd: a[i % a.length] });\012"); }
-static V S39233(void) { static V c; return STRC(c, "const F_Array_dswap = (a, i, v) => array_rmw(a, i, () => v);\012"); }
-static V S39234(void) { static V c; return STRC(c, "const F_Array_dset = (a, i, v) => ((a[i % a.length] = v), a);\012"); }
-static V S39235(void) { static V c; return STRC(c, "const F_Array_dnew = array_new;\012"); }
-static V S39236(void) { static V c; return STRC(c, "const F_Array_dclone = (a) => ({ $: \042Tuple\042, fst: a, snd: a.slice() });\012"); }
-static V S39237(void) { static V c; return STRC(c, "const F_Array_datomic_dadd = (a, i, v) => array_rmw(a, i, (o) => (o + v) >>> 0);\012"); }
-static V S39238(void) { static V c; return STRC(c, "const F_Array_datomic_dmin = (a, i, v) => array_rmw(a, i, (o) => Math.min(o, v));\012"); }
-static V S39239(void) { static V c; return STRC(c, "const F_Array_datomic_dmax = (a, i, v) => array_rmw(a, i, (o) => Math.max(o, v));\012"); }
-static V S39240(void) { static V c; return STRC(c, "const F_Array_datomic_dand = (a, i, v) => array_rmw(a, i, (o) => (o & v) >>> 0);\012"); }
-static V S39241(void) { static V c; return STRC(c, "const F_Array_datomic_dor = (a, i, v) => array_rmw(a, i, (o) => (o | v) >>> 0);\012"); }
-static V S39242(void) { static V c; return STRC(c, "const F_Array_datomic_dxor = (a, i, v) => array_rmw(a, i, (o) => (o ^ v) >>> 0);\012"); }
-static V S39243(void) { static V c; return STRC(c, "const F_Array_datomic_dexch = (a, i, v) => array_rmw(a, i, () => v);\012"); }
-static V S39244(void) { static V c; return STRC(c, "const F_Array_datomic_dcas = (a, i, x, v) => array_rmw(a, i, (o) => (o === x \077 v : o));\012"); }
-static V S39245(void) { static V c; return STRC(c, "const F_Array_datomic_dfadd = (a, i, v) => array_rmw(a, i, (o) => Math.fround(o + v));\012"); }
-static V S39246(void) { static V c; return STRC(c, "\012"); }
-static V S39247(void) { static V c; return STRC(c, "// Natives: F32\012"); }
-static V S39248(void) { static V c; return STRC(c, "// ============\012"); }
-static V S39249(void) { static V c; return STRC(c, "\012"); }
-static V S39250(void) { static V c; return STRC(c, "const fr = Math.fround;\012"); }
-static V S39251(void) { static V c; return STRC(c, "const F_F32_dadd = (a, b) => fr(a + b);\012"); }
-static V S39252(void) { static V c; return STRC(c, "const F_F32_dsub = (a, b) => fr(a - b);\012"); }
-static V S39253(void) { static V c; return STRC(c, "const F_F32_dmul = (a, b) => fr(a * b);\012"); }
-static V S39254(void) { static V c; return STRC(c, "const F_F32_ddiv = (a, b) => fr(a / b);\012"); }
-static V S39255(void) { static V c; return STRC(c, "const F_F32_dmod = (a, b) => fr(a % b);\012"); }
-static V S39256(void) { static V c; return STRC(c, "// IEEE's pow(1, y) and pow(-1, inf) are 1; JS's ** says NaN\012"); }
-static V S39257(void) { static V c; return STRC(c, "const F_F32_dpow = (a, b) => (a === 1 || (a === -1 && Math.abs(b) === Infinity) \077 1 : fr(a ** b));\012"); }
-static V S39258(void) { static V c; return STRC(c, "const F_F32_datan2 = (a, b) => fr(Math.atan2(a, b));\012"); }
-static V S39259(void) { static V c; return STRC(c, "const F_F32_dis__eq = (a, b) => a === b;\012"); }
-static V S39260(void) { static V c; return STRC(c, "const F_F32_dis__ne = (a, b) => a !== b;\012"); }
-static V S39261(void) { static V c; return STRC(c, "const F_F32_dis__lt = (a, b) => a < b;\012"); }
-static V S39262(void) { static V c; return STRC(c, "const F_F32_dis__le = (a, b) => a <= b;\012"); }
-static V S39263(void) { static V c; return STRC(c, "const F_F32_dis__gt = (a, b) => a > b;\012"); }
-static V S39264(void) { static V c; return STRC(c, "const F_F32_dis__ge = (a, b) => a >= b;\012"); }
-static V S39265(void) { static V c; return STRC(c, "const F_F32_dneg = (a) => fr(-a);\012"); }
-static V S39266(void) { static V c; return STRC(c, "const F_F32_dabs = (a) => fr(Math.abs(a));\012"); }
-static V S39267(void) { static V c; return STRC(c, "const F_F32_dsqrt = (a) => fr(Math.sqrt(a));\012"); }
-static V S39268(void) { static V c; return STRC(c, "const F_F32_dexp = (a) => fr(Math.exp(a));\012"); }
-static V S39269(void) { static V c; return STRC(c, "const F_F32_dlog = (a) => fr(Math.log(a));\012"); }
-static V S39270(void) { static V c; return STRC(c, "const F_F32_dlog2 = (a) => fr(Math.log2(a));\012"); }
-static V S39271(void) { static V c; return STRC(c, "const F_F32_dlog10 = (a) => fr(Math.log10(a));\012"); }
-static V S39272(void) { static V c; return STRC(c, "const F_F32_dsin = (a) => fr(Math.sin(a));\012"); }
-static V F_RtJs_dsrc_dp3(void) {
-top:;
-return F_String_dappend(S39211(), F_String_dappend(S39212(), F_String_dappend(S39213(), F_String_dappend(S39214(), F_String_dappend(S39215(), F_String_dappend(S39216(), F_String_dappend(S39217(), F_String_dappend(S39218(), F_String_dappend(S39219(), F_String_dappend(S39220(), F_String_dappend(S39221(), F_String_dappend(S39222(), F_String_dappend(S39223(), F_String_dappend(S39224(), F_String_dappend(S39225(), F_String_dappend(S39226(), F_String_dappend(S39227(), F_String_dappend(S39228(), F_String_dappend(S39229(), F_String_dappend(S39230(), F_String_dappend(S39231(), F_String_dappend(S39232(), F_String_dappend(S39233(), F_String_dappend(S39234(), F_String_dappend(S39235(), F_String_dappend(S39236(), F_String_dappend(S39237(), F_String_dappend(S39238(), F_String_dappend(S39239(), F_String_dappend(S39240(), F_String_dappend(S39241(), F_String_dappend(S39242(), F_String_dappend(S39243(), F_String_dappend(S39244(), F_String_dappend(S39245(), F_String_dappend(S39246(), F_String_dappend(S39247(), F_String_dappend(S39248(), F_String_dappend(S39249(), F_String_dappend(S39250(), F_String_dappend(S39251(), F_String_dappend(S39252(), F_String_dappend(S39253(), F_String_dappend(S39254(), F_String_dappend(S39255(), F_String_dappend(S39256(), F_String_dappend(S39257(), F_String_dappend(S39258(), F_String_dappend(S39259(), F_String_dappend(S39260(), F_String_dappend(S39261(), F_String_dappend(S39262(), F_String_dappend(S39263(), F_String_dappend(S39264(), F_String_dappend(S39265(), F_String_dappend(S39266(), F_String_dappend(S39267(), F_String_dappend(S39268(), F_String_dappend(S39269(), F_String_dappend(S39270(), F_String_dappend(S39271(), S39272())))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
-}
-static V W_RtJs_dsrc_dp3(V *a) { (void)a; return F_RtJs_dsrc_dp3(); }
-static V S39334(void) { static V c; return STRC(c, "  return r;\012"); }
-static V S39335(void) { static V c; return STRC(c, "};\012"); }
-static V S39336(void) { static V c; return STRC(c, "// Base's Nat.show rebuilds each quotient as a successor (checked).\012"); }
-static V S39337(void) { static V c; return STRC(c, "const F_Nat_dshow = (a) => (nat_chk(a < 0n \077 a : a / 10n), a.toString());\012"); }
-static V S39338(void) { static V c; return STRC(c, "const map_bit = (key, pos) => {\012"); }
-static V S39339(void) { static V c; return STRC(c, "  const n = Number(pos), off = n % 33;\012"); }
-static V S39340(void) { static V c; return STRC(c, "  let ci = Math.floor(n / 33);\012"); }
-static V S39341(void) { static V c; return STRC(c, "  for (const ch of key) {\012"); }
-static V S39342(void) { static V c; return STRC(c, "    if (ci-- === 0) return off === 0 \077 true : ((ch.codePointAt(0) >>> (32 - off)) & 1) === 1;\012"); }
-static V S39343(void) { static V c; return STRC(c, "  }\012"); }
-static V S39344(void) { static V c; return STRC(c, "  return false;\012"); }
-static V S39345(void) { static V c; return STRC(c, "};\012"); }
-static V S39346(void) { static V c; return STRC(c, "const F_Map_dbit = (key, pos) => ({ $: \042Tuple\042, fst: key, snd: map_bit(key, pos) });\012"); }
-static V S39347(void) { static V c; return STRC(c, "// Map.get and Map.has hand the map itself back (Base's rebuild its path).\012"); }
-static V S39348(void) { static V c; return STRC(c, "const map_leaf = (m, key) => {\012"); }
-static V S39349(void) { static V c; return STRC(c, "  for (;;) {\012"); }
-static V S39350(void) { static V c; return STRC(c, "    if (m.$ === \042MLeaf\042) return m.key === key \077 m : null;\012"); }
-static V S39351(void) { static V c; return STRC(c, "    if (m.$ !== \042MNode\042) return null;\012"); }
-static V S39352(void) { static V c; return STRC(c, "    m = map_bit(key, m.pos) \077 m.hi : m.lo;\012"); }
-static V S39353(void) { static V c; return STRC(c, "  }\012"); }
-static V S39354(void) { static V c; return STRC(c, "};\012"); }
-static V S39355(void) { static V c; return STRC(c, "const F_Map_dget = (d, m, key) => {\012"); }
-static V S39356(void) { static V c; return STRC(c, "  const l = map_leaf(m, key);\012"); }
-static V S39357(void) { static V c; return STRC(c, "  return { $: \042Tuple\042, fst: m, snd: l \077 l.val : d };\012"); }
-static V S39358(void) { static V c; return STRC(c, "};\012"); }
-static V S39359(void) { static V c; return STRC(c, "const F_Map_dhas = (m, key) => ({ $: \042Tuple\042, fst: m, snd: map_leaf(m, key) !== null });\012"); }
-static V S39360(void) { static V c; return STRC(c, "// String.cmp and String.eq, by code point (Base's String.cmp rebuilds\012"); }
-static V S39361(void) { static V c; return STRC(c, "// both strings to hand them back).\012"); }
-static V S39362(void) { static V c; return STRC(c, "const str_cmp = (a, b) => {\012"); }
-static V S39363(void) { static V c; return STRC(c, "  const x = a[Symbol.iterator](), y = b[Symbol.iterator]();\012"); }
-static V S39364(void) { static V c; return STRC(c, "  for (;;) {\012"); }
-static V S39365(void) { static V c; return STRC(c, "    const p = x.next(), q = y.next();\012"); }
-static V S39366(void) { static V c; return STRC(c, "    if (p.done) return q.done \077 \042EQ\042 : \042LT\042;\012"); }
-static V S39367(void) { static V c; return STRC(c, "    if (q.done) return \042GT\042;\012"); }
-static V S39368(void) { static V c; return STRC(c, "    const c = p.value.codePointAt(0), d = q.value.codePointAt(0);\012"); }
-static V S39369(void) { static V c; return STRC(c, "    if (c !== d) return c < d \077 \042LT\042 : \042GT\042;\012"); }
-static V S39370(void) { static V c; return STRC(c, "  }\012"); }
-static V S39371(void) { static V c; return STRC(c, "};\012"); }
-static V S39372(void) { static V c; return STRC(c, "const F_String_dcmp = (a, b) => ({ $: \042Tuple\042, fst: { $: \042Tuple\042, fst: a, snd: b }, snd: { $: str_cmp(a, b) } });\012"); }
-static V S39373(void) { static V c; return STRC(c, "const F_String_deq = (a, b) => a === b;\012"); }
-static V S39374(void) { static V c; return STRC(c, "\012"); }
-static V S39375(void) { static V c; return STRC(c, "// Natives: Array\012"); }
-static V S39376(void) { static V c; return STRC(c, "// ==============\012"); }
-static V S39377(void) { static V c; return STRC(c, "\012"); }
-static V S39378(void) { static V c; return STRC(c, "// An Array is a JS array of 2^d cells, as the official JS target's: get,\012"); }
-static V S39379(void) { static V c; return STRC(c, "// set, swap and the atomics work on it in place, so a shared one is one\012"); }
-static V S39380(void) { static V c; return STRC(c, "// array; a match on ANode slices its halves.\012"); }
-static V S39381(void) { static V c; return STRC(c, "function array_new(d, v) {\012"); }
-static V S39382(void) { static V c; return STRC(c, "  if (d > 31n) {\012"); }
-static V S39383(void) { static V c; return STRC(c, "    bend_fail(\042an array past the deepest block class 31\042);\012"); }
-static V S39384(void) { static V c; return STRC(c, "  }\012"); }
-static V S39385(void) { static V c; return STRC(c, "  return Array(2 ** Number(d)).fill(v);\012"); }
+static V S39382(void) { static V c; return STRC(c, "\012"); }
+static V S39383(void) { static V c; return STRC(c, "function array_half(a, hi) {\012"); }
+static V S39384(void) { static V c; return STRC(c, "  const h = a.length >> 1;\012"); }
+static V S39385(void) { static V c; return STRC(c, "  return hi \077 a.slice(h) : a.slice(0, h);\012"); }
 static V S39386(void) { static V c; return STRC(c, "}\012"); }
 static V S39387(void) { static V c; return STRC(c, "\012"); }
-static V S39388(void) { static V c; return STRC(c, "function array_node(a, b) {\012"); }
-static V S39389(void) { static V c; return STRC(c, "  if (a.length !== b.length) {\012"); }
-static V S39390(void) { static V c; return STRC(c, "    bend_fail(\042runtime fail-stop\042);\012"); }
-static V S39391(void) { static V c; return STRC(c, "  }\012"); }
-static V S39392(void) { static V c; return STRC(c, "  return a.concat(b);\012"); }
+static V S39388(void) { static V c; return STRC(c, "function array_rmw(a, i, f) {\012"); }
+static V S39389(void) { static V c; return STRC(c, "  const at = i % a.length;\012"); }
+static V S39390(void) { static V c; return STRC(c, "  const old = a[at];\012"); }
+static V S39391(void) { static V c; return STRC(c, "  a[at] = f(old);\012"); }
+static V S39392(void) { static V c; return STRC(c, "  return { $: \042Tuple\042, fst: a, snd: old };\012"); }
 static V S39393(void) { static V c; return STRC(c, "}\012"); }
+static V S39394(void) { static V c; return STRC(c, "\012"); }
+static V S39395(void) { static V c; return STRC(c, "const F_Array_dsize = (a) => ({ $: \042Tuple\042, fst: a, snd: a.length >>> 0 });\012"); }
+static V S39396(void) { static V c; return STRC(c, "// The checker's memo cells (check.bend's memo.*): a cell's term and its value.\012"); }
+static V S39397(void) { static V c; return STRC(c, "const F_Chk_dmemo_dnew = (t) => [undefined, undefined];\012"); }
+static V S39398(void) { static V c; return STRC(c, "const F_Chk_dmemo_dhas = (m, v) => m[0] !== undefined && m[0] === v;\012"); }
+static V S39399(void) { static V c; return STRC(c, "const F_Chk_dmemo_dget = (m) => m[1];\012"); }
+static V S39400(void) { static V c; return STRC(c, "const F_Chk_dmemo_dset = (m, v, x) => (m[1] = x, m[0] = v, x);\012"); }
+static V S39401(void) { static V c; return STRC(c, "const F_Chk_dmemo_dsame = (m, n) => m === n;\012"); }
+static V S39402(void) { static V c; return STRC(c, "const F_Chk_dmemo_dlink = (same, m, n) => (same && m[0] !== undefined && n[0] !== undefined && (m[1] = n[1]), same);\012"); }
+static V S39403(void) { static V c; return STRC(c, "const F_Array_dget = (a, i) => ({ $: \042Tuple\042, fst: a, snd: a[i % a.length] });\012"); }
+static V S39404(void) { static V c; return STRC(c, "const F_Array_dswap = (a, i, v) => array_rmw(a, i, () => v);\012"); }
+static V S39405(void) { static V c; return STRC(c, "const F_Array_dset = (a, i, v) => ((a[i % a.length] = v), a);\012"); }
+static V S39406(void) { static V c; return STRC(c, "const F_Array_dnew = array_new;\012"); }
+static V S39407(void) { static V c; return STRC(c, "const F_Array_dclone = (a) => ({ $: \042Tuple\042, fst: a, snd: a.slice() });\012"); }
+static V S39408(void) { static V c; return STRC(c, "const F_Array_datomic_dadd = (a, i, v) => array_rmw(a, i, (o) => (o + v) >>> 0);\012"); }
+static V S39409(void) { static V c; return STRC(c, "const F_Array_datomic_dmin = (a, i, v) => array_rmw(a, i, (o) => Math.min(o, v));\012"); }
+static V S39410(void) { static V c; return STRC(c, "const F_Array_datomic_dmax = (a, i, v) => array_rmw(a, i, (o) => Math.max(o, v));\012"); }
+static V S39411(void) { static V c; return STRC(c, "const F_Array_datomic_dand = (a, i, v) => array_rmw(a, i, (o) => (o & v) >>> 0);\012"); }
+static V S39412(void) { static V c; return STRC(c, "const F_Array_datomic_dor = (a, i, v) => array_rmw(a, i, (o) => (o | v) >>> 0);\012"); }
+static V S39413(void) { static V c; return STRC(c, "const F_Array_datomic_dxor = (a, i, v) => array_rmw(a, i, (o) => (o ^ v) >>> 0);\012"); }
+static V S39414(void) { static V c; return STRC(c, "const F_Array_datomic_dexch = (a, i, v) => array_rmw(a, i, () => v);\012"); }
+static V S39415(void) { static V c; return STRC(c, "const F_Array_datomic_dcas = (a, i, x, v) => array_rmw(a, i, (o) => (o === x \077 v : o));\012"); }
+static V S39416(void) { static V c; return STRC(c, "const F_Array_datomic_dfadd = (a, i, v) => array_rmw(a, i, (o) => Math.fround(o + v));\012"); }
+static V S39417(void) { static V c; return STRC(c, "\012"); }
+static V S39418(void) { static V c; return STRC(c, "// Natives: F32\012"); }
+static V S39419(void) { static V c; return STRC(c, "// ============\012"); }
+static V S39420(void) { static V c; return STRC(c, "\012"); }
+static V S39421(void) { static V c; return STRC(c, "const fr = Math.fround;\012"); }
+static V S39422(void) { static V c; return STRC(c, "const F_F32_dadd = (a, b) => fr(a + b);\012"); }
+static V S39423(void) { static V c; return STRC(c, "const F_F32_dsub = (a, b) => fr(a - b);\012"); }
+static V S39424(void) { static V c; return STRC(c, "const F_F32_dmul = (a, b) => fr(a * b);\012"); }
+static V S39425(void) { static V c; return STRC(c, "const F_F32_ddiv = (a, b) => fr(a / b);\012"); }
+static V S39426(void) { static V c; return STRC(c, "const F_F32_dmod = (a, b) => fr(a % b);\012"); }
+static V S39427(void) { static V c; return STRC(c, "// IEEE's pow(1, y) and pow(-1, inf) are 1; JS's ** says NaN\012"); }
+static V S39428(void) { static V c; return STRC(c, "const F_F32_dpow = (a, b) => (a === 1 || (a === -1 && Math.abs(b) === Infinity) \077 1 : fr(a ** b));\012"); }
+static V S39429(void) { static V c; return STRC(c, "const F_F32_datan2 = (a, b) => fr(Math.atan2(a, b));\012"); }
+static V S39430(void) { static V c; return STRC(c, "const F_F32_dis__eq = (a, b) => a === b;\012"); }
+static V S39431(void) { static V c; return STRC(c, "const F_F32_dis__ne = (a, b) => a !== b;\012"); }
+static V S39432(void) { static V c; return STRC(c, "const F_F32_dis__lt = (a, b) => a < b;\012"); }
+static V S39433(void) { static V c; return STRC(c, "const F_F32_dis__le = (a, b) => a <= b;\012"); }
+static V S39434(void) { static V c; return STRC(c, "const F_F32_dis__gt = (a, b) => a > b;\012"); }
+static V S39435(void) { static V c; return STRC(c, "const F_F32_dis__ge = (a, b) => a >= b;\012"); }
+static V S39436(void) { static V c; return STRC(c, "const F_F32_dneg = (a) => fr(-a);\012"); }
+static V S39437(void) { static V c; return STRC(c, "const F_F32_dabs = (a) => fr(Math.abs(a));\012"); }
+static V S39438(void) { static V c; return STRC(c, "const F_F32_dsqrt = (a) => fr(Math.sqrt(a));\012"); }
+static V S39439(void) { static V c; return STRC(c, "const F_F32_dexp = (a) => fr(Math.exp(a));\012"); }
+static V S39440(void) { static V c; return STRC(c, "const F_F32_dlog = (a) => fr(Math.log(a));\012"); }
+static V S39441(void) { static V c; return STRC(c, "const F_F32_dlog2 = (a) => fr(Math.log2(a));\012"); }
+static V S39442(void) { static V c; return STRC(c, "const F_F32_dlog10 = (a) => fr(Math.log10(a));\012"); }
+static V S39443(void) { static V c; return STRC(c, "const F_F32_dsin = (a) => fr(Math.sin(a));\012"); }
+static V F_RtJs_dsrc_dp3(void) {
+top:;
+return F_String_dappend(S39382(), F_String_dappend(S39383(), F_String_dappend(S39384(), F_String_dappend(S39385(), F_String_dappend(S39386(), F_String_dappend(S39387(), F_String_dappend(S39388(), F_String_dappend(S39389(), F_String_dappend(S39390(), F_String_dappend(S39391(), F_String_dappend(S39392(), F_String_dappend(S39393(), F_String_dappend(S39394(), F_String_dappend(S39395(), F_String_dappend(S39396(), F_String_dappend(S39397(), F_String_dappend(S39398(), F_String_dappend(S39399(), F_String_dappend(S39400(), F_String_dappend(S39401(), F_String_dappend(S39402(), F_String_dappend(S39403(), F_String_dappend(S39404(), F_String_dappend(S39405(), F_String_dappend(S39406(), F_String_dappend(S39407(), F_String_dappend(S39408(), F_String_dappend(S39409(), F_String_dappend(S39410(), F_String_dappend(S39411(), F_String_dappend(S39412(), F_String_dappend(S39413(), F_String_dappend(S39414(), F_String_dappend(S39415(), F_String_dappend(S39416(), F_String_dappend(S39417(), F_String_dappend(S39418(), F_String_dappend(S39419(), F_String_dappend(S39420(), F_String_dappend(S39421(), F_String_dappend(S39422(), F_String_dappend(S39423(), F_String_dappend(S39424(), F_String_dappend(S39425(), F_String_dappend(S39426(), F_String_dappend(S39427(), F_String_dappend(S39428(), F_String_dappend(S39429(), F_String_dappend(S39430(), F_String_dappend(S39431(), F_String_dappend(S39432(), F_String_dappend(S39433(), F_String_dappend(S39434(), F_String_dappend(S39435(), F_String_dappend(S39436(), F_String_dappend(S39437(), F_String_dappend(S39438(), F_String_dappend(S39439(), F_String_dappend(S39440(), F_String_dappend(S39441(), F_String_dappend(S39442(), S39443())))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+}
+static V W_RtJs_dsrc_dp3(V *a) { (void)a; return F_RtJs_dsrc_dp3(); }
+static V S39505(void) { static V c; return STRC(c, "  return r;\012"); }
+static V S39506(void) { static V c; return STRC(c, "};\012"); }
+static V S39507(void) { static V c; return STRC(c, "// Base's Nat.show rebuilds each quotient as a successor (checked).\012"); }
+static V S39508(void) { static V c; return STRC(c, "const F_Nat_dshow = (a) => (nat_chk(a < 0n \077 a : a / 10n), a.toString());\012"); }
+static V S39509(void) { static V c; return STRC(c, "const map_bit = (key, pos) => {\012"); }
+static V S39510(void) { static V c; return STRC(c, "  const n = Number(pos), off = n % 33;\012"); }
+static V S39511(void) { static V c; return STRC(c, "  let ci = Math.floor(n / 33);\012"); }
+static V S39512(void) { static V c; return STRC(c, "  for (const ch of key) {\012"); }
+static V S39513(void) { static V c; return STRC(c, "    if (ci-- === 0) return off === 0 \077 true : ((ch.codePointAt(0) >>> (32 - off)) & 1) === 1;\012"); }
+static V S39514(void) { static V c; return STRC(c, "  }\012"); }
+static V S39515(void) { static V c; return STRC(c, "  return false;\012"); }
+static V S39516(void) { static V c; return STRC(c, "};\012"); }
+static V S39517(void) { static V c; return STRC(c, "const F_Map_dbit = (key, pos) => ({ $: \042Tuple\042, fst: key, snd: map_bit(key, pos) });\012"); }
+static V S39518(void) { static V c; return STRC(c, "// Map.get and Map.has hand the map itself back (Base's rebuild its path).\012"); }
+static V S39519(void) { static V c; return STRC(c, "const map_leaf = (m, key) => {\012"); }
+static V S39520(void) { static V c; return STRC(c, "  for (;;) {\012"); }
+static V S39521(void) { static V c; return STRC(c, "    if (m.$ === \042MLeaf\042) return m.key === key \077 m : null;\012"); }
+static V S39522(void) { static V c; return STRC(c, "    if (m.$ !== \042MNode\042) return null;\012"); }
+static V S39523(void) { static V c; return STRC(c, "    m = map_bit(key, m.pos) \077 m.hi : m.lo;\012"); }
+static V S39524(void) { static V c; return STRC(c, "  }\012"); }
+static V S39525(void) { static V c; return STRC(c, "};\012"); }
+static V S39526(void) { static V c; return STRC(c, "const F_Map_dget = (d, m, key) => {\012"); }
+static V S39527(void) { static V c; return STRC(c, "  const l = map_leaf(m, key);\012"); }
+static V S39528(void) { static V c; return STRC(c, "  return { $: \042Tuple\042, fst: m, snd: l \077 l.val : d };\012"); }
+static V S39529(void) { static V c; return STRC(c, "};\012"); }
+static V S39530(void) { static V c; return STRC(c, "const F_Map_dhas = (m, key) => ({ $: \042Tuple\042, fst: m, snd: map_leaf(m, key) !== null });\012"); }
+static V S39531(void) { static V c; return STRC(c, "// String.cmp and String.eq, by code point (Base's String.cmp rebuilds\012"); }
+static V S39532(void) { static V c; return STRC(c, "// both strings to hand them back).\012"); }
+static V S39533(void) { static V c; return STRC(c, "const str_cmp = (a, b) => {\012"); }
+static V S39534(void) { static V c; return STRC(c, "  const x = a[Symbol.iterator](), y = b[Symbol.iterator]();\012"); }
+static V S39535(void) { static V c; return STRC(c, "  for (;;) {\012"); }
+static V S39536(void) { static V c; return STRC(c, "    const p = x.next(), q = y.next();\012"); }
+static V S39537(void) { static V c; return STRC(c, "    if (p.done) return q.done \077 \042EQ\042 : \042LT\042;\012"); }
+static V S39538(void) { static V c; return STRC(c, "    if (q.done) return \042GT\042;\012"); }
+static V S39539(void) { static V c; return STRC(c, "    const c = p.value.codePointAt(0), d = q.value.codePointAt(0);\012"); }
+static V S39540(void) { static V c; return STRC(c, "    if (c !== d) return c < d \077 \042LT\042 : \042GT\042;\012"); }
+static V S39541(void) { static V c; return STRC(c, "  }\012"); }
+static V S39542(void) { static V c; return STRC(c, "};\012"); }
+static V S39543(void) { static V c; return STRC(c, "const F_String_dcmp = (a, b) => ({ $: \042Tuple\042, fst: { $: \042Tuple\042, fst: a, snd: b }, snd: { $: str_cmp(a, b) } });\012"); }
+static V S39544(void) { static V c; return STRC(c, "const F_String_deq = (a, b) => a === b;\012"); }
+static V S39545(void) { static V c; return STRC(c, "\012"); }
+static V S39546(void) { static V c; return STRC(c, "// Natives: Array\012"); }
+static V S39547(void) { static V c; return STRC(c, "// ==============\012"); }
+static V S39548(void) { static V c; return STRC(c, "\012"); }
+static V S39549(void) { static V c; return STRC(c, "// An Array is a JS array of 2^d cells, as the official JS target's: get,\012"); }
+static V S39550(void) { static V c; return STRC(c, "// set, swap and the atomics work on it in place, so a shared one is one\012"); }
+static V S39551(void) { static V c; return STRC(c, "// array; a match on ANode slices its halves.\012"); }
+static V S39552(void) { static V c; return STRC(c, "function array_new(d, v) {\012"); }
+static V S39553(void) { static V c; return STRC(c, "  if (d > 31n) {\012"); }
+static V S39554(void) { static V c; return STRC(c, "    bend_fail(\042an array past the deepest block class 31\042);\012"); }
+static V S39555(void) { static V c; return STRC(c, "  }\012"); }
+static V S39556(void) { static V c; return STRC(c, "  return Array(2 ** Number(d)).fill(v);\012"); }
+static V S39557(void) { static V c; return STRC(c, "}\012"); }
+static V S39558(void) { static V c; return STRC(c, "\012"); }
+static V S39559(void) { static V c; return STRC(c, "function array_node(a, b) {\012"); }
+static V S39560(void) { static V c; return STRC(c, "  if (a.length !== b.length) {\012"); }
+static V S39561(void) { static V c; return STRC(c, "    bend_fail(\042runtime fail-stop\042);\012"); }
+static V S39562(void) { static V c; return STRC(c, "  }\012"); }
+static V S39563(void) { static V c; return STRC(c, "  return a.concat(b);\012"); }
+static V S39564(void) { static V c; return STRC(c, "}\012"); }
 static V F_RtJs_dsrc_dp2(void) {
 top:;
-return F_String_dappend(S39334(), F_String_dappend(S39335(), F_String_dappend(S39336(), F_String_dappend(S39337(), F_String_dappend(S39338(), F_String_dappend(S39339(), F_String_dappend(S39340(), F_String_dappend(S39341(), F_String_dappend(S39342(), F_String_dappend(S39343(), F_String_dappend(S39344(), F_String_dappend(S39345(), F_String_dappend(S39346(), F_String_dappend(S39347(), F_String_dappend(S39348(), F_String_dappend(S39349(), F_String_dappend(S39350(), F_String_dappend(S39351(), F_String_dappend(S39352(), F_String_dappend(S39353(), F_String_dappend(S39354(), F_String_dappend(S39355(), F_String_dappend(S39356(), F_String_dappend(S39357(), F_String_dappend(S39358(), F_String_dappend(S39359(), F_String_dappend(S39360(), F_String_dappend(S39361(), F_String_dappend(S39362(), F_String_dappend(S39363(), F_String_dappend(S39364(), F_String_dappend(S39365(), F_String_dappend(S39366(), F_String_dappend(S39367(), F_String_dappend(S39368(), F_String_dappend(S39369(), F_String_dappend(S39370(), F_String_dappend(S39371(), F_String_dappend(S39372(), F_String_dappend(S39373(), F_String_dappend(S39374(), F_String_dappend(S39375(), F_String_dappend(S39376(), F_String_dappend(S39377(), F_String_dappend(S39378(), F_String_dappend(S39379(), F_String_dappend(S39380(), F_String_dappend(S39381(), F_String_dappend(S39382(), F_String_dappend(S39383(), F_String_dappend(S39384(), F_String_dappend(S39385(), F_String_dappend(S39386(), F_String_dappend(S39387(), F_String_dappend(S39388(), F_String_dappend(S39389(), F_String_dappend(S39390(), F_String_dappend(S39391(), F_String_dappend(S39392(), S39393())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+return F_String_dappend(S39505(), F_String_dappend(S39506(), F_String_dappend(S39507(), F_String_dappend(S39508(), F_String_dappend(S39509(), F_String_dappend(S39510(), F_String_dappend(S39511(), F_String_dappend(S39512(), F_String_dappend(S39513(), F_String_dappend(S39514(), F_String_dappend(S39515(), F_String_dappend(S39516(), F_String_dappend(S39517(), F_String_dappend(S39518(), F_String_dappend(S39519(), F_String_dappend(S39520(), F_String_dappend(S39521(), F_String_dappend(S39522(), F_String_dappend(S39523(), F_String_dappend(S39524(), F_String_dappend(S39525(), F_String_dappend(S39526(), F_String_dappend(S39527(), F_String_dappend(S39528(), F_String_dappend(S39529(), F_String_dappend(S39530(), F_String_dappend(S39531(), F_String_dappend(S39532(), F_String_dappend(S39533(), F_String_dappend(S39534(), F_String_dappend(S39535(), F_String_dappend(S39536(), F_String_dappend(S39537(), F_String_dappend(S39538(), F_String_dappend(S39539(), F_String_dappend(S39540(), F_String_dappend(S39541(), F_String_dappend(S39542(), F_String_dappend(S39543(), F_String_dappend(S39544(), F_String_dappend(S39545(), F_String_dappend(S39546(), F_String_dappend(S39547(), F_String_dappend(S39548(), F_String_dappend(S39549(), F_String_dappend(S39550(), F_String_dappend(S39551(), F_String_dappend(S39552(), F_String_dappend(S39553(), F_String_dappend(S39554(), F_String_dappend(S39555(), F_String_dappend(S39556(), F_String_dappend(S39557(), F_String_dappend(S39558(), F_String_dappend(S39559(), F_String_dappend(S39560(), F_String_dappend(S39561(), F_String_dappend(S39562(), F_String_dappend(S39563(), S39564())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
 }
 static V W_RtJs_dsrc_dp2(V *a) { (void)a; return F_RtJs_dsrc_dp2(); }
-static V S39453(void) { static V c; return STRC(c, "const F_U32_dcmp = cmp_new;\012"); }
-static V S39454(void) { static V c; return STRC(c, "const F_U32_dis__eq = (a, b) => a === b;\012"); }
-static V S39455(void) { static V c; return STRC(c, "const F_U32_dis__ne = (a, b) => a !== b;\012"); }
-static V S39456(void) { static V c; return STRC(c, "const F_U32_dis__lt = (a, b) => a < b;\012"); }
-static V S39457(void) { static V c; return STRC(c, "const F_U32_dis__le = (a, b) => a <= b;\012"); }
-static V S39458(void) { static V c; return STRC(c, "const F_U32_dis__gt = (a, b) => a > b;\012"); }
-static V S39459(void) { static V c; return STRC(c, "const F_U32_dis__ge = (a, b) => a >= b;\012"); }
-static V S39460(void) { static V c; return STRC(c, "const F_U32_dis__zero = (a) => a === 0;\012"); }
-static V S39461(void) { static V c; return STRC(c, "const F_U32_dis__even = (a) => (a & 1) === 0;\012"); }
-static V S39462(void) { static V c; return STRC(c, "const F_U32_dto__nat = (a) => BigInt(a);\012"); }
-static V S39463(void) { static V c; return STRC(c, "const F_U32_dfrom__nat = (n) => Number(BigInt.asUintN(32, n));\012"); }
-static V S39464(void) { static V c; return STRC(c, "const F_U32_dmin = (a, b) => (a < b \077 a : b);\012"); }
-static V S39465(void) { static V c; return STRC(c, "const F_U32_dmax = (a, b) => (a < b \077 b : a);\012"); }
-static V S39466(void) { static V c; return STRC(c, "const F_U32_dpow = (a, n) => {\012"); }
-static V S39467(void) { static V c; return STRC(c, "  let r = 1n;\012"); }
-static V S39468(void) { static V c; return STRC(c, "  let b = BigInt(a);\012"); }
-static V S39469(void) { static V c; return STRC(c, "  const m = 1n << 32n;\012"); }
-static V S39470(void) { static V c; return STRC(c, "  for (let e = n; e > 0n; e >>= 1n) {\012"); }
-static V S39471(void) { static V c; return STRC(c, "    if (e & 1n) r = (r * b) % m;\012"); }
-static V S39472(void) { static V c; return STRC(c, "    b = (b * b) % m;\012"); }
-static V S39473(void) { static V c; return STRC(c, "    if (b === 0n && e > 1n) return (e & 1n) \077 Number(r) : 0;\012"); }
-static V S39474(void) { static V c; return STRC(c, "  }\012"); }
-static V S39475(void) { static V c; return STRC(c, "  return Number(r);\012"); }
-static V S39476(void) { static V c; return STRC(c, "};\012"); }
-static V S39477(void) { static V c; return STRC(c, "const F_U32_dlog2 = (n) => BigInt(n <= 1 \077 0 : 31 - Math.clz32(n));  // a Nat\012"); }
-static V S39478(void) { static V c; return STRC(c, "const F_U32_dto__f32 = (a) => Math.fround(a);\012"); }
-static V S39479(void) { static V c; return STRC(c, "\012"); }
-static V S39480(void) { static V c; return STRC(c, "// Natives: Nat (BigInt, up to 2^48 - 1)\012"); }
-static V S39481(void) { static V c; return STRC(c, "// ======================================\012"); }
-static V S39482(void) { static V c; return STRC(c, "\012"); }
-static V S39483(void) { static V c; return STRC(c, "// A Nat past the official runtime's largest immediate stops the program,\012"); }
-static V S39484(void) { static V c; return STRC(c, "// as does arithmetic on a negative one (a host's, which upstream traps).\012"); }
-static V S39485(void) { static V c; return STRC(c, "function nat_chk(n) {\012"); }
-static V S39486(void) { static V c; return STRC(c, "  if (n > 281474976710655n || n < 0n) {\012"); }
-static V S39487(void) { static V c; return STRC(c, "    bend_fail(\042a Nat past the largest immediate 2^48-1\042);\012"); }
-static V S39488(void) { static V c; return STRC(c, "  }\012"); }
-static V S39489(void) { static V c; return STRC(c, "  return n;\012"); }
-static V S39490(void) { static V c; return STRC(c, "}\012"); }
-static V S39491(void) { static V c; return STRC(c, "\012"); }
-static V S39492(void) { static V c; return STRC(c, "const F_Nat_ddouble = (a) => nat_chk(a * 2n);\012"); }
-static V S39493(void) { static V c; return STRC(c, "const F_Nat_dadd = (a, b) => nat_chk(a + b);\012"); }
-static V S39494(void) { static V c; return STRC(c, "const F_Nat_dsub = (a, b) => (a > b \077 a - b : 0n);\012"); }
-static V S39495(void) { static V c; return STRC(c, "const F_Nat_dmul = (a, b) => nat_chk(a * b);\012"); }
-static V S39496(void) { static V c; return STRC(c, "const nat_divmod = (a, b) => (b === 0n \077 { $: \042Tuple\042, fst: 0n, snd: a } : { $: \042Tuple\042, fst: a / b, snd: a % b });\012"); }
-static V S39497(void) { static V c; return STRC(c, "const F_Nat_ddivmod = nat_divmod;\012"); }
-static V S39498(void) { static V c; return STRC(c, "const F_Nat_ddiv = (a, b) => (b === 0n \077 0n : a / b);\012"); }
-static V S39499(void) { static V c; return STRC(c, "const F_Nat_dmod = (a, b) => (b === 0n \077 a : a % b);\012"); }
-static V S39500(void) { static V c; return STRC(c, "const F_Nat_dcmp = cmp_new;\012"); }
-static V S39501(void) { static V c; return STRC(c, "const F_Nat_dis__eq = (a, b) => a === b;\012"); }
-static V S39502(void) { static V c; return STRC(c, "const F_Nat_dis__ne = (a, b) => a !== b;\012"); }
-static V S39503(void) { static V c; return STRC(c, "const F_Nat_dis__lt = (a, b) => a < b;\012"); }
-static V S39504(void) { static V c; return STRC(c, "const F_Nat_dis__le = (a, b) => a <= b;\012"); }
-static V S39505(void) { static V c; return STRC(c, "const F_Nat_dis__gt = (a, b) => a > b;\012"); }
-static V S39506(void) { static V c; return STRC(c, "const F_Nat_dis__ge = (a, b) => a >= b;\012"); }
-static V S39507(void) { static V c; return STRC(c, "const F_Nat_dmin = (a, b) => (a < b \077 a : b);\012"); }
-static V S39508(void) { static V c; return STRC(c, "const F_Nat_dmax = (a, b) => (a < b \077 b : a);\012"); }
-static V S39509(void) { static V c; return STRC(c, "const F_Nat_dpow = (a, n) => {\012"); }
-static V S39510(void) { static V c; return STRC(c, "  if (a <= 1n) return n === 0n \077 1n : a;\012"); }
-static V S39511(void) { static V c; return STRC(c, "  let r = 1n;\012"); }
-static V S39512(void) { static V c; return STRC(c, "  for (; n > 0n; n--) r = nat_chk(r * a);\012"); }
+static V S39624(void) { static V c; return STRC(c, "const F_U32_dcmp = cmp_new;\012"); }
+static V S39625(void) { static V c; return STRC(c, "const F_U32_dis__eq = (a, b) => a === b;\012"); }
+static V S39626(void) { static V c; return STRC(c, "const F_U32_dis__ne = (a, b) => a !== b;\012"); }
+static V S39627(void) { static V c; return STRC(c, "const F_U32_dis__lt = (a, b) => a < b;\012"); }
+static V S39628(void) { static V c; return STRC(c, "const F_U32_dis__le = (a, b) => a <= b;\012"); }
+static V S39629(void) { static V c; return STRC(c, "const F_U32_dis__gt = (a, b) => a > b;\012"); }
+static V S39630(void) { static V c; return STRC(c, "const F_U32_dis__ge = (a, b) => a >= b;\012"); }
+static V S39631(void) { static V c; return STRC(c, "const F_U32_dis__zero = (a) => a === 0;\012"); }
+static V S39632(void) { static V c; return STRC(c, "const F_U32_dis__even = (a) => (a & 1) === 0;\012"); }
+static V S39633(void) { static V c; return STRC(c, "const F_U32_dto__nat = (a) => BigInt(a);\012"); }
+static V S39634(void) { static V c; return STRC(c, "const F_U32_dfrom__nat = (n) => Number(BigInt.asUintN(32, n));\012"); }
+static V S39635(void) { static V c; return STRC(c, "const F_U32_dmin = (a, b) => (a < b \077 a : b);\012"); }
+static V S39636(void) { static V c; return STRC(c, "const F_U32_dmax = (a, b) => (a < b \077 b : a);\012"); }
+static V S39637(void) { static V c; return STRC(c, "const F_U32_dpow = (a, n) => {\012"); }
+static V S39638(void) { static V c; return STRC(c, "  let r = 1n;\012"); }
+static V S39639(void) { static V c; return STRC(c, "  let b = BigInt(a);\012"); }
+static V S39640(void) { static V c; return STRC(c, "  const m = 1n << 32n;\012"); }
+static V S39641(void) { static V c; return STRC(c, "  for (let e = n; e > 0n; e >>= 1n) {\012"); }
+static V S39642(void) { static V c; return STRC(c, "    if (e & 1n) r = (r * b) % m;\012"); }
+static V S39643(void) { static V c; return STRC(c, "    b = (b * b) % m;\012"); }
+static V S39644(void) { static V c; return STRC(c, "    if (b === 0n && e > 1n) return (e & 1n) \077 Number(r) : 0;\012"); }
+static V S39645(void) { static V c; return STRC(c, "  }\012"); }
+static V S39646(void) { static V c; return STRC(c, "  return Number(r);\012"); }
+static V S39647(void) { static V c; return STRC(c, "};\012"); }
+static V S39648(void) { static V c; return STRC(c, "const F_U32_dlog2 = (n) => BigInt(n <= 1 \077 0 : 31 - Math.clz32(n));  // a Nat\012"); }
+static V S39649(void) { static V c; return STRC(c, "const F_U32_dto__f32 = (a) => Math.fround(a);\012"); }
+static V S39650(void) { static V c; return STRC(c, "\012"); }
+static V S39651(void) { static V c; return STRC(c, "// Natives: Nat (BigInt, up to 2^48 - 1)\012"); }
+static V S39652(void) { static V c; return STRC(c, "// ======================================\012"); }
+static V S39653(void) { static V c; return STRC(c, "\012"); }
+static V S39654(void) { static V c; return STRC(c, "// A Nat past the official runtime's largest immediate stops the program,\012"); }
+static V S39655(void) { static V c; return STRC(c, "// as does arithmetic on a negative one (a host's, which upstream traps).\012"); }
+static V S39656(void) { static V c; return STRC(c, "function nat_chk(n) {\012"); }
+static V S39657(void) { static V c; return STRC(c, "  if (n > 281474976710655n || n < 0n) {\012"); }
+static V S39658(void) { static V c; return STRC(c, "    bend_fail(\042a Nat past the largest immediate 2^48-1\042);\012"); }
+static V S39659(void) { static V c; return STRC(c, "  }\012"); }
+static V S39660(void) { static V c; return STRC(c, "  return n;\012"); }
+static V S39661(void) { static V c; return STRC(c, "}\012"); }
+static V S39662(void) { static V c; return STRC(c, "\012"); }
+static V S39663(void) { static V c; return STRC(c, "const F_Nat_ddouble = (a) => nat_chk(a * 2n);\012"); }
+static V S39664(void) { static V c; return STRC(c, "const F_Nat_dadd = (a, b) => nat_chk(a + b);\012"); }
+static V S39665(void) { static V c; return STRC(c, "const F_Nat_dsub = (a, b) => (a > b \077 a - b : 0n);\012"); }
+static V S39666(void) { static V c; return STRC(c, "const F_Nat_dmul = (a, b) => nat_chk(a * b);\012"); }
+static V S39667(void) { static V c; return STRC(c, "const nat_divmod = (a, b) => (b === 0n \077 { $: \042Tuple\042, fst: 0n, snd: a } : { $: \042Tuple\042, fst: a / b, snd: a % b });\012"); }
+static V S39668(void) { static V c; return STRC(c, "const F_Nat_ddivmod = nat_divmod;\012"); }
+static V S39669(void) { static V c; return STRC(c, "const F_Nat_ddiv = (a, b) => (b === 0n \077 0n : a / b);\012"); }
+static V S39670(void) { static V c; return STRC(c, "const F_Nat_dmod = (a, b) => (b === 0n \077 a : a % b);\012"); }
+static V S39671(void) { static V c; return STRC(c, "const F_Nat_dcmp = cmp_new;\012"); }
+static V S39672(void) { static V c; return STRC(c, "const F_Nat_dis__eq = (a, b) => a === b;\012"); }
+static V S39673(void) { static V c; return STRC(c, "const F_Nat_dis__ne = (a, b) => a !== b;\012"); }
+static V S39674(void) { static V c; return STRC(c, "const F_Nat_dis__lt = (a, b) => a < b;\012"); }
+static V S39675(void) { static V c; return STRC(c, "const F_Nat_dis__le = (a, b) => a <= b;\012"); }
+static V S39676(void) { static V c; return STRC(c, "const F_Nat_dis__gt = (a, b) => a > b;\012"); }
+static V S39677(void) { static V c; return STRC(c, "const F_Nat_dis__ge = (a, b) => a >= b;\012"); }
+static V S39678(void) { static V c; return STRC(c, "const F_Nat_dmin = (a, b) => (a < b \077 a : b);\012"); }
+static V S39679(void) { static V c; return STRC(c, "const F_Nat_dmax = (a, b) => (a < b \077 b : a);\012"); }
+static V S39680(void) { static V c; return STRC(c, "const F_Nat_dpow = (a, n) => {\012"); }
+static V S39681(void) { static V c; return STRC(c, "  if (a <= 1n) return n === 0n \077 1n : a;\012"); }
+static V S39682(void) { static V c; return STRC(c, "  let r = 1n;\012"); }
+static V S39683(void) { static V c; return STRC(c, "  for (; n > 0n; n--) r = nat_chk(r * a);\012"); }
 static V F_RtJs_dsrc_dp1(void) {
 top:;
-return F_String_dappend(S39453(), F_String_dappend(S39454(), F_String_dappend(S39455(), F_String_dappend(S39456(), F_String_dappend(S39457(), F_String_dappend(S39458(), F_String_dappend(S39459(), F_String_dappend(S39460(), F_String_dappend(S39461(), F_String_dappend(S39462(), F_String_dappend(S39463(), F_String_dappend(S39464(), F_String_dappend(S39465(), F_String_dappend(S39466(), F_String_dappend(S39467(), F_String_dappend(S39468(), F_String_dappend(S39469(), F_String_dappend(S39470(), F_String_dappend(S39471(), F_String_dappend(S39472(), F_String_dappend(S39473(), F_String_dappend(S39474(), F_String_dappend(S39475(), F_String_dappend(S39476(), F_String_dappend(S39477(), F_String_dappend(S39478(), F_String_dappend(S39479(), F_String_dappend(S39480(), F_String_dappend(S39481(), F_String_dappend(S39482(), F_String_dappend(S39483(), F_String_dappend(S39484(), F_String_dappend(S39485(), F_String_dappend(S39486(), F_String_dappend(S39487(), F_String_dappend(S39488(), F_String_dappend(S39489(), F_String_dappend(S39490(), F_String_dappend(S39491(), F_String_dappend(S39492(), F_String_dappend(S39493(), F_String_dappend(S39494(), F_String_dappend(S39495(), F_String_dappend(S39496(), F_String_dappend(S39497(), F_String_dappend(S39498(), F_String_dappend(S39499(), F_String_dappend(S39500(), F_String_dappend(S39501(), F_String_dappend(S39502(), F_String_dappend(S39503(), F_String_dappend(S39504(), F_String_dappend(S39505(), F_String_dappend(S39506(), F_String_dappend(S39507(), F_String_dappend(S39508(), F_String_dappend(S39509(), F_String_dappend(S39510(), F_String_dappend(S39511(), S39512())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+return F_String_dappend(S39624(), F_String_dappend(S39625(), F_String_dappend(S39626(), F_String_dappend(S39627(), F_String_dappend(S39628(), F_String_dappend(S39629(), F_String_dappend(S39630(), F_String_dappend(S39631(), F_String_dappend(S39632(), F_String_dappend(S39633(), F_String_dappend(S39634(), F_String_dappend(S39635(), F_String_dappend(S39636(), F_String_dappend(S39637(), F_String_dappend(S39638(), F_String_dappend(S39639(), F_String_dappend(S39640(), F_String_dappend(S39641(), F_String_dappend(S39642(), F_String_dappend(S39643(), F_String_dappend(S39644(), F_String_dappend(S39645(), F_String_dappend(S39646(), F_String_dappend(S39647(), F_String_dappend(S39648(), F_String_dappend(S39649(), F_String_dappend(S39650(), F_String_dappend(S39651(), F_String_dappend(S39652(), F_String_dappend(S39653(), F_String_dappend(S39654(), F_String_dappend(S39655(), F_String_dappend(S39656(), F_String_dappend(S39657(), F_String_dappend(S39658(), F_String_dappend(S39659(), F_String_dappend(S39660(), F_String_dappend(S39661(), F_String_dappend(S39662(), F_String_dappend(S39663(), F_String_dappend(S39664(), F_String_dappend(S39665(), F_String_dappend(S39666(), F_String_dappend(S39667(), F_String_dappend(S39668(), F_String_dappend(S39669(), F_String_dappend(S39670(), F_String_dappend(S39671(), F_String_dappend(S39672(), F_String_dappend(S39673(), F_String_dappend(S39674(), F_String_dappend(S39675(), F_String_dappend(S39676(), F_String_dappend(S39677(), F_String_dappend(S39678(), F_String_dappend(S39679(), F_String_dappend(S39680(), F_String_dappend(S39681(), F_String_dappend(S39682(), S39683())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
 }
 static V W_RtJs_dsrc_dp1(V *a) { (void)a; return F_RtJs_dsrc_dp1(); }
-static V S39572(void) { static V c; return STRC(c, "// bendrt.js: runtime for JavaScript generated by bendc --js.\012"); }
-static V S39573(void) { static V c; return STRC(c, "//\012"); }
-static V S39574(void) { static V c; return STRC(c, "// Values are what the official JS target uses, so effect files written for\012"); }
-static V S39575(void) { static V c; return STRC(c, "// it work unchanged: a U32 or F32 is a number, a Nat a BigInt, a Bool a\012"); }
-static V S39576(void) { static V c; return STRC(c, "// boolean, a Char a string of one code point, a String a string, and any\012"); }
-static V S39577(void) { static V c; return STRC(c, "// other constructor an object {$: \042Name\042, field: value, ...}. A function is\012"); }
-static V S39578(void) { static V c; return STRC(c, "// a curried JS function. Effects are requests the event loop answers, with\012"); }
-static V S39579(void) { static V c; return STRC(c, "// the official helpers (io_done, io_fail, io_tup, io_sys, io_park_on, ...).\012"); }
-static V S39580(void) { static V c; return STRC(c, "\012"); }
-static V S39581(void) { static V c; return STRC(c, "\042use strict\042;\012"); }
-static V S39582(void) { static V c; return STRC(c, "\012"); }
-static V S39583(void) { static V c; return STRC(c, "// Failures\012"); }
-static V S39584(void) { static V c; return STRC(c, "// ========\012"); }
-static V S39585(void) { static V c; return STRC(c, "\012"); }
-static V S39586(void) { static V c; return STRC(c, "function bend_fail(msg) {\012"); }
-static V S39587(void) { static V c; return STRC(c, "  throw \042bend: \042 + msg;\012"); }
-static V S39588(void) { static V c; return STRC(c, "}\012"); }
-static V S39589(void) { static V c; return STRC(c, "\012"); }
-static V S39590(void) { static V c; return STRC(c, "// Strings and characters\012"); }
-static V S39591(void) { static V c; return STRC(c, "// ======================\012"); }
-static V S39592(void) { static V c; return STRC(c, "\012"); }
-static V S39593(void) { static V c; return STRC(c, "function char_new(code) {\012"); }
-static V S39594(void) { static V c; return STRC(c, "  if (code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF)) {\012"); }
-static V S39595(void) { static V c; return STRC(c, "    bend_fail(code + \042 is not a Unicode scalar value\042);\012"); }
-static V S39596(void) { static V c; return STRC(c, "  }\012"); }
-static V S39597(void) { static V c; return STRC(c, "  return String.fromCodePoint(code);\012"); }
-static V S39598(void) { static V c; return STRC(c, "}\012"); }
-static V S39599(void) { static V c; return STRC(c, "\012"); }
-static V S39600(void) { static V c; return STRC(c, "// The first code point of a non-empty string, as a Char, and the rest.\012"); }
-static V S39601(void) { static V c; return STRC(c, "function str_head(s) {\012"); }
-static V S39602(void) { static V c; return STRC(c, "  const c = s.codePointAt(0);\012"); }
-static V S39603(void) { static V c; return STRC(c, "  return String.fromCodePoint(c);\012"); }
-static V S39604(void) { static V c; return STRC(c, "}\012"); }
-static V S39605(void) { static V c; return STRC(c, "\012"); }
-static V S39606(void) { static V c; return STRC(c, "function str_tail(s) {\012"); }
-static V S39607(void) { static V c; return STRC(c, "  return s.slice(s.codePointAt(0) > 0xFFFF \077 2 : 1);\012"); }
-static V S39608(void) { static V c; return STRC(c, "}\012"); }
-static V S39609(void) { static V c; return STRC(c, "\012"); }
-static V S39610(void) { static V c; return STRC(c, "function str_cons(c, s) {\012"); }
-static V S39611(void) { static V c; return STRC(c, "  return c + s;\012"); }
-static V S39612(void) { static V c; return STRC(c, "}\012"); }
-static V S39613(void) { static V c; return STRC(c, "\012"); }
-static V S39614(void) { static V c; return STRC(c, "// Natives: U32\012"); }
-static V S39615(void) { static V c; return STRC(c, "// ============\012"); }
-static V S39616(void) { static V c; return STRC(c, "\012"); }
-static V S39617(void) { static V c; return STRC(c, "const F_U32_dinc = (a) => (a + 1) >>> 0;\012"); }
-static V S39618(void) { static V c; return STRC(c, "const F_U32_dadd = (a, b) => (a + b) >>> 0;\012"); }
-static V S39619(void) { static V c; return STRC(c, "const F_U32_dsub = (a, b) => (a - b) >>> 0;\012"); }
-static V S39620(void) { static V c; return STRC(c, "const F_U32_dmul = (a, b) => Math.imul(a, b) >>> 0;\012"); }
-static V S39621(void) { static V c; return STRC(c, "const F_U32_ddiv = (a, b) => (b === 0 \077 0 : Math.floor(a / b) >>> 0);\012"); }
-static V S39622(void) { static V c; return STRC(c, "const F_U32_dmod = (a, b) => (b === 0 \077 a : a % b);\012"); }
-static V S39623(void) { static V c; return STRC(c, "const F_U32_dnot = (a) => ~a >>> 0;\012"); }
-static V S39624(void) { static V c; return STRC(c, "const F_U32_dand = (a, b) => (a & b) >>> 0;\012"); }
-static V S39625(void) { static V c; return STRC(c, "const F_U32_dor = (a, b) => (a | b) >>> 0;\012"); }
-static V S39626(void) { static V c; return STRC(c, "const F_U32_dxor = (a, b) => (a ^ b) >>> 0;\012"); }
-static V S39627(void) { static V c; return STRC(c, "const F_U32_dshl = (a) => (a << 1) >>> 0;\012"); }
-static V S39628(void) { static V c; return STRC(c, "const F_U32_dshr = (a) => a >>> 1;\012"); }
-static V S39629(void) { static V c; return STRC(c, "const F_U32_dshln = (a, n) => (n >= 32n \077 0 : (a << Number(n)) >>> 0);\012"); }
-static V S39630(void) { static V c; return STRC(c, "const F_U32_dshrn = (a, n) => (n >= 32n \077 0 : a >>> Number(n));\012"); }
-static V S39631(void) { static V c; return STRC(c, "const cmp_new = (a, b) => ({ $: a < b \077 \042LT\042 : a === b \077 \042EQ\042 : \042GT\042 });\012"); }
+static V S39743(void) { static V c; return STRC(c, "// bendrt.js: runtime for JavaScript generated by bendc --js.\012"); }
+static V S39744(void) { static V c; return STRC(c, "//\012"); }
+static V S39745(void) { static V c; return STRC(c, "// Values are what the official JS target uses, so effect files written for\012"); }
+static V S39746(void) { static V c; return STRC(c, "// it work unchanged: a U32 or F32 is a number, a Nat a BigInt, a Bool a\012"); }
+static V S39747(void) { static V c; return STRC(c, "// boolean, a Char a string of one code point, a String a string, and any\012"); }
+static V S39748(void) { static V c; return STRC(c, "// other constructor an object {$: \042Name\042, field: value, ...}. A function is\012"); }
+static V S39749(void) { static V c; return STRC(c, "// a curried JS function. Effects are requests the event loop answers, with\012"); }
+static V S39750(void) { static V c; return STRC(c, "// the official helpers (io_done, io_fail, io_tup, io_sys, io_park_on, ...).\012"); }
+static V S39751(void) { static V c; return STRC(c, "\012"); }
+static V S39752(void) { static V c; return STRC(c, "\042use strict\042;\012"); }
+static V S39753(void) { static V c; return STRC(c, "\012"); }
+static V S39754(void) { static V c; return STRC(c, "// Failures\012"); }
+static V S39755(void) { static V c; return STRC(c, "// ========\012"); }
+static V S39756(void) { static V c; return STRC(c, "\012"); }
+static V S39757(void) { static V c; return STRC(c, "function bend_fail(msg) {\012"); }
+static V S39758(void) { static V c; return STRC(c, "  throw \042bend: \042 + msg;\012"); }
+static V S39759(void) { static V c; return STRC(c, "}\012"); }
+static V S39760(void) { static V c; return STRC(c, "\012"); }
+static V S39761(void) { static V c; return STRC(c, "// Strings and characters\012"); }
+static V S39762(void) { static V c; return STRC(c, "// ======================\012"); }
+static V S39763(void) { static V c; return STRC(c, "\012"); }
+static V S39764(void) { static V c; return STRC(c, "function char_new(code) {\012"); }
+static V S39765(void) { static V c; return STRC(c, "  if (code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF)) {\012"); }
+static V S39766(void) { static V c; return STRC(c, "    bend_fail(code + \042 is not a Unicode scalar value\042);\012"); }
+static V S39767(void) { static V c; return STRC(c, "  }\012"); }
+static V S39768(void) { static V c; return STRC(c, "  return String.fromCodePoint(code);\012"); }
+static V S39769(void) { static V c; return STRC(c, "}\012"); }
+static V S39770(void) { static V c; return STRC(c, "\012"); }
+static V S39771(void) { static V c; return STRC(c, "// The first code point of a non-empty string, as a Char, and the rest.\012"); }
+static V S39772(void) { static V c; return STRC(c, "function str_head(s) {\012"); }
+static V S39773(void) { static V c; return STRC(c, "  const c = s.codePointAt(0);\012"); }
+static V S39774(void) { static V c; return STRC(c, "  return String.fromCodePoint(c);\012"); }
+static V S39775(void) { static V c; return STRC(c, "}\012"); }
+static V S39776(void) { static V c; return STRC(c, "\012"); }
+static V S39777(void) { static V c; return STRC(c, "function str_tail(s) {\012"); }
+static V S39778(void) { static V c; return STRC(c, "  return s.slice(s.codePointAt(0) > 0xFFFF \077 2 : 1);\012"); }
+static V S39779(void) { static V c; return STRC(c, "}\012"); }
+static V S39780(void) { static V c; return STRC(c, "\012"); }
+static V S39781(void) { static V c; return STRC(c, "function str_cons(c, s) {\012"); }
+static V S39782(void) { static V c; return STRC(c, "  return c + s;\012"); }
+static V S39783(void) { static V c; return STRC(c, "}\012"); }
+static V S39784(void) { static V c; return STRC(c, "\012"); }
+static V S39785(void) { static V c; return STRC(c, "// Natives: U32\012"); }
+static V S39786(void) { static V c; return STRC(c, "// ============\012"); }
+static V S39787(void) { static V c; return STRC(c, "\012"); }
+static V S39788(void) { static V c; return STRC(c, "const F_U32_dinc = (a) => (a + 1) >>> 0;\012"); }
+static V S39789(void) { static V c; return STRC(c, "const F_U32_dadd = (a, b) => (a + b) >>> 0;\012"); }
+static V S39790(void) { static V c; return STRC(c, "const F_U32_dsub = (a, b) => (a - b) >>> 0;\012"); }
+static V S39791(void) { static V c; return STRC(c, "const F_U32_dmul = (a, b) => Math.imul(a, b) >>> 0;\012"); }
+static V S39792(void) { static V c; return STRC(c, "const F_U32_ddiv = (a, b) => (b === 0 \077 0 : Math.floor(a / b) >>> 0);\012"); }
+static V S39793(void) { static V c; return STRC(c, "const F_U32_dmod = (a, b) => (b === 0 \077 a : a % b);\012"); }
+static V S39794(void) { static V c; return STRC(c, "const F_U32_dnot = (a) => ~a >>> 0;\012"); }
+static V S39795(void) { static V c; return STRC(c, "const F_U32_dand = (a, b) => (a & b) >>> 0;\012"); }
+static V S39796(void) { static V c; return STRC(c, "const F_U32_dor = (a, b) => (a | b) >>> 0;\012"); }
+static V S39797(void) { static V c; return STRC(c, "const F_U32_dxor = (a, b) => (a ^ b) >>> 0;\012"); }
+static V S39798(void) { static V c; return STRC(c, "const F_U32_dshl = (a) => (a << 1) >>> 0;\012"); }
+static V S39799(void) { static V c; return STRC(c, "const F_U32_dshr = (a) => a >>> 1;\012"); }
+static V S39800(void) { static V c; return STRC(c, "const F_U32_dshln = (a, n) => (n >= 32n \077 0 : (a << Number(n)) >>> 0);\012"); }
+static V S39801(void) { static V c; return STRC(c, "const F_U32_dshrn = (a, n) => (n >= 32n \077 0 : a >>> Number(n));\012"); }
+static V S39802(void) { static V c; return STRC(c, "const cmp_new = (a, b) => ({ $: a < b \077 \042LT\042 : a === b \077 \042EQ\042 : \042GT\042 });\012"); }
 static V F_RtJs_dsrc_dp0(void) {
 top:;
-return F_String_dappend(S39572(), F_String_dappend(S39573(), F_String_dappend(S39574(), F_String_dappend(S39575(), F_String_dappend(S39576(), F_String_dappend(S39577(), F_String_dappend(S39578(), F_String_dappend(S39579(), F_String_dappend(S39580(), F_String_dappend(S39581(), F_String_dappend(S39582(), F_String_dappend(S39583(), F_String_dappend(S39584(), F_String_dappend(S39585(), F_String_dappend(S39586(), F_String_dappend(S39587(), F_String_dappend(S39588(), F_String_dappend(S39589(), F_String_dappend(S39590(), F_String_dappend(S39591(), F_String_dappend(S39592(), F_String_dappend(S39593(), F_String_dappend(S39594(), F_String_dappend(S39595(), F_String_dappend(S39596(), F_String_dappend(S39597(), F_String_dappend(S39598(), F_String_dappend(S39599(), F_String_dappend(S39600(), F_String_dappend(S39601(), F_String_dappend(S39602(), F_String_dappend(S39603(), F_String_dappend(S39604(), F_String_dappend(S39605(), F_String_dappend(S39606(), F_String_dappend(S39607(), F_String_dappend(S39608(), F_String_dappend(S39609(), F_String_dappend(S39610(), F_String_dappend(S39611(), F_String_dappend(S39612(), F_String_dappend(S39613(), F_String_dappend(S39614(), F_String_dappend(S39615(), F_String_dappend(S39616(), F_String_dappend(S39617(), F_String_dappend(S39618(), F_String_dappend(S39619(), F_String_dappend(S39620(), F_String_dappend(S39621(), F_String_dappend(S39622(), F_String_dappend(S39623(), F_String_dappend(S39624(), F_String_dappend(S39625(), F_String_dappend(S39626(), F_String_dappend(S39627(), F_String_dappend(S39628(), F_String_dappend(S39629(), F_String_dappend(S39630(), S39631())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+return F_String_dappend(S39743(), F_String_dappend(S39744(), F_String_dappend(S39745(), F_String_dappend(S39746(), F_String_dappend(S39747(), F_String_dappend(S39748(), F_String_dappend(S39749(), F_String_dappend(S39750(), F_String_dappend(S39751(), F_String_dappend(S39752(), F_String_dappend(S39753(), F_String_dappend(S39754(), F_String_dappend(S39755(), F_String_dappend(S39756(), F_String_dappend(S39757(), F_String_dappend(S39758(), F_String_dappend(S39759(), F_String_dappend(S39760(), F_String_dappend(S39761(), F_String_dappend(S39762(), F_String_dappend(S39763(), F_String_dappend(S39764(), F_String_dappend(S39765(), F_String_dappend(S39766(), F_String_dappend(S39767(), F_String_dappend(S39768(), F_String_dappend(S39769(), F_String_dappend(S39770(), F_String_dappend(S39771(), F_String_dappend(S39772(), F_String_dappend(S39773(), F_String_dappend(S39774(), F_String_dappend(S39775(), F_String_dappend(S39776(), F_String_dappend(S39777(), F_String_dappend(S39778(), F_String_dappend(S39779(), F_String_dappend(S39780(), F_String_dappend(S39781(), F_String_dappend(S39782(), F_String_dappend(S39783(), F_String_dappend(S39784(), F_String_dappend(S39785(), F_String_dappend(S39786(), F_String_dappend(S39787(), F_String_dappend(S39788(), F_String_dappend(S39789(), F_String_dappend(S39790(), F_String_dappend(S39791(), F_String_dappend(S39792(), F_String_dappend(S39793(), F_String_dappend(S39794(), F_String_dappend(S39795(), F_String_dappend(S39796(), F_String_dappend(S39797(), F_String_dappend(S39798(), F_String_dappend(S39799(), F_String_dappend(S39800(), F_String_dappend(S39801(), S39802())))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
 }
 static V W_RtJs_dsrc_dp0(V *a) { (void)a; return F_RtJs_dsrc_dp0(); }
 static V F_J_dinfo(V a0, V a1) {
 top:;
-V s39691 = a0;
-if ((s39691) == IMM(0)) {
+V s39862 = a0;
+if ((s39862) == IMM(0)) {
 return a1;
-} else if (IS_N(s39691, 1) && IS_N(FLD(s39691, 0), 3)) {
-{ V t0 = FLD(s39691, 1); V t1 = F_J_dinfo_dctors(FLD(FLD(s39691, 0), 0), FLD(FLD(s39691, 0), 2), F_Nat_dis__eq(F_List_dlength(0, FLD(FLD(s39691, 0), 2)), 1u), a1); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s39691, 1)) {
-{ V t0 = FLD(s39691, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s39862, 1) && IS_N(FLD(s39862, 0), 3)) {
+{ V t0 = FLD(s39862, 1); V t1 = F_J_dinfo_dctors(FLD(FLD(s39862, 0), 0), FLD(FLD(s39862, 0), 2), F_Nat_dis__eq(F_List_dlength(0, FLD(FLD(s39862, 0), 2)), 1u), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s39862, 1)) {
+{ V t0 = FLD(s39862, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dinfo(V *a) { (void)a; return F_J_dinfo(a[0], a[1]); }
 static V F_J_dinfo_dctors(V a0, V a1, V a2, V a3) {
 top:;
-V s39695 = a1;
-if ((s39695) == IMM(0)) {
+V s39866 = a1;
+if ((s39866) == IMM(0)) {
 return a3;
-} else if (IS_N(s39695, 1)) {
-{ V t0 = a0; V t1 = FLD(s39695, 1); V t2 = (a2); V t3 = F_Map_dset(0, a3, FLD(FLD(s39695, 0), 0), C3(0, a0, F_Field_dnames(FLD(FLD(s39695, 0), 1)), (a2))); a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
+} else if (IS_N(s39866, 1)) {
+{ V t0 = a0; V t1 = FLD(s39866, 1); V t2 = (a2); V t3 = F_Map_dset(0, a3, FLD(FLD(s39866, 0), 0), C3(0, a0, F_Field_dnames(FLD(FLD(s39866, 0), 1)), (a2))); a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dinfo_dctors(V *a) { (void)a; return F_J_dinfo_dctors(a[0], a[1], a[2], a[3]); }
 static V D_Field_dnames(V *dst, V a0) {
 top:;
-V s39698 = a0;
-if ((s39698) == IMM(0)) {
+V s39869 = a0;
+if ((s39869) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s39698, 1)) {
-{ V dc = CH2(1, FLD(FLD(s39698, 0), 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s39698, 1); a0 = t0; goto top; }
+} else if (IS_N(s39869, 1)) {
+{ V dc = CH2(1, FLD(FLD(s39869, 0), 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s39869, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Field_dnames(V a0) { V r; D_Field_dnames(&r, a0); return r; }
 static V W_Field_dnames(V *a) { (void)a; return F_Field_dnames(a[0]); }
-static V K39701(void) { static V c; return KONST(c, C2(1, MKS("main"), IMM(0))); }
-static V S39708(void) { static V c; return STRC(c, "main"); }
-static V L39703(V *a) {
-V v39704 = apply(a[1], a[2]);
-return apply(F_J_dentry(a[0], ({ V r39705;
-V v39706 = a[0];
-V v39707 = FLD(v39706, 0);
-r39705 = F_G_dbody_x37u(FLD(v39707, 0), FLD(v39707, 1), FLD(v39707, 2), FLD(v39707, 3), S39708());
-r39705; })), FLD(v39704, 1));
+static V K39872(void) { static V c; return KONST(c, C2(1, MKS("main"), IMM(0))); }
+static V S39879(void) { static V c; return STRC(c, "main"); }
+static V L39874(V *a) {
+V v39875 = apply(a[1], a[2]);
+return apply(F_J_dentry(a[0], ({ V r39876;
+V v39877 = a[0];
+V v39878 = FLD(v39877, 0);
+r39876 = F_G_dbody_x37u(FLD(v39878, 0), FLD(v39878, 1), FLD(v39878, 2), FLD(v39878, 3), S39879());
+r39876; })), FLD(v39875, 1));
 }
 static V F_J_dprogram_dm(V a0) {
 top:;
-V v39699 = F_J_dall_dloop(F_U32_dto__nat(4000000000u), C3(2, a0, K39701(), IMM(0)));
-return mk_clo(L39703, 3, 2, (V[]){a0, v39699});
+V v39870 = F_J_dall_dloop(F_U32_dto__nat(4000000000u), C3(2, a0, K39872(), IMM(0)));
+return mk_clo(L39874, 3, 2, (V[]){a0, v39870});
 }
 static V W_J_dprogram_dm(V *a) { (void)a; return F_J_dprogram_dm(a[0]); }
-static V S39720(void) { static V c; return STRC(c, "IO"); }
-static V S39726(void) { static V c; return STRC(c, ""); }
-static V S39727(void) { static V c; return STRC(c, "no main definition"); }
-static V L39724(V *a) {
-V v39725 = a[0];
-return C2(0, S39726(), CN(0, 7, (V[]){FLD(v39725, 0), FLD(v39725, 1), FLD(v39725, 2), FLD(v39725, 3), C2(1, S39727(), FLD(v39725, 4)), FLD(v39725, 5), FLD(v39725, 6)}));
+static V S39891(void) { static V c; return STRC(c, "IO"); }
+static V S39897(void) { static V c; return STRC(c, ""); }
+static V S39898(void) { static V c; return STRC(c, "no main definition"); }
+static V L39895(V *a) {
+V v39896 = a[0];
+return C2(0, S39897(), CN(0, 7, (V[]){FLD(v39896, 0), FLD(v39896, 1), FLD(v39896, 2), FLD(v39896, 3), C2(1, S39898(), FLD(v39896, 4)), FLD(v39896, 5), FLD(v39896, 6)}));
 }
 static V F_J_dentry(V a0, V a1) {
 top:;
-V s39711 = a1;
-if (IS_N(s39711, 0)) {
-V (v39712) = F_U32_dto__nat(4000000000u);
-V v39714 = a0;
-V v39715 = FLD(v39714, 0);
-V v39716 = F_Ty_drec_x37u((v39712), FLD(v39715, 0), FLD(v39715, 1), FLD(v39715, 2), FLD(v39715, 3), C2(0, FLD(s39711, 3), 16u));
-return F_J_dentry_dty(a0, v39716, ({ V r39718;
-V v39719 = S39720();
-r39718 = F_String_deq(F_Ty_dhead(v39716), v39719);
-r39718; }));
+V s39882 = a1;
+if (IS_N(s39882, 0)) {
+V (v39883) = F_U32_dto__nat(4000000000u);
+V v39885 = a0;
+V v39886 = FLD(v39885, 0);
+V v39887 = F_Ty_drec_x37u((v39883), FLD(v39886, 0), FLD(v39886, 1), FLD(v39886, 2), FLD(v39886, 3), C2(0, FLD(s39882, 3), 16u));
+return F_J_dentry_dty(a0, v39887, ({ V r39889;
+V v39890 = S39891();
+r39889 = F_String_deq(F_Ty_dhead(v39887), v39890);
+r39889; }));
 } else {
-return mk_clo(L39724, 1, 0, 0);
+return mk_clo(L39895, 1, 0, 0);
 }
 }
 static V W_J_dentry(V *a) { (void)a; return F_J_dentry(a[0], a[1]); }
-static V S39730(void) { static V c; return STRC(c, "bend_run(F_main);\012"); }
-static V L39729(V *a) {
-return C2(0, S39730(), a[0]);
+static V S39901(void) { static V c; return STRC(c, "bend_run(F_main);\012"); }
+static V L39900(V *a) {
+return C2(0, S39901(), a[0]);
 }
-static V S39736(void) { static V c; return STRC(c, "bend_run_value(F_main, "); }
-static V S39737(void) { static V c; return STRC(c, ");\012"); }
-static V L39734(V *a) {
-V v39735 = apply(a[0], a[1]);
-return C2(0, F_String_dappend(S39736(), F_String_dappend(FLD(v39735, 0), S39737())), FLD(v39735, 1));
+static V S39907(void) { static V c; return STRC(c, "bend_run_value(F_main, "); }
+static V S39908(void) { static V c; return STRC(c, ");\012"); }
+static V L39905(V *a) {
+V v39906 = apply(a[0], a[1]);
+return C2(0, F_String_dappend(S39907(), F_String_dappend(FLD(v39906, 0), S39908())), FLD(v39906, 1));
 }
 static V F_J_dentry_dty(V a0, V a1, V a2) {
 top:;
-V s39728 = (a2);
-if ((s39728) == IMM(1)) {
-return mk_clo(L39729, 1, 0, 0);
-} else if ((s39728) == IMM(0)) {
-V v39731 = F_J_dprinter_dgo(F_U32_dto__nat(4000000000u), C2(8, a0, a1));
-return mk_clo(L39734, 2, 1, (V[]){v39731});
+V s39899 = (a2);
+if ((s39899) == IMM(1)) {
+return mk_clo(L39900, 1, 0, 0);
+} else if ((s39899) == IMM(0)) {
+V v39902 = F_J_dprinter_dgo(F_U32_dto__nat(4000000000u), C2(8, a0, a1));
+return mk_clo(L39905, 2, 1, (V[]){v39902});
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dentry_dty(V *a) { (void)a; return F_J_dentry_dty(a[0], a[1], a[2]); }
-static V S39749(void) { static V c; return STRC(c, ""); }
-static V S39751(void) { static V c; return STRC(c, ""); }
-static V L39755(V *a) {
+static V S39920(void) { static V c; return STRC(c, ""); }
+static V S39922(void) { static V c; return STRC(c, ""); }
+static V L39926(V *a) {
 return C2(0, IMM(0), a[0]);
 }
-static V S39760(void) { static V c; return STRC(c, "s += "); }
-static V S39761(void) { static V c; return STRC(c, "("); }
-static V S39762(void) { static V c; return STRC(c, ");\012"); }
-static V L39758(V *a) {
-V v39759 = apply(a[1], a[2]);
-return C2(0, C1(1, F_String_dappend(S39760(), F_String_dappend(FLD(v39759, 0), F_String_dappend(S39761(), F_String_dappend(a[0], S39762()))))), FLD(v39759, 1));
+static V S39931(void) { static V c; return STRC(c, "s += "); }
+static V S39932(void) { static V c; return STRC(c, "("); }
+static V S39933(void) { static V c; return STRC(c, ");\012"); }
+static V L39929(V *a) {
+V v39930 = apply(a[1], a[2]);
+return C2(0, C1(1, F_String_dappend(S39931(), F_String_dappend(FLD(v39930, 0), F_String_dappend(S39932(), F_String_dappend(a[0], S39933()))))), FLD(v39930, 1));
 }
-static V S39772(void) { static V c; return STRC(c, "("); }
-static V S39773(void) { static V c; return STRC(c, ").snd"); }
-static V S39777(void) { static V c; return STRC(c, "s += "); }
-static V S39778(void) { static V c; return STRC(c, "(("); }
-static V S39779(void) { static V c; return STRC(c, ").fst) + \042, \042;\012"); }
-static V L39769(V *a) {
-V v39770 = apply(a[4], a[5]);
-V v39771 = apply(F_J_dprinter_dgo(a[3], C3(0, a[2], a[1], F_String_dappend(S39772(), F_String_dappend(a[0], S39773())))), FLD(v39770, 1));
-return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S39777(), F_String_dappend(FLD(v39770, 0), F_String_dappend(S39778(), F_String_dappend(a[0], S39779()))))), C2(1, FLD(v39771, 0), IMM(0)))), FLD(v39771, 1));
+static V S39943(void) { static V c; return STRC(c, "("); }
+static V S39944(void) { static V c; return STRC(c, ").snd"); }
+static V S39948(void) { static V c; return STRC(c, "s += "); }
+static V S39949(void) { static V c; return STRC(c, "(("); }
+static V S39950(void) { static V c; return STRC(c, ").fst) + \042, \042;\012"); }
+static V L39940(V *a) {
+V v39941 = apply(a[4], a[5]);
+V v39942 = apply(F_J_dprinter_dgo(a[3], C3(0, a[2], a[1], F_String_dappend(S39943(), F_String_dappend(a[0], S39944())))), FLD(v39941, 1));
+return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S39948(), F_String_dappend(FLD(v39941, 0), F_String_dappend(S39949(), F_String_dappend(a[0], S39950()))))), C2(1, FLD(v39942, 0), IMM(0)))), FLD(v39942, 1));
 }
-static V L39786(V *a) {
+static V L39957(V *a) {
 return C2(0, IMM(0), a[0]);
 }
-static V S39798(void) { static V c; return STRC(c, "s += \042, \042;\012"); }
-static V S39799(void) { static V c; return STRC(c, ""); }
-static V S39800(void) { static V c; return STRC(c, "s += "); }
-static V S39801(void) { static V c; return STRC(c, "(("); }
-static V S39802(void) { static V c; return STRC(c, ")"); }
-static V S39804(void) { static V c; return STRC(c, ");\012"); }
-static V L39790(V *a) {
-V v39791 = apply(a[7], a[8]);
-V v39792 = apply(F_J_dprinter_dgo(a[6], CN(1, 5, (V[]){a[5], a[4], a[3], a[2], F_U32_dinc(a[1])})), FLD(v39791, 1));
-return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(({ V r39795;
-V s39796 = F_U32_dis__zero(a[1]);
-if ((s39796) == IMM(0)) {
-r39795 = S39798();
-} else if ((s39796) == IMM(1)) {
-r39795 = S39799();
+static V S39969(void) { static V c; return STRC(c, "s += \042, \042;\012"); }
+static V S39970(void) { static V c; return STRC(c, ""); }
+static V S39971(void) { static V c; return STRC(c, "s += "); }
+static V S39972(void) { static V c; return STRC(c, "(("); }
+static V S39973(void) { static V c; return STRC(c, ")"); }
+static V S39975(void) { static V c; return STRC(c, ");\012"); }
+static V L39961(V *a) {
+V v39962 = apply(a[7], a[8]);
+V v39963 = apply(F_J_dprinter_dgo(a[6], CN(1, 5, (V[]){a[5], a[4], a[3], a[2], F_U32_dinc(a[1])})), FLD(v39962, 1));
+return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(({ V r39966;
+V s39967 = F_U32_dis__zero(a[1]);
+if ((s39967) == IMM(0)) {
+r39966 = S39969();
+} else if ((s39967) == IMM(1)) {
+r39966 = S39970();
 } else { bend_fail("runtime fail-stop"); }
-r39795; }), F_String_dappend(S39800(), F_String_dappend(FLD(v39791, 0), F_String_dappend(S39801(), F_String_dappend(a[2], F_String_dappend(S39802(), F_String_dappend(F_J_dacc(a[0]), S39804())))))))), C2(1, FLD(v39792, 0), IMM(0)))), FLD(v39792, 1));
+r39966; }), F_String_dappend(S39971(), F_String_dappend(FLD(v39962, 0), F_String_dappend(S39972(), F_String_dappend(a[2], F_String_dappend(S39973(), F_String_dappend(F_J_dacc(a[0]), S39975())))))))), C2(1, FLD(v39963, 0), IMM(0)))), FLD(v39963, 1));
 }
-static V S39814(void) { static V c; return STRC(c, "v"); }
-static V S39820(void) { static V c; return STRC(c, "if (v.$ === \042"); }
-static V S39821(void) { static V c; return STRC(c, "\042)"); }
-static V S39824(void) { static V c; return STRC(c, "if (true)"); }
-static V S39825(void) { static V c; return STRC(c, " { let s = \042"); }
-static V S39826(void) { static V c; return STRC(c, "{\042;\012"); }
-static V K39830(void) { static V c; return KONST(c, C2(1, C1(1, MKS("return s + \042}\042; }\012")), IMM(0))); }
-static V L39816(V *a) {
-V v39817 = apply(a[2], a[3]);
-return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(({ V r39818;
-V s39819 = a[1];
-if ((s39819) == IMM(0)) {
-r39818 = F_String_dappend(S39820(), F_String_dappend(a[0], S39821()));
-} else if ((s39819) == IMM(1)) {
-r39818 = S39824();
+static V S39985(void) { static V c; return STRC(c, "v"); }
+static V S39991(void) { static V c; return STRC(c, "if (v.$ === \042"); }
+static V S39992(void) { static V c; return STRC(c, "\042)"); }
+static V S39995(void) { static V c; return STRC(c, "if (true)"); }
+static V S39996(void) { static V c; return STRC(c, " { let s = \042"); }
+static V S39997(void) { static V c; return STRC(c, "{\042;\012"); }
+static V K40001(void) { static V c; return KONST(c, C2(1, C1(1, MKS("return s + \042}\042; }\012")), IMM(0))); }
+static V L39987(V *a) {
+V v39988 = apply(a[2], a[3]);
+return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(({ V r39989;
+V s39990 = a[1];
+if ((s39990) == IMM(0)) {
+r39989 = F_String_dappend(S39991(), F_String_dappend(a[0], S39992()));
+} else if ((s39990) == IMM(1)) {
+r39989 = S39995();
 } else { bend_fail("runtime fail-stop"); }
-r39818; }), F_String_dappend(S39825(), F_String_dappend(a[0], S39826())))), C2(1, FLD(v39817, 0), K39830()))), FLD(v39817, 1));
+r39989; }), F_String_dappend(S39996(), F_String_dappend(a[0], S39997())))), C2(1, FLD(v39988, 0), K40001()))), FLD(v39988, 1));
 }
-static V L39833(V *a) {
+static V L40004(V *a) {
 return C2(0, IMM(0), a[0]);
 }
-static V L39836(V *a) {
-V v39837 = apply(a[5], a[6]);
-V v39838 = apply(F_J_dprinter_dgo(a[4], C4(3, a[3], a[2], a[1], a[0])), FLD(v39837, 1));
-return C2(0, F_Doc_dlist(C2(1, FLD(v39837, 0), C2(1, FLD(v39838, 0), IMM(0)))), FLD(v39838, 1));
+static V L40007(V *a) {
+V v40008 = apply(a[5], a[6]);
+V v40009 = apply(F_J_dprinter_dgo(a[4], C4(3, a[3], a[2], a[1], a[0])), FLD(v40008, 1));
+return C2(0, F_Doc_dlist(C2(1, FLD(v40008, 0), C2(1, FLD(v40009, 0), IMM(0)))), FLD(v40009, 1));
 }
-static V K39851(void) { static V c; return KONST(c, C2(1, C1(1, MKS("return \042\077\042;\012")), IMM(0))); }
-static V L39849(V *a) {
-V v39850 = apply(a[0], a[1]);
-return C2(0, F_Doc_dlist(C2(1, FLD(v39850, 0), K39851())), FLD(v39850, 1));
+static V K40022(void) { static V c; return KONST(c, C2(1, C1(1, MKS("return \042\077\042;\012")), IMM(0))); }
+static V L40020(V *a) {
+V v40021 = apply(a[0], a[1]);
+return C2(0, F_Doc_dlist(C2(1, FLD(v40021, 0), K40022())), FLD(v40021, 1));
 }
-static V K39854(void) { static V c; return KONST(c, C1(1, MKS("return \042\077\042;\012"))); }
-static V L39853(V *a) {
-return C2(0, K39854(), a[0]);
+static V K40025(void) { static V c; return KONST(c, C1(1, MKS("return \042\077\042;\012"))); }
+static V L40024(V *a) {
+return C2(0, K40025(), a[0]);
 }
-static V K39857(void) { static V c; return KONST(c, C1(1, MKS("return pr_u32(v);\012"))); }
-static V L39856(V *a) {
-return C2(0, K39857(), a[0]);
+static V K40028(void) { static V c; return KONST(c, C1(1, MKS("return pr_u32(v);\012"))); }
+static V L40027(V *a) {
+return C2(0, K40028(), a[0]);
 }
-static V K39859(void) { static V c; return KONST(c, C1(1, MKS("return pr_nat(v);\012"))); }
-static V L39858(V *a) {
-return C2(0, K39859(), a[0]);
+static V K40030(void) { static V c; return KONST(c, C1(1, MKS("return pr_nat(v);\012"))); }
+static V L40029(V *a) {
+return C2(0, K40030(), a[0]);
 }
-static V K39861(void) { static V c; return KONST(c, C1(1, MKS("return pr_f32(v);\012"))); }
-static V L39860(V *a) {
-return C2(0, K39861(), a[0]);
+static V K40032(void) { static V c; return KONST(c, C1(1, MKS("return pr_f32(v);\012"))); }
+static V L40031(V *a) {
+return C2(0, K40032(), a[0]);
 }
-static V K39863(void) { static V c; return KONST(c, C1(1, MKS("return pr_char(v);\012"))); }
-static V L39862(V *a) {
-return C2(0, K39863(), a[0]);
+static V K40034(void) { static V c; return KONST(c, C1(1, MKS("return pr_char(v);\012"))); }
+static V L40033(V *a) {
+return C2(0, K40034(), a[0]);
 }
-static V K39865(void) { static V c; return KONST(c, C1(1, MKS("return pr_str(v);\012"))); }
-static V L39864(V *a) {
-return C2(0, K39865(), a[0]);
+static V K40036(void) { static V c; return KONST(c, C1(1, MKS("return pr_str(v);\012"))); }
+static V L40035(V *a) {
+return C2(0, K40036(), a[0]);
 }
-static V S39873(void) { static V c; return STRC(c, "const xs = [];\012for (; v.$ === \042Con\042; v = v.tail) xs.push("); }
-static V S39874(void) { static V c; return STRC(c, "(v.head));\012return \042[\042 + xs.join(\042, \042) + \042]\042;\012"); }
-static V L39871(V *a) {
-V v39872 = apply(a[0], a[1]);
-return C2(0, C1(1, F_String_dappend(S39873(), F_String_dappend(FLD(v39872, 0), S39874()))), FLD(v39872, 1));
+static V S40044(void) { static V c; return STRC(c, "const xs = [];\012for (; v.$ === \042Con\042; v = v.tail) xs.push("); }
+static V S40045(void) { static V c; return STRC(c, "(v.head));\012return \042[\042 + xs.join(\042, \042) + \042]\042;\012"); }
+static V L40042(V *a) {
+V v40043 = apply(a[0], a[1]);
+return C2(0, C1(1, F_String_dappend(S40044(), F_String_dappend(FLD(v40043, 0), S40045()))), FLD(v40043, 1));
 }
-static V S39879(void) { static V c; return STRC(c, "v"); }
-static V K39883(void) { static V c; return KONST(c, C1(1, MKS("let s = \042(\042;\012"))); }
-static V K39884(void) { static V c; return KONST(c, C2(1, C1(1, MKS("return s + \042)\042;\012")), IMM(0))); }
-static V L39881(V *a) {
-V v39882 = apply(a[0], a[1]);
-return C2(0, F_Doc_dlist(C2(1, K39883(), C2(1, FLD(v39882, 0), K39884()))), FLD(v39882, 1));
+static V S40050(void) { static V c; return STRC(c, "v"); }
+static V K40054(void) { static V c; return KONST(c, C1(1, MKS("let s = \042(\042;\012"))); }
+static V K40055(void) { static V c; return KONST(c, C2(1, C1(1, MKS("return s + \042)\042;\012")), IMM(0))); }
+static V L40052(V *a) {
+V v40053 = apply(a[0], a[1]);
+return C2(0, F_Doc_dlist(C2(1, K40054(), C2(1, FLD(v40053, 0), K40055()))), FLD(v40053, 1));
 }
-static V K39887(void) { static V c; return KONST(c, C1(1, MKS("return \042<function>\042;\012"))); }
-static V L39886(V *a) {
-return C2(0, K39887(), a[0]);
+static V K40058(void) { static V c; return KONST(c, C1(1, MKS("return \042<function>\042;\012"))); }
+static V L40057(V *a) {
+return C2(0, K40058(), a[0]);
 }
-static V K39889(void) { static V c; return KONST(c, C1(1, MKS("return v \077 \042True{}\042 : \042False{}\042;\012"))); }
-static V L39888(V *a) {
-return C2(0, K39889(), a[0]);
+static V K40060(void) { static V c; return KONST(c, C1(1, MKS("return v \077 \042True{}\042 : \042False{}\042;\012"))); }
+static V L40059(V *a) {
+return C2(0, K40060(), a[0]);
 }
-static V S39897(void) { static V c; return STRC(c, "return \042[\042 + v.map((x) => "); }
-static V S39898(void) { static V c; return STRC(c, "(x)).join(\042, \042) + \042]\042;\012"); }
-static V L39895(V *a) {
-V v39896 = apply(a[0], a[1]);
-return C2(0, C1(1, F_String_dappend(S39897(), F_String_dappend(FLD(v39896, 0), S39898()))), FLD(v39896, 1));
+static V S40068(void) { static V c; return STRC(c, "return \042[\042 + v.map((x) => "); }
+static V S40069(void) { static V c; return STRC(c, "(x)).join(\042, \042) + \042]\042;\012"); }
+static V L40066(V *a) {
+V v40067 = apply(a[0], a[1]);
+return C2(0, C1(1, F_String_dappend(S40068(), F_String_dappend(FLD(v40067, 0), S40069()))), FLD(v40067, 1));
 }
-static V K39902(void) { static V c; return KONST(c, C1(1, MKS("return \042{==}\042;\012"))); }
-static V L39901(V *a) {
-return C2(0, K39902(), a[0]);
+static V K40073(void) { static V c; return KONST(c, C1(1, MKS("return \042{==}\042;\012"))); }
+static V L40072(V *a) {
+return C2(0, K40073(), a[0]);
 }
-static V S39906(void) { static V c; return STRC(c, "%"); }
-static V S39912(void) { static V c; return STRC(c, "Sigma"); }
-static V S39914(void) { static V c; return STRC(c, "&"); }
-static V K39915(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("Nat"), C2(1, MKS("F32"), C2(1, MKS("Char"), C2(1, MKS("String"), C2(1, MKS("List"), C2(1, MKS("&"), C2(1, MKS("->"), C2(1, MKS("Bool"), C2(1, MKS("Array"), C2(1, MKS("=="), IMM(0))))))))))))); }
-static V L39918(V *a) {
+static V S40077(void) { static V c; return STRC(c, "%"); }
+static V S40083(void) { static V c; return STRC(c, "Sigma"); }
+static V S40085(void) { static V c; return STRC(c, "&"); }
+static V K40086(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("Nat"), C2(1, MKS("F32"), C2(1, MKS("Char"), C2(1, MKS("String"), C2(1, MKS("List"), C2(1, MKS("&"), C2(1, MKS("->"), C2(1, MKS("Bool"), C2(1, MKS("Array"), C2(1, MKS("=="), IMM(0))))))))))))); }
+static V L40089(V *a) {
 return C2(0, a[0], a[1]);
 }
-static V S39926(void) { static V c; return STRC(c, "P"); }
-static V S39937(void) { static V c; return STRC(c, "function "); }
-static V S39938(void) { static V c; return STRC(c, "(v) {\012"); }
-static V K39941(void) { static V c; return KONST(c, C2(1, C1(1, MKS("}\012")), IMM(0))); }
-static V L39919(V *a) {
-V v39920 = a[4];
-V uo39921[8]; U_Gen_dfresh_dgo_x37n_x37u(FLD(v39920, 0), FLD(v39920, 1), FLD(v39920, 2), FLD(v39920, 3), FLD(v39920, 4), FLD(v39920, 5), FLD(v39920, 6), uo39921);
-V s39923 = uo39921[0];
-V s39924 = CN(0, 7, (V[]){uo39921[1], uo39921[2], uo39921[3], uo39921[4], uo39921[5], uo39921[6], uo39921[7]});
+static V S40097(void) { static V c; return STRC(c, "P"); }
+static V S40108(void) { static V c; return STRC(c, "function "); }
+static V S40109(void) { static V c; return STRC(c, "(v) {\012"); }
+static V K40112(void) { static V c; return KONST(c, C2(1, C1(1, MKS("}\012")), IMM(0))); }
+static V L40090(V *a) {
+V v40091 = a[4];
+V uo40092[8]; U_Gen_dfresh_dgo_x37n_x37u(FLD(v40091, 0), FLD(v40091, 1), FLD(v40091, 2), FLD(v40091, 3), FLD(v40091, 4), FLD(v40091, 5), FLD(v40091, 6), uo40092);
+V s40094 = uo40092[0];
+V s40095 = CN(0, 7, (V[]){uo40092[1], uo40092[2], uo40092[3], uo40092[4], uo40092[5], uo40092[6], uo40092[7]});
 {
-V v39925 = F_String_dappend(S39926(), F_U32_dshow_dif(s39923, F_U32_dis__zero(s39923)));
-V v39930 = s39924;
-V s39931 = IMM(0);
-V s39932 = CN(0, 7, (V[]){FLD(v39930, 0), FLD(v39930, 1), FLD(v39930, 2), FLD(v39930, 3), FLD(v39930, 4), C2(1, C2(0, a[3], v39925), FLD(v39930, 5)), FLD(v39930, 6)});
+V v40096 = F_String_dappend(S40097(), F_U32_dshow_dif(s40094, F_U32_dis__zero(s40094)));
+V v40101 = s40095;
+V s40102 = IMM(0);
+V s40103 = CN(0, 7, (V[]){FLD(v40101, 0), FLD(v40101, 1), FLD(v40101, 2), FLD(v40101, 3), FLD(v40101, 4), C2(1, C2(0, a[3], v40096), FLD(v40101, 5)), FLD(v40101, 6)});
 {
-V v39933 = apply(F_J_dprinter_dgo(a[2], C3(6, a[1], a[0], F_Ty_dhead(a[0]))), s39932);
-V v39936 = FLD(v39933, 1);
-return C2(0, v39925, CN(0, 7, (V[]){FLD(v39936, 0), FLD(v39936, 1), C2(2, FLD(v39936, 2), F_Doc_dlist(C2(1, C1(1, F_String_dappend(S39937(), F_String_dappend(v39925, S39938()))), C2(1, FLD(v39933, 0), K39941())))), FLD(v39936, 3), FLD(v39936, 4), FLD(v39936, 5), FLD(v39936, 6)}));
+V v40104 = apply(F_J_dprinter_dgo(a[2], C3(6, a[1], a[0], F_Ty_dhead(a[0]))), s40103);
+V v40107 = FLD(v40104, 1);
+return C2(0, v40096, CN(0, 7, (V[]){FLD(v40107, 0), FLD(v40107, 1), C2(2, FLD(v40107, 2), F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40108(), F_String_dappend(v40096, S40109()))), C2(1, FLD(v40104, 0), K40112())))), FLD(v40107, 3), FLD(v40107, 4), FLD(v40107, 5), FLD(v40107, 6)}));
 }
 }
 }
-static V S39950(void) { static V c; return STRC(c, ""); }
-static V L39952(V *a) {
-V v39953 = a[4];
-V uo39954[8]; U_Gen_dmemo_dfind_dgo_x37n_x37u(FLD(v39953, 0), FLD(v39953, 1), FLD(v39953, 2), FLD(v39953, 3), FLD(v39953, 4), FLD(v39953, 5), FLD(v39953, 6), a[3], uo39954);
-V s39956 = uo39954[0];
-V s39957 = CN(0, 7, (V[]){uo39954[1], uo39954[2], uo39954[3], uo39954[4], uo39954[5], uo39954[6], uo39954[7]});
+static V S40121(void) { static V c; return STRC(c, ""); }
+static V L40123(V *a) {
+V v40124 = a[4];
+V uo40125[8]; U_Gen_dmemo_dfind_dgo_x37n_x37u(FLD(v40124, 0), FLD(v40124, 1), FLD(v40124, 2), FLD(v40124, 3), FLD(v40124, 4), FLD(v40124, 5), FLD(v40124, 6), a[3], uo40125);
+V s40127 = uo40125[0];
+V s40128 = CN(0, 7, (V[]){uo40125[1], uo40125[2], uo40125[3], uo40125[4], uo40125[5], uo40125[6], uo40125[7]});
 {
-return apply(F_J_dprinter_dgo(a[2], C4(7, a[1], a[0], a[3], s39956)), s39957);
+return apply(F_J_dprinter_dgo(a[2], C4(7, a[1], a[0], a[3], s40127)), s40128);
 }
 }
 static V F_J_dprinter_dgo(V a0, V a1) {
 top:;
-V s39740 = (a0);
-if ((s39740) == 0) {
-V s39741 = a1;
-if (IS_N(s39741, 0)) {
+V s39911 = (a0);
+if ((s39911) == 0) {
+V s39912 = a1;
+if (IS_N(s39912, 0)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s39741, 1)) {
+} else if (IS_N(s39912, 1)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s39741, 2)) {
+} else if (IS_N(s39912, 2)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s39741, 3)) {
+} else if (IS_N(s39912, 3)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s39741, 4)) {
+} else if (IS_N(s39912, 4)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s39741, 5)) {
+} else if (IS_N(s39912, 5)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s39741, 6)) {
+} else if (IS_N(s39912, 6)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s39741, 7)) {
-return F_J_dout(S39749());
-} else if (IS_N(s39741, 8)) {
-return F_J_dout(S39751());
+} else if (IS_N(s39912, 7)) {
+return F_J_dout(S39920());
+} else if (IS_N(s39912, 8)) {
+return F_J_dout(S39922());
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s39740) != 0) {
-V s39753 = a1;
-if (IS_N(s39753, 0)) {
-V s39754 = FLD(s39753, 1);
-if ((s39754) == IMM(0)) {
-return mk_clo(L39755, 1, 0, 0);
-} else if (IS_N(s39754, 1) && (FLD(s39754, 1)) == IMM(0)) {
-V v39756 = F_J_dprinter_dgo(nat_subk(s39740, 1), C2(8, FLD(s39753, 0), FLD(s39754, 0)));
-return mk_clo(L39758, 3, 2, (V[]){FLD(s39753, 2), v39756});
-} else if (IS_N(s39754, 1)) {
-V v39767 = F_J_dprinter_dgo(nat_subk(s39740, 1), C2(8, FLD(s39753, 0), FLD(s39754, 0)));
-return mk_clo(L39769, 6, 5, (V[]){FLD(s39753, 2), FLD(s39754, 1), FLD(s39753, 0), nat_subk(s39740, 1), v39767});
+} else if ((s39911) != 0) {
+V s39924 = a1;
+if (IS_N(s39924, 0)) {
+V s39925 = FLD(s39924, 1);
+if ((s39925) == IMM(0)) {
+return mk_clo(L39926, 1, 0, 0);
+} else if (IS_N(s39925, 1) && (FLD(s39925, 1)) == IMM(0)) {
+V v39927 = F_J_dprinter_dgo(nat_subk(s39911, 1), C2(8, FLD(s39924, 0), FLD(s39925, 0)));
+return mk_clo(L39929, 3, 2, (V[]){FLD(s39924, 2), v39927});
+} else if (IS_N(s39925, 1)) {
+V v39938 = F_J_dprinter_dgo(nat_subk(s39911, 1), C2(8, FLD(s39924, 0), FLD(s39925, 0)));
+return mk_clo(L39940, 6, 5, (V[]){FLD(s39924, 2), FLD(s39925, 1), FLD(s39924, 0), nat_subk(s39911, 1), v39938});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s39753, 1)) {
-V s39785 = FLD(s39753, 2);
-if ((s39785) == IMM(0)) {
-return mk_clo(L39786, 1, 0, 0);
-} else if (IS_N(s39785, 1)) {
-V v39787 = F_J_dprinter_dgo(nat_subk(s39740, 1), C2(8, FLD(s39753, 0), F_Ty_dsubst(FLD(FLD(s39785, 0), 1), FLD(s39753, 1))));
-return mk_clo(L39790, 9, 8, (V[]){FLD(FLD(s39785, 0), 0), FLD(s39753, 4), FLD(s39753, 3), FLD(s39785, 1), FLD(s39753, 1), FLD(s39753, 0), nat_subk(s39740, 1), v39787});
+} else if (IS_N(s39924, 1)) {
+V s39956 = FLD(s39924, 2);
+if ((s39956) == IMM(0)) {
+return mk_clo(L39957, 1, 0, 0);
+} else if (IS_N(s39956, 1)) {
+V v39958 = F_J_dprinter_dgo(nat_subk(s39911, 1), C2(8, FLD(s39924, 0), F_Ty_dsubst(FLD(FLD(s39956, 0), 1), FLD(s39924, 1))));
+return mk_clo(L39961, 9, 8, (V[]){FLD(FLD(s39956, 0), 0), FLD(s39924, 4), FLD(s39924, 3), FLD(s39956, 1), FLD(s39924, 1), FLD(s39924, 0), nat_subk(s39911, 1), v39958});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s39753, 2)) {
-V v39813 = F_J_dprinter_dgo(nat_subk(s39740, 1), CN(1, 5, (V[]){FLD(s39753, 0), FLD(s39753, 1), FLD(s39753, 3), S39814(), 0u}));
-return mk_clo(L39816, 4, 3, (V[]){FLD(s39753, 2), FLD(s39753, 4), v39813});
-} else if (IS_N(s39753, 3)) {
-V s39832 = FLD(s39753, 2);
-if ((s39832) == IMM(0)) {
-return mk_clo(L39833, 1, 0, 0);
-} else if (IS_N(s39832, 1)) {
-V v39834 = F_J_dprinter_dgo(nat_subk(s39740, 1), CN(2, 5, (V[]){FLD(s39753, 0), FLD(s39753, 1), FLD(FLD(s39832, 0), 0), FLD(FLD(s39832, 0), 1), FLD(s39753, 3)}));
-return mk_clo(L39836, 7, 6, (V[]){FLD(s39753, 3), FLD(s39832, 1), FLD(s39753, 1), FLD(s39753, 0), nat_subk(s39740, 1), v39834});
+} else if (IS_N(s39924, 2)) {
+V v39984 = F_J_dprinter_dgo(nat_subk(s39911, 1), CN(1, 5, (V[]){FLD(s39924, 0), FLD(s39924, 1), FLD(s39924, 3), S39985(), 0u}));
+return mk_clo(L39987, 4, 3, (V[]){FLD(s39924, 2), FLD(s39924, 4), v39984});
+} else if (IS_N(s39924, 3)) {
+V s40003 = FLD(s39924, 2);
+if ((s40003) == IMM(0)) {
+return mk_clo(L40004, 1, 0, 0);
+} else if (IS_N(s40003, 1)) {
+V v40005 = F_J_dprinter_dgo(nat_subk(s39911, 1), CN(2, 5, (V[]){FLD(s39924, 0), FLD(s39924, 1), FLD(FLD(s40003, 0), 0), FLD(FLD(s40003, 0), 1), FLD(s39924, 3)}));
+return mk_clo(L40007, 7, 6, (V[]){FLD(s39924, 3), FLD(s40003, 1), FLD(s39924, 1), FLD(s39924, 0), nat_subk(s39911, 1), v40005});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s39753, 4)) {
-V s39841 = FLD(s39753, 2);
-if (IS_N(s39841, 3)) {
-V v39842 = F_J_dprinter_dgo(nat_subk(s39740, 1), C4(3, FLD(s39753, 0), F_Ty_dbind(FLD(s39841, 1), ({ V r39843;
-V s39844 = FLD(s39753, 1);
-if (IS_N(s39844, 14)) {
-r39843 = FLD(s39844, 1);
-} else if (IS_N(s39844, 5)) {
-r39843 = FLD(s39844, 1);
+} else if (IS_N(s39924, 4)) {
+V s40012 = FLD(s39924, 2);
+if (IS_N(s40012, 3)) {
+V v40013 = F_J_dprinter_dgo(nat_subk(s39911, 1), C4(3, FLD(s39924, 0), F_Ty_dbind(FLD(s40012, 1), ({ V r40014;
+V s40015 = FLD(s39924, 1);
+if (IS_N(s40015, 14)) {
+r40014 = FLD(s40015, 1);
+} else if (IS_N(s40015, 5)) {
+r40014 = FLD(s40015, 1);
 } else {
-r39843 = IMM(0);
+r40014 = IMM(0);
 }
-r39843; })), FLD(s39841, 2), F_Nat_dis__eq(F_List_dlength(0, FLD(s39841, 2)), 1u)));
-return mk_clo(L39849, 2, 1, (V[]){v39842});
+r40014; })), FLD(s40012, 2), F_Nat_dis__eq(F_List_dlength(0, FLD(s40012, 2)), 1u)));
+return mk_clo(L40020, 2, 1, (V[]){v40013});
 } else {
-return mk_clo(L39853, 1, 0, 0);
+return mk_clo(L40024, 1, 0, 0);
 }
-} else if (IS_N(s39753, 5)) {
-V s39855 = FLD(s39753, 2);
-if ((s39855) == 0) {
-return mk_clo(L39856, 1, 0, 0);
-} else if ((s39855) == 1) {
-return mk_clo(L39858, 1, 0, 0);
-} else if ((s39855) == 2) {
-return mk_clo(L39860, 1, 0, 0);
-} else if ((s39855) == 3) {
-return mk_clo(L39862, 1, 0, 0);
-} else if ((s39855) == 4) {
-return mk_clo(L39864, 1, 0, 0);
-} else if ((s39855) == 5) {
-V v39866 = F_J_dprinter_dgo(nat_subk(s39740, 1), C2(8, FLD(s39753, 0), F_P_dlast(({ V r39867;
-V s39868 = FLD(s39753, 1);
-if (IS_N(s39868, 14)) {
-r39867 = FLD(s39868, 1);
-} else if (IS_N(s39868, 5)) {
-r39867 = FLD(s39868, 1);
+} else if (IS_N(s39924, 5)) {
+V s40026 = FLD(s39924, 2);
+if ((s40026) == 0) {
+return mk_clo(L40027, 1, 0, 0);
+} else if ((s40026) == 1) {
+return mk_clo(L40029, 1, 0, 0);
+} else if ((s40026) == 2) {
+return mk_clo(L40031, 1, 0, 0);
+} else if ((s40026) == 3) {
+return mk_clo(L40033, 1, 0, 0);
+} else if ((s40026) == 4) {
+return mk_clo(L40035, 1, 0, 0);
+} else if ((s40026) == 5) {
+V v40037 = F_J_dprinter_dgo(nat_subk(s39911, 1), C2(8, FLD(s39924, 0), F_P_dlast(({ V r40038;
+V s40039 = FLD(s39924, 1);
+if (IS_N(s40039, 14)) {
+r40038 = FLD(s40039, 1);
+} else if (IS_N(s40039, 5)) {
+r40038 = FLD(s40039, 1);
 } else {
-r39867 = IMM(0);
+r40038 = IMM(0);
 }
-r39867; }))));
-return mk_clo(L39871, 2, 1, (V[]){v39866});
-} else if ((s39855) == 6) {
-V v39877 = F_J_dprinter_dgo(nat_subk(s39740, 1), C3(0, FLD(s39753, 0), F_Ty_dtuple(FLD(s39753, 1)), S39879()));
-return mk_clo(L39881, 2, 1, (V[]){v39877});
-} else if ((s39855) == 7) {
-return mk_clo(L39886, 1, 0, 0);
-} else if ((s39855) == 8) {
-return mk_clo(L39888, 1, 0, 0);
-} else if ((s39855) == 9) {
-V v39890 = F_J_dprinter_dgo(nat_subk(s39740, 1), C2(8, FLD(s39753, 0), F_P_dlast(({ V r39891;
-V s39892 = FLD(s39753, 1);
-if (IS_N(s39892, 14)) {
-r39891 = FLD(s39892, 1);
-} else if (IS_N(s39892, 5)) {
-r39891 = FLD(s39892, 1);
+r40038; }))));
+return mk_clo(L40042, 2, 1, (V[]){v40037});
+} else if ((s40026) == 6) {
+V v40048 = F_J_dprinter_dgo(nat_subk(s39911, 1), C3(0, FLD(s39924, 0), F_Ty_dtuple(FLD(s39924, 1)), S40050()));
+return mk_clo(L40052, 2, 1, (V[]){v40048});
+} else if ((s40026) == 7) {
+return mk_clo(L40057, 1, 0, 0);
+} else if ((s40026) == 8) {
+return mk_clo(L40059, 1, 0, 0);
+} else if ((s40026) == 9) {
+V v40061 = F_J_dprinter_dgo(nat_subk(s39911, 1), C2(8, FLD(s39924, 0), F_P_dlast(({ V r40062;
+V s40063 = FLD(s39924, 1);
+if (IS_N(s40063, 14)) {
+r40062 = FLD(s40063, 1);
+} else if (IS_N(s40063, 5)) {
+r40062 = FLD(s40063, 1);
 } else {
-r39891 = IMM(0);
+r40062 = IMM(0);
 }
-r39891; }))));
-return mk_clo(L39895, 2, 1, (V[]){v39890});
-} else if ((s39855) == 10) {
-return mk_clo(L39901, 1, 0, 0);
-} else if (nat_ge(s39855, 11)) {
-{ V t0 = nat_subk(s39740, 1); V t1 = C3(4, FLD(s39753, 0), FLD(s39753, 1), ({ V r39903;
-V v39904 = FLD(s39753, 0);
-V v39905 = FLD(v39904, 0);
-r39903 = F_G_dbody_x37u(FLD(v39905, 0), FLD(v39905, 1), FLD(v39905, 2), FLD(v39905, 3), F_String_dappend(S39906(), F_Ty_dhead(FLD(s39753, 1))));
-r39903; })); a0 = t0; a1 = t1; goto top; }
+r40062; }))));
+return mk_clo(L40066, 2, 1, (V[]){v40061});
+} else if ((s40026) == 10) {
+return mk_clo(L40072, 1, 0, 0);
+} else if (nat_ge(s40026, 11)) {
+{ V t0 = nat_subk(s39911, 1); V t1 = C3(4, FLD(s39924, 0), FLD(s39924, 1), ({ V r40074;
+V v40075 = FLD(s39924, 0);
+V v40076 = FLD(v40075, 0);
+r40074 = F_G_dbody_x37u(FLD(v40076, 0), FLD(v40076, 1), FLD(v40076, 2), FLD(v40076, 3), F_String_dappend(S40077(), F_Ty_dhead(FLD(s39924, 1))));
+r40074; })); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s39753, 6)) {
-{ V t0 = nat_subk(s39740, 1); V t1 = C3(5, FLD(s39753, 0), FLD(s39753, 1), F_P_dwhich(({ V r39910;
-V s39911 = F_String_deq(FLD(s39753, 2), S39912());
-if ((s39911) == IMM(0)) {
-r39910 = FLD(s39753, 2);
-} else if ((s39911) == IMM(1)) {
-r39910 = S39914();
+} else if (IS_N(s39924, 6)) {
+{ V t0 = nat_subk(s39911, 1); V t1 = C3(5, FLD(s39924, 0), FLD(s39924, 1), F_P_dwhich(({ V r40081;
+V s40082 = F_String_deq(FLD(s39924, 2), S40083());
+if ((s40082) == IMM(0)) {
+r40081 = FLD(s39924, 2);
+} else if ((s40082) == IMM(1)) {
+r40081 = S40085();
 } else { bend_fail("runtime fail-stop"); }
-r39910; }), K39915())); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s39753, 7)) {
-V s39917 = FLD(s39753, 3);
-if (IS_N(s39917, 1)) {
-return mk_clo(L39918, 2, 1, (V[]){FLD(s39917, 0)});
-} else if ((s39917) == IMM(0)) {
-return mk_clo(L39919, 5, 4, (V[]){FLD(s39753, 1), FLD(s39753, 0), nat_subk(s39740, 1), FLD(s39753, 2)});
+r40081; }), K40086())); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s39924, 7)) {
+V s40088 = FLD(s39924, 3);
+if (IS_N(s40088, 1)) {
+return mk_clo(L40089, 2, 1, (V[]){FLD(s40088, 0)});
+} else if ((s40088) == IMM(0)) {
+return mk_clo(L40090, 5, 4, (V[]){FLD(s39924, 1), FLD(s39924, 0), nat_subk(s39911, 1), FLD(s39924, 2)});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s39753, 8)) {
-V (v39943) = F_U32_dto__nat(4000000000u);
-V v39945 = FLD(s39753, 0);
-V v39946 = FLD(v39945, 0);
-V v39947 = F_Ty_drec_x37u((v39943), FLD(v39946, 0), FLD(v39946, 1), FLD(v39946, 2), FLD(v39946, 3), C2(0, FLD(s39753, 1), 16u));
-V v39949 = F_Expr_dshow_dgo(v39947, S39950(), 0u);
-return mk_clo(L39952, 5, 4, (V[]){v39947, FLD(s39753, 0), nat_subk(s39740, 1), v39949});
+} else if (IS_N(s39924, 8)) {
+V (v40114) = F_U32_dto__nat(4000000000u);
+V v40116 = FLD(s39924, 0);
+V v40117 = FLD(v40116, 0);
+V v40118 = F_Ty_drec_x37u((v40114), FLD(v40117, 0), FLD(v40117, 1), FLD(v40117, 2), FLD(v40117, 3), C2(0, FLD(s39924, 1), 16u));
+V v40120 = F_Expr_dshow_dgo(v40118, S40121(), 0u);
+return mk_clo(L40123, 5, 4, (V[]){v40118, FLD(s39924, 0), nat_subk(s39911, 1), v40120});
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dprinter_dgo(V *a) { (void)a; return F_J_dprinter_dgo(a[0], a[1]); }
-static V S39961(void) { static V c; return STRC(c, "."); }
-static V S39963(void) { static V c; return STRC(c, "[\042"); }
-static V S39964(void) { static V c; return STRC(c, "\042]"); }
+static V S40132(void) { static V c; return STRC(c, "."); }
+static V S40134(void) { static V c; return STRC(c, "[\042"); }
+static V S40135(void) { static V c; return STRC(c, "\042]"); }
 static V F_J_dacc(V a0) {
 top:;
-V s39959 = F_J_ddotted(a0);
-if ((s39959) == IMM(0)) {
-return F_String_dappend(S39961(), a0);
-} else if ((s39959) == IMM(1)) {
-return F_String_dappend(S39963(), F_String_dappend(a0, S39964()));
+V s40130 = F_J_ddotted(a0);
+if ((s40130) == IMM(0)) {
+return F_String_dappend(S40132(), a0);
+} else if ((s40130) == IMM(1)) {
+return F_String_dappend(S40134(), F_String_dappend(a0, S40135()));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dacc(V *a) { (void)a; return F_J_dacc(a[0]); }
 static __attribute__((noinline)) V H_F_J_ddotted(V a0) {
 top:;
-V s39967 = a0;
-if ((s39967) == IMM(0)) {
+V s40138 = a0;
+if ((s40138) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s39967, 1)) {
-V s39968 = F_U32_dis__eq(FLD(s39967, 0), 46u);
-if ((s39968) == IMM(0)) {
-{ V t0 = FLD(s39967, 1); a0 = t0; goto top; }
-} else if ((s39968) == IMM(1)) {
+} else if (IS_N(s40138, 1)) {
+V s40139 = F_U32_dis__eq(FLD(s40138, 0), 46u);
+if ((s40139) == IMM(0)) {
+{ V t0 = FLD(s40138, 1); a0 = t0; goto top; }
+} else if ((s40139) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -95733,56 +96165,56 @@ return IMM(0);
 return H_F_J_ddotted(a0);
 }
 static V W_J_ddotted(V *a) { (void)a; return F_J_ddotted(a[0]); }
-static V S39972(void) { static V c; return STRC(c, "out of fuel"); }
-static V L39970(V *a) {
-V v39971 = a[1];
-return C2(0, a[0], CN(0, 7, (V[]){FLD(v39971, 0), FLD(v39971, 1), FLD(v39971, 2), FLD(v39971, 3), C2(1, S39972(), FLD(v39971, 4)), FLD(v39971, 5), FLD(v39971, 6)}));
+static V S40143(void) { static V c; return STRC(c, "out of fuel"); }
+static V L40141(V *a) {
+V v40142 = a[1];
+return C2(0, a[0], CN(0, 7, (V[]){FLD(v40142, 0), FLD(v40142, 1), FLD(v40142, 2), FLD(v40142, 3), C2(1, S40143(), FLD(v40142, 4)), FLD(v40142, 5), FLD(v40142, 6)}));
 }
 static V F_J_dout(V a1) {
 top:;
-return mk_clo(L39970, 2, 1, (V[]){a1});
+return mk_clo(L40141, 2, 1, (V[]){a1});
 }
 static V W_J_dout(V *a) { (void)a; return F_J_dout(a[1]); }
-static V L39983(V *a) {
-V v39984 = apply(a[5], a[6]);
-V v39985 = FLD(v39984, 1);
-return apply(F_J_dall_dloop(a[4], C3(2, a[3], F_List_dappend(0, FLD(v39985, 3), a[2]), F_Map_dset(0, a[1], a[0], IMM(0)))), CN(0, 7, (V[]){FLD(v39985, 0), FLD(v39985, 1), FLD(v39985, 2), IMM(0), FLD(v39985, 4), FLD(v39985, 5), FLD(v39985, 6)}));
+static V L40154(V *a) {
+V v40155 = apply(a[5], a[6]);
+V v40156 = FLD(v40155, 1);
+return apply(F_J_dall_dloop(a[4], C3(2, a[3], F_List_dappend(0, FLD(v40156, 3), a[2]), F_Map_dset(0, a[1], a[0], IMM(0)))), CN(0, 7, (V[]){FLD(v40156, 0), FLD(v40156, 1), FLD(v40156, 2), IMM(0), FLD(v40156, 4), FLD(v40156, 5), FLD(v40156, 6)}));
 }
-static V L39991(V *a) {
+static V L40162(V *a) {
 return C2(0, IMM(0), a[0]);
 }
 static V F_J_dall_dloop(V a0, V a1) {
 top:;
-V s39973 = (a0);
-if ((s39973) == 0) {
-V s39974 = a1;
-if (IS_N(s39974, 0)) {
+V s40144 = (a0);
+if ((s40144) == 0) {
+V s40145 = a1;
+if (IS_N(s40145, 0)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s39974, 1)) {
+} else if (IS_N(s40145, 1)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s39974, 2)) {
+} else if (IS_N(s40145, 2)) {
 return F_J_dout(IMM(0));
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s39973) != 0) {
-V s39978 = a1;
-if (IS_N(s39978, 0)) {
-V s39979 = FLD(s39978, 4);
-if ((s39979) == IMM(1)) {
-{ V t0 = nat_subk(s39973, 1); V t1 = C3(2, FLD(s39978, 0), FLD(s39978, 2), FLD(s39978, 3)); a0 = t0; a1 = t1; goto top; }
-} else if ((s39979) == IMM(0)) {
-V v39980 = FLD(s39978, 0);
-V v39981 = F_J_ddef_x37u(FLD(v39980, 0), FLD(v39980, 1), FLD(s39978, 1));
-return mk_clo(L39983, 7, 6, (V[]){FLD(s39978, 1), FLD(s39978, 3), FLD(s39978, 2), FLD(s39978, 0), nat_subk(s39973, 1), v39981});
+} else if ((s40144) != 0) {
+V s40149 = a1;
+if (IS_N(s40149, 0)) {
+V s40150 = FLD(s40149, 4);
+if ((s40150) == IMM(1)) {
+{ V t0 = nat_subk(s40144, 1); V t1 = C3(2, FLD(s40149, 0), FLD(s40149, 2), FLD(s40149, 3)); a0 = t0; a1 = t1; goto top; }
+} else if ((s40150) == IMM(0)) {
+V v40151 = FLD(s40149, 0);
+V v40152 = F_J_ddef_x37u(FLD(v40151, 0), FLD(v40151, 1), FLD(s40149, 1));
+return mk_clo(L40154, 7, 6, (V[]){FLD(s40149, 1), FLD(s40149, 3), FLD(s40149, 2), FLD(s40149, 0), nat_subk(s40144, 1), v40152});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s39978, 1)) {
-V v39989 = FLD(s39978, 3);
-{ V t0 = nat_subk(s39973, 1); V t1 = CN(0, 5, (V[]){FLD(s39978, 0), FLD(s39978, 1), FLD(s39978, 2), FLD(v39989, 0), FLD(v39989, 1)}); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s39978, 2)) {
-V s39990 = FLD(s39978, 1);
-if ((s39990) == IMM(0)) {
-return mk_clo(L39991, 1, 0, 0);
-} else if (IS_N(s39990, 1)) {
-{ V t0 = nat_subk(s39973, 1); V t1 = C4(1, FLD(s39978, 0), FLD(s39990, 0), FLD(s39990, 1), F_Map_dhas(FLD(s39978, 2), FLD(s39990, 0))); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40149, 1)) {
+V v40160 = FLD(s40149, 3);
+{ V t0 = nat_subk(s40144, 1); V t1 = CN(0, 5, (V[]){FLD(s40149, 0), FLD(s40149, 1), FLD(s40149, 2), FLD(v40160, 0), FLD(v40160, 1)}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40149, 2)) {
+V s40161 = FLD(s40149, 1);
+if ((s40161) == IMM(0)) {
+return mk_clo(L40162, 1, 0, 0);
+} else if (IS_N(s40161, 1)) {
+{ V t0 = nat_subk(s40144, 1); V t1 = C4(1, FLD(s40149, 0), FLD(s40161, 0), FLD(s40161, 1), F_Map_dhas(FLD(s40149, 2), FLD(s40161, 0))); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -95790,370 +96222,370 @@ return mk_clo(L39991, 1, 0, 0);
 static V W_J_dall_dloop(V *a) { (void)a; return F_J_dall_dloop(a[0], a[1]); }
 static V F_J_ddef_x37u(V a0, V a1, V a2) {
 top:;
-V v39993 = C2(0, a0, a1);
-V v39994 = a0;
-V uo39995[2]; U_G_ddef_x37u(FLD(v39994, 0), FLD(v39994, 1), FLD(v39994, 2), FLD(v39994, 3), a2, uo39995);
-V v39997 = v39993;
-return F_J_ddef_ddecl_x37u(FLD(v39997, 0), FLD(v39997, 1), a2, uo39995[0], uo39995[1], ({ V r39998;
-V v39999 = a0;
-r39998 = F_G_dbody_x37u(FLD(v39999, 0), FLD(v39999, 1), FLD(v39999, 2), FLD(v39999, 3), a2);
-r39998; }));
+V v40164 = C2(0, a0, a1);
+V v40165 = a0;
+V uo40166[2]; U_G_ddef_x37u(FLD(v40165, 0), FLD(v40165, 1), FLD(v40165, 2), FLD(v40165, 3), a2, uo40166);
+V v40168 = v40164;
+return F_J_ddef_ddecl_x37u(FLD(v40168, 0), FLD(v40168, 1), a2, uo40166[0], uo40166[1], ({ V r40169;
+V v40170 = a0;
+r40169 = F_G_dbody_x37u(FLD(v40170, 0), FLD(v40170, 1), FLD(v40170, 2), FLD(v40170, 3), a2);
+r40169; }));
 }
 static V W_J_ddef_x37u(V *a) { (void)a; return F_J_ddef_x37u(a[0], a[1], a[2]); }
-static V L40015(V *a) {
+static V L40186(V *a) {
 return C2(0, IMM(0), a[0]);
 }
 static V F_J_ddef_ddecl_x37u(V a0, V a1, V a2, V a3_, V a4, V a5) {
 uint32_t a3 = (uint32_t)a3_;
 top:;
-V s40002 = a5;
-if (IS_N(s40002, 0)) {
-V v40003 = C2(0, a0, a1);
-V uo40004[3]; U_Gen_dsig_db_x37u(FLD(s40002, 1), a4, IMM(0), 0u, IMM(0), IMM(0), IMM(0), uo40004);
-return F_J_ddef_dnative_x37u(v40003, a2, a4, FLD(s40002, 2), uo40004[0], uo40004[1], uo40004[2], F_U32_dis__eq((a3), 2u));
-} else if (IS_N(s40002, 1)) {
-V v40008 = a0;
-V uo40009[3]; U_Gen_dsig_db_x37u(FLD(s40002, 1), a4, IMM(0), 0u, IMM(0), IMM(0), IMM(0), uo40009);
-V v40011 = v40008;
-return F_J_ddef_deff_x37u(FLD(v40011, 0), FLD(v40011, 1), FLD(v40011, 2), FLD(v40011, 3), a2, a4, FLD(s40002, 1), uo40009[0], uo40009[1], uo40009[2], FLD(s40002, 2));
+V s40173 = a5;
+if (IS_N(s40173, 0)) {
+V v40174 = C2(0, a0, a1);
+V uo40175[3]; U_Gen_dsig_db_x37u(FLD(s40173, 1), a4, IMM(0), 0u, IMM(0), IMM(0), IMM(0), uo40175);
+return F_J_ddef_dnative_x37u(v40174, a2, a4, FLD(s40173, 2), uo40175[0], uo40175[1], uo40175[2], F_U32_dis__eq((a3), 2u));
+} else if (IS_N(s40173, 1)) {
+V v40179 = a0;
+V uo40180[3]; U_Gen_dsig_db_x37u(FLD(s40173, 1), a4, IMM(0), 0u, IMM(0), IMM(0), IMM(0), uo40180);
+V v40182 = v40179;
+return F_J_ddef_deff_x37u(FLD(v40182, 0), FLD(v40182, 1), FLD(v40182, 2), FLD(v40182, 3), a2, a4, FLD(s40173, 1), uo40180[0], uo40180[1], uo40180[2], FLD(s40173, 2));
 } else {
-V s40013 = F_U32_dis__eq((a3), 2u);
-if ((s40013) == IMM(0)) {
-return mk_clo(L40015, 1, 0, 0);
-} else if ((s40013) == IMM(1)) {
+V s40184 = F_U32_dis__eq((a3), 2u);
+if ((s40184) == IMM(0)) {
+return mk_clo(L40186, 1, 0, 0);
+} else if ((s40184) == IMM(1)) {
 return F_J_dwrapper(a2, a4);
 } else { bend_fail("runtime fail-stop"); }
 }
 }
 static V W_J_ddef_ddecl_x37u(V *a) { (void)a; return F_J_ddef_ddecl_x37u(a[0], a[1], a[2], a[3], a[4], a[5]); }
-static V L40018(V *a) {
+static V L40189(V *a) {
 return C2(0, IMM(0), a[0]);
 }
-static V S40021(void) { static V c; return STRC(c, "const "); }
-static V S40022(void) { static V c; return STRC(c, "W_"); }
-static V S40025(void) { static V c; return STRC(c, " = "); }
-static V S40028(void) { static V c; return STRC(c, ", "); }
-static V S40031(void) { static V c; return STRC(c, ";\012"); }
-static V L40019(V *a) {
-V v40020 = a[3];
-return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v40020, 0), FLD(v40020, 1), C2(2, FLD(v40020, 2), C1(1, F_String_dappend(S40021(), F_String_dappend(F_String_dappend(S40022(), F_Gen_dmangle(a[2])), F_String_dappend(S40025(), F_String_dappend(F_J_dwrapper_dgo(F_List_dlength(0, C2(1, a[1], a[0])), 0u, F_String_djoin(F_J_dwkept(C2(1, a[1], a[0]), 0u), S40028()), a[2]), S40031())))))), FLD(v40020, 3), FLD(v40020, 4), FLD(v40020, 5), FLD(v40020, 6)}));
+static V S40192(void) { static V c; return STRC(c, "const "); }
+static V S40193(void) { static V c; return STRC(c, "W_"); }
+static V S40196(void) { static V c; return STRC(c, " = "); }
+static V S40199(void) { static V c; return STRC(c, ", "); }
+static V S40202(void) { static V c; return STRC(c, ";\012"); }
+static V L40190(V *a) {
+V v40191 = a[3];
+return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v40191, 0), FLD(v40191, 1), C2(2, FLD(v40191, 2), C1(1, F_String_dappend(S40192(), F_String_dappend(F_String_dappend(S40193(), F_Gen_dmangle(a[2])), F_String_dappend(S40196(), F_String_dappend(F_J_dwrapper_dgo(F_List_dlength(0, C2(1, a[1], a[0])), 0u, F_String_djoin(F_J_dwkept(C2(1, a[1], a[0]), 0u), S40199()), a[2]), S40202())))))), FLD(v40191, 3), FLD(v40191, 4), FLD(v40191, 5), FLD(v40191, 6)}));
 }
 static V F_J_dwrapper(V a0, V a1) {
 top:;
-V s40017 = a1;
-if ((s40017) == IMM(0)) {
-return mk_clo(L40018, 1, 0, 0);
-} else if (IS_N(s40017, 1)) {
-return mk_clo(L40019, 4, 3, (V[]){FLD(s40017, 1), FLD(s40017, 0), a0});
+V s40188 = a1;
+if ((s40188) == IMM(0)) {
+return mk_clo(L40189, 1, 0, 0);
+} else if (IS_N(s40188, 1)) {
+return mk_clo(L40190, 4, 3, (V[]){FLD(s40188, 1), FLD(s40188, 0), a0});
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dwrapper(V *a) { (void)a; return F_J_dwrapper(a[0], a[1]); }
-static V S40037(void) { static V c; return STRC(c, "p"); }
+static V S40208(void) { static V c; return STRC(c, "p"); }
 static V D_J_dwkept(V *dst, V a0, V a1) {
 top:;
-V s40036 = a0;
-if ((s40036) == IMM(0)) {
+V s40207 = a0;
+if ((s40207) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s40036, 1) && (FLD(s40036, 0)) == IMM(1)) {
-{ V dc = CH2(1, F_String_dappend(S40037(), F_U32_dshow_dif((a1), F_U32_dis__zero((a1)))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s40036, 1); V t1 = F_U32_dinc((a1)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40207, 1) && (FLD(s40207, 0)) == IMM(1)) {
+{ V dc = CH2(1, F_String_dappend(S40208(), F_U32_dshow_dif((a1), F_U32_dis__zero((a1)))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s40207, 1); V t1 = F_U32_dinc((a1)); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s40036, 1) && (FLD(s40036, 0)) == IMM(0)) {
-{ V t0 = FLD(s40036, 1); V t1 = F_U32_dinc((a1)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40207, 1) && (FLD(s40207, 0)) == IMM(0)) {
+{ V t0 = FLD(s40207, 1); V t1 = F_U32_dinc((a1)); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_J_dwkept(V a0, V a1) { V r; D_J_dwkept(&r, a0, a1); return r; }
 static V W_J_dwkept(V *a) { (void)a; return F_J_dwkept(a[0], a[1]); }
-static V S40044(void) { static V c; return STRC(c, "F_"); }
-static V S40047(void) { static V c; return STRC(c, "("); }
-static V S40048(void) { static V c; return STRC(c, ")"); }
-static V S40052(void) { static V c; return STRC(c, "(p"); }
-static V S40055(void) { static V c; return STRC(c, ") => "); }
+static V S40215(void) { static V c; return STRC(c, "F_"); }
+static V S40218(void) { static V c; return STRC(c, "("); }
+static V S40219(void) { static V c; return STRC(c, ")"); }
+static V S40223(void) { static V c; return STRC(c, "(p"); }
+static V S40226(void) { static V c; return STRC(c, ") => "); }
 static V F_J_dwrapper_dgo(V a0, V a1_, V a2, V a3) {
 uint32_t a1 = (uint32_t)a1_;
 top:;
-V s40043 = (a0);
-if ((s40043) == 0) {
-return F_String_dappend(F_String_dappend(S40044(), F_Gen_dmangle(a3)), F_String_dappend(S40047(), F_String_dappend(a2, S40048())));
-} else if (nat_ge(s40043, 1)) {
-return F_String_dappend(S40052(), F_String_dappend(F_U32_dshow_dif((a1), F_U32_dis__zero((a1))), F_String_dappend(S40055(), F_J_dwrapper_dgo(nat_subk(s40043, 1), F_U32_dinc((a1)), a2, a3))));
+V s40214 = (a0);
+if ((s40214) == 0) {
+return F_String_dappend(F_String_dappend(S40215(), F_Gen_dmangle(a3)), F_String_dappend(S40218(), F_String_dappend(a2, S40219())));
+} else if (nat_ge(s40214, 1)) {
+return F_String_dappend(S40223(), F_String_dappend(F_U32_dshow_dif((a1), F_U32_dis__zero((a1))), F_String_dappend(S40226(), F_J_dwrapper_dgo(nat_subk(s40214, 1), F_U32_dinc((a1)), a2, a3))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dwrapper_dgo(V *a) { (void)a; return F_J_dwrapper_dgo(a[0], a[1], a[2], a[3]); }
-static V S40071(void) { static V c; return STRC(c, "function "); }
-static V S40072(void) { static V c; return STRC(c, "F_"); }
-static V S40075(void) { static V c; return STRC(c, "("); }
-static V S40078(void) { static V c; return STRC(c, ", "); }
-static V S40080(void) { static V c; return STRC(c, ") {\012  return (R) => (k) => io_req(EFF[\042"); }
-static V S40081(void) { static V c; return STRC(c, "\042], \042"); }
-static V S40082(void) { static V c; return STRC(c, "\042, ["); }
-static V S40086(void) { static V c; return STRC(c, ", "); }
-static V S40088(void) { static V c; return STRC(c, "], "); }
-static V S40089(void) { static V c; return STRC(c, "^"); }
-static V S40093(void) { static V c; return STRC(c, ");\012}\012"); }
-static V L40063(V *a) {
-V v40064 = a[10];
-V uo40065[8]; U_J_deffs_dgo_x37n_x37u(a[9], a[8], FLD(v40064, 0), FLD(v40064, 1), FLD(v40064, 2), FLD(v40064, 3), FLD(v40064, 4), FLD(v40064, 5), FLD(v40064, 6), uo40065);
-V s40067 = uo40065[0];
-V s40068 = CN(0, 7, (V[]){uo40065[1], uo40065[2], uo40065[3], uo40065[4], uo40065[5], uo40065[6], uo40065[7]});
+static V S40242(void) { static V c; return STRC(c, "function "); }
+static V S40243(void) { static V c; return STRC(c, "F_"); }
+static V S40246(void) { static V c; return STRC(c, "("); }
+static V S40249(void) { static V c; return STRC(c, ", "); }
+static V S40251(void) { static V c; return STRC(c, ") {\012  return (R) => (k) => io_req(EFF[\042"); }
+static V S40252(void) { static V c; return STRC(c, "\042], \042"); }
+static V S40253(void) { static V c; return STRC(c, "\042, ["); }
+static V S40257(void) { static V c; return STRC(c, ", "); }
+static V S40259(void) { static V c; return STRC(c, "], "); }
+static V S40260(void) { static V c; return STRC(c, "^"); }
+static V S40264(void) { static V c; return STRC(c, ");\012}\012"); }
+static V L40234(V *a) {
+V v40235 = a[10];
+V uo40236[8]; U_J_deffs_dgo_x37n_x37u(a[9], a[8], FLD(v40235, 0), FLD(v40235, 1), FLD(v40235, 2), FLD(v40235, 3), FLD(v40235, 4), FLD(v40235, 5), FLD(v40235, 6), uo40236);
+V s40238 = uo40236[0];
+V s40239 = CN(0, 7, (V[]){uo40236[1], uo40236[2], uo40236[3], uo40236[4], uo40236[5], uo40236[6], uo40236[7]});
 {
-V v40069 = s40068;
-return apply(F_J_dwrapper(a[7], a[6]), CN(0, 7, (V[]){FLD(v40069, 0), FLD(v40069, 1), C2(2, FLD(v40069, 2), C1(1, F_String_dappend(S40071(), F_String_dappend(F_String_dappend(S40072(), F_Gen_dmangle(a[7])), F_String_dappend(S40075(), F_String_dappend(({ V r40076;
-V v40077 = a[5];
-r40076 = F_String_djoin(v40077, S40078());
-r40076; }), F_String_dappend(S40080(), F_String_dappend(a[8], F_String_dappend(S40081(), F_String_dappend(a[8], F_String_dappend(S40082(), F_String_dappend(({ V r40083;
-V v40084 = F_J_deff_dargs(a[4], a[5]);
-r40083 = F_String_djoin(v40084, S40086());
-r40083; }), F_String_dappend(S40088(), F_String_dappend(F_J_deff_dtags_x37u(a[3], a[2], a[1], a[0], F_G_dbody_x37u(a[3], a[2], a[1], a[0], F_String_dappend(S40089(), a[7]))), S40093())))))))))))))), FLD(v40069, 3), FLD(v40069, 4), FLD(v40069, 5), FLD(v40069, 6)}));
+V v40240 = s40239;
+return apply(F_J_dwrapper(a[7], a[6]), CN(0, 7, (V[]){FLD(v40240, 0), FLD(v40240, 1), C2(2, FLD(v40240, 2), C1(1, F_String_dappend(S40242(), F_String_dappend(F_String_dappend(S40243(), F_Gen_dmangle(a[7])), F_String_dappend(S40246(), F_String_dappend(({ V r40247;
+V v40248 = a[5];
+r40247 = F_String_djoin(v40248, S40249());
+r40247; }), F_String_dappend(S40251(), F_String_dappend(a[8], F_String_dappend(S40252(), F_String_dappend(a[8], F_String_dappend(S40253(), F_String_dappend(({ V r40254;
+V v40255 = F_J_deff_dargs(a[4], a[5]);
+r40254 = F_String_djoin(v40255, S40257());
+r40254; }), F_String_dappend(S40259(), F_String_dappend(F_J_deff_dtags_x37u(a[3], a[2], a[1], a[0], F_G_dbody_x37u(a[3], a[2], a[1], a[0], F_String_dappend(S40260(), a[7]))), S40264())))))))))))))), FLD(v40240, 3), FLD(v40240, 4), FLD(v40240, 5), FLD(v40240, 6)}));
 }
 }
 static V F_J_ddef_deff_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V a8, V a9, V a10) {
 top:;
-V v40061 = F_J_dhost_x37f4001462510x1467917856(a4);
-return mk_clo(L40063, 11, 10, (V[]){a3, a2, a1, a0, a6, a7, a5, a4, v40061, a10});
+V v40232 = F_J_dhost_x37f4001462510x1467917856(a4);
+return mk_clo(L40234, 11, 10, (V[]){a3, a2, a1, a0, a6, a7, a5, a4, v40232, a10});
 }
 static V W_J_ddef_deff_x37u(V *a) { (void)a; return F_J_ddef_deff_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10]); }
-static V S40109(void) { static V c; return STRC(c, "k"); }
+static V S40280(void) { static V c; return STRC(c, "k"); }
 static V F_J_deff_dtags_x37u(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V s40106 = a4;
-if (IS_N(s40106, 2) && IS_N(FLD(s40106, 2), 14)) {
-return F_J_deff_dtags_dio_x37u(a0, a1, a2, a3, FLD(FLD(s40106, 2), 0), FLD(FLD(s40106, 2), 1));
-} else if (IS_N(s40106, 2) && IS_N(FLD(s40106, 2), 5) && IS_N(FLD(FLD(s40106, 2), 0), 0)) {
-return F_J_deff_dtags_dio_x37u(a0, a1, a2, a3, FLD(FLD(FLD(s40106, 2), 0), 0), FLD(FLD(s40106, 2), 1));
+V s40277 = a4;
+if (IS_N(s40277, 2) && IS_N(FLD(s40277, 2), 14)) {
+return F_J_deff_dtags_dio_x37u(a0, a1, a2, a3, FLD(FLD(s40277, 2), 0), FLD(FLD(s40277, 2), 1));
+} else if (IS_N(s40277, 2) && IS_N(FLD(s40277, 2), 5) && IS_N(FLD(FLD(s40277, 2), 0), 0)) {
+return F_J_deff_dtags_dio_x37u(a0, a1, a2, a3, FLD(FLD(FLD(s40277, 2), 0), 0), FLD(FLD(s40277, 2), 1));
 } else {
-return S40109();
+return S40280();
 }
 }
 static V W_J_deff_dtags_x37u(V *a) { (void)a; return F_J_deff_dtags_x37u(a[0], a[1], a[2], a[3], a[4]); }
-static V S40112(void) { static V c; return STRC(c, "IO"); }
-static V S40114(void) { static V c; return STRC(c, "k"); }
-static V S40116(void) { static V c; return STRC(c, "k"); }
+static V S40283(void) { static V c; return STRC(c, "IO"); }
+static V S40285(void) { static V c; return STRC(c, "k"); }
+static V S40287(void) { static V c; return STRC(c, "k"); }
 static V F_J_deff_dtags_dio_x37u(V a0, V a1, V a2, V a3, V a4, V a5) {
 top:;
-V s40110 = a5;
-if (IS_N(s40110, 1) && (FLD(s40110, 1)) == IMM(0)) {
-V s40111 = F_String_deq(a4, S40112());
-if ((s40111) == IMM(0)) {
-return S40114();
-} else if ((s40111) == IMM(1)) {
-return F_J_deff_dtags_dty_x37u(a0, a1, a2, a3, FLD(s40110, 0));
+V s40281 = a5;
+if (IS_N(s40281, 1) && (FLD(s40281, 1)) == IMM(0)) {
+V s40282 = F_String_deq(a4, S40283());
+if ((s40282) == IMM(0)) {
+return S40285();
+} else if ((s40282) == IMM(1)) {
+return F_J_deff_dtags_dty_x37u(a0, a1, a2, a3, FLD(s40281, 0));
 } else { bend_fail("runtime fail-stop"); }
 } else {
-return S40116();
+return S40287();
 }
 }
 static V W_J_deff_dtags_dio_x37u(V *a) { (void)a; return F_J_deff_dtags_dio_x37u(a[0], a[1], a[2], a[3], a[4], a[5]); }
-static V S40122(void) { static V c; return STRC(c, "k"); }
-static V S40123(void) { static V c; return STRC(c, "%"); }
+static V S40293(void) { static V c; return STRC(c, "k"); }
+static V S40294(void) { static V c; return STRC(c, "%"); }
 static V F_J_deff_dtags_dty_x37u(V a0, V a1, V a2, V a3, V a4) {
 top:;
-V v40117 = F_J_deff_dhead(a4);
-V s40119 = F_Nat_dis__eq(F_J_dkind(v40117), 8u);
-if ((s40119) == IMM(0)) {
-return S40122();
-} else if ((s40119) == IMM(1)) {
-return F_J_deff_dtags_dof(v40117, F_G_dbody_x37u(a0, a1, a2, a3, F_String_dappend(S40123(), v40117)));
+V v40288 = F_J_deff_dhead(a4);
+V s40290 = F_Nat_dis__eq(F_J_dkind(v40288), 8u);
+if ((s40290) == IMM(0)) {
+return S40293();
+} else if ((s40290) == IMM(1)) {
+return F_J_deff_dtags_dof(v40288, F_G_dbody_x37u(a0, a1, a2, a3, F_String_dappend(S40294(), v40288)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_deff_dtags_dty_x37u(V *a) { (void)a; return F_J_deff_dtags_dty_x37u(a[0], a[1], a[2], a[3], a[4]); }
-static V S40131(void) { static V c; return STRC(c, "io_tags(\042"); }
-static V S40132(void) { static V c; return STRC(c, "\042, ["); }
-static V S40134(void) { static V c; return STRC(c, "], k)"); }
-static V S40139(void) { static V c; return STRC(c, "k"); }
-static V S40140(void) { static V c; return STRC(c, "k"); }
+static V S40302(void) { static V c; return STRC(c, "io_tags(\042"); }
+static V S40303(void) { static V c; return STRC(c, "\042, ["); }
+static V S40305(void) { static V c; return STRC(c, "], k)"); }
+static V S40310(void) { static V c; return STRC(c, "k"); }
+static V S40311(void) { static V c; return STRC(c, "k"); }
 static V F_J_deff_dtags_dof(V a0, V a1) {
 top:;
-V s40127 = a1;
-if (IS_N(s40127, 3)) {
-V s40128 = ({ V r40129;
-V s40130 = FLD(s40127, 2);
-if ((s40130) == IMM(0)) {
-r40129 = IMM(1);
-} else if (IS_N(s40130, 1)) {
-r40129 = IMM(0);
+V s40298 = a1;
+if (IS_N(s40298, 3)) {
+V s40299 = ({ V r40300;
+V s40301 = FLD(s40298, 2);
+if ((s40301) == IMM(0)) {
+r40300 = IMM(1);
+} else if (IS_N(s40301, 1)) {
+r40300 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r40129; });
-if ((s40128) == IMM(0)) {
-return F_String_dappend(S40131(), F_String_dappend(a0, F_String_dappend(S40132(), F_String_dappend(F_J_deff_dtags_dnames(FLD(s40127, 2)), S40134()))));
-} else if ((s40128) == IMM(1)) {
-return S40139();
+r40300; });
+if ((s40299) == IMM(0)) {
+return F_String_dappend(S40302(), F_String_dappend(a0, F_String_dappend(S40303(), F_String_dappend(F_J_deff_dtags_dnames(FLD(s40298, 2)), S40305()))));
+} else if ((s40299) == IMM(1)) {
+return S40310();
 } else { bend_fail("runtime fail-stop"); }
 } else {
-return S40140();
+return S40311();
 }
 }
 static V W_J_deff_dtags_dof(V *a) { (void)a; return F_J_deff_dtags_dof(a[0], a[1]); }
-static V S40142(void) { static V c; return STRC(c, ""); }
-static V S40143(void) { static V c; return STRC(c, "\042"); }
-static V S40144(void) { static V c; return STRC(c, "\042"); }
-static V S40147(void) { static V c; return STRC(c, ""); }
-static V S40148(void) { static V c; return STRC(c, ", "); }
+static V S40313(void) { static V c; return STRC(c, ""); }
+static V S40314(void) { static V c; return STRC(c, "\042"); }
+static V S40315(void) { static V c; return STRC(c, "\042"); }
+static V S40318(void) { static V c; return STRC(c, ""); }
+static V S40319(void) { static V c; return STRC(c, ", "); }
 static V F_J_deff_dtags_dnames(V a0) {
 top:;
-V s40141 = a0;
-if ((s40141) == IMM(0)) {
-return S40142();
-} else if (IS_N(s40141, 1)) {
-return F_String_dappend(S40143(), F_String_dappend(FLD(FLD(s40141, 0), 0), F_String_dappend(S40144(), F_String_dappend(({ V r40145;
-V s40146 = FLD(s40141, 1);
-if ((s40146) == IMM(0)) {
-r40145 = S40147();
-} else if (IS_N(s40146, 1)) {
-r40145 = S40148();
+V s40312 = a0;
+if ((s40312) == IMM(0)) {
+return S40313();
+} else if (IS_N(s40312, 1)) {
+return F_String_dappend(S40314(), F_String_dappend(FLD(FLD(s40312, 0), 0), F_String_dappend(S40315(), F_String_dappend(({ V r40316;
+V s40317 = FLD(s40312, 1);
+if ((s40317) == IMM(0)) {
+r40316 = S40318();
+} else if (IS_N(s40317, 1)) {
+r40316 = S40319();
 } else { bend_fail("runtime fail-stop"); }
-r40145; }), F_J_deff_dtags_dnames(FLD(s40141, 1))))));
+r40316; }), F_J_deff_dtags_dnames(FLD(s40312, 1))))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_deff_dtags_dnames(V *a) { (void)a; return F_J_deff_dtags_dnames(a[0]); }
-static V K40154(void) { static V c; return KONST(c, C2(1, MKS(""), C2(1, MKS("Bool"), C2(1, MKS("Nat"), C2(1, MKS("String"), C2(1, MKS("Char"), C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Array"), IMM(0)))))))))); }
+static V K40325(void) { static V c; return KONST(c, C2(1, MKS(""), C2(1, MKS("Bool"), C2(1, MKS("Nat"), C2(1, MKS("String"), C2(1, MKS("Char"), C2(1, MKS("U32"), C2(1, MKS("F32"), C2(1, MKS("Array"), IMM(0)))))))))); }
 static V F_J_dkind(V a0) {
 top:;
-return F_P_dwhich(a0, K40154());
+return F_P_dwhich(a0, K40325());
 }
 static V W_J_dkind(V *a) { (void)a; return F_J_dkind(a[0]); }
-static V S40157(void) { static V c; return STRC(c, ""); }
+static V S40328(void) { static V c; return STRC(c, ""); }
 static V F_J_deff_dhead(V a0) {
 top:;
-V s40156 = a0;
-if (IS_N(s40156, 14)) {
-return FLD(s40156, 0);
-} else if (IS_N(s40156, 0)) {
-return FLD(s40156, 0);
-} else if (IS_N(s40156, 5) && IS_N(FLD(s40156, 0), 0)) {
-return FLD(FLD(s40156, 0), 0);
+V s40327 = a0;
+if (IS_N(s40327, 14)) {
+return FLD(s40327, 0);
+} else if (IS_N(s40327, 0)) {
+return FLD(s40327, 0);
+} else if (IS_N(s40327, 5) && IS_N(FLD(s40327, 0), 0)) {
+return FLD(FLD(s40327, 0), 0);
 } else {
-return S40157();
+return S40328();
 }
 }
 static V W_J_deff_dhead(V *a) { (void)a; return F_J_deff_dhead(a[0]); }
-static V S40168(void) { static V c; return STRC(c, "null"); }
-static V S40173(void) { static V c; return STRC(c, "@-"); }
-static V S40182(void) { static V c; return STRC(c, "null"); }
+static V S40339(void) { static V c; return STRC(c, "null"); }
+static V S40344(void) { static V c; return STRC(c, "@-"); }
+static V S40353(void) { static V c; return STRC(c, "null"); }
 static V D_J_deff_dargs(V *dst, V a0, V a1) {
 top:;
-V s40158 = a0;
-V s40159 = a1;
-if ((s40158) == IMM(0)) {
+V s40329 = a0;
+V s40330 = a1;
+if ((s40329) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s40158, 1) && (s40159) == IMM(0)) {
-V s40160 = F_G_dkeep_x37u(FLD(FLD(s40158, 0), 0), FLD(FLD(s40158, 0), 1), FLD(FLD(s40158, 0), 2));
-if ((s40160) == IMM(1)) {
+} else if (IS_N(s40329, 1) && (s40330) == IMM(0)) {
+V s40331 = F_G_dkeep_x37u(FLD(FLD(s40329, 0), 0), FLD(FLD(s40329, 0), 1), FLD(FLD(s40329, 0), 2));
+if ((s40331) == IMM(1)) {
 *dst = IMM(0);
 return 0;
-} else if ((s40160) == IMM(0)) {
-V s40162 = ({ V r40163;
-V s40164 = F_G_derased__ty(FLD(FLD(s40158, 0), 2));
-if ((s40164) == IMM(0)) {
-r40163 = IMM(0);
-} else if ((s40164) == IMM(1)) {
-V s40166 = F_U32_dis__eq(FLD(FLD(s40158, 0), 1), 1u);
-if ((s40166) == IMM(0)) {
-r40163 = IMM(1);
-} else if ((s40166) == IMM(1)) {
-r40163 = IMM(0);
+} else if ((s40331) == IMM(0)) {
+V s40333 = ({ V r40334;
+V s40335 = F_G_derased__ty(FLD(FLD(s40329, 0), 2));
+if ((s40335) == IMM(0)) {
+r40334 = IMM(0);
+} else if ((s40335) == IMM(1)) {
+V s40337 = F_U32_dis__eq(FLD(FLD(s40329, 0), 1), 1u);
+if ((s40337) == IMM(0)) {
+r40334 = IMM(1);
+} else if ((s40337) == IMM(1)) {
+r40334 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r40163; });
-if ((s40162) == IMM(1)) {
-*dst = C2(1, S40168(), F_J_deff_dargs_x37s3580055888x2930167514(FLD(s40158, 1)));
+r40334; });
+if ((s40333) == IMM(1)) {
+*dst = C2(1, S40339(), F_J_deff_dargs_x37s3580055888x2930167514(FLD(s40329, 1)));
 return 0;
-} else if ((s40162) == IMM(0)) {
-*dst = F_J_deff_dargs_x37s3580055888x2930167514(FLD(s40158, 1));
+} else if ((s40333) == IMM(0)) {
+*dst = F_J_deff_dargs_x37s3580055888x2930167514(FLD(s40329, 1));
 return 0;
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40158, 1) && IS_N(s40159, 1)) {
-V s40171 = F_G_dkeep_x37u(FLD(FLD(s40158, 0), 0), FLD(FLD(s40158, 0), 1), FLD(FLD(s40158, 0), 2));
-if ((s40171) == IMM(1)) {
-{ V dc = CH2(1, F_J_deff_dwrap_dgo(FLD(FLD(s40158, 0), 2), FLD(s40159, 0), F_String_dstarts__with(FLD(FLD(s40158, 0), 2), S40173())), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s40158, 1); V t1 = FLD(s40159, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40329, 1) && IS_N(s40330, 1)) {
+V s40342 = F_G_dkeep_x37u(FLD(FLD(s40329, 0), 0), FLD(FLD(s40329, 0), 1), FLD(FLD(s40329, 0), 2));
+if ((s40342) == IMM(1)) {
+{ V dc = CH2(1, F_J_deff_dwrap_dgo(FLD(FLD(s40329, 0), 2), FLD(s40330, 0), F_String_dstarts__with(FLD(FLD(s40329, 0), 2), S40344())), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s40329, 1); V t1 = FLD(s40330, 1); a0 = t0; a1 = t1; goto top; }
 }
-} else if ((s40171) == IMM(0)) {
-V s40176 = ({ V r40177;
-V s40178 = F_G_derased__ty(FLD(FLD(s40158, 0), 2));
-if ((s40178) == IMM(0)) {
-r40177 = IMM(0);
-} else if ((s40178) == IMM(1)) {
-V s40180 = F_U32_dis__eq(FLD(FLD(s40158, 0), 1), 1u);
-if ((s40180) == IMM(0)) {
-r40177 = IMM(1);
-} else if ((s40180) == IMM(1)) {
-r40177 = IMM(0);
+} else if ((s40342) == IMM(0)) {
+V s40347 = ({ V r40348;
+V s40349 = F_G_derased__ty(FLD(FLD(s40329, 0), 2));
+if ((s40349) == IMM(0)) {
+r40348 = IMM(0);
+} else if ((s40349) == IMM(1)) {
+V s40351 = F_U32_dis__eq(FLD(FLD(s40329, 0), 1), 1u);
+if ((s40351) == IMM(0)) {
+r40348 = IMM(1);
+} else if ((s40351) == IMM(1)) {
+r40348 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r40177; });
-if ((s40176) == IMM(1)) {
-{ V dc = CH2(1, S40182(), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s40158, 1); V t1 = C2(1, FLD(s40159, 0), FLD(s40159, 1)); a0 = t0; a1 = t1; goto top; }
+r40348; });
+if ((s40347) == IMM(1)) {
+{ V dc = CH2(1, S40353(), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s40329, 1); V t1 = C2(1, FLD(s40330, 0), FLD(s40330, 1)); a0 = t0; a1 = t1; goto top; }
 }
-} else if ((s40176) == IMM(0)) {
-{ V t0 = FLD(s40158, 1); V t1 = C2(1, FLD(s40159, 0), FLD(s40159, 1)); a0 = t0; a1 = t1; goto top; }
+} else if ((s40347) == IMM(0)) {
+{ V t0 = FLD(s40329, 1); V t1 = C2(1, FLD(s40330, 0), FLD(s40330, 1)); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_J_deff_dargs(V a0, V a1) { V r; D_J_deff_dargs(&r, a0, a1); return r; }
 static V W_J_deff_dargs(V *a) { (void)a; return F_J_deff_dargs(a[0], a[1]); }
-static V S40184(void) { static V c; return STRC(c, "((a) => ("); }
-static V S40185(void) { static V c; return STRC(c, ")"); }
-static V S40187(void) { static V c; return STRC(c, "(a))"); }
+static V S40355(void) { static V c; return STRC(c, "((a) => ("); }
+static V S40356(void) { static V c; return STRC(c, ")"); }
+static V S40358(void) { static V c; return STRC(c, "(a))"); }
 static V F_J_deff_dwrap_dgo(V a0, V a1, V a2) {
 top:;
-V s40183 = (a2);
-if ((s40183) == IMM(1)) {
-return F_String_dappend(S40184(), F_String_dappend(a1, F_String_dappend(S40185(), F_String_dappend(F_J_deff_dnulls(a0), S40187()))));
-} else if ((s40183) == IMM(0)) {
+V s40354 = (a2);
+if ((s40354) == IMM(1)) {
+return F_String_dappend(S40355(), F_String_dappend(a1, F_String_dappend(S40356(), F_String_dappend(F_J_deff_dnulls(a0), S40358()))));
+} else if ((s40354) == IMM(0)) {
 return a1;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_deff_dwrap_dgo(V *a) { (void)a; return F_J_deff_dwrap_dgo(a[0], a[1], a[2]); }
-static V S40193(void) { static V c; return STRC(c, "(null)"); }
-static V S40196(void) { static V c; return STRC(c, ""); }
+static V S40364(void) { static V c; return STRC(c, "(null)"); }
+static V S40367(void) { static V c; return STRC(c, ""); }
 static V F_J_deff_dnulls(V a0) {
 top:;
-V s40192 = a0;
-if (IS_N(s40192, 1) && (FLD(s40192, 0)) == 64 && IS_N(FLD(s40192, 1), 1) && (FLD(FLD(s40192, 1), 0)) == 45) {
-return F_String_dappend(S40193(), F_J_deff_dnulls(FLD(FLD(s40192, 1), 1)));
+V s40363 = a0;
+if (IS_N(s40363, 1) && (FLD(s40363, 0)) == 64 && IS_N(FLD(s40363, 1), 1) && (FLD(FLD(s40363, 1), 0)) == 45) {
+return F_String_dappend(S40364(), F_J_deff_dnulls(FLD(FLD(s40363, 1), 1)));
 } else {
-return S40196();
+return S40367();
 }
 }
 static V W_J_deff_dnulls(V *a) { (void)a; return F_J_deff_dnulls(a[0]); }
-static V S40206(void) { static V c; return STRC(c, "null"); }
+static V S40377(void) { static V c; return STRC(c, "null"); }
 static V D_J_deff_dargs_x37s3580055888x2930167514(V *dst, V a0) {
 top:;
-V s40197 = a0;
-if ((s40197) == IMM(0)) {
+V s40368 = a0;
+if ((s40368) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s40197, 1)) {
-V s40198 = F_G_dkeep_x37u(FLD(FLD(s40197, 0), 0), FLD(FLD(s40197, 0), 1), FLD(FLD(s40197, 0), 2));
-if ((s40198) == IMM(1)) {
+} else if (IS_N(s40368, 1)) {
+V s40369 = F_G_dkeep_x37u(FLD(FLD(s40368, 0), 0), FLD(FLD(s40368, 0), 1), FLD(FLD(s40368, 0), 2));
+if ((s40369) == IMM(1)) {
 *dst = IMM(0);
 return 0;
-} else if ((s40198) == IMM(0)) {
-V s40200 = ({ V r40201;
-V s40202 = F_G_derased__ty(FLD(FLD(s40197, 0), 2));
-if ((s40202) == IMM(0)) {
-r40201 = IMM(0);
-} else if ((s40202) == IMM(1)) {
-V s40204 = F_U32_dis__eq(FLD(FLD(s40197, 0), 1), 1u);
-if ((s40204) == IMM(0)) {
-r40201 = IMM(1);
-} else if ((s40204) == IMM(1)) {
-r40201 = IMM(0);
+} else if ((s40369) == IMM(0)) {
+V s40371 = ({ V r40372;
+V s40373 = F_G_derased__ty(FLD(FLD(s40368, 0), 2));
+if ((s40373) == IMM(0)) {
+r40372 = IMM(0);
+} else if ((s40373) == IMM(1)) {
+V s40375 = F_U32_dis__eq(FLD(FLD(s40368, 0), 1), 1u);
+if ((s40375) == IMM(0)) {
+r40372 = IMM(1);
+} else if ((s40375) == IMM(1)) {
+r40372 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r40201; });
-if ((s40200) == IMM(1)) {
-{ V dc = CH2(1, S40206(), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s40197, 1); a0 = t0; goto top; }
+r40372; });
+if ((s40371) == IMM(1)) {
+{ V dc = CH2(1, S40377(), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s40368, 1); a0 = t0; goto top; }
 }
-} else if ((s40200) == IMM(0)) {
-{ V t0 = FLD(s40197, 1); a0 = t0; goto top; }
+} else if ((s40371) == IMM(0)) {
+{ V t0 = FLD(s40368, 1); a0 = t0; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -96175,81 +96607,81 @@ return 0;
 }
 static V F_J_deffs_dgo_x37n_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V a8) { V o[8]; U_J_deffs_dgo_x37n_x37u(a0, a1, a2, a3, a4, a5, a6, a7, a8, o); return CN(0, 8, o); }
 static V W_J_deffs_dgo_x37n_x37u(V *a) { (void)a; return F_J_deffs_dgo_x37n_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8]); }
-static V S40212(void) { static V c; return STRC(c, ".js"); }
+static V S40383(void) { static V c; return STRC(c, ".js"); }
 static V F_J_deffs_djs(V a0, V a1) {
 top:;
-V s40209 = a0;
-if ((s40209) == IMM(0)) {
+V s40380 = a0;
+if ((s40380) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s40209, 1)) {
-return F_J_deffs_djs_dif(FLD(s40209, 0), a1, F_J_deffs_djs(FLD(s40209, 1), a1), F_String_dstarts__with(F_String_dreverse_dgo(FLD(s40209, 0), IMM(0)), F_String_dreverse_dgo(S40212(), IMM(0))));
+} else if (IS_N(s40380, 1)) {
+return F_J_deffs_djs_dif(FLD(s40380, 0), a1, F_J_deffs_djs(FLD(s40380, 1), a1), F_String_dstarts__with(F_String_dreverse_dgo(FLD(s40380, 0), IMM(0)), F_String_dreverse_dgo(S40383(), IMM(0))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_deffs_djs(V *a) { (void)a; return F_J_deffs_djs(a[0], a[1]); }
-static V S40217(void) { static V c; return STRC(c, "\011"); }
+static V S40388(void) { static V c; return STRC(c, "\011"); }
 static V F_J_deffs_djs_dif(V a0, V a1, V a2, V a3) {
 top:;
-V s40216 = (a3);
-if ((s40216) == IMM(1)) {
-return C2(1, F_String_dappend(a0, F_String_dappend(S40217(), a1)), a2);
-} else if ((s40216) == IMM(0)) {
+V s40387 = (a3);
+if ((s40387) == IMM(1)) {
+return C2(1, F_String_dappend(a0, F_String_dappend(S40388(), a1)), a2);
+} else if ((s40387) == IMM(0)) {
 return a2;
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_deffs_djs_dif(V *a) { (void)a; return F_J_deffs_djs_dif(a[0], a[1], a[2], a[3]); }
-static V S40221(void) { static V c; return STRC(c, ""); }
-static V S40225(void) { static V c; return STRC(c, ""); }
-static V S40229(void) { static V c; return STRC(c, "_"); }
+static V S40392(void) { static V c; return STRC(c, ""); }
+static V S40396(void) { static V c; return STRC(c, ""); }
+static V S40400(void) { static V c; return STRC(c, "_"); }
 static V F_J_dhost_x37f4001462510x1467917856(V a0) {
 top:;
-V s40220 = a0;
-if ((s40220) == IMM(0)) {
-return S40221();
-} else if (IS_N(s40220, 1)) {
-V s40222 = C2(1, F_Char_dto__lower(FLD(s40220, 0)), F_String_dto__lower(FLD(s40220, 1)));
-if ((s40222) == IMM(0)) {
-return S40225();
-} else if (IS_N(s40222, 1)) {
-return F_String_dappend(({ V r40226;
-V s40227 = F_U32_dis__eq(FLD(s40222, 0), 46u);
-if ((s40227) == IMM(0)) {
-r40226 = C2(1, FLD(s40222, 0), IMM(0));
-} else if ((s40227) == IMM(1)) {
-r40226 = S40229();
+V s40391 = a0;
+if ((s40391) == IMM(0)) {
+return S40392();
+} else if (IS_N(s40391, 1)) {
+V s40393 = C2(1, F_Char_dto__lower(FLD(s40391, 0)), F_String_dto__lower(FLD(s40391, 1)));
+if ((s40393) == IMM(0)) {
+return S40396();
+} else if (IS_N(s40393, 1)) {
+return F_String_dappend(({ V r40397;
+V s40398 = F_U32_dis__eq(FLD(s40393, 0), 46u);
+if ((s40398) == IMM(0)) {
+r40397 = C2(1, FLD(s40393, 0), IMM(0));
+} else if ((s40398) == IMM(1)) {
+r40397 = S40400();
 } else { bend_fail("runtime fail-stop"); }
-r40226; }), F_J_dhost(FLD(s40222, 1)));
+r40397; }), F_J_dhost(FLD(s40393, 1)));
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dhost_x37f4001462510x1467917856(V *a) { (void)a; return F_J_dhost_x37f4001462510x1467917856(a[0]); }
-static V S40233(void) { static V c; return STRC(c, ""); }
-static V S40237(void) { static V c; return STRC(c, "_"); }
+static V S40404(void) { static V c; return STRC(c, ""); }
+static V S40408(void) { static V c; return STRC(c, "_"); }
 static V F_J_dhost(V a0) {
 top:;
-V s40232 = a0;
-if ((s40232) == IMM(0)) {
-return S40233();
-} else if (IS_N(s40232, 1)) {
-return F_String_dappend(({ V r40234;
-V s40235 = F_U32_dis__eq(FLD(s40232, 0), 46u);
-if ((s40235) == IMM(0)) {
-r40234 = C2(1, FLD(s40232, 0), IMM(0));
-} else if ((s40235) == IMM(1)) {
-r40234 = S40237();
+V s40403 = a0;
+if ((s40403) == IMM(0)) {
+return S40404();
+} else if (IS_N(s40403, 1)) {
+return F_String_dappend(({ V r40405;
+V s40406 = F_U32_dis__eq(FLD(s40403, 0), 46u);
+if ((s40406) == IMM(0)) {
+r40405 = C2(1, FLD(s40403, 0), IMM(0));
+} else if ((s40406) == IMM(1)) {
+r40405 = S40408();
 } else { bend_fail("runtime fail-stop"); }
-r40234; }), F_J_dhost(FLD(s40232, 1)));
+r40405; }), F_J_dhost(FLD(s40403, 1)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dhost(V *a) { (void)a; return F_J_dhost(a[0]); }
 static V D_String_dto__lower(V *dst, V a0) {
 top:;
-V s40240 = a0;
-if ((s40240) == IMM(0)) {
+V s40411 = a0;
+if ((s40411) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s40240, 1)) {
-{ V dc = CH2(1, F_Char_dto__lower(FLD(s40240, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s40240, 1); a0 = t0; goto top; }
+} else if (IS_N(s40411, 1)) {
+{ V dc = CH2(1, F_Char_dto__lower(FLD(s40411, 0)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s40411, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -96257,71 +96689,71 @@ static V F_String_dto__lower(V a0) { V r; D_String_dto__lower(&r, a0); return r;
 static V W_String_dto__lower(V *a) { (void)a; return F_String_dto__lower(a[0]); }
 static V F_Char_dto__lower(V a0) {
 top:;
-V s40242 = (a0);
+V s40413 = (a0);
 {
-return F_U32_dadd(s40242, F_U32_dmul(({ uint32_t r40243;
-V s40244 = F_Char_dis__upper(s40242);
-if ((s40244) == IMM(0)) {
-r40243 = 0u;
-} else if ((s40244) == IMM(1)) {
-r40243 = 1u;
+return F_U32_dadd(s40413, F_U32_dmul(({ uint32_t r40414;
+V s40415 = F_Char_dis__upper(s40413);
+if ((s40415) == IMM(0)) {
+r40414 = 0u;
+} else if ((s40415) == IMM(1)) {
+r40414 = 1u;
 } else { bend_fail("runtime fail-stop"); }
-r40243; }), 32u));
+r40414; }), 32u));
 }
 }
 static V W_Char_dto__lower(V *a) { (void)a; return F_Char_dto__lower(a[0]); }
 static V F_J_ddef_dnative_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7) {
 top:;
-V s40248 = (a7);
-if ((s40248) == IMM(1)) {
+V s40419 = (a7);
+if ((s40419) == IMM(1)) {
 return F_J_dwrapper(a1, a2);
-} else if ((s40248) == IMM(0)) {
+} else if ((s40419) == IMM(0)) {
 return F_J_ddef_dbody_x37u(a0, a1, a2, a3, a4, a5, a6);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_ddef_dnative_x37u(V *a) { (void)a; return F_J_ddef_dnative_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7]); }
-static V S40254(void) { static V c; return STRC(c, "Nat"); }
-static V S40261(void) { static V c; return STRC(c, "function "); }
-static V S40262(void) { static V c; return STRC(c, "F_"); }
-static V S40265(void) { static V c; return STRC(c, "("); }
-static V S40266(void) { static V c; return STRC(c, ", "); }
-static V S40268(void) { static V c; return STRC(c, ") {\012top: for (;;) {\012"); }
-static V K40275(void) { static V c; return KONST(c, C2(1, C1(1, MKS("}\012}\012")), IMM(0))); }
-static V L40257(V *a) {
-V v40258 = apply(a[3], a[4]);
-V v40259 = FLD(v40258, 1);
-return apply(F_J_dwrapper(a[2], a[1]), CN(0, 7, (V[]){FLD(v40259, 0), FLD(v40259, 1), C2(2, FLD(v40259, 2), F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40261(), F_String_dappend(F_String_dappend(S40262(), F_Gen_dmangle(a[2])), F_String_dappend(S40265(), F_String_dappend(F_String_djoin(a[0], S40266()), F_String_dappend(S40268(), F_J_dloop_dhead(a[0]))))))), C2(1, FLD(v40258, 0), K40275())))), FLD(v40259, 3), FLD(v40259, 4), FLD(v40259, 5), FLD(v40259, 6)}));
+static V S40425(void) { static V c; return STRC(c, "Nat"); }
+static V S40432(void) { static V c; return STRC(c, "function "); }
+static V S40433(void) { static V c; return STRC(c, "F_"); }
+static V S40436(void) { static V c; return STRC(c, "("); }
+static V S40437(void) { static V c; return STRC(c, ", "); }
+static V S40439(void) { static V c; return STRC(c, ") {\012top: for (;;) {\012"); }
+static V K40446(void) { static V c; return KONST(c, C2(1, C1(1, MKS("}\012}\012")), IMM(0))); }
+static V L40428(V *a) {
+V v40429 = apply(a[3], a[4]);
+V v40430 = FLD(v40429, 1);
+return apply(F_J_dwrapper(a[2], a[1]), CN(0, 7, (V[]){FLD(v40430, 0), FLD(v40430, 1), C2(2, FLD(v40430, 2), F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40432(), F_String_dappend(F_String_dappend(S40433(), F_Gen_dmangle(a[2])), F_String_dappend(S40436(), F_String_dappend(F_String_djoin(a[0], S40437()), F_String_dappend(S40439(), F_J_dloop_dhead(a[0]))))))), C2(1, FLD(v40429, 0), K40446())))), FLD(v40430, 3), FLD(v40430, 4), FLD(v40430, 5), FLD(v40430, 6)}));
 }
 static V F_J_ddef_dbody_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6) {
 top:;
-V v40251 = F_J_dgo(F_U32_dto__nat(4000000000u), CN(31, 5, (V[]){a0, F_J_dloop_denv(a5), C3(0, a1, a2, a4), IMM(0), F_R_dops(a3, S40254())}));
-return mk_clo(L40257, 5, 4, (V[]){a4, a2, a1, v40251});
+V v40422 = F_J_dgo(F_U32_dto__nat(4000000000u), CN(31, 5, (V[]){a0, F_J_dloop_denv(a5), C3(0, a1, a2, a4), IMM(0), F_R_dops(a3, S40425())}));
+return mk_clo(L40428, 5, 4, (V[]){a4, a2, a1, v40422});
 }
 static V W_J_ddef_dbody_x37u(V *a) { (void)a; return F_J_ddef_dbody_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6]); }
-static V S40278(void) { static V c; return STRC(c, ""); }
-static V S40279(void) { static V c; return STRC(c, "const "); }
-static V S40281(void) { static V c; return STRC(c, ", "); }
-static V S40283(void) { static V c; return STRC(c, ";\012"); }
+static V S40449(void) { static V c; return STRC(c, ""); }
+static V S40450(void) { static V c; return STRC(c, "const "); }
+static V S40452(void) { static V c; return STRC(c, ", "); }
+static V S40454(void) { static V c; return STRC(c, ";\012"); }
 static V F_J_dloop_dhead(V a0) {
 top:;
-V s40277 = a0;
-if ((s40277) == IMM(0)) {
-return S40278();
-} else if (IS_N(s40277, 1)) {
-return F_String_dappend(S40279(), F_String_dappend(F_String_djoin(F_J_dloop_dcopies(a0), S40281()), S40283()));
+V s40448 = a0;
+if ((s40448) == IMM(0)) {
+return S40449();
+} else if (IS_N(s40448, 1)) {
+return F_String_dappend(S40450(), F_String_dappend(F_String_djoin(F_J_dloop_dcopies(a0), S40452()), S40454()));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dloop_dhead(V *a) { (void)a; return F_J_dloop_dhead(a[0]); }
-static V S40288(void) { static V c; return STRC(c, " = "); }
+static V S40459(void) { static V c; return STRC(c, " = "); }
 static V D_J_dloop_dcopies(V *dst, V a0) {
 top:;
-V s40286 = a0;
-if ((s40286) == IMM(0)) {
+V s40457 = a0;
+if ((s40457) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s40286, 1)) {
-{ V dc = CH2(1, F_String_dappend(F_J_dloop_dv(FLD(s40286, 0)), F_String_dappend(S40288(), FLD(s40286, 0))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s40286, 1); a0 = t0; goto top; }
+} else if (IS_N(s40457, 1)) {
+{ V dc = CH2(1, F_String_dappend(F_J_dloop_dv(FLD(s40457, 0)), F_String_dappend(S40459(), FLD(s40457, 0))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s40457, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -96329,675 +96761,675 @@ static V F_J_dloop_dcopies(V a0) { V r; D_J_dloop_dcopies(&r, a0); return r; }
 static V W_J_dloop_dcopies(V *a) { (void)a; return F_J_dloop_dcopies(a[0]); }
 static V F_J_dloop_dv(V a0) {
 top:;
-V s40291 = a0;
-if (IS_N(s40291, 1) && (FLD(s40291, 0)) == 97) {
-return C2(1, 99u, FLD(s40291, 1));
-} else if (IS_N(s40291, 1) && (FLD(s40291, 0)) == 40 && IS_N(FLD(s40291, 1), 1) && (FLD(FLD(s40291, 1), 0)) == 97) {
-return C2(1, 40u, C2(1, 99u, FLD(FLD(s40291, 1), 1)));
+V s40462 = a0;
+if (IS_N(s40462, 1) && (FLD(s40462, 0)) == 97) {
+return C2(1, 99u, FLD(s40462, 1));
+} else if (IS_N(s40462, 1) && (FLD(s40462, 0)) == 40 && IS_N(FLD(s40462, 1), 1) && (FLD(FLD(s40462, 1), 0)) == 97) {
+return C2(1, 40u, C2(1, 99u, FLD(FLD(s40462, 1), 1)));
 } else {
-return s40291;
+return s40462;
 }
 }
 static V W_J_dloop_dv(V *a) { (void)a; return F_J_dloop_dv(a[0]); }
 static V D_J_dloop_denv(V *dst, V a0) {
 top:;
-V s40292 = a0;
-if ((s40292) == IMM(0)) {
+V s40463 = a0;
+if ((s40463) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s40292, 1)) {
-{ V dc = CH2(1, C2(0, FLD(FLD(s40292, 0), 0), F_J_dloop_dv(FLD(FLD(s40292, 0), 1))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s40292, 1); a0 = t0; goto top; }
+} else if (IS_N(s40463, 1)) {
+{ V dc = CH2(1, C2(0, FLD(FLD(s40463, 0), 0), F_J_dloop_dv(FLD(FLD(s40463, 0), 1))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s40463, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_J_dloop_denv(V a0) { V r; D_J_dloop_denv(&r, a0); return r; }
 static V W_J_dloop_denv(V *a) { (void)a; return F_J_dloop_denv(a[0]); }
-static V K40324(void) { static V c; return KONST(c, C2(0, IMM(0), IMM(0))); }
-static V L40331(V *a) {
+static V K40495(void) { static V c; return KONST(c, C2(0, IMM(0), IMM(0))); }
+static V L40502(V *a) {
 return C2(0, IMM(0), a[0]);
 }
-static V L40334(V *a) {
-V v40335 = apply(a[4], a[5]);
-V v40336 = apply(F_J_dgo(a[3], C3(0, a[2], a[1], a[0])), FLD(v40335, 1));
-return C2(0, C2(1, FLD(v40335, 0), FLD(v40336, 0)), FLD(v40336, 1));
+static V L40505(V *a) {
+V v40506 = apply(a[4], a[5]);
+V v40507 = apply(F_J_dgo(a[3], C3(0, a[2], a[1], a[0])), FLD(v40506, 1));
+return C2(0, C2(1, FLD(v40506, 0), FLD(v40507, 0)), FLD(v40507, 1));
 }
-static V K40345(void) { static V c; return KONST(c, C1(1, MKS("word_con("))); }
-static V K40346(void) { static V c; return KONST(c, C1(1, MKS(", "))); }
-static V K40347(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
-static V L40341(V *a) {
-V v40342 = apply(a[4], a[5]);
-V v40343 = apply(F_J_dgo(a[3], C3(3, a[2], a[1], a[0])), FLD(v40342, 1));
-return C2(0, F_Doc_dlist(C2(1, K40345(), C2(1, FLD(v40342, 0), C2(1, K40346(), C2(1, FLD(v40343, 0), K40347()))))), FLD(v40343, 1));
+static V K40516(void) { static V c; return KONST(c, C1(1, MKS("word_con("))); }
+static V K40517(void) { static V c; return KONST(c, C1(1, MKS(", "))); }
+static V K40518(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
+static V L40512(V *a) {
+V v40513 = apply(a[4], a[5]);
+V v40514 = apply(F_J_dgo(a[3], C3(3, a[2], a[1], a[0])), FLD(v40513, 1));
+return C2(0, F_Doc_dlist(C2(1, K40516(), C2(1, FLD(v40513, 0), C2(1, K40517(), C2(1, FLD(v40514, 0), K40518()))))), FLD(v40514, 1));
 }
-static V K40351(void) { static V c; return KONST(c, C1(1, MKS("0"))); }
-static V L40350(V *a) {
-return C2(0, K40351(), a[0]);
+static V K40522(void) { static V c; return KONST(c, C1(1, MKS("0"))); }
+static V L40521(V *a) {
+return C2(0, K40522(), a[0]);
 }
-static V L40357(V *a) {
-V v40358 = apply(a[0], a[1]);
-return C2(0, C2(1, FLD(v40358, 0), IMM(0)), FLD(v40358, 1));
+static V L40528(V *a) {
+V v40529 = apply(a[0], a[1]);
+return C2(0, C2(1, FLD(v40529, 0), IMM(0)), FLD(v40529, 1));
 }
-static V S40361(void) { static V c; return STRC(c, "unknown constructor: "); }
-static V L40364(V *a) {
-V v40365 = a[1];
-return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v40365, 0), FLD(v40365, 1), FLD(v40365, 2), FLD(v40365, 3), C2(1, a[0], FLD(v40365, 4)), FLD(v40365, 5), FLD(v40365, 6)}));
+static V S40532(void) { static V c; return STRC(c, "unknown constructor: "); }
+static V L40535(V *a) {
+V v40536 = a[1];
+return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v40536, 0), FLD(v40536, 1), FLD(v40536, 2), FLD(v40536, 3), C2(1, a[0], FLD(v40536, 4)), FLD(v40536, 5), FLD(v40536, 6)}));
 }
-static V K40368(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
-static V L40366(V *a) {
-V v40367 = apply(a[0], a[1]);
-return C2(0, K40368(), FLD(v40367, 1));
+static V K40539(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
+static V L40537(V *a) {
+V v40538 = apply(a[0], a[1]);
+return C2(0, K40539(), FLD(v40538, 1));
 }
-static V K40370(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("F32"), IMM(0)))); }
-static V L40373(V *a) {
-V v40374 = apply(a[3], a[4]);
-return C2(0, F_J_dctor_dkind(F_J_dkind(a[2]), a[1], a[0], FLD(v40374, 0)), FLD(v40374, 1));
+static V K40541(void) { static V c; return KONST(c, C2(1, MKS("U32"), C2(1, MKS("F32"), IMM(0)))); }
+static V L40544(V *a) {
+V v40545 = apply(a[3], a[4]);
+return C2(0, F_J_dctor_dkind(F_J_dkind(a[2]), a[1], a[0], FLD(v40545, 0)), FLD(v40545, 1));
 }
-static V S40384(void) { static V c; return STRC(c, "F_"); }
-static V S40387(void) { static V c; return STRC(c, "("); }
-static V S40389(void) { static V c; return STRC(c, ", "); }
-static V K40391(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
-static V L40380(V *a) {
-V v40381 = apply(a[5], a[6]);
-V v40382 = apply(F_J_dgo(a[4], C3(0, a[3], a[2], a[1])), FLD(v40381, 1));
-return C2(0, F_J_dapply(FLD(v40382, 0), F_Doc_dlist(C2(1, C1(1, F_String_dappend(F_String_dappend(S40384(), F_Gen_dmangle(a[0])), S40387())), C2(1, F_Doc_dsep(FLD(v40381, 0), S40389()), K40391())))), FLD(v40382, 1));
+static V S40555(void) { static V c; return STRC(c, "F_"); }
+static V S40558(void) { static V c; return STRC(c, "("); }
+static V S40560(void) { static V c; return STRC(c, ", "); }
+static V K40562(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
+static V L40551(V *a) {
+V v40552 = apply(a[5], a[6]);
+V v40553 = apply(F_J_dgo(a[4], C3(0, a[3], a[2], a[1])), FLD(v40552, 1));
+return C2(0, F_J_dapply(FLD(v40553, 0), F_Doc_dlist(C2(1, C1(1, F_String_dappend(F_String_dappend(S40555(), F_Gen_dmangle(a[0])), S40558())), C2(1, F_Doc_dsep(FLD(v40552, 0), S40560()), K40562())))), FLD(v40553, 1));
 }
-static V S40398(void) { static V c; return STRC(c, "W_"); }
-static V L40396(V *a) {
-V v40397 = apply(a[1], a[2]);
-return C2(0, F_J_dapply(FLD(v40397, 0), C1(1, F_String_dappend(S40398(), F_Gen_dmangle(a[0])))), FLD(v40397, 1));
+static V S40569(void) { static V c; return STRC(c, "W_"); }
+static V L40567(V *a) {
+V v40568 = apply(a[1], a[2]);
+return C2(0, F_J_dapply(FLD(v40568, 0), C1(1, F_String_dappend(S40569(), F_Gen_dmangle(a[0])))), FLD(v40568, 1));
 }
-static V K40405(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
-static V L40404(V *a) {
-return C2(0, K40405(), a[0]);
+static V K40576(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
+static V L40575(V *a) {
+return C2(0, K40576(), a[0]);
 }
-static V S40407(void) { static V c; return STRC(c, "unknown function: "); }
-static V L40410(V *a) {
-V v40411 = a[1];
-return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v40411, 0), FLD(v40411, 1), FLD(v40411, 2), FLD(v40411, 3), C2(1, a[0], FLD(v40411, 4)), FLD(v40411, 5), FLD(v40411, 6)}));
+static V S40578(void) { static V c; return STRC(c, "unknown function: "); }
+static V L40581(V *a) {
+V v40582 = a[1];
+return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v40582, 0), FLD(v40582, 1), FLD(v40582, 2), FLD(v40582, 3), C2(1, a[0], FLD(v40582, 4)), FLD(v40582, 5), FLD(v40582, 6)}));
 }
-static V K40414(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
-static V L40412(V *a) {
-V v40413 = apply(a[0], a[1]);
-return C2(0, K40414(), FLD(v40413, 1));
+static V K40585(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
+static V L40583(V *a) {
+V v40584 = apply(a[0], a[1]);
+return C2(0, K40585(), FLD(v40584, 1));
 }
-static V L40415(V *a) {
-V v40416 = a[5];
-return apply(F_J_dgo(a[4], C4(7, a[3], a[2], a[1], a[0])), CN(0, 7, (V[]){FLD(v40416, 0), FLD(v40416, 1), FLD(v40416, 2), C2(1, a[1], FLD(v40416, 3)), FLD(v40416, 4), FLD(v40416, 5), FLD(v40416, 6)}));
+static V L40586(V *a) {
+V v40587 = a[5];
+return apply(F_J_dgo(a[4], C4(7, a[3], a[2], a[1], a[0])), CN(0, 7, (V[]){FLD(v40587, 0), FLD(v40587, 1), FLD(v40587, 2), C2(1, a[1], FLD(v40587, 3)), FLD(v40587, 4), FLD(v40587, 5), FLD(v40587, 6)}));
 }
-static V K40427(void) { static V c; return KONST(c, C1(1, MKS("("))); }
-static V K40428(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
-static V L40423(V *a) {
-V v40424 = apply(a[4], a[5]);
-V v40425 = apply(F_J_dgo(a[3], C3(0, a[2], a[1], a[0])), FLD(v40424, 1));
-return C2(0, F_J_dapply(FLD(v40425, 0), F_Doc_dlist(C2(1, K40427(), C2(1, FLD(v40424, 0), K40428())))), FLD(v40425, 1));
+static V K40598(void) { static V c; return KONST(c, C1(1, MKS("("))); }
+static V K40599(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
+static V L40594(V *a) {
+V v40595 = apply(a[4], a[5]);
+V v40596 = apply(F_J_dgo(a[3], C3(0, a[2], a[1], a[0])), FLD(v40595, 1));
+return C2(0, F_J_dapply(FLD(v40596, 0), F_Doc_dlist(C2(1, K40598(), C2(1, FLD(v40595, 0), K40599())))), FLD(v40596, 1));
 }
-static V K40438(void) { static V c; return KONST(c, C1(1, MKS("0"))); }
-static V L40437(V *a) {
-return C2(0, K40438(), a[0]);
+static V K40609(void) { static V c; return KONST(c, C1(1, MKS("0"))); }
+static V L40608(V *a) {
+return C2(0, K40609(), a[0]);
 }
-static V S40444(void) { static V c; return STRC(c, "%gpu"); }
-static V K40447(void) { static V c; return KONST(c, C3(0, MKS(""), IMM(0), IMM(0))); }
-static V K40451(void) { static V c; return KONST(c, C1(1, MKS("(() => {\012"))); }
-static V K40452(void) { static V c; return KONST(c, C2(1, C1(1, MKS("})()")), IMM(0))); }
-static V L40449(V *a) {
-V v40450 = apply(a[0], a[1]);
-return C2(0, F_Doc_dlist(C2(1, K40451(), C2(1, FLD(v40450, 0), K40452()))), FLD(v40450, 1));
+static V S40615(void) { static V c; return STRC(c, "%gpu"); }
+static V K40618(void) { static V c; return KONST(c, C3(0, MKS(""), IMM(0), IMM(0))); }
+static V K40622(void) { static V c; return KONST(c, C1(1, MKS("(() => {\012"))); }
+static V K40623(void) { static V c; return KONST(c, C2(1, C1(1, MKS("})()")), IMM(0))); }
+static V L40620(V *a) {
+V v40621 = apply(a[0], a[1]);
+return C2(0, F_Doc_dlist(C2(1, K40622(), C2(1, FLD(v40621, 0), K40623()))), FLD(v40621, 1));
 }
-static V L40459(V *a) {
+static V L40630(V *a) {
 return C2(0, C1(1, F_U32_dshow_dif(a[0], F_U32_dis__zero(a[0]))), a[1]);
 }
-static V S40465(void) { static V c; return STRC(c, "n"); }
-static V L40462(V *a) {
-return C2(0, C1(1, F_String_dappend(F_U32_dshow_dif(a[0], F_U32_dis__zero(a[0])), S40465())), a[1]);
+static V S40636(void) { static V c; return STRC(c, "n"); }
+static V L40633(V *a) {
+return C2(0, C1(1, F_String_dappend(F_U32_dshow_dif(a[0], F_U32_dis__zero(a[0])), S40636())), a[1]);
 }
-static V L40467(V *a) {
+static V L40638(V *a) {
 return C2(0, C1(1, F_J_dflt_dof(a[0], F_F32_dread(a[0]))), a[1]);
 }
-static V S40471(void) { static V c; return STRC(c, "\042"); }
-static V S40473(void) { static V c; return STRC(c, "\042"); }
-static V L40470(V *a) {
-return C2(0, C1(1, F_String_dappend(S40471(), F_String_dappend(F_J_dlit(a[0]), S40473()))), a[1]);
+static V S40642(void) { static V c; return STRC(c, "\042"); }
+static V S40644(void) { static V c; return STRC(c, "\042"); }
+static V L40641(V *a) {
+return C2(0, C1(1, F_String_dappend(S40642(), F_String_dappend(F_J_dlit(a[0]), S40644()))), a[1]);
 }
-static V K40483(void) { static V c; return KONST(c, C1(1, MKS("nat_chk(("))); }
-static V S40484(void) { static V c; return STRC(c, ") + "); }
-static V S40487(void) { static V c; return STRC(c, "n)"); }
-static V L40481(V *a) {
-V v40482 = apply(a[1], a[2]);
-return C2(0, F_Doc_dlist(C2(1, K40483(), C2(1, FLD(v40482, 0), C2(1, C1(1, F_String_dappend(S40484(), F_String_dappend(F_U32_dshow_dif(a[0], F_U32_dis__zero(a[0])), S40487()))), IMM(0))))), FLD(v40482, 1));
+static V K40654(void) { static V c; return KONST(c, C1(1, MKS("nat_chk(("))); }
+static V S40655(void) { static V c; return STRC(c, ") + "); }
+static V S40658(void) { static V c; return STRC(c, "n)"); }
+static V L40652(V *a) {
+V v40653 = apply(a[1], a[2]);
+return C2(0, F_Doc_dlist(C2(1, K40654(), C2(1, FLD(v40653, 0), C2(1, C1(1, F_String_dappend(S40655(), F_String_dappend(F_U32_dshow_dif(a[0], F_U32_dis__zero(a[0])), S40658()))), IMM(0))))), FLD(v40653, 1));
 }
-static V K40492(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
-static V L40491(V *a) {
-return C2(0, K40492(), a[0]);
+static V K40663(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
+static V L40662(V *a) {
+return C2(0, K40663(), a[0]);
 }
-static V S40494(void) { static V c; return STRC(c, "parse error: "); }
-static V L40497(V *a) {
-V v40498 = a[1];
-return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v40498, 0), FLD(v40498, 1), FLD(v40498, 2), FLD(v40498, 3), C2(1, a[0], FLD(v40498, 4)), FLD(v40498, 5), FLD(v40498, 6)}));
+static V S40665(void) { static V c; return STRC(c, "parse error: "); }
+static V L40668(V *a) {
+V v40669 = a[1];
+return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v40669, 0), FLD(v40669, 1), FLD(v40669, 2), FLD(v40669, 3), C2(1, a[0], FLD(v40669, 4)), FLD(v40669, 5), FLD(v40669, 6)}));
 }
-static V K40501(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
-static V L40499(V *a) {
-V v40500 = apply(a[0], a[1]);
-return C2(0, K40501(), FLD(v40500, 1));
+static V K40672(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
+static V L40670(V *a) {
+V v40671 = apply(a[0], a[1]);
+return C2(0, K40672(), FLD(v40671, 1));
 }
-static V S40503(void) { static V c; return STRC(c, "unexpected expression: "); }
-static V S40506(void) { static V c; return STRC(c, ""); }
-static V L40510(V *a) {
-V v40511 = a[1];
-return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v40511, 0), FLD(v40511, 1), FLD(v40511, 2), FLD(v40511, 3), C2(1, a[0], FLD(v40511, 4)), FLD(v40511, 5), FLD(v40511, 6)}));
+static V S40674(void) { static V c; return STRC(c, "unexpected expression: "); }
+static V S40677(void) { static V c; return STRC(c, ""); }
+static V L40681(V *a) {
+V v40682 = a[1];
+return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v40682, 0), FLD(v40682, 1), FLD(v40682, 2), FLD(v40682, 3), C2(1, a[0], FLD(v40682, 4)), FLD(v40682, 5), FLD(v40682, 6)}));
 }
-static V K40514(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
-static V L40512(V *a) {
-V v40513 = apply(a[0], a[1]);
-return C2(0, K40514(), FLD(v40513, 1));
+static V K40685(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
+static V L40683(V *a) {
+V v40684 = apply(a[0], a[1]);
+return C2(0, K40685(), FLD(v40684, 1));
 }
-static V S40522(void) { static V c; return STRC(c, "q"); }
-static V K40530(void) { static V c; return KONST(c, C2(0, IMM(0), IMM(0))); }
-static V K40533(void) { static V c; return KONST(c, C3(0, MKS(""), IMM(0), IMM(0))); }
-static V S40535(void) { static V c; return STRC(c, "(("); }
-static V S40536(void) { static V c; return STRC(c, ") => {\012"); }
-static V K40539(void) { static V c; return KONST(c, C2(1, C1(1, MKS("})")), IMM(0))); }
-static V L40515(V *a) {
-V v40516 = a[5];
-V uo40517[8]; U_Gen_dfresh_dgo_x37n_x37u(FLD(v40516, 0), FLD(v40516, 1), FLD(v40516, 2), FLD(v40516, 3), FLD(v40516, 4), FLD(v40516, 5), FLD(v40516, 6), uo40517);
-V s40519 = uo40517[0];
-V s40520 = CN(0, 7, (V[]){uo40517[1], uo40517[2], uo40517[3], uo40517[4], uo40517[5], uo40517[6], uo40517[7]});
+static V S40693(void) { static V c; return STRC(c, "q"); }
+static V K40701(void) { static V c; return KONST(c, C2(0, IMM(0), IMM(0))); }
+static V K40704(void) { static V c; return KONST(c, C3(0, MKS(""), IMM(0), IMM(0))); }
+static V S40706(void) { static V c; return STRC(c, "(("); }
+static V S40707(void) { static V c; return STRC(c, ") => {\012"); }
+static V K40710(void) { static V c; return KONST(c, C2(1, C1(1, MKS("})")), IMM(0))); }
+static V L40686(V *a) {
+V v40687 = a[5];
+V uo40688[8]; U_Gen_dfresh_dgo_x37n_x37u(FLD(v40687, 0), FLD(v40687, 1), FLD(v40687, 2), FLD(v40687, 3), FLD(v40687, 4), FLD(v40687, 5), FLD(v40687, 6), uo40688);
+V s40690 = uo40688[0];
+V s40691 = CN(0, 7, (V[]){uo40688[1], uo40688[2], uo40688[3], uo40688[4], uo40688[5], uo40688[6], uo40688[7]});
 {
-V v40521 = F_String_dappend(S40522(), F_U32_dshow_dif(s40519, F_U32_dis__zero(s40519)));
-V v40526 = apply(F_J_dgo(a[4], CN(31, 5, (V[]){a[3], F_List_dappend(0, ({ V r40527;
-V v40528 = F_J_dpat_dgo(F_U32_dto__nat(4000000000u), C4(8, a[3], a[2], v40521, K40530()));
-r40527 = FLD(v40528, 1);
-r40527; }), a[1]), K40533(), IMM(0), a[0]})), s40520);
-return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40535(), F_String_dappend(v40521, S40536()))), C2(1, FLD(v40526, 0), K40539()))), FLD(v40526, 1));
+V v40692 = F_String_dappend(S40693(), F_U32_dshow_dif(s40690, F_U32_dis__zero(s40690)));
+V v40697 = apply(F_J_dgo(a[4], CN(31, 5, (V[]){a[3], F_List_dappend(0, ({ V r40698;
+V v40699 = F_J_dpat_dgo(F_U32_dto__nat(4000000000u), C4(8, a[3], a[2], v40692, K40701()));
+r40698 = FLD(v40699, 1);
+r40698; }), a[1]), K40704(), IMM(0), a[0]})), s40691);
+return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40706(), F_String_dappend(v40692, S40707()))), C2(1, FLD(v40697, 0), K40710()))), FLD(v40697, 1));
 }
 }
-static V K40546(void) { static V c; return KONST(c, C1(1, MKS("{ "))); }
-static V K40549(void) { static V c; return KONST(c, C2(1, C1(1, MKS("continue top; }\012")), IMM(0))); }
-static V L40544(V *a) {
-V v40545 = apply(a[1], a[2]);
-return C2(0, F_Doc_dlist(C2(1, K40546(), C2(1, F_J_dtail_dtemps(FLD(v40545, 0), 0u), C2(1, F_Gen_dtail_dassign(a[0], 0u), K40549())))), FLD(v40545, 1));
+static V K40717(void) { static V c; return KONST(c, C1(1, MKS("{ "))); }
+static V K40720(void) { static V c; return KONST(c, C2(1, C1(1, MKS("continue top; }\012")), IMM(0))); }
+static V L40715(V *a) {
+V v40716 = apply(a[1], a[2]);
+return C2(0, F_Doc_dlist(C2(1, K40717(), C2(1, F_J_dtail_dtemps(FLD(v40716, 0), 0u), C2(1, F_Gen_dtail_dassign(a[0], 0u), K40720())))), FLD(v40716, 1));
 }
-static V L40556(V *a) {
-V v40557 = apply(a[1], a[2]);
-return C2(0, F_J_dret(a[0], FLD(v40557, 0)), FLD(v40557, 1));
+static V L40727(V *a) {
+V v40728 = apply(a[1], a[2]);
+return C2(0, F_J_dret(a[0], FLD(v40728, 0)), FLD(v40728, 1));
 }
-static V K40566(void) { static V c; return KONST(c, C1(1, MKS(";\012"))); }
-static V L40562(V *a) {
-V v40563 = apply(a[6], a[7]);
-V v40564 = apply(F_J_dgo(a[5], CN(31, 5, (V[]){a[4], a[3], a[2], a[1], a[0]})), FLD(v40563, 1));
-return C2(0, F_Doc_dlist(C2(1, FLD(v40563, 0), C2(1, K40566(), C2(1, FLD(v40564, 0), IMM(0))))), FLD(v40564, 1));
+static V K40737(void) { static V c; return KONST(c, C1(1, MKS(";\012"))); }
+static V L40733(V *a) {
+V v40734 = apply(a[6], a[7]);
+V v40735 = apply(F_J_dgo(a[5], CN(31, 5, (V[]){a[4], a[3], a[2], a[1], a[0]})), FLD(v40734, 1));
+return C2(0, F_Doc_dlist(C2(1, FLD(v40734, 0), C2(1, K40737(), C2(1, FLD(v40735, 0), IMM(0))))), FLD(v40735, 1));
 }
-static V S40575(void) { static V c; return STRC(c, "v"); }
-static V S40583(void) { static V c; return STRC(c, "const "); }
-static V S40584(void) { static V c; return STRC(c, " = "); }
-static V K40587(void) { static V c; return KONST(c, C1(1, MKS(";\012"))); }
-static V L40568(V *a) {
-V v40569 = a[8];
-V uo40570[8]; U_Gen_dfresh_dgo_x37n_x37u(FLD(v40569, 0), FLD(v40569, 1), FLD(v40569, 2), FLD(v40569, 3), FLD(v40569, 4), FLD(v40569, 5), FLD(v40569, 6), uo40570);
-V s40572 = uo40570[0];
-V s40573 = CN(0, 7, (V[]){uo40570[1], uo40570[2], uo40570[3], uo40570[4], uo40570[5], uo40570[6], uo40570[7]});
+static V S40746(void) { static V c; return STRC(c, "v"); }
+static V S40754(void) { static V c; return STRC(c, "const "); }
+static V S40755(void) { static V c; return STRC(c, " = "); }
+static V K40758(void) { static V c; return KONST(c, C1(1, MKS(";\012"))); }
+static V L40739(V *a) {
+V v40740 = a[8];
+V uo40741[8]; U_Gen_dfresh_dgo_x37n_x37u(FLD(v40740, 0), FLD(v40740, 1), FLD(v40740, 2), FLD(v40740, 3), FLD(v40740, 4), FLD(v40740, 5), FLD(v40740, 6), uo40741);
+V s40743 = uo40741[0];
+V s40744 = CN(0, 7, (V[]){uo40741[1], uo40741[2], uo40741[3], uo40741[4], uo40741[5], uo40741[6], uo40741[7]});
 {
-V v40574 = F_String_dappend(S40575(), F_U32_dshow_dif(s40572, F_U32_dis__zero(s40572)));
-V v40579 = apply(F_J_dgo(a[7], C3(16, a[6], a[5], a[4])), s40573);
-V v40581 = apply(F_J_dgo(a[7], CN(31, 5, (V[]){a[6], C2(1, C2(0, a[3], v40574), a[5]), a[2], a[1], a[0]})), FLD(v40579, 1));
-return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40583(), F_String_dappend(v40574, S40584()))), C2(1, FLD(v40579, 0), C2(1, K40587(), C2(1, FLD(v40581, 0), IMM(0)))))), FLD(v40581, 1));
+V v40745 = F_String_dappend(S40746(), F_U32_dshow_dif(s40743, F_U32_dis__zero(s40743)));
+V v40750 = apply(F_J_dgo(a[7], C3(16, a[6], a[5], a[4])), s40744);
+V v40752 = apply(F_J_dgo(a[7], CN(31, 5, (V[]){a[6], C2(1, C2(0, a[3], v40745), a[5]), a[2], a[1], a[0]})), FLD(v40750, 1));
+return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40754(), F_String_dappend(v40745, S40755()))), C2(1, FLD(v40750, 0), C2(1, K40758(), C2(1, FLD(v40752, 0), IMM(0)))))), FLD(v40752, 1));
 }
 }
-static V S40596(void) { static V c; return STRC(c, "v"); }
-static V K40606(void) { static V c; return KONST(c, C2(0, IMM(0), IMM(0))); }
-static V S40610(void) { static V c; return STRC(c, "const "); }
-static V S40611(void) { static V c; return STRC(c, " = "); }
-static V K40614(void) { static V c; return KONST(c, C1(1, MKS(";\012"))); }
-static V L40589(V *a) {
-V v40590 = a[8];
-V uo40591[8]; U_Gen_dfresh_dgo_x37n_x37u(FLD(v40590, 0), FLD(v40590, 1), FLD(v40590, 2), FLD(v40590, 3), FLD(v40590, 4), FLD(v40590, 5), FLD(v40590, 6), uo40591);
-V s40593 = uo40591[0];
-V s40594 = CN(0, 7, (V[]){uo40591[1], uo40591[2], uo40591[3], uo40591[4], uo40591[5], uo40591[6], uo40591[7]});
+static V S40767(void) { static V c; return STRC(c, "v"); }
+static V K40777(void) { static V c; return KONST(c, C2(0, IMM(0), IMM(0))); }
+static V S40781(void) { static V c; return STRC(c, "const "); }
+static V S40782(void) { static V c; return STRC(c, " = "); }
+static V K40785(void) { static V c; return KONST(c, C1(1, MKS(";\012"))); }
+static V L40760(V *a) {
+V v40761 = a[8];
+V uo40762[8]; U_Gen_dfresh_dgo_x37n_x37u(FLD(v40761, 0), FLD(v40761, 1), FLD(v40761, 2), FLD(v40761, 3), FLD(v40761, 4), FLD(v40761, 5), FLD(v40761, 6), uo40762);
+V s40764 = uo40762[0];
+V s40765 = CN(0, 7, (V[]){uo40762[1], uo40762[2], uo40762[3], uo40762[4], uo40762[5], uo40762[6], uo40762[7]});
 {
-V v40595 = F_String_dappend(S40596(), F_U32_dshow_dif(s40593, F_U32_dis__zero(s40593)));
-V v40600 = apply(F_J_dgo(a[7], C3(16, a[6], a[5], a[4])), s40594);
-V v40602 = apply(F_J_dgo(a[7], CN(31, 5, (V[]){a[6], F_List_dappend(0, ({ V r40603;
-V v40604 = F_J_dpat_dgo(F_U32_dto__nat(4000000000u), C4(8, a[6], a[3], v40595, K40606()));
-r40603 = FLD(v40604, 1);
-r40603; }), a[5]), a[2], a[1], a[0]})), FLD(v40600, 1));
-return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40610(), F_String_dappend(v40595, S40611()))), C2(1, FLD(v40600, 0), C2(1, K40614(), C2(1, FLD(v40602, 0), IMM(0)))))), FLD(v40602, 1));
+V v40766 = F_String_dappend(S40767(), F_U32_dshow_dif(s40764, F_U32_dis__zero(s40764)));
+V v40771 = apply(F_J_dgo(a[7], C3(16, a[6], a[5], a[4])), s40765);
+V v40773 = apply(F_J_dgo(a[7], CN(31, 5, (V[]){a[6], F_List_dappend(0, ({ V r40774;
+V v40775 = F_J_dpat_dgo(F_U32_dto__nat(4000000000u), C4(8, a[6], a[3], v40766, K40777()));
+r40774 = FLD(v40775, 1);
+r40774; }), a[5]), a[2], a[1], a[0]})), FLD(v40771, 1));
+return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40781(), F_String_dappend(v40766, S40782()))), C2(1, FLD(v40771, 0), C2(1, K40785(), C2(1, FLD(v40773, 0), IMM(0)))))), FLD(v40773, 1));
 }
 }
-static V S40618(void) { static V c; return STRC(c, "%par"); }
-static V S40621(void) { static V c; return STRC(c, "_"); }
-static V S40623(void) { static V c; return STRC(c, "%par"); }
-static V K40627(void) { static V c; return KONST(c, C1(1, MKS("{\012"))); }
-static V K40628(void) { static V c; return KONST(c, C2(1, C1(1, MKS("}\012")), IMM(0))); }
-static V L40630(V *a) {
+static V S40789(void) { static V c; return STRC(c, "%par"); }
+static V S40792(void) { static V c; return STRC(c, "_"); }
+static V S40794(void) { static V c; return STRC(c, "%par"); }
+static V K40798(void) { static V c; return KONST(c, C1(1, MKS("{\012"))); }
+static V K40799(void) { static V c; return KONST(c, C2(1, C1(1, MKS("}\012")), IMM(0))); }
+static V L40801(V *a) {
 return C2(0, a[0], a[1]);
 }
-static V S40635(void) { static V c; return STRC(c, "if ("); }
-static V S40637(void) { static V c; return STRC(c, ") {\012"); }
-static V K40640(void) { static V c; return KONST(c, C1(1, MKS("} else "))); }
-static V L40633(V *a) {
-V v40634 = apply(a[3], a[4]);
-return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40635(), F_String_dappend(F_Gen_dand(C2(1, a[2], a[1])), S40637()))), C2(1, a[0], C2(1, K40640(), C2(1, FLD(v40634, 0), IMM(0)))))), FLD(v40634, 1));
+static V S40806(void) { static V c; return STRC(c, "if ("); }
+static V S40808(void) { static V c; return STRC(c, ") {\012"); }
+static V K40811(void) { static V c; return KONST(c, C1(1, MKS("} else "))); }
+static V L40804(V *a) {
+V v40805 = apply(a[3], a[4]);
+return C2(0, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40806(), F_String_dappend(F_Gen_dand(C2(1, a[2], a[1])), S40808()))), C2(1, a[0], C2(1, K40811(), C2(1, FLD(v40805, 0), IMM(0)))))), FLD(v40805, 1));
 }
-static V K40644(void) { static V c; return KONST(c, C1(1, MKS("{ bend_fail(\042runtime fail-stop\042); }\012"))); }
-static V L40643(V *a) {
-return C2(0, K40644(), a[0]);
+static V K40815(void) { static V c; return KONST(c, C1(1, MKS("{ bend_fail(\042runtime fail-stop\042); }\012"))); }
+static V L40814(V *a) {
+return C2(0, K40815(), a[0]);
 }
-static V K40646(void) { static V c; return KONST(c, C2(0, IMM(0), IMM(0))); }
-static V L40652(V *a) {
-V v40653 = apply(a[8], a[9]);
-return apply(F_J_dgo(a[7], CN(26, 8, (V[]){a[6], a[5], a[4], a[3], a[2], a[1], F_List_dreverse_dgo(0, a[0], IMM(0)), FLD(v40653, 0)})), FLD(v40653, 1));
+static V K40817(void) { static V c; return KONST(c, C2(0, IMM(0), IMM(0))); }
+static V L40823(V *a) {
+V v40824 = apply(a[8], a[9]);
+return apply(F_J_dgo(a[7], CN(26, 8, (V[]){a[6], a[5], a[4], a[3], a[2], a[1], F_List_dreverse_dgo(0, a[0], IMM(0)), FLD(v40824, 0)})), FLD(v40824, 1));
 }
-static V K40658(void) { static V c; return KONST(c, C2(0, IMM(0), IMM(0))); }
-static V L40657(V *a) {
-return C2(0, K40658(), a[0]);
+static V K40829(void) { static V c; return KONST(c, C2(0, IMM(0), IMM(0))); }
+static V L40828(V *a) {
+return C2(0, K40829(), a[0]);
 }
-static V S40671(void) { static V c; return STRC(c, "s"); }
-static V L40659(V *a) {
-V v40660 = a[5];
-V uo40661[8]; U_Gen_dfresh_dgo_x37n_x37u(FLD(v40660, 0), FLD(v40660, 1), FLD(v40660, 2), FLD(v40660, 3), FLD(v40660, 4), FLD(v40660, 5), FLD(v40660, 6), uo40661);
-V s40663 = uo40661[0];
-V s40664 = CN(0, 7, (V[]){uo40661[1], uo40661[2], uo40661[3], uo40661[4], uo40661[5], uo40661[6], uo40661[7]});
+static V S40842(void) { static V c; return STRC(c, "s"); }
+static V L40830(V *a) {
+V v40831 = a[5];
+V uo40832[8]; U_Gen_dfresh_dgo_x37n_x37u(FLD(v40831, 0), FLD(v40831, 1), FLD(v40831, 2), FLD(v40831, 3), FLD(v40831, 4), FLD(v40831, 5), FLD(v40831, 6), uo40832);
+V s40834 = uo40832[0];
+V s40835 = CN(0, 7, (V[]){uo40832[1], uo40832[2], uo40832[3], uo40832[4], uo40832[5], uo40832[6], uo40832[7]});
 {
-V v40665 = apply(F_J_dgo(a[4], C3(16, a[3], a[2], a[1])), s40664);
-V v40667 = apply(F_J_dgo(a[4], C3(28, a[3], a[2], a[0])), FLD(v40665, 1));
-return C2(0, ({ V r40669;
-V v40670 = F_String_dappend(S40671(), F_U32_dshow_dif(s40663, F_U32_dis__zero(s40663)));
-V v40675 = FLD(v40667, 0);
-r40669 = F_J_dscrs_dput_x37u(v40670, FLD(v40665, 0), FLD(v40675, 0), FLD(v40675, 1));
-r40669; }), FLD(v40667, 1));
+V v40836 = apply(F_J_dgo(a[4], C3(16, a[3], a[2], a[1])), s40835);
+V v40838 = apply(F_J_dgo(a[4], C3(28, a[3], a[2], a[0])), FLD(v40836, 1));
+return C2(0, ({ V r40840;
+V v40841 = F_String_dappend(S40842(), F_U32_dshow_dif(s40834, F_U32_dis__zero(s40834)));
+V v40846 = FLD(v40838, 0);
+r40840 = F_J_dscrs_dput_x37u(v40841, FLD(v40836, 0), FLD(v40846, 0), FLD(v40846, 1));
+r40840; }), FLD(v40838, 1));
 }
 }
-static V L40680(V *a) {
-V v40681 = apply(a[1], a[2]);
-return C2(0, F_Doc_dlist(C2(1, a[0], C2(1, FLD(v40681, 0), IMM(0)))), FLD(v40681, 1));
+static V L40851(V *a) {
+V v40852 = apply(a[1], a[2]);
+return C2(0, F_Doc_dlist(C2(1, a[0], C2(1, FLD(v40852, 0), IMM(0)))), FLD(v40852, 1));
 }
-static V L40685(V *a) {
-V v40686 = apply(a[6], a[7]);
-return apply(F_J_dgo(a[5], CN(29, 6, (V[]){a[4], a[3], a[2], a[1], a[0], FLD(v40686, 0)})), FLD(v40686, 1));
+static V L40856(V *a) {
+V v40857 = apply(a[6], a[7]);
+return apply(F_J_dgo(a[5], CN(29, 6, (V[]){a[4], a[3], a[2], a[1], a[0], FLD(v40857, 0)})), FLD(v40857, 1));
 }
-static V L40694(V *a) {
-V v40695 = apply(a[1], a[2]);
-return C2(0, F_J_dret(a[0], FLD(v40695, 0)), FLD(v40695, 1));
+static V L40865(V *a) {
+V v40866 = apply(a[1], a[2]);
+return C2(0, F_J_dret(a[0], FLD(v40866, 0)), FLD(v40866, 1));
 }
 static V F_J_dgo(V a0, V a1) {
 top:;
-V s40294 = (a0);
-if ((s40294) == 0) {
-V s40295 = a1;
-if (IS_N(s40295, 0)) {
+V s40465 = (a0);
+if ((s40465) == 0) {
+V s40466 = a1;
+if (IS_N(s40466, 0)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 1)) {
+} else if (IS_N(s40466, 1)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 2)) {
+} else if (IS_N(s40466, 2)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 3)) {
+} else if (IS_N(s40466, 3)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 4)) {
+} else if (IS_N(s40466, 4)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 5)) {
+} else if (IS_N(s40466, 5)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 6)) {
+} else if (IS_N(s40466, 6)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 7)) {
+} else if (IS_N(s40466, 7)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 8)) {
+} else if (IS_N(s40466, 8)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 9)) {
+} else if (IS_N(s40466, 9)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 10)) {
+} else if (IS_N(s40466, 10)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 11)) {
+} else if (IS_N(s40466, 11)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 12)) {
+} else if (IS_N(s40466, 12)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 13)) {
+} else if (IS_N(s40466, 13)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 14)) {
+} else if (IS_N(s40466, 14)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 15)) {
+} else if (IS_N(s40466, 15)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 16)) {
+} else if (IS_N(s40466, 16)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 17)) {
+} else if (IS_N(s40466, 17)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 18)) {
+} else if (IS_N(s40466, 18)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 19)) {
+} else if (IS_N(s40466, 19)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 20)) {
+} else if (IS_N(s40466, 20)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 21)) {
+} else if (IS_N(s40466, 21)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 22)) {
+} else if (IS_N(s40466, 22)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 23)) {
+} else if (IS_N(s40466, 23)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 24)) {
+} else if (IS_N(s40466, 24)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 25)) {
+} else if (IS_N(s40466, 25)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 26)) {
+} else if (IS_N(s40466, 26)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 27)) {
+} else if (IS_N(s40466, 27)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 28)) {
-return F_J_dout(K40324());
-} else if (IS_N(s40295, 29)) {
+} else if (IS_N(s40466, 28)) {
+return F_J_dout(K40495());
+} else if (IS_N(s40466, 29)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 30)) {
+} else if (IS_N(s40466, 30)) {
 return F_J_dout(IMM(0));
-} else if (IS_N(s40295, 31)) {
+} else if (IS_N(s40466, 31)) {
 return F_J_dout(IMM(0));
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s40294) != 0) {
-V s40329 = a1;
-if (IS_N(s40329, 0)) {
-V s40330 = FLD(s40329, 2);
-if ((s40330) == IMM(0)) {
-return mk_clo(L40331, 1, 0, 0);
-} else if (IS_N(s40330, 1)) {
-V v40332 = F_J_dgo(nat_subk(s40294, 1), C3(16, FLD(s40329, 0), FLD(s40329, 1), FLD(s40330, 0)));
-return mk_clo(L40334, 6, 5, (V[]){FLD(s40330, 1), FLD(s40329, 1), FLD(s40329, 0), nat_subk(s40294, 1), v40332});
+} else if ((s40465) != 0) {
+V s40500 = a1;
+if (IS_N(s40500, 0)) {
+V s40501 = FLD(s40500, 2);
+if ((s40501) == IMM(0)) {
+return mk_clo(L40502, 1, 0, 0);
+} else if (IS_N(s40501, 1)) {
+V v40503 = F_J_dgo(nat_subk(s40465, 1), C3(16, FLD(s40500, 0), FLD(s40500, 1), FLD(s40501, 0)));
+return mk_clo(L40505, 6, 5, (V[]){FLD(s40501, 1), FLD(s40500, 1), FLD(s40500, 0), nat_subk(s40465, 1), v40503});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 1)) {
-V s40338 = FLD(s40329, 2);
-if (IS_N(s40338, 6) && IS_N(FLD(s40338, 1), 1) && IS_N(FLD(FLD(s40338, 1), 1), 1) && (FLD(FLD(FLD(s40338, 1), 1), 1)) == IMM(0)) {
-V v40339 = F_J_dgo(nat_subk(s40294, 1), C3(16, FLD(s40329, 0), FLD(s40329, 1), FLD(FLD(s40338, 1), 0)));
-return mk_clo(L40341, 6, 5, (V[]){FLD(FLD(FLD(s40338, 1), 1), 0), FLD(s40329, 1), FLD(s40329, 0), nat_subk(s40294, 1), v40339});
+} else if (IS_N(s40500, 1)) {
+V s40509 = FLD(s40500, 2);
+if (IS_N(s40509, 6) && IS_N(FLD(s40509, 1), 1) && IS_N(FLD(FLD(s40509, 1), 1), 1) && (FLD(FLD(FLD(s40509, 1), 1), 1)) == IMM(0)) {
+V v40510 = F_J_dgo(nat_subk(s40465, 1), C3(16, FLD(s40500, 0), FLD(s40500, 1), FLD(FLD(s40509, 1), 0)));
+return mk_clo(L40512, 6, 5, (V[]){FLD(FLD(FLD(s40509, 1), 1), 0), FLD(s40500, 1), FLD(s40500, 0), nat_subk(s40465, 1), v40510});
 } else {
-{ V t0 = nat_subk(s40294, 1); V t1 = C3(16, FLD(s40329, 0), FLD(s40329, 1), s40338); a0 = t0; a1 = t1; goto top; }
+{ V t0 = nat_subk(s40465, 1); V t1 = C3(16, FLD(s40500, 0), FLD(s40500, 1), s40509); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s40329, 2)) {
-V s40349 = FLD(s40329, 2);
-if ((s40349) == 0) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C3(1, FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 3)); a0 = t0; a1 = t1; goto top; }
-} else if ((s40349) == 1) {
-return mk_clo(L40350, 1, 0, 0);
-} else if (nat_ge(s40349, 2)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C3(16, FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 3)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 2)) {
+V s40520 = FLD(s40500, 2);
+if ((s40520) == 0) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C3(1, FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 3)); a0 = t0; a1 = t1; goto top; }
+} else if ((s40520) == 1) {
+return mk_clo(L40521, 1, 0, 0);
+} else if (nat_ge(s40520, 2)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C3(16, FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 3)); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 3)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C4(2, FLD(s40329, 0), FLD(s40329, 1), F_Expr_dwordk(FLD(s40329, 2)), FLD(s40329, 2)); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40329, 4)) {
-V s40353 = FLD(s40329, 2);
-V s40354 = FLD(s40329, 3);
-if (nat_ge(s40353, 2)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C3(0, FLD(s40329, 0), FLD(s40329, 1), s40354); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40354, 1) && (FLD(s40354, 1)) == IMM(0)) {
-V v40355 = F_J_dgo(nat_subk(s40294, 1), C3(3, FLD(s40329, 0), FLD(s40329, 1), FLD(s40354, 0)));
-return mk_clo(L40357, 2, 1, (V[]){v40355});
+} else if (IS_N(s40500, 3)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C4(2, FLD(s40500, 0), FLD(s40500, 1), F_Expr_dwordk(FLD(s40500, 2)), FLD(s40500, 2)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 4)) {
+V s40524 = FLD(s40500, 2);
+V s40525 = FLD(s40500, 3);
+if (nat_ge(s40524, 2)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C3(0, FLD(s40500, 0), FLD(s40500, 1), s40525); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40525, 1) && (FLD(s40525, 1)) == IMM(0)) {
+V v40526 = F_J_dgo(nat_subk(s40465, 1), C3(3, FLD(s40500, 0), FLD(s40500, 1), FLD(s40525, 0)));
+return mk_clo(L40528, 2, 1, (V[]){v40526});
 } else {
-{ V t0 = nat_subk(s40294, 1); V t1 = C3(0, FLD(s40329, 0), FLD(s40329, 1), s40354); a0 = t0; a1 = t1; goto top; }
+{ V t0 = nat_subk(s40465, 1); V t1 = C3(0, FLD(s40500, 0), FLD(s40500, 1), s40525); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s40329, 5)) {
-V s40359 = FLD(s40329, 3);
-if ((s40359) == IMM(0)) {
-V v40360 = F_String_dappend(S40361(), FLD(s40329, 2));
-V v40363 = mk_clo(L40364, 2, 1, (V[]){v40360});
-return mk_clo(L40366, 2, 1, (V[]){v40363});
-} else if (IS_N(s40359, 1)) {
-V v40369 = F_J_dgo(nat_subk(s40294, 1), C4(4, FLD(s40329, 0), FLD(s40329, 1), F_P_dwhich(FLD(s40329, 2), K40370()), FLD(s40329, 4)));
-return mk_clo(L40373, 5, 4, (V[]){FLD(FLD(s40359, 0), 1), FLD(s40329, 2), FLD(FLD(s40359, 0), 0), v40369});
+} else if (IS_N(s40500, 5)) {
+V s40530 = FLD(s40500, 3);
+if ((s40530) == IMM(0)) {
+V v40531 = F_String_dappend(S40532(), FLD(s40500, 2));
+V v40534 = mk_clo(L40535, 2, 1, (V[]){v40531});
+return mk_clo(L40537, 2, 1, (V[]){v40534});
+} else if (IS_N(s40530, 1)) {
+V v40540 = F_J_dgo(nat_subk(s40465, 1), C4(4, FLD(s40500, 0), FLD(s40500, 1), F_P_dwhich(FLD(s40500, 2), K40541()), FLD(s40500, 4)));
+return mk_clo(L40544, 5, 4, (V[]){FLD(FLD(s40530, 0), 1), FLD(s40500, 2), FLD(FLD(s40530, 0), 0), v40540});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 6)) {
-V s40377 = FLD(s40329, 6);
-if ((s40377) == IMM(1)) {
-V v40378 = F_J_dgo(nat_subk(s40294, 1), C3(0, FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 3)));
-return mk_clo(L40380, 7, 6, (V[]){FLD(s40329, 2), FLD(s40329, 5), FLD(s40329, 1), FLD(s40329, 0), nat_subk(s40294, 1), v40378});
-} else if ((s40377) == IMM(0)) {
-V v40394 = F_J_dgo(nat_subk(s40294, 1), C3(0, FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 4)));
-return mk_clo(L40396, 3, 2, (V[]){FLD(s40329, 2), v40394});
+} else if (IS_N(s40500, 6)) {
+V s40548 = FLD(s40500, 6);
+if ((s40548) == IMM(1)) {
+V v40549 = F_J_dgo(nat_subk(s40465, 1), C3(0, FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 3)));
+return mk_clo(L40551, 7, 6, (V[]){FLD(s40500, 2), FLD(s40500, 5), FLD(s40500, 1), FLD(s40500, 0), nat_subk(s40465, 1), v40549});
+} else if ((s40548) == IMM(0)) {
+V v40565 = F_J_dgo(nat_subk(s40465, 1), C3(0, FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 4)));
+return mk_clo(L40567, 3, 2, (V[]){FLD(s40500, 2), v40565});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 7)) {
-V v40402 = FLD(s40329, 3);
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(6, 7, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(v40402, 0), FLD(v40402, 1), FLD(v40402, 2), FLD(v40402, 3)}); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40329, 8)) {
-V s40403 = FLD(s40329, 3);
-if ((s40403) == 3) {
-return mk_clo(L40404, 1, 0, 0);
-} else if ((s40403) == 4) {
-V v40406 = F_String_dappend(S40407(), FLD(s40329, 2));
-V v40409 = mk_clo(L40410, 2, 1, (V[]){v40406});
-return mk_clo(L40412, 2, 1, (V[]){v40409});
+} else if (IS_N(s40500, 7)) {
+V v40573 = FLD(s40500, 3);
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(6, 7, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(v40573, 0), FLD(v40573, 1), FLD(v40573, 2), FLD(v40573, 3)}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 8)) {
+V s40574 = FLD(s40500, 3);
+if ((s40574) == 3) {
+return mk_clo(L40575, 1, 0, 0);
+} else if ((s40574) == 4) {
+V v40577 = F_String_dappend(S40578(), FLD(s40500, 2));
+V v40580 = mk_clo(L40581, 2, 1, (V[]){v40577});
+return mk_clo(L40583, 2, 1, (V[]){v40580});
 } else {
-return mk_clo(L40415, 6, 5, (V[]){FLD(s40329, 4), FLD(s40329, 2), FLD(s40329, 1), FLD(s40329, 0), nat_subk(s40294, 1)});
+return mk_clo(L40586, 6, 5, (V[]){FLD(s40500, 4), FLD(s40500, 2), FLD(s40500, 1), FLD(s40500, 0), nat_subk(s40465, 1)});
 }
-} else if (IS_N(s40329, 9)) {
-V v40418 = FLD(s40329, 3);
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(8, 5, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), F_U32_dto__nat(FLD(v40418, 0)), F_Gen_dsplit_x37u(FLD(v40418, 1), FLD(s40329, 4), IMM(0), IMM(0), IMM(0), IMM(0))}); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40329, 10)) {
-V v40421 = F_J_dgo(nat_subk(s40294, 1), C3(16, FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2)));
-return mk_clo(L40423, 6, 5, (V[]){FLD(s40329, 3), FLD(s40329, 1), FLD(s40329, 0), nat_subk(s40294, 1), v40421});
-} else if (IS_N(s40329, 11)) {
-V s40431 = FLD(s40329, 4);
-if ((s40431) == IMM(1)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C4(10, FLD(s40329, 0), FLD(s40329, 1), C1(0, FLD(s40329, 2)), FLD(s40329, 3)); a0 = t0; a1 = t1; goto top; }
-} else if ((s40431) == IMM(0)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(9, 5, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), ({ V r40432;
-V v40433 = FLD(s40329, 0);
-V v40434 = FLD(v40433, 0);
-r40432 = F_G_ddef_x37u(FLD(v40434, 0), FLD(v40434, 1), FLD(v40434, 2), FLD(v40434, 3), FLD(s40329, 2));
-r40432; }), FLD(s40329, 3)}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 9)) {
+V v40589 = FLD(s40500, 3);
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(8, 5, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), F_U32_dto__nat(FLD(v40589, 0)), F_Gen_dsplit_x37u(FLD(v40589, 1), FLD(s40500, 4), IMM(0), IMM(0), IMM(0), IMM(0))}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 10)) {
+V v40592 = F_J_dgo(nat_subk(s40465, 1), C3(16, FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2)));
+return mk_clo(L40594, 6, 5, (V[]){FLD(s40500, 3), FLD(s40500, 1), FLD(s40500, 0), nat_subk(s40465, 1), v40592});
+} else if (IS_N(s40500, 11)) {
+V s40602 = FLD(s40500, 4);
+if ((s40602) == IMM(1)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C4(10, FLD(s40500, 0), FLD(s40500, 1), C1(0, FLD(s40500, 2)), FLD(s40500, 3)); a0 = t0; a1 = t1; goto top; }
+} else if ((s40602) == IMM(0)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(9, 5, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), ({ V r40603;
+V v40604 = FLD(s40500, 0);
+V v40605 = FLD(v40604, 0);
+r40603 = F_G_ddef_x37u(FLD(v40605, 0), FLD(v40605, 1), FLD(v40605, 2), FLD(v40605, 3), FLD(s40500, 2));
+r40603; }), FLD(s40500, 3)}); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 12)) {
-V s40436 = FLD(s40329, 2);
-if (IS_N(s40436, 1)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C4(14, FLD(s40329, 0), FLD(s40329, 1), FLD(s40436, 0), FLD(s40436, 1)); a0 = t0; a1 = t1; goto top; }
-} else if ((s40436) == IMM(0)) {
-return mk_clo(L40437, 1, 0, 0);
+} else if (IS_N(s40500, 12)) {
+V s40607 = FLD(s40500, 2);
+if (IS_N(s40607, 1)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C4(14, FLD(s40500, 0), FLD(s40500, 1), FLD(s40607, 0), FLD(s40607, 1)); a0 = t0; a1 = t1; goto top; }
+} else if ((s40607) == IMM(0)) {
+return mk_clo(L40608, 1, 0, 0);
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 13)) {
-V s40439 = FLD(s40329, 4);
-if ((s40439) == IMM(1)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C3(12, FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 3)); a0 = t0; a1 = t1; goto top; }
-} else if ((s40439) == IMM(0)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(11, 5, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), ({ V r40440;
-V s40441 = F_Env_dfind(FLD(s40329, 1), FLD(s40329, 2));
-if ((s40441) == IMM(0)) {
-r40440 = IMM(0);
-} else if (IS_N(s40441, 1)) {
-r40440 = IMM(1);
+} else if (IS_N(s40500, 13)) {
+V s40610 = FLD(s40500, 4);
+if ((s40610) == IMM(1)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C3(12, FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 3)); a0 = t0; a1 = t1; goto top; }
+} else if ((s40610) == IMM(0)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(11, 5, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), ({ V r40611;
+V s40612 = F_Env_dfind(FLD(s40500, 1), FLD(s40500, 2));
+if ((s40612) == IMM(0)) {
+r40611 = IMM(0);
+} else if (IS_N(s40612, 1)) {
+r40611 = IMM(1);
 } else { bend_fail("runtime fail-stop"); }
-r40440; })}); a0 = t0; a1 = t1; goto top; }
+r40611; })}); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 14)) {
-V s40443 = FLD(s40329, 2);
-if (IS_N(s40443, 0)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(13, 5, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40443, 0), FLD(s40329, 3), F_String_deq(FLD(s40443, 0), S40444())}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 14)) {
+V s40614 = FLD(s40500, 2);
+if (IS_N(s40614, 0)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(13, 5, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40614, 0), FLD(s40500, 3), F_String_deq(FLD(s40614, 0), S40615())}); a0 = t0; a1 = t1; goto top; }
 } else {
-{ V t0 = nat_subk(s40294, 1); V t1 = C4(10, FLD(s40329, 0), FLD(s40329, 1), s40443, FLD(s40329, 3)); a0 = t0; a1 = t1; goto top; }
+{ V t0 = nat_subk(s40465, 1); V t1 = C4(10, FLD(s40500, 0), FLD(s40500, 1), s40614, FLD(s40500, 3)); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s40329, 15)) {
-V v40446 = F_J_dgo(nat_subk(s40294, 1), CN(31, 5, (V[]){FLD(s40329, 0), FLD(s40329, 1), K40447(), IMM(0), FLD(s40329, 2)}));
-return mk_clo(L40449, 2, 1, (V[]){v40446});
-} else if (IS_N(s40329, 16)) {
-V s40454 = FLD(s40329, 2);
-if (IS_N(s40454, 0)) {
-V v40455 = FLD(s40329, 0);
-V v40456 = FLD(v40455, 0);
-return F_J_dvar_dfound_x37u_x37u(FLD(v40456, 0), FLD(v40456, 1), FLD(v40456, 2), FLD(v40456, 3), FLD(v40455, 1), FLD(s40454, 0), F_Env_dfind(FLD(s40329, 1), FLD(s40454, 0)));
-} else if (IS_LI(s40454, 1)) {
-return mk_clo(L40459, 2, 1, (V[]){LI_V(s40454)});
-} else if (IS_LI(s40454, 2)) {
-return mk_clo(L40462, 2, 1, (V[]){LI_V(s40454)});
-} else if (IS_N(s40454, 3)) {
-return mk_clo(L40467, 2, 1, (V[]){FLD(s40454, 0)});
-} else if (IS_N(s40454, 4)) {
-return mk_clo(L40470, 2, 1, (V[]){FLD(s40454, 0)});
-} else if (IS_N(s40454, 5)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C4(14, FLD(s40329, 0), FLD(s40329, 1), FLD(s40454, 0), FLD(s40454, 1)); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40454, 6)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(5, 5, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40454, 0), ({ V r40476;
-V v40477 = FLD(s40329, 0);
-r40476 = F_J_dctor_x37u(FLD(v40477, 0), FLD(v40477, 1), FLD(s40454, 0));
-r40476; }), FLD(s40454, 1)}); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40454, 7)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C4(17, FLD(s40329, 0), FLD(s40329, 1), FLD(s40454, 0), FLD(s40454, 1)); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40454, 8)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C3(15, FLD(s40329, 0), FLD(s40329, 1), C3(8, FLD(s40454, 0), FLD(s40454, 1), FLD(s40454, 2))); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40454, 9)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C3(15, FLD(s40329, 0), FLD(s40329, 1), C2(9, FLD(s40454, 0), FLD(s40454, 1))); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40454, 11)) {
-V v40479 = F_J_dgo(nat_subk(s40294, 1), C3(16, FLD(s40329, 0), FLD(s40329, 1), FLD(s40454, 1)));
-return mk_clo(L40481, 3, 2, (V[]){FLD(s40454, 0), v40479});
-} else if (IS_N(s40454, 14)) {
-return mk_clo(L40491, 1, 0, 0);
-} else if (IS_N(s40454, 15)) {
-V v40493 = F_String_dappend(S40494(), FLD(s40454, 0));
-V v40496 = mk_clo(L40497, 2, 1, (V[]){v40493});
-return mk_clo(L40499, 2, 1, (V[]){v40496});
+} else if (IS_N(s40500, 15)) {
+V v40617 = F_J_dgo(nat_subk(s40465, 1), CN(31, 5, (V[]){FLD(s40500, 0), FLD(s40500, 1), K40618(), IMM(0), FLD(s40500, 2)}));
+return mk_clo(L40620, 2, 1, (V[]){v40617});
+} else if (IS_N(s40500, 16)) {
+V s40625 = FLD(s40500, 2);
+if (IS_N(s40625, 0)) {
+V v40626 = FLD(s40500, 0);
+V v40627 = FLD(v40626, 0);
+return F_J_dvar_dfound_x37u_x37u(FLD(v40627, 0), FLD(v40627, 1), FLD(v40627, 2), FLD(v40627, 3), FLD(v40626, 1), FLD(s40625, 0), F_Env_dfind(FLD(s40500, 1), FLD(s40625, 0)));
+} else if (IS_LI(s40625, 1)) {
+return mk_clo(L40630, 2, 1, (V[]){LI_V(s40625)});
+} else if (IS_LI(s40625, 2)) {
+return mk_clo(L40633, 2, 1, (V[]){LI_V(s40625)});
+} else if (IS_N(s40625, 3)) {
+return mk_clo(L40638, 2, 1, (V[]){FLD(s40625, 0)});
+} else if (IS_N(s40625, 4)) {
+return mk_clo(L40641, 2, 1, (V[]){FLD(s40625, 0)});
+} else if (IS_N(s40625, 5)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C4(14, FLD(s40500, 0), FLD(s40500, 1), FLD(s40625, 0), FLD(s40625, 1)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40625, 6)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(5, 5, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40625, 0), ({ V r40647;
+V v40648 = FLD(s40500, 0);
+r40647 = F_J_dctor_x37u(FLD(v40648, 0), FLD(v40648, 1), FLD(s40625, 0));
+r40647; }), FLD(s40625, 1)}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40625, 7)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C4(17, FLD(s40500, 0), FLD(s40500, 1), FLD(s40625, 0), FLD(s40625, 1)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40625, 8)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C3(15, FLD(s40500, 0), FLD(s40500, 1), C3(8, FLD(s40625, 0), FLD(s40625, 1), FLD(s40625, 2))); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40625, 9)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C3(15, FLD(s40500, 0), FLD(s40500, 1), C2(9, FLD(s40625, 0), FLD(s40625, 1))); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40625, 11)) {
+V v40650 = F_J_dgo(nat_subk(s40465, 1), C3(16, FLD(s40500, 0), FLD(s40500, 1), FLD(s40625, 1)));
+return mk_clo(L40652, 3, 2, (V[]){FLD(s40625, 0), v40650});
+} else if (IS_N(s40625, 14)) {
+return mk_clo(L40662, 1, 0, 0);
+} else if (IS_N(s40625, 15)) {
+V v40664 = F_String_dappend(S40665(), FLD(s40625, 0));
+V v40667 = mk_clo(L40668, 2, 1, (V[]){v40664});
+return mk_clo(L40670, 2, 1, (V[]){v40667});
 } else {
-V v40502 = F_String_dappend(S40503(), ({ V r40504;
-V v40505 = s40454;
-r40504 = F_Expr_dshow_dgo(v40505, S40506(), 0u);
-r40504; }));
-V v40509 = mk_clo(L40510, 2, 1, (V[]){v40502});
-return mk_clo(L40512, 2, 1, (V[]){v40509});
+V v40673 = F_String_dappend(S40674(), ({ V r40675;
+V v40676 = s40625;
+r40675 = F_Expr_dshow_dgo(v40676, S40677(), 0u);
+r40675; }));
+V v40680 = mk_clo(L40681, 2, 1, (V[]){v40673});
+return mk_clo(L40683, 2, 1, (V[]){v40680});
 }
-} else if (IS_N(s40329, 17)) {
-return mk_clo(L40515, 6, 5, (V[]){FLD(s40329, 3), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 0), nat_subk(s40294, 1)});
-} else if (IS_N(s40329, 18)) {
-V v40541 = FLD(s40329, 3);
-V v40542 = F_J_dgo(nat_subk(s40294, 1), C3(0, FLD(s40329, 0), FLD(s40329, 1), FLD(v40541, 0)));
-return mk_clo(L40544, 3, 2, (V[]){FLD(s40329, 2), v40542});
-} else if (IS_N(s40329, 19)) {
-V v40551 = FLD(s40329, 2);
-{ V t0 = nat_subk(s40294, 1); V t1 = C4(18, FLD(s40329, 0), FLD(s40329, 1), FLD(v40551, 2), F_Gen_dsplit_x37u(FLD(v40551, 1), FLD(s40329, 3), IMM(0), IMM(0), IMM(0), IMM(0))); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40329, 20)) {
-V s40553 = FLD(s40329, 6);
-if ((s40553) == IMM(1)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = C4(19, FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 5)); a0 = t0; a1 = t1; goto top; }
-} else if ((s40553) == IMM(0)) {
-V v40554 = F_J_dgo(nat_subk(s40294, 1), C4(14, FLD(s40329, 0), FLD(s40329, 1), C1(0, FLD(s40329, 4)), FLD(s40329, 5)));
-return mk_clo(L40556, 3, 2, (V[]){FLD(s40329, 3), v40554});
+} else if (IS_N(s40500, 17)) {
+return mk_clo(L40686, 6, 5, (V[]){FLD(s40500, 3), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 0), nat_subk(s40465, 1)});
+} else if (IS_N(s40500, 18)) {
+V v40712 = FLD(s40500, 3);
+V v40713 = F_J_dgo(nat_subk(s40465, 1), C3(0, FLD(s40500, 0), FLD(s40500, 1), FLD(v40712, 0)));
+return mk_clo(L40715, 3, 2, (V[]){FLD(s40500, 2), v40713});
+} else if (IS_N(s40500, 19)) {
+V v40722 = FLD(s40500, 2);
+{ V t0 = nat_subk(s40465, 1); V t1 = C4(18, FLD(s40500, 0), FLD(s40500, 1), FLD(v40722, 2), F_Gen_dsplit_x37u(FLD(v40722, 1), FLD(s40500, 3), IMM(0), IMM(0), IMM(0), IMM(0))); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 20)) {
+V s40724 = FLD(s40500, 6);
+if ((s40724) == IMM(1)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = C4(19, FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 5)); a0 = t0; a1 = t1; goto top; }
+} else if ((s40724) == IMM(0)) {
+V v40725 = F_J_dgo(nat_subk(s40465, 1), C4(14, FLD(s40500, 0), FLD(s40500, 1), C1(0, FLD(s40500, 4)), FLD(s40500, 5)));
+return mk_clo(L40727, 3, 2, (V[]){FLD(s40500, 3), v40725});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 21)) {
-V s40559 = FLD(s40329, 7);
-if ((s40559) == IMM(1)) {
-V v40560 = F_J_dgo(nat_subk(s40294, 1), C3(16, FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 5)));
-return mk_clo(L40562, 8, 7, (V[]){FLD(s40329, 6), FLD(s40329, 3), FLD(s40329, 2), FLD(s40329, 1), FLD(s40329, 0), nat_subk(s40294, 1), v40560});
-} else if ((s40559) == IMM(0)) {
-return mk_clo(L40568, 9, 8, (V[]){FLD(s40329, 6), FLD(s40329, 3), FLD(s40329, 2), FLD(s40329, 4), FLD(s40329, 5), FLD(s40329, 1), FLD(s40329, 0), nat_subk(s40294, 1)});
+} else if (IS_N(s40500, 21)) {
+V s40730 = FLD(s40500, 7);
+if ((s40730) == IMM(1)) {
+V v40731 = F_J_dgo(nat_subk(s40465, 1), C3(16, FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 5)));
+return mk_clo(L40733, 8, 7, (V[]){FLD(s40500, 6), FLD(s40500, 3), FLD(s40500, 2), FLD(s40500, 1), FLD(s40500, 0), nat_subk(s40465, 1), v40731});
+} else if ((s40730) == IMM(0)) {
+return mk_clo(L40739, 9, 8, (V[]){FLD(s40500, 6), FLD(s40500, 3), FLD(s40500, 2), FLD(s40500, 4), FLD(s40500, 5), FLD(s40500, 1), FLD(s40500, 0), nat_subk(s40465, 1)});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 22)) {
-return mk_clo(L40589, 9, 8, (V[]){FLD(s40329, 6), FLD(s40329, 3), FLD(s40329, 2), FLD(s40329, 4), FLD(s40329, 5), FLD(s40329, 1), FLD(s40329, 0), nat_subk(s40294, 1)});
-} else if (IS_N(s40329, 23)) {
-V s40616 = FLD(s40329, 4);
-V s40617 = FLD(s40329, 5);
-if (IS_N(s40616, 1) && IS_N(s40617, 6) && IS_N(FLD(s40617, 1), 1)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(31, 5, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), C3(8, FLD(s40616, 0), FLD(FLD(s40617, 1), 0), C3(8, C2(1, S40618(), FLD(s40616, 1)), C2(6, FLD(s40617, 0), FLD(FLD(s40617, 1), 1)), FLD(s40329, 6)))}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 22)) {
+return mk_clo(L40760, 9, 8, (V[]){FLD(s40500, 6), FLD(s40500, 3), FLD(s40500, 2), FLD(s40500, 4), FLD(s40500, 5), FLD(s40500, 1), FLD(s40500, 0), nat_subk(s40465, 1)});
+} else if (IS_N(s40500, 23)) {
+V s40787 = FLD(s40500, 4);
+V s40788 = FLD(s40500, 5);
+if (IS_N(s40787, 1) && IS_N(s40788, 6) && IS_N(FLD(s40788, 1), 1)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(31, 5, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), C3(8, FLD(s40787, 0), FLD(FLD(s40788, 1), 0), C3(8, C2(1, S40789(), FLD(s40787, 1)), C2(6, FLD(s40788, 0), FLD(FLD(s40788, 1), 1)), FLD(s40500, 6)))}); a0 = t0; a1 = t1; goto top; }
 } else {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(31, 5, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), FLD(s40329, 6)}); a0 = t0; a1 = t1; goto top; }
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(31, 5, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), FLD(s40500, 6)}); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s40329, 24)) {
-V s40619 = FLD(s40329, 8);
-if ((s40619) == IMM(1)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(23, 7, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), FLD(s40329, 5), FLD(s40329, 6), FLD(s40329, 7)}); a0 = t0; a1 = t1; goto top; }
-} else if ((s40619) == IMM(0)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(22, 7, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), C2(1, FLD(s40329, 4), FLD(s40329, 5)), FLD(s40329, 6), FLD(s40329, 7)}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 24)) {
+V s40790 = FLD(s40500, 8);
+if ((s40790) == IMM(1)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(23, 7, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), FLD(s40500, 5), FLD(s40500, 6), FLD(s40500, 7)}); a0 = t0; a1 = t1; goto top; }
+} else if ((s40790) == IMM(0)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(22, 7, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), C2(1, FLD(s40500, 4), FLD(s40500, 5)), FLD(s40500, 6), FLD(s40500, 7)}); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 25)) {
-V s40620 = FLD(s40329, 4);
-if (IS_N(s40620, 0)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(21, 8, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), FLD(s40620, 0), FLD(s40329, 5), FLD(s40329, 6), F_String_deq(FLD(s40620, 0), S40621())}); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40620, 1)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(24, 9, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), FLD(s40620, 0), FLD(s40620, 1), FLD(s40329, 5), FLD(s40329, 6), F_String_deq(FLD(s40620, 0), S40623())}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 25)) {
+V s40791 = FLD(s40500, 4);
+if (IS_N(s40791, 0)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(21, 8, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), FLD(s40791, 0), FLD(s40500, 5), FLD(s40500, 6), F_String_deq(FLD(s40791, 0), S40792())}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40791, 1)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(24, 9, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), FLD(s40791, 0), FLD(s40791, 1), FLD(s40500, 5), FLD(s40500, 6), F_String_deq(FLD(s40791, 0), S40794())}); a0 = t0; a1 = t1; goto top; }
 } else {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(22, 7, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), s40620, FLD(s40329, 5), FLD(s40329, 6)}); a0 = t0; a1 = t1; goto top; }
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(22, 7, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), s40791, FLD(s40500, 5), FLD(s40500, 6)}); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s40329, 26)) {
-V s40625 = FLD(s40329, 6);
-if ((s40625) == IMM(0)) {
-V v40626 = F_Doc_dlist(C2(1, K40627(), C2(1, FLD(s40329, 7), K40628())));
-return mk_clo(L40630, 2, 1, (V[]){v40626});
-} else if (IS_N(s40625, 1)) {
-V v40631 = F_J_dgo(nat_subk(s40294, 1), CN(27, 6, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), FLD(s40329, 4), FLD(s40329, 5)}));
-return mk_clo(L40633, 5, 4, (V[]){FLD(s40329, 7), FLD(s40625, 1), FLD(s40625, 0), v40631});
+} else if (IS_N(s40500, 26)) {
+V s40796 = FLD(s40500, 6);
+if ((s40796) == IMM(0)) {
+V v40797 = F_Doc_dlist(C2(1, K40798(), C2(1, FLD(s40500, 7), K40799())));
+return mk_clo(L40801, 2, 1, (V[]){v40797});
+} else if (IS_N(s40796, 1)) {
+V v40802 = F_J_dgo(nat_subk(s40465, 1), CN(27, 6, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), FLD(s40500, 4), FLD(s40500, 5)}));
+return mk_clo(L40804, 5, 4, (V[]){FLD(s40500, 7), FLD(s40796, 1), FLD(s40796, 0), v40802});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 27)) {
-V s40642 = FLD(s40329, 5);
-if ((s40642) == IMM(0)) {
-return mk_clo(L40643, 1, 0, 0);
-} else if (IS_N(s40642, 1) && IS_N(FLD(s40642, 0), 10)) {
-V uo40645[2]; U_J_dpats(FLD(s40329, 0), FLD(FLD(s40642, 0), 0), FLD(s40329, 4), K40646(), uo40645);
-V v40648 = uo40645[0];
-V v40649 = F_J_dgo(nat_subk(s40294, 1), CN(31, 5, (V[]){FLD(s40329, 0), F_List_dappend(0, uo40645[1], FLD(s40329, 1)), FLD(s40329, 2), FLD(s40329, 3), FLD(FLD(s40642, 0), 1)}));
-return mk_clo(L40652, 10, 9, (V[]){v40648, FLD(s40642, 1), FLD(s40329, 4), FLD(s40329, 3), FLD(s40329, 2), FLD(s40329, 1), FLD(s40329, 0), nat_subk(s40294, 1), v40649});
-} else if (IS_N(s40642, 1)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(27, 6, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), FLD(s40329, 4), FLD(s40642, 1)}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 27)) {
+V s40813 = FLD(s40500, 5);
+if ((s40813) == IMM(0)) {
+return mk_clo(L40814, 1, 0, 0);
+} else if (IS_N(s40813, 1) && IS_N(FLD(s40813, 0), 10)) {
+V uo40816[2]; U_J_dpats(FLD(s40500, 0), FLD(FLD(s40813, 0), 0), FLD(s40500, 4), K40817(), uo40816);
+V v40819 = uo40816[0];
+V v40820 = F_J_dgo(nat_subk(s40465, 1), CN(31, 5, (V[]){FLD(s40500, 0), F_List_dappend(0, uo40816[1], FLD(s40500, 1)), FLD(s40500, 2), FLD(s40500, 3), FLD(FLD(s40813, 0), 1)}));
+return mk_clo(L40823, 10, 9, (V[]){v40819, FLD(s40813, 1), FLD(s40500, 4), FLD(s40500, 3), FLD(s40500, 2), FLD(s40500, 1), FLD(s40500, 0), nat_subk(s40465, 1), v40820});
+} else if (IS_N(s40813, 1)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(27, 6, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), FLD(s40500, 4), FLD(s40813, 1)}); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 28)) {
-V s40656 = FLD(s40329, 2);
-if ((s40656) == IMM(0)) {
-return mk_clo(L40657, 1, 0, 0);
-} else if (IS_N(s40656, 1)) {
-return mk_clo(L40659, 6, 5, (V[]){FLD(s40656, 1), FLD(s40656, 0), FLD(s40329, 1), FLD(s40329, 0), nat_subk(s40294, 1)});
+} else if (IS_N(s40500, 28)) {
+V s40827 = FLD(s40500, 2);
+if ((s40827) == IMM(0)) {
+return mk_clo(L40828, 1, 0, 0);
+} else if (IS_N(s40827, 1)) {
+return mk_clo(L40830, 6, 5, (V[]){FLD(s40827, 1), FLD(s40827, 0), FLD(s40500, 1), FLD(s40500, 0), nat_subk(s40465, 1)});
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40329, 29)) {
-V v40677 = FLD(s40329, 5);
-V v40678 = F_J_dgo(nat_subk(s40294, 1), CN(27, 6, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), FLD(v40677, 0), FLD(s40329, 4)}));
-return mk_clo(L40680, 3, 2, (V[]){FLD(v40677, 1), v40678});
-} else if (IS_N(s40329, 30)) {
-V v40683 = F_J_dgo(nat_subk(s40294, 1), C3(28, FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 4)));
-return mk_clo(L40685, 8, 7, (V[]){FLD(s40329, 5), FLD(s40329, 3), FLD(s40329, 2), FLD(s40329, 1), FLD(s40329, 0), nat_subk(s40294, 1), v40683});
-} else if (IS_N(s40329, 31)) {
-V s40688 = FLD(s40329, 4);
-if (IS_N(s40688, 8)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(25, 7, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), FLD(s40688, 0), FLD(s40688, 1), FLD(s40688, 2)}); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40688, 9)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(30, 6, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), FLD(s40688, 0), FLD(s40688, 1)}); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40688, 5) && IS_N(FLD(s40688, 0), 0)) {
-{ V t0 = nat_subk(s40294, 1); V t1 = CN(20, 7, (V[]){FLD(s40329, 0), FLD(s40329, 1), FLD(s40329, 2), FLD(s40329, 3), FLD(FLD(s40688, 0), 0), FLD(s40688, 1), ({ V r40689;
-V v40690 = FLD(s40329, 2);
-r40689 = F_Gen_dis__tail_x37u(FLD(s40329, 1), FLD(v40690, 0), FLD(v40690, 1), FLD(v40690, 2), FLD(s40329, 3), FLD(FLD(s40688, 0), 0), FLD(s40688, 1));
-r40689; })}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40500, 29)) {
+V v40848 = FLD(s40500, 5);
+V v40849 = F_J_dgo(nat_subk(s40465, 1), CN(27, 6, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), FLD(v40848, 0), FLD(s40500, 4)}));
+return mk_clo(L40851, 3, 2, (V[]){FLD(v40848, 1), v40849});
+} else if (IS_N(s40500, 30)) {
+V v40854 = F_J_dgo(nat_subk(s40465, 1), C3(28, FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 4)));
+return mk_clo(L40856, 8, 7, (V[]){FLD(s40500, 5), FLD(s40500, 3), FLD(s40500, 2), FLD(s40500, 1), FLD(s40500, 0), nat_subk(s40465, 1), v40854});
+} else if (IS_N(s40500, 31)) {
+V s40859 = FLD(s40500, 4);
+if (IS_N(s40859, 8)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(25, 7, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), FLD(s40859, 0), FLD(s40859, 1), FLD(s40859, 2)}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40859, 9)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(30, 6, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), FLD(s40859, 0), FLD(s40859, 1)}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40859, 5) && IS_N(FLD(s40859, 0), 0)) {
+{ V t0 = nat_subk(s40465, 1); V t1 = CN(20, 7, (V[]){FLD(s40500, 0), FLD(s40500, 1), FLD(s40500, 2), FLD(s40500, 3), FLD(FLD(s40859, 0), 0), FLD(s40859, 1), ({ V r40860;
+V v40861 = FLD(s40500, 2);
+r40860 = F_Gen_dis__tail_x37u(FLD(s40500, 1), FLD(v40861, 0), FLD(v40861, 1), FLD(v40861, 2), FLD(s40500, 3), FLD(FLD(s40859, 0), 0), FLD(s40859, 1));
+r40860; })}); a0 = t0; a1 = t1; goto top; }
 } else {
-V v40692 = F_J_dgo(nat_subk(s40294, 1), C3(16, FLD(s40329, 0), FLD(s40329, 1), s40688));
-return mk_clo(L40694, 3, 2, (V[]){FLD(s40329, 3), v40692});
+V v40863 = F_J_dgo(nat_subk(s40465, 1), C3(16, FLD(s40500, 0), FLD(s40500, 1), s40859));
+return mk_clo(L40865, 3, 2, (V[]){FLD(s40500, 3), v40863});
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dgo(V *a) { (void)a; return F_J_dgo(a[0], a[1]); }
-static V K40698(void) { static V c; return KONST(c, C1(1, MKS("return "))); }
-static V K40699(void) { static V c; return KONST(c, C2(1, C1(1, MKS(";\012")), IMM(0))); }
-static V K40701(void) { static V c; return KONST(c, C1(1, MKS(" = "))); }
-static V K40702(void) { static V c; return KONST(c, C2(1, C1(1, MKS(";\012")), IMM(0))); }
-static V K40704(void) { static V c; return KONST(c, C1(1, MKS("*dst = "))); }
-static V K40705(void) { static V c; return KONST(c, C2(1, C1(1, MKS(";\012return 0;\012")), IMM(0))); }
-static V K40707(void) { static V c; return KONST(c, C1(1, MKS("return "))); }
-static V K40708(void) { static V c; return KONST(c, C2(1, C1(1, MKS(";\012")), IMM(0))); }
+static V K40869(void) { static V c; return KONST(c, C1(1, MKS("return "))); }
+static V K40870(void) { static V c; return KONST(c, C2(1, C1(1, MKS(";\012")), IMM(0))); }
+static V K40872(void) { static V c; return KONST(c, C1(1, MKS(" = "))); }
+static V K40873(void) { static V c; return KONST(c, C2(1, C1(1, MKS(";\012")), IMM(0))); }
+static V K40875(void) { static V c; return KONST(c, C1(1, MKS("*dst = "))); }
+static V K40876(void) { static V c; return KONST(c, C2(1, C1(1, MKS(";\012return 0;\012")), IMM(0))); }
+static V K40878(void) { static V c; return KONST(c, C1(1, MKS("return "))); }
+static V K40879(void) { static V c; return KONST(c, C2(1, C1(1, MKS(";\012")), IMM(0))); }
 static V F_J_dret(V a0, V a1) {
 top:;
-V s40697 = a0;
-if ((s40697) == IMM(0)) {
-return F_Doc_dlist(C2(1, K40698(), C2(1, a1, K40699())));
-} else if (IS_N(s40697, 1)) {
-return F_Doc_dlist(C2(1, C1(1, FLD(s40697, 0)), C2(1, K40701(), C2(1, a1, K40702()))));
-} else if (IS_N(s40697, 2)) {
-return F_Doc_dlist(C2(1, K40704(), C2(1, a1, K40705())));
-} else if (IS_N(s40697, 3)) {
-return F_Doc_dlist(C2(1, K40707(), C2(1, a1, K40708())));
+V s40868 = a0;
+if ((s40868) == IMM(0)) {
+return F_Doc_dlist(C2(1, K40869(), C2(1, a1, K40870())));
+} else if (IS_N(s40868, 1)) {
+return F_Doc_dlist(C2(1, C1(1, FLD(s40868, 0)), C2(1, K40872(), C2(1, a1, K40873()))));
+} else if (IS_N(s40868, 2)) {
+return F_Doc_dlist(C2(1, K40875(), C2(1, a1, K40876())));
+} else if (IS_N(s40868, 3)) {
+return F_Doc_dlist(C2(1, K40878(), C2(1, a1, K40879())));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dret(V *a) { (void)a; return F_J_dret(a[0], a[1]); }
-static V S40710(void) { static V c; return STRC(c, "const "); }
-static V S40711(void) { static V c; return STRC(c, " = "); }
-static V K40714(void) { static V c; return KONST(c, C1(1, MKS(";\012"))); }
+static V S40881(void) { static V c; return STRC(c, "const "); }
+static V S40882(void) { static V c; return STRC(c, " = "); }
+static V K40885(void) { static V c; return KONST(c, C1(1, MKS(";\012"))); }
 BEND_UINL V U_J_dscrs_dput_x37u(V a0, V a1, V a2, V a3, V *o) {
 top:;
 o[0] = C2(1, a0, a2);
-o[1] = F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40710(), F_String_dappend(a0, S40711()))), C2(1, a1, C2(1, K40714(), C2(1, a3, IMM(0))))));
+o[1] = F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40881(), F_String_dappend(a0, S40882()))), C2(1, a1, C2(1, K40885(), C2(1, a3, IMM(0))))));
 return 0;
 }
 static V F_J_dscrs_dput_x37u(V a0, V a1, V a2, V a3) { V o[2]; U_J_dscrs_dput_x37u(a0, a1, a2, a3, o); return CN(0, 2, o); }
 static V W_J_dscrs_dput_x37u(V *a) { (void)a; return F_J_dscrs_dput_x37u(a[0], a[1], a[2], a[3]); }
 BEND_UINL V U_J_dpats(V a0, V a1, V a2, V a3, V *o) {
 top:;
-V s40716 = a1;
-V s40717 = a2;
-if (IS_N(s40716, 1) && IS_N(s40717, 1)) {
-{ V t0 = a0; V t1 = FLD(s40716, 1); V t2 = FLD(s40717, 1); V t3 = F_J_dpat_dgo(F_U32_dto__nat(4000000000u), C4(8, a0, FLD(s40716, 0), FLD(s40717, 0), a3)); a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
+V s40887 = a1;
+V s40888 = a2;
+if (IS_N(s40887, 1) && IS_N(s40888, 1)) {
+{ V t0 = a0; V t1 = FLD(s40887, 1); V t2 = FLD(s40888, 1); V t3 = F_J_dpat_dgo(F_U32_dto__nat(4000000000u), C4(8, a0, FLD(s40887, 0), FLD(s40888, 0), a3)); a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
 } else {
 bend_open(a3, o, 2, 0);
 return 0;
@@ -97005,365 +97437,365 @@ return 0;
 }
 static V F_J_dpats(V a0, V a1, V a2, V a3) { V o[2]; U_J_dpats(a0, a1, a2, a3, o); return CN(0, 2, o); }
 static V W_J_dpats(V *a) { (void)a; return F_J_dpats(a[0], a[1], a[2], a[3]); }
-static V S40723(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
-static V S40725(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
-static V S40727(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
-static V S40729(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
-static V S40731(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
-static V S40733(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
-static V S40735(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
-static V S40737(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
-static V S40739(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
-static V S40745(void) { static V c; return STRC(c, "(("); }
-static V S40746(void) { static V c; return STRC(c, ") >>> 1)"); }
-static V S40749(void) { static V c; return STRC(c, "((("); }
-static V S40750(void) { static V c; return STRC(c, ") & 1) === 1)"); }
-static V S40758(void) { static V c; return STRC(c, "("); }
-static V S40759(void) { static V c; return STRC(c, ")[0]"); }
-static V S40764(void) { static V c; return STRC(c, "("); }
-static V S40765(void) { static V c; return STRC(c, ").length === 1"); }
-static V S40768(void) { static V c; return STRC(c, "array_half("); }
-static V S40769(void) { static V c; return STRC(c, ", 0)"); }
-static V S40772(void) { static V c; return STRC(c, "array_half("); }
-static V S40773(void) { static V c; return STRC(c, ", 1)"); }
-static V S40778(void) { static V c; return STRC(c, "("); }
-static V S40779(void) { static V c; return STRC(c, ").length !== 1"); }
-static V S40786(void) { static V c; return STRC(c, "True"); }
-static V S40788(void) { static V c; return STRC(c, "!"); }
-static V S40789(void) { static V c; return STRC(c, ""); }
-static V S40790(void) { static V c; return STRC(c, "("); }
-static V S40791(void) { static V c; return STRC(c, ")"); }
-static V S40796(void) { static V c; return STRC(c, "Zero"); }
-static V S40798(void) { static V c; return STRC(c, "(("); }
-static V S40799(void) { static V c; return STRC(c, ") - 1n)"); }
-static V S40804(void) { static V c; return STRC(c, "("); }
-static V S40805(void) { static V c; return STRC(c, ") !== 0n"); }
-static V S40809(void) { static V c; return STRC(c, "("); }
-static V S40810(void) { static V c; return STRC(c, ") === 0n"); }
-static V S40814(void) { static V c; return STRC(c, "SNil"); }
-static V S40816(void) { static V c; return STRC(c, "str_head("); }
-static V S40817(void) { static V c; return STRC(c, ")"); }
-static V S40820(void) { static V c; return STRC(c, "str_tail("); }
-static V S40821(void) { static V c; return STRC(c, ")"); }
-static V S40826(void) { static V c; return STRC(c, "("); }
-static V S40827(void) { static V c; return STRC(c, ") !== \042\042"); }
-static V S40831(void) { static V c; return STRC(c, "("); }
-static V S40832(void) { static V c; return STRC(c, ") === \042\042"); }
-static V S40835(void) { static V c; return STRC(c, "("); }
-static V S40836(void) { static V c; return STRC(c, ").codePointAt(0)"); }
-static V S40839(void) { static V c; return STRC(c, "F_F32_dbits("); }
-static V S40840(void) { static V c; return STRC(c, ")"); }
-static V S40843(void) { static V c; return STRC(c, "ALeaf"); }
-static V S40849(void) { static V c; return STRC(c, "("); }
-static V S40850(void) { static V c; return STRC(c, ").$ === \042"); }
-static V S40851(void) { static V c; return STRC(c, "\042"); }
-static V S40858(void) { static V c; return STRC(c, "false /* unknown constructor "); }
-static V S40859(void) { static V c; return STRC(c, " */"); }
-static V S40870(void) { static V c; return STRC(c, "("); }
-static V S40871(void) { static V c; return STRC(c, ") === "); }
-static V S40874(void) { static V c; return STRC(c, "n"); }
-static V S40879(void) { static V c; return STRC(c, "(("); }
-static V S40880(void) { static V c; return STRC(c, ") - "); }
-static V S40883(void) { static V c; return STRC(c, "n)"); }
-static V S40892(void) { static V c; return STRC(c, "("); }
-static V S40893(void) { static V c; return STRC(c, ") === "); }
-static V S40900(void) { static V c; return STRC(c, "("); }
-static V S40901(void) { static V c; return STRC(c, ") === "); }
+static V S40894(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
+static V S40896(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
+static V S40898(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
+static V S40900(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
+static V S40902(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
+static V S40904(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
+static V S40906(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
+static V S40908(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
+static V S40910(void) { static V c; return STRC(c, "bend_out_of_fuel"); }
+static V S40916(void) { static V c; return STRC(c, "(("); }
+static V S40917(void) { static V c; return STRC(c, ") >>> 1)"); }
+static V S40920(void) { static V c; return STRC(c, "((("); }
+static V S40921(void) { static V c; return STRC(c, ") & 1) === 1)"); }
+static V S40929(void) { static V c; return STRC(c, "("); }
+static V S40930(void) { static V c; return STRC(c, ")[0]"); }
+static V S40935(void) { static V c; return STRC(c, "("); }
+static V S40936(void) { static V c; return STRC(c, ").length === 1"); }
+static V S40939(void) { static V c; return STRC(c, "array_half("); }
+static V S40940(void) { static V c; return STRC(c, ", 0)"); }
+static V S40943(void) { static V c; return STRC(c, "array_half("); }
+static V S40944(void) { static V c; return STRC(c, ", 1)"); }
+static V S40949(void) { static V c; return STRC(c, "("); }
+static V S40950(void) { static V c; return STRC(c, ").length !== 1"); }
+static V S40957(void) { static V c; return STRC(c, "True"); }
+static V S40959(void) { static V c; return STRC(c, "!"); }
+static V S40960(void) { static V c; return STRC(c, ""); }
+static V S40961(void) { static V c; return STRC(c, "("); }
+static V S40962(void) { static V c; return STRC(c, ")"); }
+static V S40967(void) { static V c; return STRC(c, "Zero"); }
+static V S40969(void) { static V c; return STRC(c, "(("); }
+static V S40970(void) { static V c; return STRC(c, ") - 1n)"); }
+static V S40975(void) { static V c; return STRC(c, "("); }
+static V S40976(void) { static V c; return STRC(c, ") !== 0n"); }
+static V S40980(void) { static V c; return STRC(c, "("); }
+static V S40981(void) { static V c; return STRC(c, ") === 0n"); }
+static V S40985(void) { static V c; return STRC(c, "SNil"); }
+static V S40987(void) { static V c; return STRC(c, "str_head("); }
+static V S40988(void) { static V c; return STRC(c, ")"); }
+static V S40991(void) { static V c; return STRC(c, "str_tail("); }
+static V S40992(void) { static V c; return STRC(c, ")"); }
+static V S40997(void) { static V c; return STRC(c, "("); }
+static V S40998(void) { static V c; return STRC(c, ") !== \042\042"); }
+static V S41002(void) { static V c; return STRC(c, "("); }
+static V S41003(void) { static V c; return STRC(c, ") === \042\042"); }
+static V S41006(void) { static V c; return STRC(c, "("); }
+static V S41007(void) { static V c; return STRC(c, ").codePointAt(0)"); }
+static V S41010(void) { static V c; return STRC(c, "F_F32_dbits("); }
+static V S41011(void) { static V c; return STRC(c, ")"); }
+static V S41014(void) { static V c; return STRC(c, "ALeaf"); }
+static V S41020(void) { static V c; return STRC(c, "("); }
+static V S41021(void) { static V c; return STRC(c, ").$ === \042"); }
+static V S41022(void) { static V c; return STRC(c, "\042"); }
+static V S41029(void) { static V c; return STRC(c, "false /* unknown constructor "); }
+static V S41030(void) { static V c; return STRC(c, " */"); }
+static V S41041(void) { static V c; return STRC(c, "("); }
+static V S41042(void) { static V c; return STRC(c, ") === "); }
+static V S41045(void) { static V c; return STRC(c, "n"); }
+static V S41050(void) { static V c; return STRC(c, "(("); }
+static V S41051(void) { static V c; return STRC(c, ") - "); }
+static V S41054(void) { static V c; return STRC(c, "n)"); }
+static V S41063(void) { static V c; return STRC(c, "("); }
+static V S41064(void) { static V c; return STRC(c, ") === "); }
+static V S41071(void) { static V c; return STRC(c, "("); }
+static V S41072(void) { static V c; return STRC(c, ") === "); }
 static V F_J_dpat_dgo(V a0, V a1) {
 top:;
-V s40720 = (a0);
-if ((s40720) == 0) {
-V s40721 = a1;
-if (IS_N(s40721, 0)) {
-V v40722 = FLD(s40721, 3);
-return C2(0, C2(1, S40723(), FLD(v40722, 0)), FLD(v40722, 1));
-} else if (IS_N(s40721, 1)) {
-V v40724 = FLD(s40721, 3);
-return C2(0, C2(1, S40725(), FLD(v40724, 0)), FLD(v40724, 1));
-} else if (IS_N(s40721, 2)) {
-V v40726 = FLD(s40721, 4);
-return C2(0, C2(1, S40727(), FLD(v40726, 0)), FLD(v40726, 1));
-} else if (IS_N(s40721, 3)) {
-V v40728 = FLD(s40721, 3);
-return C2(0, C2(1, S40729(), FLD(v40728, 0)), FLD(v40728, 1));
-} else if (IS_N(s40721, 4)) {
-V v40730 = FLD(s40721, 3);
-return C2(0, C2(1, S40731(), FLD(v40730, 0)), FLD(v40730, 1));
-} else if (IS_N(s40721, 5)) {
-V v40732 = FLD(s40721, 4);
-return C2(0, C2(1, S40733(), FLD(v40732, 0)), FLD(v40732, 1));
-} else if (IS_N(s40721, 6)) {
-V v40734 = FLD(s40721, 7);
-return C2(0, C2(1, S40735(), FLD(v40734, 0)), FLD(v40734, 1));
-} else if (IS_N(s40721, 7)) {
-V v40736 = FLD(s40721, 5);
-return C2(0, C2(1, S40737(), FLD(v40736, 0)), FLD(v40736, 1));
-} else if (IS_N(s40721, 8)) {
-V v40738 = FLD(s40721, 3);
-return C2(0, C2(1, S40739(), FLD(v40738, 0)), FLD(v40738, 1));
+V s40891 = (a0);
+if ((s40891) == 0) {
+V s40892 = a1;
+if (IS_N(s40892, 0)) {
+V v40893 = FLD(s40892, 3);
+return C2(0, C2(1, S40894(), FLD(v40893, 0)), FLD(v40893, 1));
+} else if (IS_N(s40892, 1)) {
+V v40895 = FLD(s40892, 3);
+return C2(0, C2(1, S40896(), FLD(v40895, 0)), FLD(v40895, 1));
+} else if (IS_N(s40892, 2)) {
+V v40897 = FLD(s40892, 4);
+return C2(0, C2(1, S40898(), FLD(v40897, 0)), FLD(v40897, 1));
+} else if (IS_N(s40892, 3)) {
+V v40899 = FLD(s40892, 3);
+return C2(0, C2(1, S40900(), FLD(v40899, 0)), FLD(v40899, 1));
+} else if (IS_N(s40892, 4)) {
+V v40901 = FLD(s40892, 3);
+return C2(0, C2(1, S40902(), FLD(v40901, 0)), FLD(v40901, 1));
+} else if (IS_N(s40892, 5)) {
+V v40903 = FLD(s40892, 4);
+return C2(0, C2(1, S40904(), FLD(v40903, 0)), FLD(v40903, 1));
+} else if (IS_N(s40892, 6)) {
+V v40905 = FLD(s40892, 7);
+return C2(0, C2(1, S40906(), FLD(v40905, 0)), FLD(v40905, 1));
+} else if (IS_N(s40892, 7)) {
+V v40907 = FLD(s40892, 5);
+return C2(0, C2(1, S40908(), FLD(v40907, 0)), FLD(v40907, 1));
+} else if (IS_N(s40892, 8)) {
+V v40909 = FLD(s40892, 3);
+return C2(0, C2(1, S40910(), FLD(v40909, 0)), FLD(v40909, 1));
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s40720) != 0) {
-V s40740 = a1;
-if (IS_N(s40740, 0)) {
-V s40741 = FLD(s40740, 1);
-V s40742 = FLD(s40740, 2);
-if (IS_N(s40741, 1) && IS_N(s40742, 1)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(0, FLD(s40740, 0), FLD(s40741, 1), FLD(s40742, 1), F_J_dpat_dgo(nat_subk(s40720, 1), C4(8, FLD(s40740, 0), FLD(s40741, 0), FLD(s40742, 0), FLD(s40740, 3)))); a0 = t0; a1 = t1; goto top; }
+} else if ((s40891) != 0) {
+V s40911 = a1;
+if (IS_N(s40911, 0)) {
+V s40912 = FLD(s40911, 1);
+V s40913 = FLD(s40911, 2);
+if (IS_N(s40912, 1) && IS_N(s40913, 1)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(0, FLD(s40911, 0), FLD(s40912, 1), FLD(s40913, 1), F_J_dpat_dgo(nat_subk(s40891, 1), C4(8, FLD(s40911, 0), FLD(s40912, 0), FLD(s40913, 0), FLD(s40911, 3)))); a0 = t0; a1 = t1; goto top; }
 } else {
-return FLD(s40740, 3);
+return FLD(s40911, 3);
 }
-} else if (IS_N(s40740, 1)) {
-V s40744 = FLD(s40740, 1);
-if (IS_N(s40744, 1) && IS_N(FLD(s40744, 1), 1) && IS_N(FLD(FLD(s40744, 1), 1), 1) && (FLD(FLD(FLD(s40744, 1), 1), 1)) == IMM(0)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(3, FLD(s40740, 0), FLD(FLD(FLD(s40744, 1), 1), 0), F_String_dappend(S40745(), F_String_dappend(FLD(s40740, 2), S40746())), F_J_dpat_dgo(nat_subk(s40720, 1), C4(8, FLD(s40740, 0), FLD(FLD(s40744, 1), 0), F_String_dappend(S40749(), F_String_dappend(FLD(s40740, 2), S40750())), FLD(s40740, 3)))); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40911, 1)) {
+V s40915 = FLD(s40911, 1);
+if (IS_N(s40915, 1) && IS_N(FLD(s40915, 1), 1) && IS_N(FLD(FLD(s40915, 1), 1), 1) && (FLD(FLD(FLD(s40915, 1), 1), 1)) == IMM(0)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(3, FLD(s40911, 0), FLD(FLD(FLD(s40915, 1), 1), 0), F_String_dappend(S40916(), F_String_dappend(FLD(s40911, 2), S40917())), F_J_dpat_dgo(nat_subk(s40891, 1), C4(8, FLD(s40911, 0), FLD(FLD(s40915, 1), 0), F_String_dappend(S40920(), F_String_dappend(FLD(s40911, 2), S40921())), FLD(s40911, 3)))); a0 = t0; a1 = t1; goto top; }
 } else {
-return FLD(s40740, 3);
+return FLD(s40911, 3);
 }
-} else if (IS_N(s40740, 2)) {
-V s40754 = FLD(s40740, 1);
-if ((s40754) == 0) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(1, FLD(s40740, 0), FLD(s40740, 2), FLD(s40740, 3), FLD(s40740, 4)); a0 = t0; a1 = t1; goto top; }
-} else if ((s40754) == 1) {
-return FLD(s40740, 4);
-} else if (nat_ge(s40754, 2)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(8, FLD(s40740, 0), FLD(s40740, 2), FLD(s40740, 3), FLD(s40740, 4)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40911, 2)) {
+V s40925 = FLD(s40911, 1);
+if ((s40925) == 0) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(1, FLD(s40911, 0), FLD(s40911, 2), FLD(s40911, 3), FLD(s40911, 4)); a0 = t0; a1 = t1; goto top; }
+} else if ((s40925) == 1) {
+return FLD(s40911, 4);
+} else if (nat_ge(s40925, 2)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(8, FLD(s40911, 0), FLD(s40911, 2), FLD(s40911, 3), FLD(s40911, 4)); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40740, 3)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = CN(2, 5, (V[]){FLD(s40740, 0), F_Pat_dwordk(FLD(s40740, 1)), FLD(s40740, 1), FLD(s40740, 2), FLD(s40740, 3)}); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s40740, 4)) {
-V s40756 = FLD(s40740, 1);
-if (IS_N(s40756, 1) && (FLD(s40756, 1)) == IMM(0)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(3, FLD(s40740, 0), FLD(s40756, 0), FLD(s40740, 2), FLD(s40740, 3)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40911, 3)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = CN(2, 5, (V[]){FLD(s40911, 0), F_Pat_dwordk(FLD(s40911, 1)), FLD(s40911, 1), FLD(s40911, 2), FLD(s40911, 3)}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40911, 4)) {
+V s40927 = FLD(s40911, 1);
+if (IS_N(s40927, 1) && (FLD(s40927, 1)) == IMM(0)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(3, FLD(s40911, 0), FLD(s40927, 0), FLD(s40911, 2), FLD(s40911, 3)); a0 = t0; a1 = t1; goto top; }
 } else {
-return FLD(s40740, 3);
+return FLD(s40911, 3);
 }
-} else if (IS_N(s40740, 5)) {
-V s40757 = FLD(s40740, 0);
-if ((s40757) == IMM(1)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(0, FLD(s40740, 1), FLD(s40740, 2), C2(1, F_String_dappend(S40758(), F_String_dappend(FLD(s40740, 3), S40759())), IMM(0)), ({ V r40762;
-V v40763 = FLD(s40740, 4);
-r40762 = C2(0, C2(1, F_String_dappend(S40764(), F_String_dappend(FLD(s40740, 3), S40765())), FLD(v40763, 0)), FLD(v40763, 1));
-r40762; })); a0 = t0; a1 = t1; goto top; }
-} else if ((s40757) == IMM(0)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(0, FLD(s40740, 1), FLD(s40740, 2), C2(1, F_String_dappend(S40768(), F_String_dappend(FLD(s40740, 3), S40769())), C2(1, F_String_dappend(S40772(), F_String_dappend(FLD(s40740, 3), S40773())), IMM(0))), ({ V r40776;
-V v40777 = FLD(s40740, 4);
-r40776 = C2(0, C2(1, F_String_dappend(S40778(), F_String_dappend(FLD(s40740, 3), S40779())), FLD(v40777, 0)), FLD(v40777, 1));
-r40776; })); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40911, 5)) {
+V s40928 = FLD(s40911, 0);
+if ((s40928) == IMM(1)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(0, FLD(s40911, 1), FLD(s40911, 2), C2(1, F_String_dappend(S40929(), F_String_dappend(FLD(s40911, 3), S40930())), IMM(0)), ({ V r40933;
+V v40934 = FLD(s40911, 4);
+r40933 = C2(0, C2(1, F_String_dappend(S40935(), F_String_dappend(FLD(s40911, 3), S40936())), FLD(v40934, 0)), FLD(v40934, 1));
+r40933; })); a0 = t0; a1 = t1; goto top; }
+} else if ((s40928) == IMM(0)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(0, FLD(s40911, 1), FLD(s40911, 2), C2(1, F_String_dappend(S40939(), F_String_dappend(FLD(s40911, 3), S40940())), C2(1, F_String_dappend(S40943(), F_String_dappend(FLD(s40911, 3), S40944())), IMM(0))), ({ V r40947;
+V v40948 = FLD(s40911, 4);
+r40947 = C2(0, C2(1, F_String_dappend(S40949(), F_String_dappend(FLD(s40911, 3), S40950())), FLD(v40948, 0)), FLD(v40948, 1));
+r40947; })); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40740, 6)) {
-V s40782 = FLD(s40740, 1);
-if ((s40782) == 1) {
-V v40783 = FLD(s40740, 7);
-return C2(0, C2(1, F_String_dappend(({ V r40784;
-V s40785 = F_String_deq(FLD(s40740, 2), S40786());
-if ((s40785) == IMM(0)) {
-r40784 = S40788();
-} else if ((s40785) == IMM(1)) {
-r40784 = S40789();
+} else if (IS_N(s40911, 6)) {
+V s40953 = FLD(s40911, 1);
+if ((s40953) == 1) {
+V v40954 = FLD(s40911, 7);
+return C2(0, C2(1, F_String_dappend(({ V r40955;
+V s40956 = F_String_deq(FLD(s40911, 2), S40957());
+if ((s40956) == IMM(0)) {
+r40955 = S40959();
+} else if ((s40956) == IMM(1)) {
+r40955 = S40960();
 } else { bend_fail("runtime fail-stop"); }
-r40784; }), F_String_dappend(S40790(), F_String_dappend(FLD(s40740, 4), S40791()))), FLD(v40783, 0)), FLD(v40783, 1));
-} else if ((s40782) == 2) {
-V s40795 = F_String_deq(FLD(s40740, 2), S40796());
-if ((s40795) == IMM(0)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(0, FLD(s40740, 0), FLD(s40740, 3), C2(1, F_String_dappend(S40798(), F_String_dappend(FLD(s40740, 4), S40799())), IMM(0)), ({ V r40802;
-V v40803 = FLD(s40740, 7);
-r40802 = C2(0, C2(1, F_String_dappend(S40804(), F_String_dappend(FLD(s40740, 4), S40805())), FLD(v40803, 0)), FLD(v40803, 1));
-r40802; })); a0 = t0; a1 = t1; goto top; }
-} else if ((s40795) == IMM(1)) {
-V v40808 = FLD(s40740, 7);
-return C2(0, C2(1, F_String_dappend(S40809(), F_String_dappend(FLD(s40740, 4), S40810())), FLD(v40808, 0)), FLD(v40808, 1));
+r40955; }), F_String_dappend(S40961(), F_String_dappend(FLD(s40911, 4), S40962()))), FLD(v40954, 0)), FLD(v40954, 1));
+} else if ((s40953) == 2) {
+V s40966 = F_String_deq(FLD(s40911, 2), S40967());
+if ((s40966) == IMM(0)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(0, FLD(s40911, 0), FLD(s40911, 3), C2(1, F_String_dappend(S40969(), F_String_dappend(FLD(s40911, 4), S40970())), IMM(0)), ({ V r40973;
+V v40974 = FLD(s40911, 7);
+r40973 = C2(0, C2(1, F_String_dappend(S40975(), F_String_dappend(FLD(s40911, 4), S40976())), FLD(v40974, 0)), FLD(v40974, 1));
+r40973; })); a0 = t0; a1 = t1; goto top; }
+} else if ((s40966) == IMM(1)) {
+V v40979 = FLD(s40911, 7);
+return C2(0, C2(1, F_String_dappend(S40980(), F_String_dappend(FLD(s40911, 4), S40981())), FLD(v40979, 0)), FLD(v40979, 1));
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s40782) == 3) {
-V s40813 = F_String_deq(FLD(s40740, 2), S40814());
-if ((s40813) == IMM(0)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(0, FLD(s40740, 0), FLD(s40740, 3), C2(1, F_String_dappend(S40816(), F_String_dappend(FLD(s40740, 4), S40817())), C2(1, F_String_dappend(S40820(), F_String_dappend(FLD(s40740, 4), S40821())), IMM(0))), ({ V r40824;
-V v40825 = FLD(s40740, 7);
-r40824 = C2(0, C2(1, F_String_dappend(S40826(), F_String_dappend(FLD(s40740, 4), S40827())), FLD(v40825, 0)), FLD(v40825, 1));
-r40824; })); a0 = t0; a1 = t1; goto top; }
-} else if ((s40813) == IMM(1)) {
-V v40830 = FLD(s40740, 7);
-return C2(0, C2(1, F_String_dappend(S40831(), F_String_dappend(FLD(s40740, 4), S40832())), FLD(v40830, 0)), FLD(v40830, 1));
+} else if ((s40953) == 3) {
+V s40984 = F_String_deq(FLD(s40911, 2), S40985());
+if ((s40984) == IMM(0)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(0, FLD(s40911, 0), FLD(s40911, 3), C2(1, F_String_dappend(S40987(), F_String_dappend(FLD(s40911, 4), S40988())), C2(1, F_String_dappend(S40991(), F_String_dappend(FLD(s40911, 4), S40992())), IMM(0))), ({ V r40995;
+V v40996 = FLD(s40911, 7);
+r40995 = C2(0, C2(1, F_String_dappend(S40997(), F_String_dappend(FLD(s40911, 4), S40998())), FLD(v40996, 0)), FLD(v40996, 1));
+r40995; })); a0 = t0; a1 = t1; goto top; }
+} else if ((s40984) == IMM(1)) {
+V v41001 = FLD(s40911, 7);
+return C2(0, C2(1, F_String_dappend(S41002(), F_String_dappend(FLD(s40911, 4), S41003())), FLD(v41001, 0)), FLD(v41001, 1));
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s40782) == 4) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(0, FLD(s40740, 0), FLD(s40740, 3), C2(1, F_String_dappend(S40835(), F_String_dappend(FLD(s40740, 4), S40836())), IMM(0)), FLD(s40740, 7)); a0 = t0; a1 = t1; goto top; }
-} else if ((s40782) == 5) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(4, FLD(s40740, 0), FLD(s40740, 3), FLD(s40740, 4), FLD(s40740, 7)); a0 = t0; a1 = t1; goto top; }
-} else if ((s40782) == 6) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(4, FLD(s40740, 0), FLD(s40740, 3), F_String_dappend(S40839(), F_String_dappend(FLD(s40740, 4), S40840())), FLD(s40740, 7)); a0 = t0; a1 = t1; goto top; }
-} else if ((s40782) == 7) {
-{ V t0 = nat_subk(s40720, 1); V t1 = CN(5, 5, (V[]){F_String_deq(FLD(s40740, 2), S40843()), FLD(s40740, 0), FLD(s40740, 3), FLD(s40740, 4), FLD(s40740, 7)}); a0 = t0; a1 = t1; goto top; }
+} else if ((s40953) == 4) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(0, FLD(s40911, 0), FLD(s40911, 3), C2(1, F_String_dappend(S41006(), F_String_dappend(FLD(s40911, 4), S41007())), IMM(0)), FLD(s40911, 7)); a0 = t0; a1 = t1; goto top; }
+} else if ((s40953) == 5) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(4, FLD(s40911, 0), FLD(s40911, 3), FLD(s40911, 4), FLD(s40911, 7)); a0 = t0; a1 = t1; goto top; }
+} else if ((s40953) == 6) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(4, FLD(s40911, 0), FLD(s40911, 3), F_String_dappend(S41010(), F_String_dappend(FLD(s40911, 4), S41011())), FLD(s40911, 7)); a0 = t0; a1 = t1; goto top; }
+} else if ((s40953) == 7) {
+{ V t0 = nat_subk(s40891, 1); V t1 = CN(5, 5, (V[]){F_String_deq(FLD(s40911, 2), S41014()), FLD(s40911, 0), FLD(s40911, 3), FLD(s40911, 4), FLD(s40911, 7)}); a0 = t0; a1 = t1; goto top; }
 } else {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(0, FLD(s40740, 0), FLD(s40740, 3), F_J_dpaths(FLD(s40740, 4), FLD(s40740, 5)), ({ V r40846;
-V s40847 = FLD(s40740, 6);
-if ((s40847) == IMM(1)) {
-r40846 = FLD(s40740, 7);
-} else if ((s40847) == IMM(0)) {
-V v40848 = FLD(s40740, 7);
-r40846 = C2(0, C2(1, F_String_dappend(S40849(), F_String_dappend(FLD(s40740, 4), F_String_dappend(S40850(), F_String_dappend(FLD(s40740, 2), S40851())))), FLD(v40848, 0)), FLD(v40848, 1));
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(0, FLD(s40911, 0), FLD(s40911, 3), F_J_dpaths(FLD(s40911, 4), FLD(s40911, 5)), ({ V r41017;
+V s41018 = FLD(s40911, 6);
+if ((s41018) == IMM(1)) {
+r41017 = FLD(s40911, 7);
+} else if ((s41018) == IMM(0)) {
+V v41019 = FLD(s40911, 7);
+r41017 = C2(0, C2(1, F_String_dappend(S41020(), F_String_dappend(FLD(s40911, 4), F_String_dappend(S41021(), F_String_dappend(FLD(s40911, 2), S41022())))), FLD(v41019, 0)), FLD(v41019, 1));
 } else { bend_fail("runtime fail-stop"); }
-r40846; })); a0 = t0; a1 = t1; goto top; }
+r41017; })); a0 = t0; a1 = t1; goto top; }
 }
-} else if (IS_N(s40740, 7)) {
-V s40856 = FLD(s40740, 1);
-if ((s40856) == IMM(0)) {
-V v40857 = FLD(s40740, 5);
-return C2(0, C2(1, F_String_dappend(S40858(), F_String_dappend(FLD(s40740, 2), S40859())), FLD(v40857, 0)), FLD(v40857, 1));
-} else if (IS_N(s40856, 1)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = CN(6, 8, (V[]){FLD(s40740, 0), F_J_dkind(FLD(FLD(s40856, 0), 0)), FLD(s40740, 2), FLD(s40740, 3), FLD(s40740, 4), FLD(FLD(s40856, 0), 1), FLD(FLD(s40856, 0), 2), FLD(s40740, 5)}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s40911, 7)) {
+V s41027 = FLD(s40911, 1);
+if ((s41027) == IMM(0)) {
+V v41028 = FLD(s40911, 5);
+return C2(0, C2(1, F_String_dappend(S41029(), F_String_dappend(FLD(s40911, 2), S41030())), FLD(v41028, 0)), FLD(v41028, 1));
+} else if (IS_N(s41027, 1)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = CN(6, 8, (V[]){FLD(s40911, 0), F_J_dkind(FLD(FLD(s41027, 0), 0)), FLD(s40911, 2), FLD(s40911, 3), FLD(s40911, 4), FLD(FLD(s41027, 0), 1), FLD(FLD(s41027, 0), 2), FLD(s40911, 5)}); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s40740, 8)) {
-V s40863 = FLD(s40740, 1);
-if (IS_N(s40863, 0)) {
-V v40864 = FLD(s40740, 3);
-return F_Gen_dpat_dvar_x37u(FLD(s40863, 0), FLD(s40740, 2), FLD(v40864, 0), FLD(v40864, 1));
-} else if (IS_N(s40863, 1)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = CN(7, 6, (V[]){FLD(s40740, 0), ({ V r40866;
-V v40867 = FLD(s40740, 0);
-r40866 = F_J_dctor_x37u(FLD(v40867, 0), FLD(v40867, 1), FLD(s40863, 0));
-r40866; }), FLD(s40863, 0), FLD(s40863, 1), FLD(s40740, 2), FLD(s40740, 3)}); a0 = t0; a1 = t1; goto top; }
-} else if (IS_LI(s40863, 2)) {
-V v40869 = FLD(s40740, 3);
-return C2(0, C2(1, F_String_dappend(S40870(), F_String_dappend(FLD(s40740, 2), F_String_dappend(S40871(), F_String_dappend(F_U32_dshow_dif(LI_V(s40863), F_U32_dis__zero(LI_V(s40863))), S40874())))), FLD(v40869, 0)), FLD(v40869, 1));
-} else if (IS_N(s40863, 3)) {
-{ V t0 = nat_subk(s40720, 1); V t1 = C4(8, FLD(s40740, 0), FLD(s40863, 1), F_String_dappend(S40879(), F_String_dappend(FLD(s40740, 2), F_String_dappend(S40880(), F_String_dappend(F_U32_dshow_dif(FLD(s40863, 0), F_U32_dis__zero(FLD(s40863, 0))), S40883())))), ({ V r40888;
-V v40889 = FLD(s40740, 3);
-r40888 = C2(0, C2(1, F_J_dsucc_dcond(FLD(s40740, 2), FLD(s40863, 0)), FLD(v40889, 0)), FLD(v40889, 1));
-r40888; })); a0 = t0; a1 = t1; goto top; }
-} else if (IS_LI(s40863, 4)) {
-V v40891 = FLD(s40740, 3);
-return C2(0, C2(1, F_String_dappend(S40892(), F_String_dappend(FLD(s40740, 2), F_String_dappend(S40893(), F_U32_dshow_dif(LI_V(s40863), F_U32_dis__zero(LI_V(s40863)))))), FLD(v40891, 0)), FLD(v40891, 1));
-} else if (IS_N(s40863, 5)) {
-V v40899 = FLD(s40740, 3);
-return C2(0, C2(1, F_String_dappend(S40900(), F_String_dappend(FLD(s40740, 2), F_String_dappend(S40901(), F_J_dflt_dof(FLD(s40863, 0), F_F32_dread(FLD(s40863, 0)))))), FLD(v40899, 0)), FLD(v40899, 1));
+} else if (IS_N(s40911, 8)) {
+V s41034 = FLD(s40911, 1);
+if (IS_N(s41034, 0)) {
+V v41035 = FLD(s40911, 3);
+return F_Gen_dpat_dvar_x37u(FLD(s41034, 0), FLD(s40911, 2), FLD(v41035, 0), FLD(v41035, 1));
+} else if (IS_N(s41034, 1)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = CN(7, 6, (V[]){FLD(s40911, 0), ({ V r41037;
+V v41038 = FLD(s40911, 0);
+r41037 = F_J_dctor_x37u(FLD(v41038, 0), FLD(v41038, 1), FLD(s41034, 0));
+r41037; }), FLD(s41034, 0), FLD(s41034, 1), FLD(s40911, 2), FLD(s40911, 3)}); a0 = t0; a1 = t1; goto top; }
+} else if (IS_LI(s41034, 2)) {
+V v41040 = FLD(s40911, 3);
+return C2(0, C2(1, F_String_dappend(S41041(), F_String_dappend(FLD(s40911, 2), F_String_dappend(S41042(), F_String_dappend(F_U32_dshow_dif(LI_V(s41034), F_U32_dis__zero(LI_V(s41034))), S41045())))), FLD(v41040, 0)), FLD(v41040, 1));
+} else if (IS_N(s41034, 3)) {
+{ V t0 = nat_subk(s40891, 1); V t1 = C4(8, FLD(s40911, 0), FLD(s41034, 1), F_String_dappend(S41050(), F_String_dappend(FLD(s40911, 2), F_String_dappend(S41051(), F_String_dappend(F_U32_dshow_dif(FLD(s41034, 0), F_U32_dis__zero(FLD(s41034, 0))), S41054())))), ({ V r41059;
+V v41060 = FLD(s40911, 3);
+r41059 = C2(0, C2(1, F_J_dsucc_dcond(FLD(s40911, 2), FLD(s41034, 0)), FLD(v41060, 0)), FLD(v41060, 1));
+r41059; })); a0 = t0; a1 = t1; goto top; }
+} else if (IS_LI(s41034, 4)) {
+V v41062 = FLD(s40911, 3);
+return C2(0, C2(1, F_String_dappend(S41063(), F_String_dappend(FLD(s40911, 2), F_String_dappend(S41064(), F_U32_dshow_dif(LI_V(s41034), F_U32_dis__zero(LI_V(s41034)))))), FLD(v41062, 0)), FLD(v41062, 1));
+} else if (IS_N(s41034, 5)) {
+V v41070 = FLD(s40911, 3);
+return C2(0, C2(1, F_String_dappend(S41071(), F_String_dappend(FLD(s40911, 2), F_String_dappend(S41072(), F_J_dflt_dof(FLD(s41034, 0), F_F32_dread(FLD(s41034, 0)))))), FLD(v41070, 0)), FLD(v41070, 1));
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dpat_dgo(V *a) { (void)a; return F_J_dpat_dgo(a[0], a[1]); }
-static V S40908(void) { static V c; return STRC(c, "("); }
-static V S40911(void) { static V c; return STRC(c, ")"); }
-static V S40914(void) { static V c; return STRC(c, "Math.fround("); }
-static V S40915(void) { static V c; return STRC(c, ")"); }
+static V S41079(void) { static V c; return STRC(c, "("); }
+static V S41082(void) { static V c; return STRC(c, ")"); }
+static V S41085(void) { static V c; return STRC(c, "Math.fround("); }
+static V S41086(void) { static V c; return STRC(c, ")"); }
 static V F_J_dflt_dof(V a0, V a1) {
 top:;
-V s40907 = a1;
-if (IS_N(s40907, 1)) {
-return F_String_dappend(S40908(), F_String_dappend(F_J_dflt_dbits(F_F32_dbits(FLD(s40907, 0))), S40911()));
-} else if ((s40907) == IMM(0)) {
-return F_String_dappend(S40914(), F_String_dappend(a0, S40915()));
+V s41078 = a1;
+if (IS_N(s41078, 1)) {
+return F_String_dappend(S41079(), F_String_dappend(F_J_dflt_dbits(F_F32_dbits(FLD(s41078, 0))), S41082()));
+} else if ((s41078) == IMM(0)) {
+return F_String_dappend(S41085(), F_String_dappend(a0, S41086()));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dflt_dof(V *a) { (void)a; return F_J_dflt_dof(a[0], a[1]); }
-static V S40927(void) { static V c; return STRC(c, ""); }
-static V S40928(void) { static V c; return STRC(c, "-"); }
+static V S41098(void) { static V c; return STRC(c, ""); }
+static V S41099(void) { static V c; return STRC(c, "-"); }
 static V F_J_dflt_dbits(V a0_) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-uint32_t (u40918) = F_U32_dand(F_U32_dshrn((a0), 23u), 255u);
-uint32_t (u40921) = F_U32_dand((a0), 8388607u);
-return F_String_dappend(({ V r40923;
-V s40924 = F_U32_dis__eq(F_U32_dshrn((a0), 31u), 1u);
-if ((s40924) == IMM(0)) {
-r40923 = S40927();
-} else if ((s40924) == IMM(1)) {
-r40923 = S40928();
+uint32_t (u41089) = F_U32_dand(F_U32_dshrn((a0), 23u), 255u);
+uint32_t (u41092) = F_U32_dand((a0), 8388607u);
+return F_String_dappend(({ V r41094;
+V s41095 = F_U32_dis__eq(F_U32_dshrn((a0), 31u), 1u);
+if ((s41095) == IMM(0)) {
+r41094 = S41098();
+} else if ((s41095) == IMM(1)) {
+r41094 = S41099();
 } else { bend_fail("runtime fail-stop"); }
-r40923; }), ({ V r40929;
-V s40930 = F_U32_dis__eq((u40918), 0u);
-if ((s40930) == IMM(0)) {
-r40929 = F_J_dflt_dmag(F_U32_dor((u40921), 8388608u), (u40918));
-} else if ((s40930) == IMM(1)) {
-r40929 = F_J_dflt_dmag((u40921), 1u);
+r41094; }), ({ V r41100;
+V s41101 = F_U32_dis__eq((u41089), 0u);
+if ((s41101) == IMM(0)) {
+r41100 = F_J_dflt_dmag(F_U32_dor((u41092), 8388608u), (u41089));
+} else if ((s41101) == IMM(1)) {
+r41100 = F_J_dflt_dmag((u41092), 1u);
 } else { bend_fail("runtime fail-stop"); }
-r40929; }));
+r41100; }));
 }
 static V W_J_dflt_dbits(V *a) { (void)a; return F_J_dflt_dbits(a[0]); }
-static V S40940(void) { static V c; return STRC(c, " * 2 ** -"); }
-static V S40950(void) { static V c; return STRC(c, " * 2 ** "); }
+static V S41111(void) { static V c; return STRC(c, " * 2 ** -"); }
+static V S41121(void) { static V c; return STRC(c, " * 2 ** "); }
 static V F_J_dflt_dmag(V a0_, V a1_) {
 uint32_t a0 = (uint32_t)a0_;
 uint32_t a1 = (uint32_t)a1_;
 top:;
-V s40936 = F_U32_dis__ge((a1), 150u);
-if ((s40936) == IMM(0)) {
-return F_String_dappend(F_U32_dshow_dif((a0), F_U32_dis__zero((a0))), F_String_dappend(S40940(), ({ V r40941;
-uint32_t (u40942) = F_U32_dsub(150u, (a1));
-r40941 = F_U32_dshow_dif((u40942), F_U32_dis__zero((u40942)));
-r40941; })));
-} else if ((s40936) == IMM(1)) {
-return F_String_dappend(F_U32_dshow_dif((a0), F_U32_dis__zero((a0))), F_String_dappend(S40950(), ({ V r40951;
-uint32_t (u40952) = F_U32_dsub((a1), 150u);
-r40951 = F_U32_dshow_dif((u40952), F_U32_dis__zero((u40952)));
-r40951; })));
+V s41107 = F_U32_dis__ge((a1), 150u);
+if ((s41107) == IMM(0)) {
+return F_String_dappend(F_U32_dshow_dif((a0), F_U32_dis__zero((a0))), F_String_dappend(S41111(), ({ V r41112;
+uint32_t (u41113) = F_U32_dsub(150u, (a1));
+r41112 = F_U32_dshow_dif((u41113), F_U32_dis__zero((u41113)));
+r41112; })));
+} else if ((s41107) == IMM(1)) {
+return F_String_dappend(F_U32_dshow_dif((a0), F_U32_dis__zero((a0))), F_String_dappend(S41121(), ({ V r41122;
+uint32_t (u41123) = F_U32_dsub((a1), 150u);
+r41122 = F_U32_dshow_dif((u41123), F_U32_dis__zero((u41123)));
+r41122; })));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dflt_dmag(V *a) { (void)a; return F_J_dflt_dmag(a[0], a[1]); }
-static V S40960(void) { static V c; return STRC(c, "("); }
-static V S40961(void) { static V c; return STRC(c, ") >= "); }
-static V S40964(void) { static V c; return STRC(c, "n"); }
-static V S40969(void) { static V c; return STRC(c, "("); }
-static V S40970(void) { static V c; return STRC(c, ") !== 0n"); }
+static V S41131(void) { static V c; return STRC(c, "("); }
+static V S41132(void) { static V c; return STRC(c, ") >= "); }
+static V S41135(void) { static V c; return STRC(c, "n"); }
+static V S41140(void) { static V c; return STRC(c, "("); }
+static V S41141(void) { static V c; return STRC(c, ") !== 0n"); }
 static V F_J_dsucc_dcond(V a0, V a1_) {
 uint32_t a1 = (uint32_t)a1_;
 top:;
-V s40958 = F_U32_dis__eq((a1), 1u);
-if ((s40958) == IMM(0)) {
-return F_String_dappend(S40960(), F_String_dappend(a0, F_String_dappend(S40961(), F_String_dappend(F_U32_dshow_dif((a1), F_U32_dis__zero((a1))), S40964()))));
-} else if ((s40958) == IMM(1)) {
-return F_String_dappend(S40969(), F_String_dappend(a0, S40970()));
+V s41129 = F_U32_dis__eq((a1), 1u);
+if ((s41129) == IMM(0)) {
+return F_String_dappend(S41131(), F_String_dappend(a0, F_String_dappend(S41132(), F_String_dappend(F_U32_dshow_dif((a1), F_U32_dis__zero((a1))), S41135()))));
+} else if ((s41129) == IMM(1)) {
+return F_String_dappend(S41140(), F_String_dappend(a0, S41141()));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dsucc_dcond(V *a) { (void)a; return F_J_dsucc_dcond(a[0], a[1]); }
 static V F_J_dctor_x37u(V a0, V a1, V a2) {
 top:;
-V v40973 = F_Map_dget(IMM(0), F_J_dopt(a1), a2);
-return FLD(v40973, 1);
+V v41144 = F_Map_dget(IMM(0), F_J_dopt(a1), a2);
+return FLD(v41144, 1);
 }
 static V W_J_dctor_x37u(V *a) { (void)a; return F_J_dctor_x37u(a[0], a[1], a[2]); }
 static V D_J_dopt(V *dst, V a0) {
 top:;
-V s40976 = a0;
-if ((s40976) == IMM(0)) {
+V s41147 = a0;
+if ((s41147) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s40976, 1)) {
-*dst = C2(1, FLD(s40976, 0), C1(1, FLD(s40976, 1)));
+} else if (IS_N(s41147, 1)) {
+*dst = C2(1, FLD(s41147, 0), C1(1, FLD(s41147, 1)));
 return 0;
-} else if (IS_N(s40976, 2)) {
-{ V dc = CH3(2, FLD(s40976, 0), F_J_dopt(FLD(s40976, 1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
-{ V t0 = FLD(s40976, 2); a0 = t0; goto top; }
+} else if (IS_N(s41147, 2)) {
+{ V dc = CH3(2, FLD(s41147, 0), F_J_dopt(FLD(s41147, 1)), BEND_HOLE); *dst = dc; dst = &FLD(dc, 2);
+{ V t0 = FLD(s41147, 2); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_J_dopt(V a0) { V r; D_J_dopt(&r, a0); return r; }
 static V W_J_dopt(V *a) { (void)a; return F_J_dopt(a[0]); }
-static V S40979(void) { static V c; return STRC(c, "("); }
-static V S40980(void) { static V c; return STRC(c, ")"); }
+static V S41150(void) { static V c; return STRC(c, "("); }
+static V S41151(void) { static V c; return STRC(c, ")"); }
 static V D_J_dpaths(V *dst, V a0, V a1) {
 top:;
-V s40978 = a1;
-if ((s40978) == IMM(0)) {
+V s41149 = a1;
+if ((s41149) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s40978, 1)) {
-{ V dc = CH2(1, F_String_dappend(S40979(), F_String_dappend(a0, F_String_dappend(S40980(), F_J_dacc(FLD(s40978, 0))))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = FLD(s40978, 1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41149, 1)) {
+{ V dc = CH2(1, F_String_dappend(S41150(), F_String_dappend(a0, F_String_dappend(S41151(), F_J_dacc(FLD(s41149, 0))))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = FLD(s41149, 1); a0 = t0; a1 = t1; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_J_dpaths(V a0, V a1) { V r; D_J_dpaths(&r, a0, a1); return r; }
 static V W_J_dpaths(V *a) { (void)a; return F_J_dpaths(a[0], a[1]); }
-static V S40986(void) { static V c; return STRC(c, "const t"); }
-static V S40989(void) { static V c; return STRC(c, " = "); }
-static V K40992(void) { static V c; return KONST(c, C1(1, MKS("; "))); }
+static V S41157(void) { static V c; return STRC(c, "const t"); }
+static V S41160(void) { static V c; return STRC(c, " = "); }
+static V K41163(void) { static V c; return KONST(c, C1(1, MKS("; "))); }
 static __attribute__((noinline)) V H_F_J_dtail_dtemps(V a0, V a1_) {
 uint32_t a1 = (uint32_t)a1_;
 top:;
-V s40985 = a0;
-if ((s40985) == IMM(0)) {
+V s41156 = a0;
+if ((s41156) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s40985, 1)) {
-return F_Doc_dlist(C2(1, C1(1, F_String_dappend(S40986(), F_String_dappend(F_U32_dshow_dif((a1), F_U32_dis__zero((a1))), S40989()))), C2(1, FLD(s40985, 0), C2(1, K40992(), C2(1, F_J_dtail_dtemps(FLD(s40985, 1), F_U32_dinc((a1))), IMM(0))))));
+} else if (IS_N(s41156, 1)) {
+return F_Doc_dlist(C2(1, C1(1, F_String_dappend(S41157(), F_String_dappend(F_U32_dshow_dif((a1), F_U32_dis__zero((a1))), S41160()))), C2(1, FLD(s41156, 0), C2(1, K41163(), C2(1, F_J_dtail_dtemps(FLD(s41156, 1), F_U32_dinc((a1))), IMM(0))))));
 } else { bend_fail("runtime fail-stop"); }
 }
 BEND_UINL V F_J_dtail_dtemps(V a0, V a1_) {
@@ -97374,48 +97806,48 @@ return IMM(0);
 return H_F_J_dtail_dtemps(a0, a1);
 }
 static V W_J_dtail_dtemps(V *a) { (void)a; return F_J_dtail_dtemps(a[0], a[1]); }
-static V S40997(void) { static V c; return STRC(c, ""); }
+static V S41168(void) { static V c; return STRC(c, ""); }
 static V F_J_dlit(V a0) {
 top:;
-V s40996 = a0;
-if ((s40996) == IMM(0)) {
-return S40997();
-} else if (IS_N(s40996, 1)) {
-return F_String_dappend(F_J_dlit__chr(FLD(s40996, 0)), F_J_dlit(FLD(s40996, 1)));
+V s41167 = a0;
+if ((s41167) == IMM(0)) {
+return S41168();
+} else if (IS_N(s41167, 1)) {
+return F_String_dappend(F_J_dlit__chr(FLD(s41167, 0)), F_J_dlit(FLD(s41167, 1)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dlit(V *a) { (void)a; return F_J_dlit(a[0]); }
-static V K41010(void) { static V c; return KONST(c, C2(1, MKS("\042"), C2(1, MKS("\134"), IMM(0)))); }
-static V S41012(void) { static V c; return STRC(c, "\134u{"); }
-static V S41013(void) { static V c; return STRC(c, ""); }
-static V S41015(void) { static V c; return STRC(c, "}"); }
+static V K41181(void) { static V c; return KONST(c, C2(1, MKS("\042"), C2(1, MKS("\134"), IMM(0)))); }
+static V S41183(void) { static V c; return STRC(c, "\134u{"); }
+static V S41184(void) { static V c; return STRC(c, ""); }
+static V S41186(void) { static V c; return STRC(c, "}"); }
 static V F_J_dlit__chr(V a0_) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-V s41001 = ({ V r41002;
-V s41003 = ({ V r41004;
-V s41005 = F_U32_dis__ge((a0), 32u);
-if ((s41005) == IMM(0)) {
-r41004 = IMM(0);
-} else if ((s41005) == IMM(1)) {
-r41004 = F_U32_dis__lt((a0), 127u);
+V s41172 = ({ V r41173;
+V s41174 = ({ V r41175;
+V s41176 = F_U32_dis__ge((a0), 32u);
+if ((s41176) == IMM(0)) {
+r41175 = IMM(0);
+} else if ((s41176) == IMM(1)) {
+r41175 = F_U32_dis__lt((a0), 127u);
 } else { bend_fail("runtime fail-stop"); }
-r41004; });
-if ((s41003) == IMM(0)) {
-r41002 = IMM(0);
-} else if ((s41003) == IMM(1)) {
-V v41008 = C2(1, (a0), IMM(0));
-V s41009 = F_List_dcontains_x37s539261848x2963157848(K41010(), v41008);
-if ((s41009) == IMM(0)) {
-r41002 = IMM(1);
-} else if ((s41009) == IMM(1)) {
-r41002 = IMM(0);
+r41175; });
+if ((s41174) == IMM(0)) {
+r41173 = IMM(0);
+} else if ((s41174) == IMM(1)) {
+V v41179 = C2(1, (a0), IMM(0));
+V s41180 = F_List_dcontains_x37s539261848x2963157848(K41181(), v41179);
+if ((s41180) == IMM(0)) {
+r41173 = IMM(1);
+} else if ((s41180) == IMM(1)) {
+r41173 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-r41002; });
-if ((s41001) == IMM(0)) {
-return F_String_dappend(S41012(), F_String_dappend(F_J_dhex_dgo_x37s2491568216x8239786((a0), S41013()), S41015()));
-} else if ((s41001) == IMM(1)) {
+r41173; });
+if ((s41172) == IMM(0)) {
+return F_String_dappend(S41183(), F_String_dappend(F_J_dhex_dgo_x37s2491568216x8239786((a0), S41184()), S41186()));
+} else if ((s41172) == IMM(1)) {
 return C2(1, (a0), IMM(0));
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -97423,246 +97855,246 @@ static V W_J_dlit__chr(V *a) { (void)a; return F_J_dlit__chr(a[0]); }
 BEND_UINL V F_J_dhex_dgo_x37s2491568216x8239786(V a0_, V a1) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-V s41018 = F_U32_dis__lt((a0), 16u);
-if ((s41018) == IMM(1)) {
-uint32_t (u41020) = F_U32_dand((a0), 15u);
-return F_String_dappend(C2(1, ({ uint32_t r41022;
-V s41023 = F_U32_dis__lt((u41020), 10u);
-if ((s41023) == IMM(0)) {
-r41022 = F_U32_dadd(87u, (u41020));
-} else if ((s41023) == IMM(1)) {
-r41022 = F_U32_dadd(48u, (u41020));
+V s41189 = F_U32_dis__lt((a0), 16u);
+if ((s41189) == IMM(1)) {
+uint32_t (u41191) = F_U32_dand((a0), 15u);
+return F_String_dappend(C2(1, ({ uint32_t r41193;
+V s41194 = F_U32_dis__lt((u41191), 10u);
+if ((s41194) == IMM(0)) {
+r41193 = F_U32_dadd(87u, (u41191));
+} else if ((s41194) == IMM(1)) {
+r41193 = F_U32_dadd(48u, (u41191));
 } else { bend_fail("runtime fail-stop"); }
-r41022; }), IMM(0)), a1);
-} else if ((s41018) == IMM(0)) {
-uint32_t (u41028) = F_U32_dand((a0), 15u);
-return F_J_dhex_dgo_x37s1291691603x8209995(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41031;
-V s41032 = F_U32_dis__lt((u41028), 10u);
-if ((s41032) == IMM(0)) {
-r41031 = F_U32_dadd(87u, (u41028));
-} else if ((s41032) == IMM(1)) {
-r41031 = F_U32_dadd(48u, (u41028));
+r41193; }), IMM(0)), a1);
+} else if ((s41189) == IMM(0)) {
+uint32_t (u41199) = F_U32_dand((a0), 15u);
+return F_J_dhex_dgo_x37s1291691603x8209995(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41202;
+V s41203 = F_U32_dis__lt((u41199), 10u);
+if ((s41203) == IMM(0)) {
+r41202 = F_U32_dadd(87u, (u41199));
+} else if ((s41203) == IMM(1)) {
+r41202 = F_U32_dadd(48u, (u41199));
 } else { bend_fail("runtime fail-stop"); }
-r41031; }), IMM(0)), a1));
+r41202; }), IMM(0)), a1));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dhex_dgo_x37s2491568216x8239786(V *a) { (void)a; return F_J_dhex_dgo_x37s2491568216x8239786(a[0], a[1]); }
 BEND_UINL V F_J_dhex_dgo_x37s1291691603x8209995(V a0_, V a1) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-V s41038 = F_U32_dis__lt((a0), 16u);
-if ((s41038) == IMM(1)) {
-uint32_t (u41040) = F_U32_dand((a0), 15u);
-return F_String_dappend(C2(1, ({ uint32_t r41042;
-V s41043 = F_U32_dis__lt((u41040), 10u);
-if ((s41043) == IMM(0)) {
-r41042 = F_U32_dadd(87u, (u41040));
-} else if ((s41043) == IMM(1)) {
-r41042 = F_U32_dadd(48u, (u41040));
+V s41209 = F_U32_dis__lt((a0), 16u);
+if ((s41209) == IMM(1)) {
+uint32_t (u41211) = F_U32_dand((a0), 15u);
+return F_String_dappend(C2(1, ({ uint32_t r41213;
+V s41214 = F_U32_dis__lt((u41211), 10u);
+if ((s41214) == IMM(0)) {
+r41213 = F_U32_dadd(87u, (u41211));
+} else if ((s41214) == IMM(1)) {
+r41213 = F_U32_dadd(48u, (u41211));
 } else { bend_fail("runtime fail-stop"); }
-r41042; }), IMM(0)), a1);
-} else if ((s41038) == IMM(0)) {
-uint32_t (u41048) = F_U32_dand((a0), 15u);
-return F_J_dhex_dgo_x37s32637286x8180204(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41051;
-V s41052 = F_U32_dis__lt((u41048), 10u);
-if ((s41052) == IMM(0)) {
-r41051 = F_U32_dadd(87u, (u41048));
-} else if ((s41052) == IMM(1)) {
-r41051 = F_U32_dadd(48u, (u41048));
+r41213; }), IMM(0)), a1);
+} else if ((s41209) == IMM(0)) {
+uint32_t (u41219) = F_U32_dand((a0), 15u);
+return F_J_dhex_dgo_x37s32637286x8180204(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41222;
+V s41223 = F_U32_dis__lt((u41219), 10u);
+if ((s41223) == IMM(0)) {
+r41222 = F_U32_dadd(87u, (u41219));
+} else if ((s41223) == IMM(1)) {
+r41222 = F_U32_dadd(48u, (u41219));
 } else { bend_fail("runtime fail-stop"); }
-r41051; }), IMM(0)), a1));
+r41222; }), IMM(0)), a1));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dhex_dgo_x37s1291691603x8209995(V *a) { (void)a; return F_J_dhex_dgo_x37s1291691603x8209995(a[0], a[1]); }
 BEND_UINL V F_J_dhex_dgo_x37s32637286x8180204(V a0_, V a1) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-V s41058 = F_U32_dis__lt((a0), 16u);
-if ((s41058) == IMM(1)) {
-uint32_t (u41060) = F_U32_dand((a0), 15u);
-return F_String_dappend(C2(1, ({ uint32_t r41062;
-V s41063 = F_U32_dis__lt((u41060), 10u);
-if ((s41063) == IMM(0)) {
-r41062 = F_U32_dadd(87u, (u41060));
-} else if ((s41063) == IMM(1)) {
-r41062 = F_U32_dadd(48u, (u41060));
+V s41229 = F_U32_dis__lt((a0), 16u);
+if ((s41229) == IMM(1)) {
+uint32_t (u41231) = F_U32_dand((a0), 15u);
+return F_String_dappend(C2(1, ({ uint32_t r41233;
+V s41234 = F_U32_dis__lt((u41231), 10u);
+if ((s41234) == IMM(0)) {
+r41233 = F_U32_dadd(87u, (u41231));
+} else if ((s41234) == IMM(1)) {
+r41233 = F_U32_dadd(48u, (u41231));
 } else { bend_fail("runtime fail-stop"); }
-r41062; }), IMM(0)), a1);
-} else if ((s41058) == IMM(0)) {
-uint32_t (u41068) = F_U32_dand((a0), 15u);
-return F_J_dhex_dgo_x37s3239606481x8150413(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41071;
-V s41072 = F_U32_dis__lt((u41068), 10u);
-if ((s41072) == IMM(0)) {
-r41071 = F_U32_dadd(87u, (u41068));
-} else if ((s41072) == IMM(1)) {
-r41071 = F_U32_dadd(48u, (u41068));
+r41233; }), IMM(0)), a1);
+} else if ((s41229) == IMM(0)) {
+uint32_t (u41239) = F_U32_dand((a0), 15u);
+return F_J_dhex_dgo_x37s3239606481x8150413(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41242;
+V s41243 = F_U32_dis__lt((u41239), 10u);
+if ((s41243) == IMM(0)) {
+r41242 = F_U32_dadd(87u, (u41239));
+} else if ((s41243) == IMM(1)) {
+r41242 = F_U32_dadd(48u, (u41239));
 } else { bend_fail("runtime fail-stop"); }
-r41071; }), IMM(0)), a1));
+r41242; }), IMM(0)), a1));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dhex_dgo_x37s32637286x8180204(V *a) { (void)a; return F_J_dhex_dgo_x37s32637286x8180204(a[0], a[1]); }
 BEND_UINL V F_J_dhex_dgo_x37s3239606481x8150413(V a0_, V a1) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-V s41078 = F_U32_dis__lt((a0), 16u);
-if ((s41078) == IMM(1)) {
-uint32_t (u41080) = F_U32_dand((a0), 15u);
-return F_String_dappend(C2(1, ({ uint32_t r41082;
-V s41083 = F_U32_dis__lt((u41080), 10u);
-if ((s41083) == IMM(0)) {
-r41082 = F_U32_dadd(87u, (u41080));
-} else if ((s41083) == IMM(1)) {
-r41082 = F_U32_dadd(48u, (u41080));
+V s41249 = F_U32_dis__lt((a0), 16u);
+if ((s41249) == IMM(1)) {
+uint32_t (u41251) = F_U32_dand((a0), 15u);
+return F_String_dappend(C2(1, ({ uint32_t r41253;
+V s41254 = F_U32_dis__lt((u41251), 10u);
+if ((s41254) == IMM(0)) {
+r41253 = F_U32_dadd(87u, (u41251));
+} else if ((s41254) == IMM(1)) {
+r41253 = F_U32_dadd(48u, (u41251));
 } else { bend_fail("runtime fail-stop"); }
-r41082; }), IMM(0)), a1);
-} else if ((s41078) == IMM(0)) {
-uint32_t (u41088) = F_U32_dand((a0), 15u);
-return F_J_dhex_dgo_x37s2405009636x8120622(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41091;
-V s41092 = F_U32_dis__lt((u41088), 10u);
-if ((s41092) == IMM(0)) {
-r41091 = F_U32_dadd(87u, (u41088));
-} else if ((s41092) == IMM(1)) {
-r41091 = F_U32_dadd(48u, (u41088));
+r41253; }), IMM(0)), a1);
+} else if ((s41249) == IMM(0)) {
+uint32_t (u41259) = F_U32_dand((a0), 15u);
+return F_J_dhex_dgo_x37s2405009636x8120622(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41262;
+V s41263 = F_U32_dis__lt((u41259), 10u);
+if ((s41263) == IMM(0)) {
+r41262 = F_U32_dadd(87u, (u41259));
+} else if ((s41263) == IMM(1)) {
+r41262 = F_U32_dadd(48u, (u41259));
 } else { bend_fail("runtime fail-stop"); }
-r41091; }), IMM(0)), a1));
+r41262; }), IMM(0)), a1));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dhex_dgo_x37s3239606481x8150413(V *a) { (void)a; return F_J_dhex_dgo_x37s3239606481x8150413(a[0], a[1]); }
 BEND_UINL V F_J_dhex_dgo_x37s2405009636x8120622(V a0_, V a1) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-V s41098 = F_U32_dis__lt((a0), 16u);
-if ((s41098) == IMM(1)) {
-uint32_t (u41100) = F_U32_dand((a0), 15u);
-return F_String_dappend(C2(1, ({ uint32_t r41102;
-V s41103 = F_U32_dis__lt((u41100), 10u);
-if ((s41103) == IMM(0)) {
-r41102 = F_U32_dadd(87u, (u41100));
-} else if ((s41103) == IMM(1)) {
-r41102 = F_U32_dadd(48u, (u41100));
+V s41269 = F_U32_dis__lt((a0), 16u);
+if ((s41269) == IMM(1)) {
+uint32_t (u41271) = F_U32_dand((a0), 15u);
+return F_String_dappend(C2(1, ({ uint32_t r41273;
+V s41274 = F_U32_dis__lt((u41271), 10u);
+if ((s41274) == IMM(0)) {
+r41273 = F_U32_dadd(87u, (u41271));
+} else if ((s41274) == IMM(1)) {
+r41273 = F_U32_dadd(48u, (u41271));
 } else { bend_fail("runtime fail-stop"); }
-r41102; }), IMM(0)), a1);
-} else if ((s41098) == IMM(0)) {
-uint32_t (u41108) = F_U32_dand((a0), 15u);
-return F_J_dhex_dgo_x37s1586577935x8090831(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41111;
-V s41112 = F_U32_dis__lt((u41108), 10u);
-if ((s41112) == IMM(0)) {
-r41111 = F_U32_dadd(87u, (u41108));
-} else if ((s41112) == IMM(1)) {
-r41111 = F_U32_dadd(48u, (u41108));
+r41273; }), IMM(0)), a1);
+} else if ((s41269) == IMM(0)) {
+uint32_t (u41279) = F_U32_dand((a0), 15u);
+return F_J_dhex_dgo_x37s1586577935x8090831(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41282;
+V s41283 = F_U32_dis__lt((u41279), 10u);
+if ((s41283) == IMM(0)) {
+r41282 = F_U32_dadd(87u, (u41279));
+} else if ((s41283) == IMM(1)) {
+r41282 = F_U32_dadd(48u, (u41279));
 } else { bend_fail("runtime fail-stop"); }
-r41111; }), IMM(0)), a1));
+r41282; }), IMM(0)), a1));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dhex_dgo_x37s2405009636x8120622(V *a) { (void)a; return F_J_dhex_dgo_x37s2405009636x8120622(a[0], a[1]); }
 BEND_UINL V F_J_dhex_dgo_x37s1586577935x8090831(V a0_, V a1) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-V s41118 = F_U32_dis__lt((a0), 16u);
-if ((s41118) == IMM(1)) {
-uint32_t (u41120) = F_U32_dand((a0), 15u);
-return F_String_dappend(C2(1, ({ uint32_t r41122;
-V s41123 = F_U32_dis__lt((u41120), 10u);
-if ((s41123) == IMM(0)) {
-r41122 = F_U32_dadd(87u, (u41120));
-} else if ((s41123) == IMM(1)) {
-r41122 = F_U32_dadd(48u, (u41120));
+V s41289 = F_U32_dis__lt((a0), 16u);
+if ((s41289) == IMM(1)) {
+uint32_t (u41291) = F_U32_dand((a0), 15u);
+return F_String_dappend(C2(1, ({ uint32_t r41293;
+V s41294 = F_U32_dis__lt((u41291), 10u);
+if ((s41294) == IMM(0)) {
+r41293 = F_U32_dadd(87u, (u41291));
+} else if ((s41294) == IMM(1)) {
+r41293 = F_U32_dadd(48u, (u41291));
 } else { bend_fail("runtime fail-stop"); }
-r41122; }), IMM(0)), a1);
-} else if ((s41118) == IMM(0)) {
-uint32_t (u41128) = F_U32_dand((a0), 15u);
-return F_J_dhex_dgo_x37s3867092194x8061040(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41131;
-V s41132 = F_U32_dis__lt((u41128), 10u);
-if ((s41132) == IMM(0)) {
-r41131 = F_U32_dadd(87u, (u41128));
-} else if ((s41132) == IMM(1)) {
-r41131 = F_U32_dadd(48u, (u41128));
+r41293; }), IMM(0)), a1);
+} else if ((s41289) == IMM(0)) {
+uint32_t (u41299) = F_U32_dand((a0), 15u);
+return F_J_dhex_dgo_x37s3867092194x8061040(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41302;
+V s41303 = F_U32_dis__lt((u41299), 10u);
+if ((s41303) == IMM(0)) {
+r41302 = F_U32_dadd(87u, (u41299));
+} else if ((s41303) == IMM(1)) {
+r41302 = F_U32_dadd(48u, (u41299));
 } else { bend_fail("runtime fail-stop"); }
-r41131; }), IMM(0)), a1));
+r41302; }), IMM(0)), a1));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dhex_dgo_x37s1586577935x8090831(V *a) { (void)a; return F_J_dhex_dgo_x37s1586577935x8090831(a[0], a[1]); }
 BEND_UINL V F_J_dhex_dgo_x37s3867092194x8061040(V a0_, V a1) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-V s41138 = F_U32_dis__lt((a0), 16u);
-if ((s41138) == IMM(1)) {
-uint32_t (u41140) = F_U32_dand((a0), 15u);
-return F_String_dappend(C2(1, ({ uint32_t r41142;
-V s41143 = F_U32_dis__lt((u41140), 10u);
-if ((s41143) == IMM(0)) {
-r41142 = F_U32_dadd(87u, (u41140));
-} else if ((s41143) == IMM(1)) {
-r41142 = F_U32_dadd(48u, (u41140));
+V s41309 = F_U32_dis__lt((a0), 16u);
+if ((s41309) == IMM(1)) {
+uint32_t (u41311) = F_U32_dand((a0), 15u);
+return F_String_dappend(C2(1, ({ uint32_t r41313;
+V s41314 = F_U32_dis__lt((u41311), 10u);
+if ((s41314) == IMM(0)) {
+r41313 = F_U32_dadd(87u, (u41311));
+} else if ((s41314) == IMM(1)) {
+r41313 = F_U32_dadd(48u, (u41311));
 } else { bend_fail("runtime fail-stop"); }
-r41142; }), IMM(0)), a1);
-} else if ((s41138) == IMM(0)) {
-uint32_t (u41148) = F_U32_dand((a0), 15u);
-return F_J_dhex_dgo_x37s1860454509x8031249(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41151;
-V s41152 = F_U32_dis__lt((u41148), 10u);
-if ((s41152) == IMM(0)) {
-r41151 = F_U32_dadd(87u, (u41148));
-} else if ((s41152) == IMM(1)) {
-r41151 = F_U32_dadd(48u, (u41148));
+r41313; }), IMM(0)), a1);
+} else if ((s41309) == IMM(0)) {
+uint32_t (u41319) = F_U32_dand((a0), 15u);
+return F_J_dhex_dgo_x37s1860454509x8031249(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41322;
+V s41323 = F_U32_dis__lt((u41319), 10u);
+if ((s41323) == IMM(0)) {
+r41322 = F_U32_dadd(87u, (u41319));
+} else if ((s41323) == IMM(1)) {
+r41322 = F_U32_dadd(48u, (u41319));
 } else { bend_fail("runtime fail-stop"); }
-r41151; }), IMM(0)), a1));
+r41322; }), IMM(0)), a1));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dhex_dgo_x37s3867092194x8061040(V *a) { (void)a; return F_J_dhex_dgo_x37s3867092194x8061040(a[0], a[1]); }
 BEND_UINL V F_J_dhex_dgo_x37s1860454509x8031249(V a0_, V a1) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-V s41158 = F_U32_dis__lt((a0), 16u);
-if ((s41158) == IMM(1)) {
-uint32_t (u41160) = F_U32_dand((a0), 15u);
-return F_String_dappend(C2(1, ({ uint32_t r41162;
-V s41163 = F_U32_dis__lt((u41160), 10u);
-if ((s41163) == IMM(0)) {
-r41162 = F_U32_dadd(87u, (u41160));
-} else if ((s41163) == IMM(1)) {
-r41162 = F_U32_dadd(48u, (u41160));
+V s41329 = F_U32_dis__lt((a0), 16u);
+if ((s41329) == IMM(1)) {
+uint32_t (u41331) = F_U32_dand((a0), 15u);
+return F_String_dappend(C2(1, ({ uint32_t r41333;
+V s41334 = F_U32_dis__lt((u41331), 10u);
+if ((s41334) == IMM(0)) {
+r41333 = F_U32_dadd(87u, (u41331));
+} else if ((s41334) == IMM(1)) {
+r41333 = F_U32_dadd(48u, (u41331));
 } else { bend_fail("runtime fail-stop"); }
-r41162; }), IMM(0)), a1);
-} else if ((s41158) == IMM(0)) {
-uint32_t (u41168) = F_U32_dand((a0), 15u);
-return F_J_dhex_dgo_x37s509762208x8001458(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41171;
-V s41172 = F_U32_dis__lt((u41168), 10u);
-if ((s41172) == IMM(0)) {
-r41171 = F_U32_dadd(87u, (u41168));
-} else if ((s41172) == IMM(1)) {
-r41171 = F_U32_dadd(48u, (u41168));
+r41333; }), IMM(0)), a1);
+} else if ((s41329) == IMM(0)) {
+uint32_t (u41339) = F_U32_dand((a0), 15u);
+return F_J_dhex_dgo_x37s509762208x8001458(F_U32_dshrn((a0), 4u), F_String_dappend(C2(1, ({ uint32_t r41342;
+V s41343 = F_U32_dis__lt((u41339), 10u);
+if ((s41343) == IMM(0)) {
+r41342 = F_U32_dadd(87u, (u41339));
+} else if ((s41343) == IMM(1)) {
+r41342 = F_U32_dadd(48u, (u41339));
 } else { bend_fail("runtime fail-stop"); }
-r41171; }), IMM(0)), a1));
+r41342; }), IMM(0)), a1));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dhex_dgo_x37s1860454509x8031249(V *a) { (void)a; return F_J_dhex_dgo_x37s1860454509x8031249(a[0], a[1]); }
-static V S41178(void) { static V c; return STRC(c, "<hex: out of digits>"); }
+static V S41349(void) { static V c; return STRC(c, "<hex: out of digits>"); }
 BEND_UINL V F_J_dhex_dgo_x37s509762208x8001458(V a0_, V a1) {
 uint32_t a0 = (uint32_t)a0_;
 top:;
-return S41178();
+return S41349();
 }
 static V W_J_dhex_dgo_x37s509762208x8001458(V *a) { (void)a; return F_J_dhex_dgo_x37s509762208x8001458(a[0], a[1]); }
-static V L41180(V *a) {
+static V L41351(V *a) {
 return C2(0, C1(1, a[0]), a[1]);
 }
-static V S41182(void) { static V c; return STRC(c, "_"); }
-static V K41188(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
-static V L41187(V *a) {
-return C2(0, K41188(), a[0]);
+static V S41353(void) { static V c; return STRC(c, "_"); }
+static V K41359(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
+static V L41358(V *a) {
+return C2(0, K41359(), a[0]);
 }
 static V F_J_dvar_dfound_x37u_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6) {
 top:;
-V s41179 = a6;
-if (IS_N(s41179, 1)) {
-return mk_clo(L41180, 2, 1, (V[]){FLD(s41179, 0)});
-} else if ((s41179) == IMM(0)) {
-V s41181 = F_String_deq(a5, S41182());
-if ((s41181) == IMM(0)) {
-V uo41184[2]; U_G_ddef_x37u(a0, a1, a2, a3, a5, uo41184);
-return F_J_dvar_ddef_x37u(a5, uo41184[0], uo41184[1]);
-} else if ((s41181) == IMM(1)) {
-return mk_clo(L41187, 1, 0, 0);
+V s41350 = a6;
+if (IS_N(s41350, 1)) {
+return mk_clo(L41351, 2, 1, (V[]){FLD(s41350, 0)});
+} else if ((s41350) == IMM(0)) {
+V s41352 = F_String_deq(a5, S41353());
+if ((s41352) == IMM(0)) {
+V uo41355[2]; U_G_ddef_x37u(a0, a1, a2, a3, a5, uo41355);
+return F_J_dvar_ddef_x37u(a5, uo41355[0], uo41355[1]);
+} else if ((s41352) == IMM(1)) {
+return mk_clo(L41358, 1, 0, 0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -97673,149 +98105,149 @@ top:;
 return F_J_dvar_dkind(a0, F_U32_dto__nat((a1)), F_U32_dfrom__nat(F_List_dlength(0, a2)));
 }
 static V W_J_dvar_ddef_x37u(V *a) { (void)a; return F_J_dvar_ddef_x37u(a[0], a[1], a[2]); }
-static V K41195(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
-static V L41194(V *a) {
-return C2(0, K41195(), a[0]);
+static V K41366(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
+static V L41365(V *a) {
+return C2(0, K41366(), a[0]);
 }
-static V S41197(void) { static V c; return STRC(c, "unknown name: "); }
-static V L41200(V *a) {
-V v41201 = a[1];
-return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v41201, 0), FLD(v41201, 1), FLD(v41201, 2), FLD(v41201, 3), C2(1, a[0], FLD(v41201, 4)), FLD(v41201, 5), FLD(v41201, 6)}));
+static V S41368(void) { static V c; return STRC(c, "unknown name: "); }
+static V L41371(V *a) {
+V v41372 = a[1];
+return C2(0, IMM(0), CN(0, 7, (V[]){FLD(v41372, 0), FLD(v41372, 1), FLD(v41372, 2), FLD(v41372, 3), C2(1, a[0], FLD(v41372, 4)), FLD(v41372, 5), FLD(v41372, 6)}));
 }
-static V K41204(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
-static V L41202(V *a) {
-V v41203 = apply(a[0], a[1]);
-return C2(0, K41204(), FLD(v41203, 1));
+static V K41375(void) { static V c; return KONST(c, C1(1, MKS("null"))); }
+static V L41373(V *a) {
+V v41374 = apply(a[0], a[1]);
+return C2(0, K41375(), FLD(v41374, 1));
 }
-static V S41214(void) { static V c; return STRC(c, "W_"); }
-static V S41217(void) { static V c; return STRC(c, "F_"); }
-static V S41220(void) { static V c; return STRC(c, "()"); }
-static V L41205(V *a) {
-V v41206 = a[2];
-V uo41207[8]; U_Gen_dclo_dgo_x37n_x37u(a[1], FLD(v41206, 0), FLD(v41206, 1), FLD(v41206, 2), C2(1, a[1], FLD(v41206, 3)), FLD(v41206, 4), FLD(v41206, 5), FLD(v41206, 6), uo41207);
-V s41209 = uo41207[0];
-V s41210 = CN(0, 7, (V[]){uo41207[1], uo41207[2], uo41207[3], uo41207[4], uo41207[5], uo41207[6], uo41207[7]});
+static V S41385(void) { static V c; return STRC(c, "W_"); }
+static V S41388(void) { static V c; return STRC(c, "F_"); }
+static V S41391(void) { static V c; return STRC(c, "()"); }
+static V L41376(V *a) {
+V v41377 = a[2];
+V uo41378[8]; U_Gen_dclo_dgo_x37n_x37u(a[1], FLD(v41377, 0), FLD(v41377, 1), FLD(v41377, 2), C2(1, a[1], FLD(v41377, 3)), FLD(v41377, 4), FLD(v41377, 5), FLD(v41377, 6), uo41378);
+V s41380 = uo41378[0];
+V s41381 = CN(0, 7, (V[]){uo41378[1], uo41378[2], uo41378[3], uo41378[4], uo41378[5], uo41378[6], uo41378[7]});
 {
-return C2(0, ({ V r41211;
-V s41212 = F_U32_dis__zero(a[0]);
-if ((s41212) == IMM(0)) {
-r41211 = C1(1, F_String_dappend(S41214(), F_Gen_dmangle(a[1])));
-} else if ((s41212) == IMM(1)) {
-r41211 = C1(1, F_String_dappend(F_String_dappend(S41217(), F_Gen_dmangle(a[1])), S41220()));
+return C2(0, ({ V r41382;
+V s41383 = F_U32_dis__zero(a[0]);
+if ((s41383) == IMM(0)) {
+r41382 = C1(1, F_String_dappend(S41385(), F_Gen_dmangle(a[1])));
+} else if ((s41383) == IMM(1)) {
+r41382 = C1(1, F_String_dappend(F_String_dappend(S41388(), F_Gen_dmangle(a[1])), S41391()));
 } else { bend_fail("runtime fail-stop"); }
-r41211; }), s41210);
+r41382; }), s41381);
 }
 }
 static V F_J_dvar_dkind(V a0, V a1, V a2_) {
 uint32_t a2 = (uint32_t)a2_;
 top:;
-V s41193 = (a1);
-if ((s41193) == 3) {
-return mk_clo(L41194, 1, 0, 0);
-} else if ((s41193) == 4) {
-V v41196 = F_String_dappend(S41197(), a0);
-V v41199 = mk_clo(L41200, 2, 1, (V[]){v41196});
-return mk_clo(L41202, 2, 1, (V[]){v41199});
+V s41364 = (a1);
+if ((s41364) == 3) {
+return mk_clo(L41365, 1, 0, 0);
+} else if ((s41364) == 4) {
+V v41367 = F_String_dappend(S41368(), a0);
+V v41370 = mk_clo(L41371, 2, 1, (V[]){v41367});
+return mk_clo(L41373, 2, 1, (V[]){v41370});
 } else {
-return mk_clo(L41205, 3, 2, (V[]){(a2), a0});
+return mk_clo(L41376, 3, 2, (V[]){(a2), a0});
 }
 }
 static V W_J_dvar_dkind(V *a) { (void)a; return F_J_dvar_dkind(a[0], a[1], a[2]); }
-static V K41223(void) { static V c; return KONST(c, C1(1, MKS("("))); }
-static V K41224(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
+static V K41394(void) { static V c; return KONST(c, C1(1, MKS("("))); }
+static V K41395(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
 static V F_J_dapply(V a0, V a1) {
 top:;
-V s41222 = a0;
-if ((s41222) == IMM(0)) {
+V s41393 = a0;
+if ((s41393) == IMM(0)) {
 return a1;
-} else if (IS_N(s41222, 1)) {
-{ V t0 = FLD(s41222, 1); V t1 = F_Doc_dlist(C2(1, a1, C2(1, K41223(), C2(1, FLD(s41222, 0), K41224())))); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41393, 1)) {
+{ V t0 = FLD(s41393, 1); V t1 = F_Doc_dlist(C2(1, a1, C2(1, K41394(), C2(1, FLD(s41393, 0), K41395())))); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dapply(V *a) { (void)a; return F_J_dapply(a[0], a[1]); }
-static V S41229(void) { static V c; return STRC(c, "True"); }
-static V S41231(void) { static V c; return STRC(c, "false"); }
-static V S41232(void) { static V c; return STRC(c, "true"); }
-static V S41234(void) { static V c; return STRC(c, "Zero"); }
-static V K41236(void) { static V c; return KONST(c, C1(1, MKS("nat_chk("))); }
-static V K41238(void) { static V c; return KONST(c, C2(1, C1(1, MKS(" + 1n)")), IMM(0))); }
-static V K41240(void) { static V c; return KONST(c, C1(1, MKS("0n"))); }
-static V S41242(void) { static V c; return STRC(c, "SNil"); }
-static V K41244(void) { static V c; return KONST(c, C1(1, MKS("str_cons("))); }
-static V S41245(void) { static V c; return STRC(c, ", "); }
-static V K41247(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
-static V K41249(void) { static V c; return KONST(c, C1(1, MKS("\042\042"))); }
-static V K41250(void) { static V c; return KONST(c, C1(1, MKS("char_new("))); }
-static V K41252(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
-static V K41254(void) { static V c; return KONST(c, C1(1, MKS("("))); }
-static V K41256(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
-static V K41258(void) { static V c; return KONST(c, C1(1, MKS("f32_of_bits("))); }
-static V K41260(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
-static V S41262(void) { static V c; return STRC(c, "ALeaf"); }
-static V S41265(void) { static V c; return STRC(c, "({$: \042"); }
-static V S41266(void) { static V c; return STRC(c, "\042"); }
-static V K41270(void) { static V c; return KONST(c, C2(1, C1(1, MKS("})")), IMM(0))); }
+static V S41400(void) { static V c; return STRC(c, "True"); }
+static V S41402(void) { static V c; return STRC(c, "false"); }
+static V S41403(void) { static V c; return STRC(c, "true"); }
+static V S41405(void) { static V c; return STRC(c, "Zero"); }
+static V K41407(void) { static V c; return KONST(c, C1(1, MKS("nat_chk("))); }
+static V K41409(void) { static V c; return KONST(c, C2(1, C1(1, MKS(" + 1n)")), IMM(0))); }
+static V K41411(void) { static V c; return KONST(c, C1(1, MKS("0n"))); }
+static V S41413(void) { static V c; return STRC(c, "SNil"); }
+static V K41415(void) { static V c; return KONST(c, C1(1, MKS("str_cons("))); }
+static V S41416(void) { static V c; return STRC(c, ", "); }
+static V K41418(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
+static V K41420(void) { static V c; return KONST(c, C1(1, MKS("\042\042"))); }
+static V K41421(void) { static V c; return KONST(c, C1(1, MKS("char_new("))); }
+static V K41423(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
+static V K41425(void) { static V c; return KONST(c, C1(1, MKS("("))); }
+static V K41427(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
+static V K41429(void) { static V c; return KONST(c, C1(1, MKS("f32_of_bits("))); }
+static V K41431(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
+static V S41433(void) { static V c; return STRC(c, "ALeaf"); }
+static V S41436(void) { static V c; return STRC(c, "({$: \042"); }
+static V S41437(void) { static V c; return STRC(c, "\042"); }
+static V K41441(void) { static V c; return KONST(c, C2(1, C1(1, MKS("})")), IMM(0))); }
 static V F_J_dctor_dkind(V a0, V a1, V a2, V a3) {
 top:;
-V s41226 = (a0);
-if ((s41226) == 1) {
-return C1(1, ({ V r41227;
-V s41228 = F_String_deq(a1, S41229());
-if ((s41228) == IMM(0)) {
-r41227 = S41231();
-} else if ((s41228) == IMM(1)) {
-r41227 = S41232();
+V s41397 = (a0);
+if ((s41397) == 1) {
+return C1(1, ({ V r41398;
+V s41399 = F_String_deq(a1, S41400());
+if ((s41399) == IMM(0)) {
+r41398 = S41402();
+} else if ((s41399) == IMM(1)) {
+r41398 = S41403();
 } else { bend_fail("runtime fail-stop"); }
-r41227; }));
-} else if ((s41226) == 2) {
-V s41233 = F_String_deq(a1, S41234());
-if ((s41233) == IMM(0)) {
-return F_Doc_dlist(C2(1, K41236(), C2(1, F_Doc_dlist(a3), K41238())));
-} else if ((s41233) == IMM(1)) {
-return K41240();
+r41398; }));
+} else if ((s41397) == 2) {
+V s41404 = F_String_deq(a1, S41405());
+if ((s41404) == IMM(0)) {
+return F_Doc_dlist(C2(1, K41407(), C2(1, F_Doc_dlist(a3), K41409())));
+} else if ((s41404) == IMM(1)) {
+return K41411();
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s41226) == 3) {
-V s41241 = F_String_deq(a1, S41242());
-if ((s41241) == IMM(0)) {
-return F_Doc_dlist(C2(1, K41244(), C2(1, F_Doc_dsep(a3, S41245()), K41247())));
-} else if ((s41241) == IMM(1)) {
-return K41249();
+} else if ((s41397) == 3) {
+V s41412 = F_String_deq(a1, S41413());
+if ((s41412) == IMM(0)) {
+return F_Doc_dlist(C2(1, K41415(), C2(1, F_Doc_dsep(a3, S41416()), K41418())));
+} else if ((s41412) == IMM(1)) {
+return K41420();
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s41226) == 4) {
-return F_Doc_dlist(C2(1, K41250(), C2(1, F_Doc_dlist(a3), K41252())));
-} else if ((s41226) == 5) {
-return F_Doc_dlist(C2(1, K41254(), C2(1, F_Doc_dlist(a3), K41256())));
-} else if ((s41226) == 6) {
-return F_Doc_dlist(C2(1, K41258(), C2(1, F_Doc_dlist(a3), K41260())));
-} else if ((s41226) == 7) {
-return F_J_dctor_darr(F_String_deq(a1, S41262()), a3);
+} else if ((s41397) == 4) {
+return F_Doc_dlist(C2(1, K41421(), C2(1, F_Doc_dlist(a3), K41423())));
+} else if ((s41397) == 5) {
+return F_Doc_dlist(C2(1, K41425(), C2(1, F_Doc_dlist(a3), K41427())));
+} else if ((s41397) == 6) {
+return F_Doc_dlist(C2(1, K41429(), C2(1, F_Doc_dlist(a3), K41431())));
+} else if ((s41397) == 7) {
+return F_J_dctor_darr(F_String_deq(a1, S41433()), a3);
 } else {
-return F_Doc_dlist(C2(1, C1(1, F_String_dappend(S41265(), F_String_dappend(a1, S41266()))), C2(1, F_Doc_dlist_x37f502031342x2207252200(a2, a3), K41270())));
+return F_Doc_dlist(C2(1, C1(1, F_String_dappend(S41436(), F_String_dappend(a1, S41437()))), C2(1, F_Doc_dlist_x37f502031342x2207252200(a2, a3), K41441())));
 }
 }
 static V W_J_dctor_dkind(V *a) { (void)a; return F_J_dctor_dkind(a[0], a[1], a[2], a[3]); }
-static V S41274(void) { static V c; return STRC(c, ", "); }
-static V S41276(void) { static V c; return STRC(c, ": "); }
+static V S41445(void) { static V c; return STRC(c, ", "); }
+static V S41447(void) { static V c; return STRC(c, ": "); }
 static V F_Doc_dlist_x37f502031342x2207252200(V a0, V a1) {
 top:;
-V s41272 = a0;
-V s41273 = a1;
-if (IS_N(s41272, 1) && IS_N(s41273, 1)) {
-return C2(2, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S41274(), F_String_dappend(F_J_dkey(FLD(s41272, 0)), S41276()))), C2(1, FLD(s41273, 0), IMM(0)))), F_Doc_dlist(F_J_dobj_dfields(FLD(s41272, 1), FLD(s41273, 1))));
+V s41443 = a0;
+V s41444 = a1;
+if (IS_N(s41443, 1) && IS_N(s41444, 1)) {
+return C2(2, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S41445(), F_String_dappend(F_J_dkey(FLD(s41443, 0)), S41447()))), C2(1, FLD(s41444, 0), IMM(0)))), F_Doc_dlist(F_J_dobj_dfields(FLD(s41443, 1), FLD(s41444, 1))));
 } else {
 return IMM(0);
 }
 }
 static V W_Doc_dlist_x37f502031342x2207252200(V *a) { (void)a; return F_Doc_dlist_x37f502031342x2207252200(a[0], a[1]); }
-static V S41284(void) { static V c; return STRC(c, ", "); }
-static V S41286(void) { static V c; return STRC(c, ": "); }
+static V S41455(void) { static V c; return STRC(c, ", "); }
+static V S41457(void) { static V c; return STRC(c, ": "); }
 static V D_J_dobj_dfields(V *dst, V a0, V a1) {
 top:;
-V s41282 = a0;
-V s41283 = a1;
-if (IS_N(s41282, 1) && IS_N(s41283, 1)) {
-{ V dc = CH2(1, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S41284(), F_String_dappend(F_J_dkey(FLD(s41282, 0)), S41286()))), C2(1, FLD(s41283, 0), IMM(0)))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s41282, 1); V t1 = FLD(s41283, 1); a0 = t0; a1 = t1; goto top; }
+V s41453 = a0;
+V s41454 = a1;
+if (IS_N(s41453, 1) && IS_N(s41454, 1)) {
+{ V dc = CH2(1, F_Doc_dlist(C2(1, C1(1, F_String_dappend(S41455(), F_String_dappend(F_J_dkey(FLD(s41453, 0)), S41457()))), C2(1, FLD(s41454, 0), IMM(0)))), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s41453, 1); V t1 = FLD(s41454, 1); a0 = t0; a1 = t1; goto top; }
 }
 } else {
 *dst = IMM(0);
@@ -97824,137 +98256,137 @@ return 0;
 }
 static V F_J_dobj_dfields(V a0, V a1) { V r; D_J_dobj_dfields(&r, a0, a1); return r; }
 static V W_J_dobj_dfields(V *a) { (void)a; return F_J_dobj_dfields(a[0], a[1]); }
-static V S41291(void) { static V c; return STRC(c, "__proto__"); }
-static V S41295(void) { static V c; return STRC(c, "\042"); }
-static V S41296(void) { static V c; return STRC(c, "\042"); }
-static V S41299(void) { static V c; return STRC(c, "[\042__proto__\042]"); }
+static V S41462(void) { static V c; return STRC(c, "__proto__"); }
+static V S41466(void) { static V c; return STRC(c, "\042"); }
+static V S41467(void) { static V c; return STRC(c, "\042"); }
+static V S41470(void) { static V c; return STRC(c, "[\042__proto__\042]"); }
 static V F_J_dkey(V a0) {
 top:;
-V s41290 = F_String_deq(a0, S41291());
-if ((s41290) == IMM(0)) {
-V s41293 = F_J_ddotted(a0);
-if ((s41293) == IMM(0)) {
+V s41461 = F_String_deq(a0, S41462());
+if ((s41461) == IMM(0)) {
+V s41464 = F_J_ddotted(a0);
+if ((s41464) == IMM(0)) {
 return a0;
-} else if ((s41293) == IMM(1)) {
-return F_String_dappend(S41295(), F_String_dappend(a0, S41296()));
+} else if ((s41464) == IMM(1)) {
+return F_String_dappend(S41466(), F_String_dappend(a0, S41467()));
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s41290) == IMM(1)) {
-return S41299();
+} else if ((s41461) == IMM(1)) {
+return S41470();
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dkey(V *a) { (void)a; return F_J_dkey(a[0]); }
-static V K41301(void) { static V c; return KONST(c, C1(1, MKS("["))); }
-static V K41303(void) { static V c; return KONST(c, C2(1, C1(1, MKS("]")), IMM(0))); }
-static V K41305(void) { static V c; return KONST(c, C1(1, MKS("array_node("))); }
-static V S41306(void) { static V c; return STRC(c, ", "); }
-static V K41308(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
+static V K41472(void) { static V c; return KONST(c, C1(1, MKS("["))); }
+static V K41474(void) { static V c; return KONST(c, C2(1, C1(1, MKS("]")), IMM(0))); }
+static V K41476(void) { static V c; return KONST(c, C1(1, MKS("array_node("))); }
+static V S41477(void) { static V c; return STRC(c, ", "); }
+static V K41479(void) { static V c; return KONST(c, C2(1, C1(1, MKS(")")), IMM(0))); }
 static V F_J_dctor_darr(V a0, V a1) {
 top:;
-V s41300 = (a0);
-if ((s41300) == IMM(1)) {
-return F_Doc_dlist(C2(1, K41301(), C2(1, F_Doc_dlist(a1), K41303())));
-} else if ((s41300) == IMM(0)) {
-return F_Doc_dlist(C2(1, K41305(), C2(1, F_Doc_dsep(a1, S41306()), K41308())));
+V s41471 = (a0);
+if ((s41471) == IMM(1)) {
+return F_Doc_dlist(C2(1, K41472(), C2(1, F_Doc_dlist(a1), K41474())));
+} else if ((s41471) == IMM(0)) {
+return F_Doc_dlist(C2(1, K41476(), C2(1, F_Doc_dsep(a1, S41477()), K41479())));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_J_dctor_darr(V *a) { (void)a; return F_J_dctor_darr(a[0], a[1]); }
-static V S41311(void) { static V c; return STRC(c, "process.stdout.write(\042"); }
-static V S41313(void) { static V c; return STRC(c, "\134n\042);\012"); }
-static V S41317(void) { static V c; return STRC(c, "#include <stdio.h>\012\012int main(void) {\012  fputs(\042"); }
-static V S41319(void) { static V c; return STRC(c, "\134n\042, stdout);\012  return 0;\012}\012"); }
+static V S41482(void) { static V c; return STRC(c, "process.stdout.write(\042"); }
+static V S41484(void) { static V c; return STRC(c, "\134n\042);\012"); }
+static V S41488(void) { static V c; return STRC(c, "#include <stdio.h>\012\012int main(void) {\012  fputs(\042"); }
+static V S41490(void) { static V c; return STRC(c, "\134n\042, stdout);\012  return 0;\012}\012"); }
 static V F_Main_demit__value(V a0, V a1) {
 top:;
-V s41310 = (a0);
-if ((s41310) == IMM(1)) {
-return F_IO_dwrite(F_String_dappend(S41311(), F_String_dappend(F_J_dlit(a1), S41313())));
-} else if ((s41310) == IMM(0)) {
-return F_IO_dwrite(F_String_dappend(S41317(), F_String_dappend(F_Gen_dlit(a1), S41319())));
+V s41481 = (a0);
+if ((s41481) == IMM(1)) {
+return F_IO_dwrite(F_String_dappend(S41482(), F_String_dappend(F_J_dlit(a1), S41484())));
+} else if ((s41481) == IMM(0)) {
+return F_IO_dwrite(F_String_dappend(S41488(), F_String_dappend(F_Gen_dlit(a1), S41490())));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Main_demit__value(V *a) { (void)a; return F_Main_demit__value(a[0], a[1]); }
-static V L41325(V *a) {
-V v41326 = a[0];
-return F_Main_dcheck__only_dgo(F_Chk_dreport(FLD(v41326, 0)));
+static V L41496(V *a) {
+V v41497 = a[0];
+return F_Main_dcheck__only_dgo(F_Chk_dreport(FLD(v41497, 0)));
 }
-static V L41332(V *a) {
-V v41333 = IMM(1);
-V v41334 = a[2];
-return F_Main_dchecked_x37u(v41333, a[1], a[0], FLD(v41334, 0), FLD(v41334, 1));
+static V L41503(V *a) {
+V v41504 = IMM(1);
+V v41505 = a[2];
+return F_Main_dchecked_x37u(v41504, a[1], a[0], FLD(v41505, 0), FLD(v41505, 1));
 }
-static V S41337(void) { static V c; return STRC(c, ""); }
-static V L41340(V *a) {
+static V S41508(void) { static V c; return STRC(c, ""); }
+static V L41511(V *a) {
 return F_IO_dpure(IMM(0));
 }
-static V S41343(void) { static V c; return STRC(c, "usage: bendc [--check-only | --parse-only | --no-check | --js | -o <binary> | --native -o <binary>] <base.bend> <input.bend> | --tokens <file> | --ast <file>"); }
+static V S41514(void) { static V c; return STRC(c, "usage: bendc [--check-only | --parse-only | --no-check | --js | -o <binary> | --native -o <binary>] <base.bend> <input.bend> | --tokens <file> | --ast <file>"); }
 static V F_Main_drun3(V a0, V a1, V a2) {
 top:;
-V s41323 = (a0);
-if ((s41323) == 3) {
-return F_IO_dbind(F_Main_dcheck(a1, a2), mk_clo(L41325, 1, 0, 0));
-} else if ((s41323) == 4) {
+V s41494 = (a0);
+if ((s41494) == 3) {
+return F_IO_dbind(F_Main_dcheck(a1, a2), mk_clo(L41496, 1, 0, 0));
+} else if ((s41494) == 4) {
 return F_Main_dbuild(IMM(0), a1, a2);
-} else if ((s41323) == 5) {
-return F_IO_dbind(F_Main_dcheck(a1, a2), mk_clo(L41332, 3, 2, (V[]){a2, a1}));
-} else if ((s41323) == 8) {
-return F_IO_dbind(F_Main_dchk_dload(64u, a1, a2, S41337(), IMM(0), C3(0, F_Chk_dbook__nil(), IMM(0), 0u)), mk_clo(L41340, 1, 0, 0));
+} else if ((s41494) == 5) {
+return F_IO_dbind(F_Main_dcheck(a1, a2), mk_clo(L41503, 3, 2, (V[]){a2, a1}));
+} else if ((s41494) == 8) {
+return F_IO_dbind(F_Main_dchk_dload(64u, a1, a2, S41508(), IMM(0), C3(0, F_Chk_dbook__nil(), IMM(0), 0u)), mk_clo(L41511, 1, 0, 0));
 } else {
-return F_IO_ddie(1u, S41343());
+return F_IO_ddie(1u, S41514());
 }
 }
 static V W_Main_drun3(V *a) { (void)a; return F_Main_drun3(a[0], a[1], a[2]); }
 static V F_Chk_dreport(V a0) {
 top:;
-V v41345 = F_Chk_dStr_dunique(({ V r41346;
-V v41347 = a0;
-r41346 = F_Chk_dreport_down_x37u(FLD(v41347, 0), FLD(v41347, 1), FLD(v41347, 2), FLD(v41347, 3), FLD(v41347, 4), FLD(v41347, 5), FLD(v41347, 6), FLD(v41347, 7), ({ V r41348;
-V v41349 = a0;
-r41348 = F_List_dreverse_dgo(0, FLD(v41349, 2), IMM(0));
-r41348; }));
-r41346; }), IMM(0));
-V v41353 = a0;
-V v41354 = F_Chk_dreport_dbad__all_x37u(FLD(v41353, 0), FLD(v41353, 1), FLD(v41353, 2), FLD(v41353, 3), FLD(v41353, 4), FLD(v41353, 5), FLD(v41353, 6), FLD(v41353, 7), F_Map_dkeys_dgo(0, ({ V r41355;
-V v41356 = a0;
-r41355 = FLD(v41356, 0);
-r41355; }), IMM(0)));
-return F_Chk_dreport_dgo(a0, v41345, v41354, ({ V r41359;
-V s41360 = v41354;
-if ((s41360) == IMM(0)) {
-r41359 = IMM(1);
-} else if (IS_N(s41360, 1)) {
-r41359 = IMM(0);
+V v41516 = F_Chk_dStr_dunique(({ V r41517;
+V v41518 = a0;
+r41517 = F_Chk_dreport_down_x37u(FLD(v41518, 0), FLD(v41518, 1), FLD(v41518, 2), FLD(v41518, 3), FLD(v41518, 4), FLD(v41518, 5), FLD(v41518, 6), FLD(v41518, 7), ({ V r41519;
+V v41520 = a0;
+r41519 = F_List_dreverse_dgo(0, FLD(v41520, 2), IMM(0));
+r41519; }));
+r41517; }), IMM(0));
+V v41524 = a0;
+V v41525 = F_Chk_dreport_dbad__all_x37u(FLD(v41524, 0), FLD(v41524, 1), FLD(v41524, 2), FLD(v41524, 3), FLD(v41524, 4), FLD(v41524, 5), FLD(v41524, 6), FLD(v41524, 7), F_Map_dkeys_dgo(0, ({ V r41526;
+V v41527 = a0;
+r41526 = FLD(v41527, 0);
+r41526; }), IMM(0)));
+return F_Chk_dreport_dgo(a0, v41516, v41525, ({ V r41530;
+V s41531 = v41525;
+if ((s41531) == IMM(0)) {
+r41530 = IMM(1);
+} else if (IS_N(s41531, 1)) {
+r41530 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r41359; }));
+r41530; }));
 }
 static V W_Chk_dreport(V *a) { (void)a; return F_Chk_dreport(a[0]); }
 static V F_Chk_dreport_dgo(V a0, V a1, V a2, V a3) {
 top:;
-V s41362 = (a3);
-if ((s41362) == IMM(1)) {
+V s41533 = (a3);
+if ((s41533) == IMM(1)) {
 return IMM(0);
-} else if ((s41362) == IMM(0)) {
-return F_Chk_dreport_dgo_duses(a1, a2, ({ V r41363;
-V (v41364) = F_U32_dto__nat(4000000000u);
-V v41366 = a0;
-r41363 = F_Chk_dreport_dwalk_dgo_x37u((v41364), FLD(v41366, 0), FLD(v41366, 1), FLD(v41366, 2), FLD(v41366, 3), FLD(v41366, 4), FLD(v41366, 5), FLD(v41366, 6), FLD(v41366, 7), C3(0, a1, IMM(0), IMM(0)));
-r41363; }));
+} else if ((s41533) == IMM(0)) {
+return F_Chk_dreport_dgo_duses(a1, a2, ({ V r41534;
+V (v41535) = F_U32_dto__nat(4000000000u);
+V v41537 = a0;
+r41534 = F_Chk_dreport_dwalk_dgo_x37u((v41535), FLD(v41537, 0), FLD(v41537, 1), FLD(v41537, 2), FLD(v41537, 3), FLD(v41537, 4), FLD(v41537, 5), FLD(v41537, 6), FLD(v41537, 7), C3(0, a1, IMM(0), IMM(0)));
+r41534; }));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Chk_dreport_dgo(V *a) { (void)a; return F_Chk_dreport_dgo(a[0], a[1], a[2], a[3]); }
 static V F_Chk_dreport_dwalk_dgo_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V a8, V a9) {
 top:;
-V s41369 = (a0);
-if ((s41369) == 0) {
+V s41540 = (a0);
+if ((s41540) == 0) {
 return IMM(0);
-} else if (nat_ge(s41369, 1)) {
-V s41370 = a9;
+} else if (nat_ge(s41540, 1)) {
+V s41541 = a9;
 {
-V s41371 = FLD(s41370, 0);
-if ((s41371) == IMM(0)) {
-return C1(1, FLD(s41370, 2));
-} else if (IS_N(s41371, 1)) {
-V v41372 = F_Map_dhas(FLD(s41370, 1), FLD(s41371, 0));
-V v41374 = F_Chk_dreport_dwalk_done_x37u(a1, a2, a3, (a4), (a5), a6, a7, a8, FLD(s41371, 0), FLD(s41371, 1), FLD(v41372, 0), FLD(v41372, 1), FLD(s41370, 2));
-{ V t0 = nat_subk(s41369, 1); V t1 = a1; V t2 = a2; V t3 = a3; V t4 = (a4); V t5 = (a5); V t6 = a6; V t7 = a7; V t8 = a8; V t9 = v41374; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; a6 = t6; a7 = t7; a8 = t8; a9 = t9; goto top; }
+V s41542 = FLD(s41541, 0);
+if ((s41542) == IMM(0)) {
+return C1(1, FLD(s41541, 2));
+} else if (IS_N(s41542, 1)) {
+V v41543 = F_Map_dhas(FLD(s41541, 1), FLD(s41542, 0));
+V v41545 = F_Chk_dreport_dwalk_done_x37u(a1, a2, a3, (a4), (a5), a6, a7, a8, FLD(s41542, 0), FLD(s41542, 1), FLD(v41543, 0), FLD(v41543, 1), FLD(s41541, 2));
+{ V t0 = nat_subk(s41540, 1); V t1 = a1; V t2 = a2; V t3 = a3; V t4 = (a4); V t5 = (a5); V t6 = a6; V t7 = a7; V t8 = a8; V t9 = v41545; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; a6 = t6; a7 = t7; a8 = t8; a9 = t9; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 } else { bend_fail("runtime fail-stop"); }
@@ -97962,17 +98394,17 @@ V v41374 = F_Chk_dreport_dwalk_done_x37u(a1, a2, a3, (a4), (a5), a6, a7, a8, FLD
 static V W_Chk_dreport_dwalk_dgo_x37u(V *a) { (void)a; return F_Chk_dreport_dwalk_dgo_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]); }
 BEND_UINL V U_Chk_dreport_dwalk_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V a8, V a9, V a10, V a11, V a12, V *o) {
 top:;
-V s41376 = (a11);
-if ((s41376) == IMM(1)) {
+V s41547 = (a11);
+if ((s41547) == IMM(1)) {
 o[0] = a9;
 o[1] = a10;
 o[2] = a12;
 return 0;
-} else if ((s41376) == IMM(0)) {
-V v41377 = F_Chk_dtld__refs(F_Chk_dMap_dfind_dgo(a0, a8));
-o[0] = F_List_dappend(0, v41377, a9);
+} else if ((s41547) == IMM(0)) {
+V v41548 = F_Chk_dtld__refs(F_Chk_dMap_dfind_dgo(a0, a8));
+o[0] = F_List_dappend(0, v41548, a9);
 o[1] = F_Map_dset(0, a10, a8, IMM(0));
-o[2] = F_Chk_dreport_duses(v41377, a8, a12);
+o[2] = F_Chk_dreport_duses(v41548, a8, a12);
 return 0;
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -97980,43 +98412,43 @@ static V F_Chk_dreport_dwalk_done_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6,
 static V W_Chk_dreport_dwalk_done_x37u(V *a) { (void)a; return F_Chk_dreport_dwalk_done_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12]); }
 static V F_Chk_dreport_duses(V a0, V a1, V a2) {
 top:;
-V s41383 = a0;
-if ((s41383) == IMM(0)) {
+V s41554 = a0;
+if ((s41554) == IMM(0)) {
 return a2;
-} else if (IS_N(s41383, 1)) {
-{ V t0 = FLD(s41383, 1); V t1 = a1; V t2 = C2(1, C2(0, FLD(s41383, 0), a1), a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s41554, 1)) {
+{ V t0 = FLD(s41554, 1); V t1 = a1; V t2 = C2(1, C2(0, FLD(s41554, 0), a1), a2); a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Chk_dreport_duses(V *a) { (void)a; return F_Chk_dreport_duses(a[0], a[1], a[2]); }
-static V S41389(void) { static V c; return STRC(c, ""); }
+static V S41560(void) { static V c; return STRC(c, ""); }
 static V F_Chk_dtld__refs(V a0) {
 top:;
-V s41384 = a0;
-if (IS_N(s41384, 1) && IS_N(FLD(s41384, 0), 0)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(FLD(s41384, 0), 2), ({ V r41385;
-V s41386 = FLD(FLD(s41384, 0), 3);
-if (IS_N(s41386, 1)) {
-r41385 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41386, 0), IMM(0));
-} else if ((s41386) == IMM(0)) {
-r41385 = IMM(0);
+V s41555 = a0;
+if (IS_N(s41555, 1) && IS_N(FLD(s41555, 0), 0)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(FLD(s41555, 0), 2), ({ V r41556;
+V s41557 = FLD(FLD(s41555, 0), 3);
+if (IS_N(s41557, 1)) {
+r41556 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41557, 0), IMM(0));
+} else if ((s41557) == IMM(0)) {
+r41556 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r41385; }));
-} else if (IS_N(s41384, 1) && IS_N(FLD(s41384, 0), 1)) {
-return F_Chk_dterm__refs_dgo_x37s526539827x8001459(C3(15, S41389(), F_Chk_dCtrD_dts(FLD(FLD(s41384, 0), 3)), IMM(0)), IMM(0));
-} else if ((s41384) == IMM(0)) {
+r41556; }));
+} else if (IS_N(s41555, 1) && IS_N(FLD(s41555, 0), 1)) {
+return F_Chk_dterm__refs_dgo_x37s526539827x8001459(C3(15, S41560(), F_Chk_dCtrD_dts(FLD(FLD(s41555, 0), 3)), IMM(0)), IMM(0));
+} else if ((s41555) == IMM(0)) {
 return IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Chk_dtld__refs(V *a) { (void)a; return F_Chk_dtld__refs(a[0]); }
 static V D_Chk_dCtrD_dts(V *dst, V a0) {
 top:;
-V s41392 = a0;
-if ((s41392) == IMM(0)) {
+V s41563 = a0;
+if ((s41563) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s41392, 1)) {
-{ V dc = CH2(1, FLD(FLD(s41392, 0), 2), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s41392, 1); a0 = t0; goto top; }
+} else if (IS_N(s41563, 1)) {
+{ V dc = CH2(1, FLD(FLD(s41563, 0), 2), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s41563, 1); a0 = t0; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -98024,70 +98456,70 @@ static V F_Chk_dCtrD_dts(V a0) { V r; D_Chk_dCtrD_dts(&r, a0); return r; }
 static V W_Chk_dCtrD_dts(V *a) { (void)a; return F_Chk_dCtrD_dts(a[0]); }
 static V F_Chk_dterm__refs_dgo_x37s526539827x8001459(V a0, V a1) {
 top:;
-V s41393 = a0;
-if (IS_N(s41393, 4)) {
-return C2(1, FLD(s41393, 0), a1);
-} else if (IS_N(s41393, 14)) {
-V s41394 = FLD(s41393, 1);
-if ((s41394) == IMM(0)) {
+V s41564 = a0;
+if (IS_N(s41564, 4)) {
+return C2(1, FLD(s41564, 0), a1);
+} else if (IS_N(s41564, 14)) {
+V s41565 = FLD(s41564, 1);
+if ((s41565) == IMM(0)) {
 return a1;
-} else if (IS_N(s41394, 1)) {
-{ V t0 = C4(14, FLD(s41393, 0), FLD(s41394, 1), FLD(s41393, 2), FLD(s41393, 3)); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41394, 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41565, 1)) {
+{ V t0 = C4(14, FLD(s41564, 0), FLD(s41565, 1), FLD(s41564, 2), FLD(s41564, 3)); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41565, 0), a1); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s41393, 1)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 2), a1);
-} else if (IS_N(s41393, 3)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 3), a1);
-} else if (IS_N(s41393, 5)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 2), a1);
-} else if (IS_N(s41393, 6)) {
-V s41399 = FLD(s41393, 2);
-if ((s41399) == IMM(0)) {
+} else if (IS_N(s41564, 1)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 2), a1);
+} else if (IS_N(s41564, 3)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 3), a1);
+} else if (IS_N(s41564, 5)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 2), a1);
+} else if (IS_N(s41564, 6)) {
+V s41570 = FLD(s41564, 2);
+if ((s41570) == IMM(0)) {
 return a1;
-} else if (IS_N(s41399, 1)) {
-{ V t0 = CN(6, 6, (V[]){FLD(s41393, 0), FLD(s41393, 1), FLD(s41399, 1), FLD(s41393, 3), FLD(s41393, 4), FLD(s41393, 5)}); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41399, 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41570, 1)) {
+{ V t0 = CN(6, 6, (V[]){FLD(s41564, 0), FLD(s41564, 1), FLD(s41570, 1), FLD(s41564, 3), FLD(s41564, 4), FLD(s41564, 5)}); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41570, 0), a1); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s41393, 7)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 0), a1);
-} else if (IS_N(s41393, 10)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 0), a1));
-} else if (IS_N(s41393, 11)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 4), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 3), a1));
-} else if (IS_N(s41393, 12)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 2), a1);
-} else if (IS_N(s41393, 13)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 0), a1));
-} else if (IS_N(s41393, 15)) {
-V s41409 = FLD(s41393, 1);
-if ((s41409) == IMM(0)) {
+} else if (IS_N(s41564, 7)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 0), a1);
+} else if (IS_N(s41564, 10)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 0), a1));
+} else if (IS_N(s41564, 11)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 4), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 3), a1));
+} else if (IS_N(s41564, 12)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 2), a1);
+} else if (IS_N(s41564, 13)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 0), a1));
+} else if (IS_N(s41564, 15)) {
+V s41580 = FLD(s41564, 1);
+if ((s41580) == IMM(0)) {
 return a1;
-} else if (IS_N(s41409, 1)) {
-{ V t0 = C3(15, FLD(s41393, 0), FLD(s41409, 1), FLD(s41393, 2)); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41409, 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41580, 1)) {
+{ V t0 = C3(15, FLD(s41564, 0), FLD(s41580, 1), FLD(s41564, 2)); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41580, 0), a1); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s41393, 17)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 2), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 1), a1));
-} else if (IS_N(s41393, 19)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 2), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 0), a1)));
-} else if (IS_N(s41393, 21)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 2), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 0), a1)));
-} else if (IS_N(s41393, 23)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 0), a1));
-} else if (IS_N(s41393, 24)) {
-V s41421 = FLD(s41393, 0);
-if ((s41421) == IMM(0)) {
+} else if (IS_N(s41564, 17)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 2), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 1), a1));
+} else if (IS_N(s41564, 19)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 2), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 0), a1)));
+} else if (IS_N(s41564, 21)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 2), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 0), a1)));
+} else if (IS_N(s41564, 23)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 0), a1));
+} else if (IS_N(s41564, 24)) {
+V s41592 = FLD(s41564, 0);
+if ((s41592) == IMM(0)) {
 return a1;
-} else if (IS_N(s41421, 1)) {
-{ V t0 = C3(24, FLD(s41421, 1), FLD(s41393, 1), FLD(s41393, 2)); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41421, 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41592, 1)) {
+{ V t0 = C3(24, FLD(s41592, 1), FLD(s41564, 1), FLD(s41564, 2)); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41592, 0), a1); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s41393, 25)) {
-V s41423 = FLD(s41393, 0);
-if ((s41423) == IMM(0)) {
+} else if (IS_N(s41564, 25)) {
+V s41594 = FLD(s41564, 0);
+if ((s41594) == IMM(0)) {
 return a1;
-} else if (IS_N(s41423, 1)) {
-{ V t0 = C3(25, FLD(s41423, 1), FLD(s41393, 1), FLD(s41393, 2)); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41423, 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41594, 1)) {
+{ V t0 = C3(25, FLD(s41594, 1), FLD(s41564, 1), FLD(s41564, 2)); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41594, 0), a1); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s41393, 31)) {
-return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41393, 1), a1);
+} else if (IS_N(s41564, 31)) {
+return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41564, 1), a1);
 } else {
 return a1;
 }
@@ -98095,70 +98527,70 @@ return a1;
 static V W_Chk_dterm__refs_dgo_x37s526539827x8001459(V *a) { (void)a; return F_Chk_dterm__refs_dgo_x37s526539827x8001459(a[0], a[1]); }
 static V F_Chk_dterm__refs_dgo_x37s1843676890x8031250(V a0, V a1) {
 top:;
-V s41426 = a0;
-if (IS_N(s41426, 4)) {
-return C2(1, FLD(s41426, 0), a1);
-} else if (IS_N(s41426, 14)) {
-V s41427 = FLD(s41426, 1);
-if ((s41427) == IMM(0)) {
-return C2(1, FLD(s41426, 0), a1);
-} else if (IS_N(s41427, 1)) {
-return F_Chk_dterm__refs_dgo_x37s526539827x8001459(C4(14, FLD(s41426, 0), C2(1, FLD(s41427, 0), FLD(s41427, 1)), FLD(s41426, 2), FLD(s41426, 3)), C2(1, FLD(s41426, 0), a1));
+V s41597 = a0;
+if (IS_N(s41597, 4)) {
+return C2(1, FLD(s41597, 0), a1);
+} else if (IS_N(s41597, 14)) {
+V s41598 = FLD(s41597, 1);
+if ((s41598) == IMM(0)) {
+return C2(1, FLD(s41597, 0), a1);
+} else if (IS_N(s41598, 1)) {
+return F_Chk_dterm__refs_dgo_x37s526539827x8001459(C4(14, FLD(s41597, 0), C2(1, FLD(s41598, 0), FLD(s41598, 1)), FLD(s41597, 2), FLD(s41597, 3)), C2(1, FLD(s41597, 0), a1));
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s41426, 1)) {
-{ V t0 = FLD(s41426, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 3)) {
-{ V t0 = FLD(s41426, 3); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 5)) {
-{ V t0 = FLD(s41426, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 6)) {
-V s41429 = FLD(s41426, 2);
-if ((s41429) == IMM(0)) {
-{ V t0 = FLD(s41426, 3); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41429, 1)) {
-{ V t0 = FLD(s41426, 3); V t1 = F_Chk_dterm__refs_dgo_x37s526539827x8001459(CN(6, 6, (V[]){FLD(s41426, 0), FLD(s41426, 1), C2(1, FLD(s41429, 0), FLD(s41429, 1)), FLD(s41426, 3), FLD(s41426, 4), FLD(s41426, 5)}), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 1)) {
+{ V t0 = FLD(s41597, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 3)) {
+{ V t0 = FLD(s41597, 3); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 5)) {
+{ V t0 = FLD(s41597, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 6)) {
+V s41600 = FLD(s41597, 2);
+if ((s41600) == IMM(0)) {
+{ V t0 = FLD(s41597, 3); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41600, 1)) {
+{ V t0 = FLD(s41597, 3); V t1 = F_Chk_dterm__refs_dgo_x37s526539827x8001459(CN(6, 6, (V[]){FLD(s41597, 0), FLD(s41597, 1), C2(1, FLD(s41600, 0), FLD(s41600, 1)), FLD(s41597, 3), FLD(s41597, 4), FLD(s41597, 5)}), a1); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s41426, 7)) {
-{ V t0 = FLD(s41426, 0); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 10)) {
-{ V t0 = FLD(s41426, 1); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41426, 0), a1); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 11)) {
-{ V t0 = FLD(s41426, 4); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41426, 3), a1); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 12)) {
-{ V t0 = FLD(s41426, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 13)) {
-{ V t0 = FLD(s41426, 1); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41426, 0), a1); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 15)) {
-V s41434 = FLD(s41426, 1);
-if ((s41434) == IMM(0)) {
+} else if (IS_N(s41597, 7)) {
+{ V t0 = FLD(s41597, 0); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 10)) {
+{ V t0 = FLD(s41597, 1); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41597, 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 11)) {
+{ V t0 = FLD(s41597, 4); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41597, 3), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 12)) {
+{ V t0 = FLD(s41597, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 13)) {
+{ V t0 = FLD(s41597, 1); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41597, 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 15)) {
+V s41605 = FLD(s41597, 1);
+if ((s41605) == IMM(0)) {
 return a1;
-} else if (IS_N(s41434, 1)) {
-return F_Chk_dterm__refs_dgo_x37s526539827x8001459(C3(15, FLD(s41426, 0), FLD(s41434, 1), FLD(s41426, 2)), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41434, 0), a1));
+} else if (IS_N(s41605, 1)) {
+return F_Chk_dterm__refs_dgo_x37s526539827x8001459(C3(15, FLD(s41597, 0), FLD(s41605, 1), FLD(s41597, 2)), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41605, 0), a1));
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s41426, 17)) {
-{ V t0 = FLD(s41426, 2); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41426, 1), a1); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 19)) {
-{ V t0 = FLD(s41426, 2); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41426, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41426, 0), a1)); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 21)) {
-{ V t0 = FLD(s41426, 2); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41426, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41426, 0), a1)); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 23)) {
-{ V t0 = FLD(s41426, 1); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41426, 0), a1); a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41426, 24)) {
-V s41443 = FLD(s41426, 0);
-if ((s41443) == IMM(0)) {
-{ V t0 = FLD(s41426, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41443, 1)) {
-{ V t0 = FLD(s41426, 2); V t1 = F_Chk_dterm__refs_dgo_x37s526539827x8001459(C3(24, C2(1, FLD(s41443, 0), FLD(s41443, 1)), FLD(s41426, 1), FLD(s41426, 2)), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 17)) {
+{ V t0 = FLD(s41597, 2); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41597, 1), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 19)) {
+{ V t0 = FLD(s41597, 2); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41597, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41597, 0), a1)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 21)) {
+{ V t0 = FLD(s41597, 2); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41597, 1), F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41597, 0), a1)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 23)) {
+{ V t0 = FLD(s41597, 1); V t1 = F_Chk_dterm__refs_dgo_x37s1843676890x8031250(FLD(s41597, 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 24)) {
+V s41614 = FLD(s41597, 0);
+if ((s41614) == IMM(0)) {
+{ V t0 = FLD(s41597, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41614, 1)) {
+{ V t0 = FLD(s41597, 2); V t1 = F_Chk_dterm__refs_dgo_x37s526539827x8001459(C3(24, C2(1, FLD(s41614, 0), FLD(s41614, 1)), FLD(s41597, 1), FLD(s41597, 2)), a1); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s41426, 25)) {
-V s41445 = FLD(s41426, 0);
-if ((s41445) == IMM(0)) {
-{ V t0 = FLD(s41426, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if (IS_N(s41445, 1)) {
-{ V t0 = FLD(s41426, 2); V t1 = F_Chk_dterm__refs_dgo_x37s526539827x8001459(C3(25, C2(1, FLD(s41445, 0), FLD(s41445, 1)), FLD(s41426, 1), FLD(s41426, 2)), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 25)) {
+V s41616 = FLD(s41597, 0);
+if ((s41616) == IMM(0)) {
+{ V t0 = FLD(s41597, 2); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41616, 1)) {
+{ V t0 = FLD(s41597, 2); V t1 = F_Chk_dterm__refs_dgo_x37s526539827x8001459(C3(25, C2(1, FLD(s41616, 0), FLD(s41616, 1)), FLD(s41597, 1), FLD(s41597, 2)), a1); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
-} else if (IS_N(s41426, 31)) {
-{ V t0 = FLD(s41426, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41597, 31)) {
+{ V t0 = FLD(s41597, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
 } else {
 return a1;
 }
@@ -98166,118 +98598,118 @@ return a1;
 static V W_Chk_dterm__refs_dgo_x37s1843676890x8031250(V *a) { (void)a; return F_Chk_dterm__refs_dgo_x37s1843676890x8031250(a[0], a[1]); }
 static V F_Chk_dreport_dgo_duses(V a0, V a1, V a2) {
 top:;
-V s41447 = a2;
-if ((s41447) == IMM(0)) {
+V s41618 = a2;
+if ((s41618) == IMM(0)) {
 return a0;
-} else if (IS_N(s41447, 1)) {
-V v41448 = a1;
-V v41449 = F_Set_dfrom__list_dgo(a1, IMM(0));
-V v41451 = F_Chk_dreport_dclose2_dgo_x37u(F_U32_dto__nat(4000000000u), F_Chk_dreport_dumap(FLD(s41447, 0), IMM(0)), v41448, v41449);
-V s41455 = v41451;
-if ((s41455) == IMM(0)) {
+} else if (IS_N(s41618, 1)) {
+V v41619 = a1;
+V v41620 = F_Set_dfrom__list_dgo(a1, IMM(0));
+V v41622 = F_Chk_dreport_dclose2_dgo_x37u(F_U32_dto__nat(4000000000u), F_Chk_dreport_dumap(FLD(s41618, 0), IMM(0)), v41619, v41620);
+V s41626 = v41622;
+if ((s41626) == IMM(0)) {
 return a0;
-} else if (IS_N(s41455, 1)) {
-return F_Chk_dreport_dkeep_dgo_x37u(a0, FLD(s41455, 0), IMM(0));
+} else if (IS_N(s41626, 1)) {
+return F_Chk_dreport_dkeep_dgo_x37u(a0, FLD(s41626, 0), IMM(0));
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Chk_dreport_dgo_duses(V *a) { (void)a; return F_Chk_dreport_dgo_duses(a[0], a[1], a[2]); }
 static V F_Chk_dreport_dkeep_dgo_x37u(V a0, V a1, V a2) {
 top:;
-V s41457 = a0;
-if ((s41457) == IMM(0)) {
+V s41628 = a0;
+if ((s41628) == IMM(0)) {
 return F_List_dreverse_dgo(0, a2, IMM(0));
-} else if (IS_N(s41457, 1)) {
-V v41459 = F_Map_dhas(a1, FLD(s41457, 0));
-V uo41461[2]; U_Chk_dreport_dkeep_dtwo_x37u(FLD(s41457, 0), FLD(v41459, 0), FLD(v41459, 1), a2, uo41461);
-{ V t0 = FLD(s41457, 1); V t1 = uo41461[0]; V t2 = uo41461[1]; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s41628, 1)) {
+V v41630 = F_Map_dhas(a1, FLD(s41628, 0));
+V uo41632[2]; U_Chk_dreport_dkeep_dtwo_x37u(FLD(s41628, 0), FLD(v41630, 0), FLD(v41630, 1), a2, uo41632);
+{ V t0 = FLD(s41628, 1); V t1 = uo41632[0]; V t2 = uo41632[1]; a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Chk_dreport_dkeep_dgo_x37u(V *a) { (void)a; return F_Chk_dreport_dkeep_dgo_x37u(a[0], a[1], a[2]); }
 BEND_UINL V U_Chk_dreport_dkeep_dtwo_x37u(V a0, V a1, V a2, V a3, V *o) {
 top:;
 o[0] = a1;
-o[1] = ({ V r41463;
-V s41464 = (a2);
-if ((s41464) == IMM(0)) {
-r41463 = a3;
-} else if ((s41464) == IMM(1)) {
-r41463 = C2(1, a0, a3);
+o[1] = ({ V r41634;
+V s41635 = (a2);
+if ((s41635) == IMM(0)) {
+r41634 = a3;
+} else if ((s41635) == IMM(1)) {
+r41634 = C2(1, a0, a3);
 } else { bend_fail("runtime fail-stop"); }
-r41463; });
+r41634; });
 return 0;
 }
 static V F_Chk_dreport_dkeep_dtwo_x37u(V a0, V a1, V a2, V a3) { V o[2]; U_Chk_dreport_dkeep_dtwo_x37u(a0, a1, a2, a3, o); return CN(0, 2, o); }
 static V W_Chk_dreport_dkeep_dtwo_x37u(V *a) { (void)a; return F_Chk_dreport_dkeep_dtwo_x37u(a[0], a[1], a[2], a[3]); }
 static V F_Chk_dreport_dumap(V a0, V a1) {
 top:;
-V s41465 = a0;
-if ((s41465) == IMM(0)) {
+V s41636 = a0;
+if ((s41636) == IMM(0)) {
 return a1;
-} else if (IS_N(s41465, 1)) {
-{ V t0 = FLD(s41465, 1); V t1 = F_Chk_dreport_dumap_dadd(a1, FLD(FLD(s41465, 0), 0), FLD(FLD(s41465, 0), 1)); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41636, 1)) {
+{ V t0 = FLD(s41636, 1); V t1 = F_Chk_dreport_dumap_dadd(a1, FLD(FLD(s41636, 0), 0), FLD(FLD(s41636, 0), 1)); a0 = t0; a1 = t1; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Chk_dreport_dumap(V *a) { (void)a; return F_Chk_dreport_dumap(a[0], a[1]); }
 static V F_Chk_dreport_dumap_dadd(V a0, V a1, V a2) {
 top:;
-return F_Map_dset(0, a0, a1, C2(1, a2, ({ V r41467;
-V v41468 = F_Chk_dMap_dfind_dgo(a0, a1);
-V s41470 = v41468;
-if ((s41470) == IMM(0)) {
-r41467 = IMM(0);
-} else if (IS_N(s41470, 1)) {
-r41467 = FLD(s41470, 0);
+return F_Map_dset(0, a0, a1, C2(1, a2, ({ V r41638;
+V v41639 = F_Chk_dMap_dfind_dgo(a0, a1);
+V s41641 = v41639;
+if ((s41641) == IMM(0)) {
+r41638 = IMM(0);
+} else if (IS_N(s41641, 1)) {
+r41638 = FLD(s41641, 0);
 } else { bend_fail("runtime fail-stop"); }
-r41467; })));
+r41638; })));
 }
 static V W_Chk_dreport_dumap_dadd(V *a) { (void)a; return F_Chk_dreport_dumap_dadd(a[0], a[1], a[2]); }
 static V F_Chk_dreport_dclose2_dgo_x37u(V a0, V a1, V a2, V a3) {
 top:;
-V s41472 = (a0);
-if ((s41472) == 0) {
+V s41643 = (a0);
+if ((s41643) == 0) {
 return IMM(0);
-} else if (nat_ge(s41472, 1)) {
-V s41473 = a2;
-if ((s41473) == IMM(0)) {
+} else if (nat_ge(s41643, 1)) {
+V s41644 = a2;
+if ((s41644) == IMM(0)) {
 return C1(1, a3);
-} else if (IS_N(s41473, 1)) {
-V uo41474[2]; U_Chk_dreport_dclose2_dadd_x37u(({ V r41475;
-V s41476 = F_Chk_dMap_dfind_dgo(a1, FLD(s41473, 0));
-if ((s41476) == IMM(0)) {
-r41475 = IMM(0);
-} else if (IS_N(s41476, 1)) {
-r41475 = FLD(s41476, 0);
+} else if (IS_N(s41644, 1)) {
+V uo41645[2]; U_Chk_dreport_dclose2_dadd_x37u(({ V r41646;
+V s41647 = F_Chk_dMap_dfind_dgo(a1, FLD(s41644, 0));
+if ((s41647) == IMM(0)) {
+r41646 = IMM(0);
+} else if (IS_N(s41647, 1)) {
+r41646 = FLD(s41647, 0);
 } else { bend_fail("runtime fail-stop"); }
-r41475; }), FLD(s41473, 1), a3, uo41474);
-{ V t0 = nat_subk(s41472, 1); V t1 = a1; V t2 = uo41474[0]; V t3 = uo41474[1]; a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
+r41646; }), FLD(s41644, 1), a3, uo41645);
+{ V t0 = nat_subk(s41643, 1); V t1 = a1; V t2 = uo41645[0]; V t3 = uo41645[1]; a0 = t0; a1 = t1; a2 = t2; a3 = t3; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Chk_dreport_dclose2_dgo_x37u(V *a) { (void)a; return F_Chk_dreport_dclose2_dgo_x37u(a[0], a[1], a[2], a[3]); }
 BEND_UINL V U_Chk_dreport_dclose2_dadd_x37u(V a0, V a1, V a2, V *o) {
 top:;
-V s41479 = a0;
-if ((s41479) == IMM(0)) {
+V s41650 = a0;
+if ((s41650) == IMM(0)) {
 o[0] = a1;
 o[1] = a2;
 return 0;
-} else if (IS_N(s41479, 1)) {
-V v41480 = F_Map_dhas(a2, FLD(s41479, 0));
-V uo41482[2]; U_Chk_dreport_dclose2_dtwo_x37u(FLD(s41479, 0), a1, FLD(v41480, 0), FLD(v41480, 1), uo41482);
-{ V t0 = FLD(s41479, 1); V t1 = uo41482[0]; V t2 = uo41482[1]; a0 = t0; a1 = t1; a2 = t2; goto top; }
+} else if (IS_N(s41650, 1)) {
+V v41651 = F_Map_dhas(a2, FLD(s41650, 0));
+V uo41653[2]; U_Chk_dreport_dclose2_dtwo_x37u(FLD(s41650, 0), a1, FLD(v41651, 0), FLD(v41651, 1), uo41653);
+{ V t0 = FLD(s41650, 1); V t1 = uo41653[0]; V t2 = uo41653[1]; a0 = t0; a1 = t1; a2 = t2; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V F_Chk_dreport_dclose2_dadd_x37u(V a0, V a1, V a2) { V o[2]; U_Chk_dreport_dclose2_dadd_x37u(a0, a1, a2, o); return CN(0, 2, o); }
 static V W_Chk_dreport_dclose2_dadd_x37u(V *a) { (void)a; return F_Chk_dreport_dclose2_dadd_x37u(a[0], a[1], a[2]); }
 BEND_UINL V U_Chk_dreport_dclose2_dtwo_x37u(V a0, V a1, V a2, V a3, V *o) {
 top:;
-V s41484 = (a3);
-if ((s41484) == IMM(1)) {
+V s41655 = (a3);
+if ((s41655) == IMM(1)) {
 o[0] = a1;
 o[1] = a2;
 return 0;
-} else if ((s41484) == IMM(0)) {
+} else if ((s41655) == IMM(0)) {
 o[0] = C2(1, a0, a1);
 o[1] = F_Map_dset(0, a2, a0, IMM(0));
 return 0;
@@ -98287,18 +98719,18 @@ static V F_Chk_dreport_dclose2_dtwo_x37u(V a0, V a1, V a2, V a3) { V o[2]; U_Chk
 static V W_Chk_dreport_dclose2_dtwo_x37u(V *a) { (void)a; return F_Chk_dreport_dclose2_dtwo_x37u(a[0], a[1], a[2], a[3]); }
 static V D_Chk_dreport_dbad__all_x37u(V *dst, V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V a8) {
 top:;
-V s41486 = a8;
-if ((s41486) == IMM(0)) {
+V s41657 = a8;
+if ((s41657) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s41486, 1)) {
-V s41487 = F_Chk_dTld_dbad(F_Chk_dMap_dfind_dgo(a0, FLD(s41486, 0)));
-if ((s41487) == IMM(1)) {
-{ V dc = CH2(1, FLD(s41486, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = a0; V t1 = a1; V t2 = a2; V t3 = (a3); V t4 = (a4); V t5 = a5; V t6 = a6; V t7 = a7; V t8 = FLD(s41486, 1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; a6 = t6; a7 = t7; a8 = t8; goto top; }
+} else if (IS_N(s41657, 1)) {
+V s41658 = F_Chk_dTld_dbad(F_Chk_dMap_dfind_dgo(a0, FLD(s41657, 0)));
+if ((s41658) == IMM(1)) {
+{ V dc = CH2(1, FLD(s41657, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = a0; V t1 = a1; V t2 = a2; V t3 = (a3); V t4 = (a4); V t5 = a5; V t6 = a6; V t7 = a7; V t8 = FLD(s41657, 1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; a6 = t6; a7 = t7; a8 = t8; goto top; }
 }
-} else if ((s41487) == IMM(0)) {
-{ V t0 = a0; V t1 = a1; V t2 = a2; V t3 = (a3); V t4 = (a4); V t5 = a5; V t6 = a6; V t7 = a7; V t8 = FLD(s41486, 1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; a6 = t6; a7 = t7; a8 = t8; goto top; }
+} else if ((s41658) == IMM(0)) {
+{ V t0 = a0; V t1 = a1; V t2 = a2; V t3 = (a3); V t4 = (a4); V t5 = a5; V t6 = a6; V t7 = a7; V t8 = FLD(s41657, 1); a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; a5 = t5; a6 = t6; a7 = t7; a8 = t8; goto top; }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
@@ -98306,22 +98738,22 @@ static V F_Chk_dreport_dbad__all_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, 
 static V W_Chk_dreport_dbad__all_x37u(V *a) { (void)a; return F_Chk_dreport_dbad__all_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8]); }
 static V F_Chk_dTld_dbad(V a0) {
 top:;
-V s41490 = a0;
-if (IS_N(s41490, 1) && IS_N(FLD(s41490, 0), 0)) {
-V s41491 = FLD(FLD(s41490, 0), 4);
-if ((s41491) == IMM(0)) {
-V s41492 = FLD(FLD(s41490, 0), 6);
-if ((s41492) == IMM(0)) {
+V s41661 = a0;
+if (IS_N(s41661, 1) && IS_N(FLD(s41661, 0), 0)) {
+V s41662 = FLD(FLD(s41661, 0), 4);
+if ((s41662) == IMM(0)) {
+V s41663 = FLD(FLD(s41661, 0), 6);
+if ((s41663) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s41492, 1)) {
-V s41493 = FLD(FLD(s41490, 0), 5);
-if ((s41493) == IMM(0)) {
+} else if (IS_N(s41663, 1)) {
+V s41664 = FLD(FLD(s41661, 0), 5);
+if ((s41664) == IMM(0)) {
 return IMM(1);
-} else if ((s41493) == IMM(1)) {
+} else if ((s41664) == IMM(1)) {
 return IMM(0);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
-} else if ((s41491) == IMM(1)) {
+} else if ((s41662) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else {
@@ -98331,44 +98763,44 @@ return IMM(0);
 static V W_Chk_dTld_dbad(V *a) { (void)a; return F_Chk_dTld_dbad(a[0]); }
 static V F_Chk_dreport_down_x37u(V a0, V a1, V a2, V a3, V a4, V a5, V a6, V a7, V a8) {
 top:;
-V s41494 = a8;
-if ((s41494) == IMM(0)) {
+V s41665 = a8;
+if ((s41665) == IMM(0)) {
 return IMM(0);
-} else if (IS_N(s41494, 1)) {
-V v41495 = F_Chk_dreport_down_x37u(a0, a1, a2, (a3), (a4), a5, a6, a7, FLD(s41494, 1));
-V v41497 = F_Chk_dMap_dfind_dgo(a0, FLD(s41494, 0));
-V v41499 = ({ V r41500;
-V s41501 = v41497;
-if (IS_N(s41501, 1) && IS_N(FLD(s41501, 0), 0)) {
-r41500 = FLD(FLD(s41501, 0), 5);
-} else if (IS_N(s41501, 1) && IS_N(FLD(s41501, 0), 1)) {
-r41500 = FLD(FLD(s41501, 0), 4);
-} else if ((s41501) == IMM(0)) {
-r41500 = IMM(0);
+} else if (IS_N(s41665, 1)) {
+V v41666 = F_Chk_dreport_down_x37u(a0, a1, a2, (a3), (a4), a5, a6, a7, FLD(s41665, 1));
+V v41668 = F_Chk_dMap_dfind_dgo(a0, FLD(s41665, 0));
+V v41670 = ({ V r41671;
+V s41672 = v41668;
+if (IS_N(s41672, 1) && IS_N(FLD(s41672, 0), 0)) {
+r41671 = FLD(FLD(s41672, 0), 5);
+} else if (IS_N(s41672, 1) && IS_N(FLD(s41672, 0), 1)) {
+r41671 = FLD(FLD(s41672, 0), 4);
+} else if ((s41672) == IMM(0)) {
+r41671 = IMM(0);
 } else { bend_fail("runtime fail-stop"); }
-r41500; });
-V s41502 = v41499;
-if ((s41502) == IMM(0)) {
-return C2(1, FLD(s41494, 0), v41495);
-} else if ((s41502) == IMM(1)) {
-return v41495;
+r41671; });
+V s41673 = v41670;
+if ((s41673) == IMM(0)) {
+return C2(1, FLD(s41665, 0), v41666);
+} else if ((s41673) == IMM(1)) {
+return v41666;
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Chk_dreport_down_x37u(V *a) { (void)a; return F_Chk_dreport_down_x37u(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8]); }
 static V D_Chk_dStr_dunique(V *dst, V a0, V a1) {
 top:;
-V s41503 = a0;
-if ((s41503) == IMM(0)) {
+V s41674 = a0;
+if ((s41674) == IMM(0)) {
 *dst = IMM(0);
 return 0;
-} else if (IS_N(s41503, 1)) {
-V s41504 = F_Chk_dStr_dhas(a1, FLD(s41503, 0));
-if ((s41504) == IMM(1)) {
-{ V t0 = FLD(s41503, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if ((s41504) == IMM(0)) {
-{ V dc = CH2(1, FLD(s41503, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
-{ V t0 = FLD(s41503, 1); V t1 = C2(1, FLD(s41503, 0), a1); a0 = t0; a1 = t1; goto top; }
+} else if (IS_N(s41674, 1)) {
+V s41675 = F_Chk_dStr_dhas(a1, FLD(s41674, 0));
+if ((s41675) == IMM(1)) {
+{ V t0 = FLD(s41674, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
+} else if ((s41675) == IMM(0)) {
+{ V dc = CH2(1, FLD(s41674, 0), BEND_HOLE); *dst = dc; dst = &FLD(dc, 1);
+{ V t0 = FLD(s41674, 1); V t1 = C2(1, FLD(s41674, 0), a1); a0 = t0; a1 = t1; goto top; }
 }
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
@@ -98377,236 +98809,236 @@ static V F_Chk_dStr_dunique(V a0, V a1) { V r; D_Chk_dStr_dunique(&r, a0, a1); r
 static V W_Chk_dStr_dunique(V *a) { (void)a; return F_Chk_dStr_dunique(a[0], a[1]); }
 static V F_Main_dcheck__only_dgo(V a0) {
 top:;
-V s41506 = a0;
-if ((s41506) == IMM(0)) {
+V s41677 = a0;
+if ((s41677) == IMM(0)) {
 return F_IO_dwrite(F_Chk_dreport__text_x37s3596833507x2930167513());
-} else if (IS_N(s41506, 1)) {
-return F_IO_ddie(1u, F_Chk_dreport__text(C2(1, FLD(s41506, 0), FLD(s41506, 1))));
+} else if (IS_N(s41677, 1)) {
+return F_IO_ddie(1u, F_Chk_dreport__text(C2(1, FLD(s41677, 0), FLD(s41677, 1))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Main_dcheck__only_dgo(V *a) { (void)a; return F_Main_dcheck__only_dgo(a[0]); }
-static V S41512(void) { static V c; return STRC(c, "ALL PROOFS CHECK\012Use --verdict for mathematical validity.\012"); }
-static V S41515(void) { static V c; return STRC(c, "SOME PROOFS FAIL\012"); }
-static V S41516(void) { static V c; return STRC(c, "Error: "); }
-static V S41518(void) { static V c; return STRC(c, " def"); }
-static V S41522(void) { static V c; return STRC(c, "s rely"); }
-static V S41523(void) { static V c; return STRC(c, " relies"); }
-static V S41524(void) { static V c; return STRC(c, " on unsafe or foreign code:"); }
+static V S41683(void) { static V c; return STRC(c, "ALL PROOFS CHECK\012Use --verdict for mathematical validity.\012"); }
+static V S41686(void) { static V c; return STRC(c, "SOME PROOFS FAIL\012"); }
+static V S41687(void) { static V c; return STRC(c, "Error: "); }
+static V S41689(void) { static V c; return STRC(c, " def"); }
+static V S41693(void) { static V c; return STRC(c, "s rely"); }
+static V S41694(void) { static V c; return STRC(c, " relies"); }
+static V S41695(void) { static V c; return STRC(c, " on unsafe or foreign code:"); }
 static V F_Chk_dreport__text(V a0) {
 top:;
-V s41511 = a0;
-if ((s41511) == IMM(0)) {
-return S41512();
-} else if (IS_N(s41511, 1)) {
-V (v41513) = F_List_dlength(0, C2(1, FLD(s41511, 0), FLD(s41511, 1)));
-return F_String_dappend(S41515(), F_String_dappend(S41516(), F_String_dappend(F_Nat_dshow((v41513)), F_String_dappend(S41518(), F_String_dappend(({ V r41519;
-V s41520 = F_Nat_dis__eq((v41513), 1u);
-if ((s41520) == IMM(0)) {
-r41519 = S41522();
-} else if ((s41520) == IMM(1)) {
-r41519 = S41523();
+V s41682 = a0;
+if ((s41682) == IMM(0)) {
+return S41683();
+} else if (IS_N(s41682, 1)) {
+V (v41684) = F_List_dlength(0, C2(1, FLD(s41682, 0), FLD(s41682, 1)));
+return F_String_dappend(S41686(), F_String_dappend(S41687(), F_String_dappend(F_Nat_dshow((v41684)), F_String_dappend(S41689(), F_String_dappend(({ V r41690;
+V s41691 = F_Nat_dis__eq((v41684), 1u);
+if ((s41691) == IMM(0)) {
+r41690 = S41693();
+} else if ((s41691) == IMM(1)) {
+r41690 = S41694();
 } else { bend_fail("runtime fail-stop"); }
-r41519; }), F_String_dappend(S41524(), F_Chk_dreport__lines(C2(1, FLD(s41511, 0), FLD(s41511, 1)))))))));
+r41690; }), F_String_dappend(S41695(), F_Chk_dreport__lines(C2(1, FLD(s41682, 0), FLD(s41682, 1)))))))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Chk_dreport__text(V *a) { (void)a; return F_Chk_dreport__text(a[0]); }
-static V S41533(void) { static V c; return STRC(c, ""); }
-static V S41534(void) { static V c; return STRC(c, "\012- "); }
+static V S41704(void) { static V c; return STRC(c, ""); }
+static V S41705(void) { static V c; return STRC(c, "\012- "); }
 static V F_Chk_dreport__lines(V a0) {
 top:;
-V s41532 = a0;
-if ((s41532) == IMM(0)) {
-return S41533();
-} else if (IS_N(s41532, 1)) {
-return F_String_dappend(S41534(), F_String_dappend(FLD(s41532, 0), F_Chk_dreport__lines(FLD(s41532, 1))));
+V s41703 = a0;
+if ((s41703) == IMM(0)) {
+return S41704();
+} else if (IS_N(s41703, 1)) {
+return F_String_dappend(S41705(), F_String_dappend(FLD(s41703, 0), F_Chk_dreport__lines(FLD(s41703, 1))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Chk_dreport__lines(V *a) { (void)a; return F_Chk_dreport__lines(a[0]); }
-static V S41538(void) { static V c; return STRC(c, "ALL PROOFS CHECK\012Use --verdict for mathematical validity.\012"); }
+static V S41709(void) { static V c; return STRC(c, "ALL PROOFS CHECK\012Use --verdict for mathematical validity.\012"); }
 BEND_UINL V F_Chk_dreport__text_x37s3596833507x2930167513(void) {
 top:;
-return S41538();
+return S41709();
 }
 static V W_Chk_dreport__text_x37s3596833507x2930167513(V *a) { (void)a; return F_Chk_dreport__text_x37s3596833507x2930167513(); }
-static V L41541(V *a) {
-V v41542 = IMM(0);
-V v41543 = a[2];
-return F_Main_dchecked_x37u(v41542, a[1], a[0], FLD(v41543, 0), FLD(v41543, 1));
+static V L41712(V *a) {
+V v41713 = IMM(0);
+V v41714 = a[2];
+return F_Main_dchecked_x37u(v41713, a[1], a[0], FLD(v41714, 0), FLD(v41714, 1));
 }
-static V L41547(V *a) {
+static V L41718(V *a) {
 return F_IO_dprint(F_Toks_dshow(F_Lex_dall(a[0])));
 }
-static V S41563(void) { static V c; return STRC(c, ""); }
-static V L41553(V *a) {
-return F_Main_dast(({ V r41554;
-V v41555 = apply(F_P_ddecls_dsel(F_U32_dto__nat(4000000000u), IMM(1)), F_Lex_dall(a[0]));
-V s41559 = FLD(v41555, 0);
-V s41560 = ({ V r41561;
-V s41562 = FLD(v41555, 1);
-if (IS_N(s41562, 1) && IS_N(FLD(FLD(s41562, 0), 0), 12)) {
-r41561 = FLD(FLD(FLD(s41562, 0), 0), 0);
+static V S41734(void) { static V c; return STRC(c, ""); }
+static V L41724(V *a) {
+return F_Main_dast(({ V r41725;
+V v41726 = apply(F_P_ddecls_dsel(F_U32_dto__nat(4000000000u), IMM(1)), F_Lex_dall(a[0]));
+V s41730 = FLD(v41726, 0);
+V s41731 = ({ V r41732;
+V s41733 = FLD(v41726, 1);
+if (IS_N(s41733, 1) && IS_N(FLD(FLD(s41733, 0), 0), 12)) {
+r41732 = FLD(FLD(FLD(s41733, 0), 0), 0);
 } else {
-r41561 = S41563();
+r41732 = S41734();
 }
-r41561; });
+r41732; });
 {
-r41554 = F_Main_dparse_dfin_x37u(s41559, s41560);
+r41725 = F_Main_dparse_dfin_x37u(s41730, s41731);
 }
-r41554; }));
+r41725; }));
 }
-static V S41567(void) { static V c; return STRC(c, "usage: bendc [--check-only | --parse-only | --no-check | --js | -o <binary> | --native -o <binary>] <base.bend> <input.bend> | --tokens <file> | --ast <file>"); }
+static V S41738(void) { static V c; return STRC(c, "usage: bendc [--check-only | --parse-only | --no-check | --js | -o <binary> | --native -o <binary>] <base.bend> <input.bend> | --tokens <file> | --ast <file>"); }
 static V F_Main_drun2(V a0, V a1, V a2) {
 top:;
-V s41539 = (a0);
-if ((s41539) == 0) {
-return F_IO_dbind(F_Main_dcheck(a1, a2), mk_clo(L41541, 3, 2, (V[]){a2, a1}));
-} else if ((s41539) == 1) {
-return F_IO_dbind(F_IO_dread__file(a2), mk_clo(L41547, 1, 0, 0));
-} else if ((s41539) == 2) {
-return F_IO_dbind(F_IO_dread__file(a2), mk_clo(L41553, 1, 0, 0));
+V s41710 = (a0);
+if ((s41710) == 0) {
+return F_IO_dbind(F_Main_dcheck(a1, a2), mk_clo(L41712, 3, 2, (V[]){a2, a1}));
+} else if ((s41710) == 1) {
+return F_IO_dbind(F_IO_dread__file(a2), mk_clo(L41718, 1, 0, 0));
+} else if ((s41710) == 2) {
+return F_IO_dbind(F_IO_dread__file(a2), mk_clo(L41724, 1, 0, 0));
 } else {
-return F_IO_ddie(1u, S41567());
+return F_IO_ddie(1u, S41738());
 }
 }
 static V W_Main_drun2(V *a) { (void)a; return F_Main_drun2(a[0], a[1], a[2]); }
-static V S41570(void) { static V c; return STRC(c, "bendc: parse error: "); }
+static V S41741(void) { static V c; return STRC(c, "bendc: parse error: "); }
 static V F_Main_dast(V a0) {
 top:;
-V s41569 = a0;
-if (IS_N(s41569, 0)) {
-return F_IO_ddie(1u, F_String_dappend(S41570(), FLD(s41569, 0)));
-} else if (IS_N(s41569, 1)) {
-return F_IO_dwrite(F_Decls_dshow_dgo(FLD(s41569, 0)));
+V s41740 = a0;
+if (IS_N(s41740, 0)) {
+return F_IO_ddie(1u, F_String_dappend(S41741(), FLD(s41740, 0)));
+} else if (IS_N(s41740, 1)) {
+return F_IO_dwrite(F_Decls_dshow_dgo(FLD(s41740, 0)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Main_dast(V *a) { (void)a; return F_Main_dast(a[0]); }
-static V S41576(void) { static V c; return STRC(c, ""); }
-static V S41578(void) { static V c; return STRC(c, "\012"); }
+static V S41747(void) { static V c; return STRC(c, ""); }
+static V S41749(void) { static V c; return STRC(c, "\012"); }
 static V F_Decls_dshow_dgo(V a0) {
 top:;
-V s41575 = a0;
-if ((s41575) == IMM(0)) {
-return S41576();
-} else if (IS_N(s41575, 1)) {
-return F_String_dappend(F_Decl_dshow(FLD(s41575, 0)), F_String_dappend(S41578(), F_Decls_dshow_dgo(FLD(s41575, 1))));
+V s41746 = a0;
+if ((s41746) == IMM(0)) {
+return S41747();
+} else if (IS_N(s41746, 1)) {
+return F_String_dappend(F_Decl_dshow(FLD(s41746, 0)), F_String_dappend(S41749(), F_Decls_dshow_dgo(FLD(s41746, 1))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Decls_dshow_dgo(V *a) { (void)a; return F_Decls_dshow_dgo(a[0]); }
-static V S41583(void) { static V c; return STRC(c, "def "); }
-static V S41584(void) { static V c; return STRC(c, "("); }
-static V S41586(void) { static V c; return STRC(c, ") = "); }
-static V S41587(void) { static V c; return STRC(c, ""); }
-static V S41594(void) { static V c; return STRC(c, "eff "); }
-static V S41595(void) { static V c; return STRC(c, "("); }
-static V S41597(void) { static V c; return STRC(c, ")"); }
-static V S41602(void) { static V c; return STRC(c, "law "); }
-static V S41603(void) { static V c; return STRC(c, "("); }
-static V S41605(void) { static V c; return STRC(c, ")"); }
-static V S41610(void) { static V c; return STRC(c, "type "); }
-static V S41611(void) { static V c; return STRC(c, " "); }
-static V S41616(void) { static V c; return STRC(c, "import "); }
-static V S41617(void) { static V c; return STRC(c, " as "); }
+static V S41754(void) { static V c; return STRC(c, "def "); }
+static V S41755(void) { static V c; return STRC(c, "("); }
+static V S41757(void) { static V c; return STRC(c, ") = "); }
+static V S41758(void) { static V c; return STRC(c, ""); }
+static V S41765(void) { static V c; return STRC(c, "eff "); }
+static V S41766(void) { static V c; return STRC(c, "("); }
+static V S41768(void) { static V c; return STRC(c, ")"); }
+static V S41773(void) { static V c; return STRC(c, "law "); }
+static V S41774(void) { static V c; return STRC(c, "("); }
+static V S41776(void) { static V c; return STRC(c, ")"); }
+static V S41781(void) { static V c; return STRC(c, "type "); }
+static V S41782(void) { static V c; return STRC(c, " "); }
+static V S41787(void) { static V c; return STRC(c, "import "); }
+static V S41788(void) { static V c; return STRC(c, " as "); }
 static V F_Decl_dshow(V a0) {
 top:;
-V s41582 = a0;
-if (IS_N(s41582, 0)) {
-return F_String_dappend(S41583(), F_String_dappend(FLD(s41582, 0), F_String_dappend(S41584(), F_String_dappend(F_Params_dshow(FLD(s41582, 1)), F_String_dappend(S41586(), F_Expr_dshow_dgo(FLD(s41582, 2), S41587(), 0u))))));
-} else if (IS_N(s41582, 1)) {
-return F_String_dappend(S41594(), F_String_dappend(FLD(s41582, 0), F_String_dappend(S41595(), F_String_dappend(F_Params_dshow(FLD(s41582, 1)), S41597()))));
-} else if (IS_N(s41582, 2)) {
-return F_String_dappend(S41602(), F_String_dappend(FLD(s41582, 0), F_String_dappend(S41603(), F_String_dappend(F_Params_dshow(FLD(s41582, 1)), S41605()))));
-} else if (IS_N(s41582, 3)) {
-return F_String_dappend(S41610(), F_String_dappend(FLD(s41582, 0), F_String_dappend(S41611(), F_Ctors_dshow(FLD(s41582, 2)))));
-} else if (IS_N(s41582, 4)) {
-return F_String_dappend(S41616(), F_String_dappend(FLD(s41582, 0), F_String_dappend(S41617(), FLD(s41582, 1))));
+V s41753 = a0;
+if (IS_N(s41753, 0)) {
+return F_String_dappend(S41754(), F_String_dappend(FLD(s41753, 0), F_String_dappend(S41755(), F_String_dappend(F_Params_dshow(FLD(s41753, 1)), F_String_dappend(S41757(), F_Expr_dshow_dgo(FLD(s41753, 2), S41758(), 0u))))));
+} else if (IS_N(s41753, 1)) {
+return F_String_dappend(S41765(), F_String_dappend(FLD(s41753, 0), F_String_dappend(S41766(), F_String_dappend(F_Params_dshow(FLD(s41753, 1)), S41768()))));
+} else if (IS_N(s41753, 2)) {
+return F_String_dappend(S41773(), F_String_dappend(FLD(s41753, 0), F_String_dappend(S41774(), F_String_dappend(F_Params_dshow(FLD(s41753, 1)), S41776()))));
+} else if (IS_N(s41753, 3)) {
+return F_String_dappend(S41781(), F_String_dappend(FLD(s41753, 0), F_String_dappend(S41782(), F_Ctors_dshow(FLD(s41753, 2)))));
+} else if (IS_N(s41753, 4)) {
+return F_String_dappend(S41787(), F_String_dappend(FLD(s41753, 0), F_String_dappend(S41788(), FLD(s41753, 1))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Decl_dshow(V *a) { (void)a; return F_Decl_dshow(a[0]); }
-static V S41622(void) { static V c; return STRC(c, ""); }
-static V S41626(void) { static V c; return STRC(c, " "); }
+static V S41793(void) { static V c; return STRC(c, ""); }
+static V S41797(void) { static V c; return STRC(c, " "); }
 static V F_Ctors_dshow(V a0) {
 top:;
-V s41621 = a0;
-if ((s41621) == IMM(0)) {
-return S41622();
-} else if (IS_N(s41621, 1)) {
-return F_String_dappend(({ V r41623;
-V v41624 = FLD(s41621, 0);
-r41623 = F_Ctor_dshow_x37u(FLD(v41624, 0), FLD(v41624, 1));
-r41623; }), F_String_dappend(S41626(), F_Ctors_dshow(FLD(s41621, 1))));
+V s41792 = a0;
+if ((s41792) == IMM(0)) {
+return S41793();
+} else if (IS_N(s41792, 1)) {
+return F_String_dappend(({ V r41794;
+V v41795 = FLD(s41792, 0);
+r41794 = F_Ctor_dshow_x37u(FLD(v41795, 0), FLD(v41795, 1));
+r41794; }), F_String_dappend(S41797(), F_Ctors_dshow(FLD(s41792, 1))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Ctors_dshow(V *a) { (void)a; return F_Ctors_dshow(a[0]); }
-static V S41630(void) { static V c; return STRC(c, "{"); }
-static V S41632(void) { static V c; return STRC(c, "}"); }
+static V S41801(void) { static V c; return STRC(c, "{"); }
+static V S41803(void) { static V c; return STRC(c, "}"); }
 static V F_Ctor_dshow_x37u(V a0, V a1) {
 top:;
-return F_String_dappend(a0, F_String_dappend(S41630(), F_String_dappend(F_Fields_dshow(a1), S41632())));
+return F_String_dappend(a0, F_String_dappend(S41801(), F_String_dappend(F_Fields_dshow(a1), S41803())));
 }
 static V W_Ctor_dshow_x37u(V *a) { (void)a; return F_Ctor_dshow_x37u(a[0], a[1]); }
-static V S41637(void) { static V c; return STRC(c, ""); }
-static V S41638(void) { static V c; return STRC(c, ":"); }
-static V S41639(void) { static V c; return STRC(c, ""); }
-static V S41641(void) { static V c; return STRC(c, " "); }
+static V S41808(void) { static V c; return STRC(c, ""); }
+static V S41809(void) { static V c; return STRC(c, ":"); }
+static V S41810(void) { static V c; return STRC(c, ""); }
+static V S41812(void) { static V c; return STRC(c, " "); }
 static V F_Fields_dshow(V a0) {
 top:;
-V s41636 = a0;
-if ((s41636) == IMM(0)) {
-return S41637();
-} else if (IS_N(s41636, 1)) {
-return F_String_dappend(FLD(FLD(s41636, 0), 0), F_String_dappend(S41638(), F_String_dappend(F_Expr_dshow_dgo(FLD(FLD(s41636, 0), 1), S41639(), 0u), F_String_dappend(S41641(), F_Fields_dshow(FLD(s41636, 1))))));
+V s41807 = a0;
+if ((s41807) == IMM(0)) {
+return S41808();
+} else if (IS_N(s41807, 1)) {
+return F_String_dappend(FLD(FLD(s41807, 0), 0), F_String_dappend(S41809(), F_String_dappend(F_Expr_dshow_dgo(FLD(FLD(s41807, 0), 1), S41810(), 0u), F_String_dappend(S41812(), F_Fields_dshow(FLD(s41807, 1))))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Fields_dshow(V *a) { (void)a; return F_Fields_dshow(a[0]); }
-static V S41648(void) { static V c; return STRC(c, ""); }
-static V S41652(void) { static V c; return STRC(c, " "); }
+static V S41819(void) { static V c; return STRC(c, ""); }
+static V S41823(void) { static V c; return STRC(c, " "); }
 static V F_Params_dshow(V a0) {
 top:;
-V s41647 = a0;
-if ((s41647) == IMM(0)) {
-return S41648();
-} else if (IS_N(s41647, 1)) {
-return F_String_dappend(({ V r41649;
-V v41650 = FLD(s41647, 0);
-r41649 = F_Param_dshow_x37u(FLD(v41650, 0), FLD(v41650, 1), FLD(v41650, 2));
-r41649; }), F_String_dappend(S41652(), F_Params_dshow(FLD(s41647, 1))));
+V s41818 = a0;
+if ((s41818) == IMM(0)) {
+return S41819();
+} else if (IS_N(s41818, 1)) {
+return F_String_dappend(({ V r41820;
+V v41821 = FLD(s41818, 0);
+r41820 = F_Param_dshow_x37u(FLD(v41821, 0), FLD(v41821, 1), FLD(v41821, 2));
+r41820; }), F_String_dappend(S41823(), F_Params_dshow(FLD(s41818, 1))));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Params_dshow(V *a) { (void)a; return F_Params_dshow(a[0]); }
-static V S41658(void) { static V c; return STRC(c, ":"); }
+static V S41829(void) { static V c; return STRC(c, ":"); }
 static V F_Param_dshow_x37u(V a0, V a1_, V a2) {
 uint32_t a1 = (uint32_t)a1_;
 top:;
-return F_String_dappend(F_U32_dshow_dif((a1), F_U32_dis__zero((a1))), F_String_dappend(a0, F_String_dappend(S41658(), a2)));
+return F_String_dappend(F_U32_dshow_dif((a1), F_U32_dis__zero((a1))), F_String_dappend(a0, F_String_dappend(S41829(), a2)));
 }
 static V W_Param_dshow_x37u(V *a) { (void)a; return F_Param_dshow_x37u(a[0], a[1], a[2]); }
-static V S41663(void) { static V c; return STRC(c, ""); }
+static V S41834(void) { static V c; return STRC(c, ""); }
 static V F_Toks_dshow(V a0) {
 top:;
-V s41662 = a0;
-if ((s41662) == IMM(0)) {
-return S41663();
-} else if (IS_N(s41662, 1)) {
-return F_String_dappend(({ V r41664;
-V v41665 = FLD(s41662, 0);
-r41664 = F_Tok_dshow_x37u(FLD(v41665, 0), FLD(v41665, 1), FLD(v41665, 2));
-r41664; }), F_Toks_dshow(FLD(s41662, 1)));
+V s41833 = a0;
+if ((s41833) == IMM(0)) {
+return S41834();
+} else if (IS_N(s41833, 1)) {
+return F_String_dappend(({ V r41835;
+V v41836 = FLD(s41833, 0);
+r41835 = F_Tok_dshow_x37u(FLD(v41836, 0), FLD(v41836, 1), FLD(v41836, 2));
+r41835; }), F_Toks_dshow(FLD(s41833, 1)));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Toks_dshow(V *a) { (void)a; return F_Toks_dshow(a[0]); }
-static V S41671(void) { static V c; return STRC(c, ""); }
-static V S41672(void) { static V c; return STRC(c, " "); }
+static V S41842(void) { static V c; return STRC(c, ""); }
+static V S41843(void) { static V c; return STRC(c, " "); }
 static V F_Tok_dshow_x37u(V a0, V a1, V a2_) {
 uint32_t a2 = (uint32_t)a2_;
 top:;
-return F_String_dappend(({ V r41669;
-V s41670 = (a1);
-if ((s41670) == IMM(0)) {
-r41669 = S41671();
-} else if ((s41670) == IMM(1)) {
-r41669 = S41672();
+return F_String_dappend(({ V r41840;
+V s41841 = (a1);
+if ((s41841) == IMM(0)) {
+r41840 = S41842();
+} else if ((s41841) == IMM(1)) {
+r41840 = S41843();
 } else { bend_fail("runtime fail-stop"); }
-r41669; }), F_TK_dshow(a0));
+r41840; }), F_TK_dshow(a0));
 }
 static V W_Tok_dshow_x37u(V *a) { (void)a; return F_Tok_dshow_x37u(a[0], a[1], a[2]); }
 static V E_IO_dprint(V *a) { return io_req(CID_IO_PRINT, 2, (V[]){a[0], a[2]}); }

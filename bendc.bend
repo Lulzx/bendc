@@ -22349,6 +22349,104 @@ def G.hless.shared(ds: List<&2, Decl>) -> List<&2, String>:
     case d <> rest:
       G.hless.shared(rest)
 
+# Foreign code builds and reads the values its defs take and return through
+# the effect ABI (io_node, CID_*), which has header words: the types a
+# foreign def's signature names, and the types their fields hold, keep them.
+def G.hless.heads(es: List<&2, Core.Expr>) -> List<&2, String>:
+  match es:
+    case Nil{}:
+      Nil{}
+    case e <> t:
+      Ty.head(e) <> G.hless.heads(t)
+
+def G.hless.subs(es: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match es:
+    case Nil{}:
+      Nil{}
+    case e <> t:
+      List.append(&2, Core.Expr, Ty.args(e), G.hless.subs(t))
+
+# The type names es mention: their heads and, fuel levels deep, their arguments'.
+def G.hless.tnames(fuel: Nat, +es: List<&2, Core.Expr>) -> List<&2, String>:
+  match fuel:
+    case 0n:
+      Nil{}
+    case 1n+f:
+      List.append(&2, String, G.hless.heads(es), G.hless.tnames(f, G.hless.subs(es)))
+
+def G.hless.ftys(fs: List<&2, Field>) -> List<&2, Core.Expr>:
+  match fs:
+    case Nil{}:
+      Nil{}
+    case Field{n, ty} <> t:
+      ty <> G.hless.ftys(t)
+
+def G.hless.ctys(cs: List<&2, Ctor>) -> List<&2, Core.Expr>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case Ctor{n, fs} <> t:
+      List.append(&2, Core.Expr, G.hless.ftys(fs), G.hless.ctys(t))
+
+# The field types of the types named ns.
+def G.hless.fields(+ns: List<&2, String>, ds: List<&2, Decl>) -> List<&2, Core.Expr>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case DType{+name, ps, cs} <> t:
+      +rest = G.hless.fields(ns, t)
+      Bool.pick(List<&2, Core.Expr>, Str.has(ns, name), List.append(&2, Core.Expr, G.hless.ctys(cs), rest), rest)
+    case d <> t:
+      G.hless.fields(ns, t)
+
+def G.hless.reach(fuel: Nat, +ns: List<&2, String>, +ds: List<&2, Decl>) -> List<&2, String>:
+  match fuel:
+    case 0n:
+      ns
+    case 1n+f:
+      G.hless.reach(f, Gen.dedup(List.append(&2, String, ns, G.hless.tnames(8n, G.hless.fields(ns, ds))), Nil{}), ds)
+
+# The names in a parameter's type as written (List<Tree> names List and Tree).
+def G.hless.words(s: String, +cur: String) -> List<&2, String>:
+  match s:
+    case SNil{}:
+      [cur]
+    case SCon{Chr{+c}, +t}:
+      Bool.pick(Unit -> List<&2, String>, Bool.or(Main.ids.word(c), U32.is_eq(c, 46)),
+        u => G.hless.words(t, cur ++ SCon{Chr{c}, SNil{}}), u => cur <> G.hless.words(t, ""))(Unit{})
+
+def G.hless.pexprs(ps: List<&2, Core.Param>) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Param{x, m, ty} <> t:
+      List.append(&2, String, G.hless.words(ty, ""), G.hless.pexprs(t))
+
+def G.hless.effs(ds: List<&2, Decl>) -> List<&2, String>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case DEff{+n, ps, ims} <> t:
+      List.append(&2, String, n <> G.hless.pexprs(ps), G.hless.effs(t))
+    case d <> t:
+      G.hless.effs(t)
+
+# The types a foreign def's law names.
+def G.hless.laws(+effs: List<&2, String>, ds: List<&2, Decl>) -> List<&2, String>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case DLaw{+n, ps, r} <> t:
+      +rest = G.hless.laws(effs, t)
+      Bool.pick(List<&2, String>, Str.has(effs, n),
+        List.append(&2, String, G.hless.pexprs(ps), List.append(&2, String, G.hless.tnames(8n, [r]), rest)), rest)
+    case d <> t:
+      G.hless.laws(effs, t)
+
+def G.hless.foreign(+ds: List<&2, Decl>) -> List<&2, String>:
+  +effs = G.hless.effs(ds)
+  G.hless.reach(16n, Gen.dedup(List.append(&2, String, effs, G.hless.laws(effs, ds)), Nil{}), ds)
+
 def G.hless.type(+name: String, ps: List<&2, String>, +cs: List<&2, Ctor>, +m: Map<&2, CInfo>, +shared: List<&2, String>) -> Map<&2, CInfo>:
   +plain = Bool.and(Nat.is_eq(List.length(&2, String, ps), 0n), Bool.not(Str.has(shared, name)))
   +allowed = Bool.not(Str.has(["String", "Image", "Event", "IO.OP", "App", "Word", "U32", "F32", "Char",
@@ -22369,7 +22467,7 @@ def G.hless(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
   match on:
     case True{}:
       G{ctors, defs, bodies, dps} = g
-      G{G.hless.decls(ds, ctors, G.hless.shared(ds)), defs, bodies, dps}
+      G{G.hless.decls(ds, ctors, List.append(&2, String, G.hless.shared(ds), G.hless.foreign(ds))), defs, bodies, dps}
     case False{}:
       g
 
