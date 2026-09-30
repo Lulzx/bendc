@@ -10718,11 +10718,13 @@ def Unb.subs(ps: List<&2, Core.Param>, us: List<&2, Unb>, e: Core.Expr) -> Core.
 
 # A let binding x to a full call of a def with a flat result opens it into
 # variables, when each use of x allows it (see Unb.use): x is then its
-# constructor rebuilt from them.
-def Unb.lvar.go(hit: Bool, +x: String, +u: Unb, v: Core.Expr, b: Core.Expr) -> Core.Expr:
+# constructor rebuilt from them. Their names carry n, how many names are
+# bound around the let, so a let of the same name inside b (inlined bodies
+# reuse names) opens into other ones, which the substitution cannot catch.
+def Unb.lvar.go(hit: Bool, +x: String, +n: Nat, +u: Unb, v: Core.Expr, b: Core.Expr) -> Core.Expr:
   match hit:
     case True{}:
-      +xs = Unb.names("_ubl_" ++ x ++ "_", Unb.tys.of(u), 0)
+      +xs = Unb.names("_ubl_" ++ x ++ "_" ++ Nat.show(n) ++ "_", Unb.tys.of(u), 0)
       Core.ELet{Core.PCtor{Unb.ctor.of(u), Unb.pvars(xs)}, v, Unb.sub(b, x, Core.ECtor{Unb.ctor.of(u), Unb.vars(xs)})}
     case False{}:
       Core.ELet{Core.PVar{x}, v, b}
@@ -10734,7 +10736,8 @@ def Unb.lvar.call(+tail: Bool, +x: String, +rm: Map<&2, URet>, +rk: String, +wm:
       +r = G.get(URet, URet{Unb.none(), 0}, rm, f)
       Unb.lvar.go(Bool.and(Bool.and(Unb.is(URet.u(r)), Bool.not(Str.has(bound, f))),
         Bool.and(U32.is_eq(URet.n(r), U32.from_nat(List.length(&2, Core.Expr, args))),
-          U32.is_eq(Unb.use(b, tail, x, Unb.ctor.of(URet.u(r)), rk, wm), 1))), x, URet.u(r), Core.ECall{Core.EVar{f}, args}, b)
+          U32.is_eq(Unb.use(b, tail, x, Unb.ctor.of(URet.u(r)), rk, wm), 1))), x, List.length(&2, String, bound), URet.u(r),
+        Core.ECall{Core.EVar{f}, args}, b)
     case other:
       Core.ELet{Core.PVar{x}, other, b}
 
