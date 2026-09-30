@@ -364,7 +364,7 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    always run first, on every def; the passes below come after, and their own case of a known
    constructor or literal resolves what the proven ones leave (literal patterns, nested patterns,
    matches that inlining exposes).
-   `BEND_OPT` names its passes by letter: the default is `i..spuf`, and `BEND_OPT=` turns it off.
+   `BEND_OPT` names its passes by letter: the default is `i..spufwh`, and `BEND_OPT=` turns it off.
    - `i` inlines small defs: a body of size at most 4 plus 2 per `.` (8 for `i..`) that calls only
      defs declared before it (so inlining ends), and is neither native nor `IO`. Most of the gain
      comes from `Bool.pick`, `Bool.and`, `Bool.or` and `Bool.not`, whose arguments move into the
@@ -439,6 +439,14 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
 7. **Value printers.** For a non-`IO` main, printers are generated from main's return type and the
    field types of each constructor, specialised per type instance (e.g. `Tree<String>`).
 
+The C and GPU generators also use `h` to omit the header of a non-parameterized
+Data type with exactly one boxed constructor of 1–15 fields and at least one
+other constructor; the others must be nullary or word leaves. Runtime-owned
+types and types used by an explicit shared (`+`) typed parameter keep their
+headers. The runtime tracks sharing in side bytes for eligible nodes. This
+representation is disabled under reference counting; native code keeps the
+headered representation. Remove `h` from `BEND_OPT` to compare it independently.
+
 **Runtime** (`rt/bendrt.h`, about 520 lines). Every value is one 64-bit word:
 
 | Value | Representation |
@@ -447,7 +455,7 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
 | `Nat` | the raw number, at most 2^48 - 1 (as in the official runtime; past it is an error) |
 | `Array<T>` | pointer to a flat block of 2^depth cells, written in place (a shared array is one block); scalar arrays made by `Array.new%w` have 32-bit cells, others 64-bit cells |
 | nullary constructor (`Nil{}`, `True{}`) | `(tag << 3) \| 1` |
-| constructor with fields | pointer to `{tag, fields...}` |
+| constructor with fields | pointer to `{tag, fields...}`, or `{fields...}` for an eligible headerless node |
 | one constructor with one field (`Chr{code}`) | the field itself |
 | closure | pointer to `{fn, arity, nargs, args...}` |
 
