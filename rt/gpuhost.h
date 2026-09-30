@@ -609,22 +609,22 @@ static int gpu_kq_host(const GpuProg *prog, KW *H, const KParams *P, KW waiting)
 // runs them: a SIMD group runs its lanes' calls in step, and calls with the
 // same def and leading arguments tend to take the same branches (raytrace's
 // column quarters: pixels past the width, or not, alike across the group).
-// A lane's saved state names no lane (its frames and heap chunk are the
-// arena's), so the calls can trade lanes; the lanes that wait stay the same.
+// Only the dispatch order changes. Each thread loads and saves the original
+// lane's context, so the host need not read or move its heap/frame state.
 static KW *gpu_ks_H, gpu_ks_n;
 static int gpu_ks_cmp(const void *x, const void *y) {
   KW a = *(const KW *)x, b = *(const KW *)y;
-  for (int j = 7; j < K_LANE; j++) {
+  for (int j = 7; j < 10 + KQ_ARGS; j++) {
     if (j == 8 || j == 9) continue;
     KW u = gpu_ks_H[j * gpu_ks_n + a], v = gpu_ks_H[j * gpu_ks_n + b];
     if (u != v) return u < v ? -1 : 1;
   }
   return a < b ? -1 : a > b;
 }
-static void gpu_kq_sort(KW *H, const KParams *P, KW waiting) {
+static void gpu_kq_sort(KW *H, KParams *P, KW waiting) {
   KW n = P->nlanes, k = 0;
-  KW *ix = malloc(waiting * sizeof(KW)), *st = malloc(waiting * K_LANE * sizeof(KW));
-  if (!ix || !st) { free(ix); free(st); return; }
+  KW *ix = malloc(waiting * sizeof(KW));
+  if (!ix) return;
   KW *L = H + P->lane0;
   for (KW l = 0; l < n && k < waiting; l++) {
     if (L[l] == PC_KQ) ix[k++] = l;
@@ -632,18 +632,10 @@ static void gpu_kq_sort(KW *H, const KParams *P, KW waiting) {
   gpu_ks_H = L;
   gpu_ks_n = n;
   qsort(ix, k, sizeof(KW), gpu_ks_cmp);
-  for (KW i = 0; i < k; i++) {
-    for (int j = 0; j < K_LANE; j++) st[i * K_LANE + j] = L[j * n + ix[i]];
-  }
-  // (the lanes that wait, in lane order, take the calls in sorted order)
-  KW i = 0;
-  for (KW l = 0; l < n && i < k; l++) {
-    if (L[l] != PC_KQ) continue;
-    for (int j = 0; j < K_LANE; j++) L[j * n + l] = st[i * K_LANE + j];
-    i++;
-  }
+  P->kqmap = P->fn0 + 2 * P->nfn;
+  H[P->kqmap] = k;
+  for (KW i = 0; i < k; i++) H[P->kqmap + 1 + i] = ix[i];
   free(ix);
-  free(st);
 }
 
 static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
@@ -660,7 +652,8 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   P.lane0 = P.qd + 4 * P.qcap;
   P.fn0 = P.lane0 + K_LANE * gpu_lanes;
   P.nfn = nfn;
-  KW rf = P.fn0 + 2 * nfn + 1;
+  // The sorted-dispatch map is before the root frame and allocation area.
+  KW rf = P.fn0 + 2 * nfn + gpu_lanes + 2;
   if (rf <= gpu_pin) rf = gpu_pin + 1;
   KW fs = k_frame_size(entry);
 #ifdef KQ_SHARED
@@ -726,6 +719,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     if (__atomic_load_n(&gpu_A[KA_DONE], __ATOMIC_SEQ_CST) != 0) break;
     for (KW l = 0; l < gpu_lanes; l++) waiting += H[P.lane0 + l] == PC_KQ;
     if (waiting > 0 && gpu_kq_host(prog, H, &P, waiting)) waiting = 0;
+    P.kqmap = 0;
     if (waiting > 1 && gpu_kq_order) gpu_kq_sort(H, &P, waiting);
     if (waiting > 0) {
       // (again, after the arena grows, while a call runs out of it)

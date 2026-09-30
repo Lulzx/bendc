@@ -111,6 +111,7 @@ typedef struct {
   KW nlanes;
   KW fork_limit;  // tasks fork only this many levels deep
   KW q0;          // the KQ_ stacks (KR_WORDS words a lane)
+  KW kqmap;       // optional sorted KQ lane indices: count, then indices
 } KParams;
 
 #define PC_IDLE 0
@@ -915,6 +916,10 @@ kernel void bend_kq(device coherent(device) KW *H [[buffer(0)]], device KAU *A [
 #else
 static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
 #endif
+  if (P->kqmap) {
+    if (lane >= H[P->kqmap]) return;
+    lane = (KU)H[P->kqmap + 1 + lane];
+  }
   if (lane >= P->nlanes || H[P->lane0 + lane] != PC_KQ) return;
   KCtx cx;
   KTHR KCtx *c = &cx;
