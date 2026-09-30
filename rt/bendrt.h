@@ -281,6 +281,11 @@ struct PDeque;
 typedef struct Thr {
   GcCache cache[2][GC_NCLS];
   uint32_t rcur[GC_NCLS];   // where the next search for a reuse block starts
+  size_t since;             // bytes handed out not yet added to gc_since
+  // Its candidate bits (see gc_cand; the first thread's are gc_cand): the
+  // blocks where it freed slots, which it reuses. Only it reads and writes
+  // them (when counting references, all threads use gc_cand).
+  uint64_t *cand;
   V *rcs; size_t rcn, rccap; // reference counting: the objects rc_free_obj has yet to free
   uintptr_t top;
   volatile uintptr_t sp;
@@ -363,7 +368,12 @@ static size_t gc_nrem, gc_caprem;
 static V *gc_rem_prev;  // the last collection's, sorted (while this one roots)
 static size_t gc_nprev, gc_capprev;
 // Per class, a bit per block: matches freed slots in it (GC_CANDW words a
-// class).
+// class). Each thread has its own (Thr.cand), and reuses the blocks where
+// it freed: a block another thread freed in, or allocates in, has lines
+// that thread holds, and taking its free slots made every access slower
+// (with shared bits, two threads each sorting a tree of its own took a
+// third more cycles than one thread sorting both, and tree-bitonic on 12
+// threads 95G cycles, 74G with a thread's own).
 #define GC_CANDW (GC_MAXBLK / 64)
 static uint64_t *gc_cand;
 // More than one thread runs Bend code (frees must then be atomic).
@@ -560,6 +570,20 @@ static V *gc_bump_word(GcCache *k, uint32_t jw, size_t sw) {
   return p;
 }
 
+// Bytes a thread's caches hand out go to gc_since GC_SINCE_BATCH at a time:
+// one shared counter added to at each refill is a cache line all threads
+// write, and it made each thread's refills slower as threads were added.
+// (A collection may come up to that many bytes a thread late.) k is in its
+// thread's Thr, whose first field is the caches.
+#define GC_SINCE_BATCH ((size_t)64 << 10)
+static inline void gc_handed(GcCache *k, int atomic, unsigned c, size_t n) {
+  Thr *t = (Thr *)(k - (atomic ? GC_NCLS : 0) - c);
+  if ((t->since += n) >= GC_SINCE_BATCH) {
+    atomic_fetch_add_explicit(&gc_since, t->since, memory_order_relaxed);
+    t->since = 0;
+  }
+}
+
 // Slow path: the next word of a block being bumped through, the rest of the
 // block's free words, or another block.
 __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c) {
@@ -574,8 +598,7 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
     p[0] = BEND_HOLE;
     BEND_BARRIER();
     if (!k->reuse)
-      atomic_fetch_add_explicit(&gc_since, ((size_t)__builtin_popcountll(k->bits) + 1) * sw * sizeof(V),
-        memory_order_relaxed);
+      gc_handed(k, atomic, c, ((size_t)__builtin_popcountll(k->bits) + 1) * sw * sizeof(V));
     return p;
   }
   // Counted, the thread's own frees go back to the block it allocates from:
@@ -606,7 +629,8 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
     Thr *t = thr_self;
     t->claiming = 1;
     atomic_signal_fence(memory_order_seq_cst);
-    uint64_t *cand = gc_cand + (size_t)c * GC_CANDW;
+    int shared = gc_hot.rc;  // (counting: rc_free_slot sets gc_cand's bits)
+    uint64_t *cand = (shared ? gc_cand : t->cand) + (size_t)c * GC_CANDW;
     uintptr_t nw = (gc_top + 63) >> 6;
     uintptr_t at = t->rcur[c] < gc_top ? t->rcur[c] : 0;
     for (uintptr_t n = 0; b == NULL && n <= nw; n++) {
@@ -616,7 +640,8 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
       while (f && b == NULL) {
         uintptr_t bi = (w << 6) + (uintptr_t)__builtin_ctzll(f);
         f &= f - 1;
-        __atomic_fetch_and(&cand[w], ~(1ull << (bi & 63)), __ATOMIC_RELAXED);
+        if (shared) __atomic_fetch_and(&cand[w], ~(1ull << (bi & 63)), __ATOMIC_RELAXED);
+        else cand[w] &= ~(1ull << (bi & 63));
         if (bi >= gc_top || __atomic_load_n(&gc_kind[bi], __ATOMIC_ACQUIRE) != 1) continue;
         GcBlk *q = gc_blk(bi);
         if (q->cls != c || q->atomic || __atomic_load_n(&q->owned, __ATOMIC_RELAXED)) continue;
@@ -661,7 +686,7 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
   if (fresh) {
     // A fresh block is handed out by bumping a pointer, a word of its
     // bitmap at a time.
-    atomic_fetch_add_explicit(&gc_since, (size_t)b->nobj * sw * sizeof(V), memory_order_relaxed);
+    gc_handed(k, atomic, c, (size_t)b->nobj * sw * sizeof(V));
     k->bits = 0;
     k->j = k->nj;
     return gc_bump_word(k, 0, sw);
@@ -879,7 +904,7 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
 #endif
   (void)line;
   BEND_POISON_AT(v, w);
-  uint64_t *cw = &h->cand[(size_t)(w - 2) * GC_CANDW + (bi >> 6)];
+  size_t cx = (size_t)(w - 2) * GC_CANDW + (bi >> 6);
   // A freed slot is young when it is handed out again: the thread that
   // hands it out clears its mark (gc_next_bits). Cleared here, after the
   // allocation bit, it could be the mark of the object another thread made
@@ -894,12 +919,11 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   // rebuilt them under it (tests/par_free.bend).
   if (UNLIKELY(h->mt)) {
     __atomic_fetch_and(aw, ~bit, __ATOMIC_RELEASE);
-    // (a sample of the frees keeps the shared candidate words cool)
-    if ((i & 15) == 0 && !(*cw & (1ull << (bi & 63))))
-      __atomic_fetch_or(cw, 1ull << (bi & 63), __ATOMIC_RELAXED);
+    // (a sample of the frees: the thread's bits are a few loads away)
+    if ((i & 15) == 0) thr_self->cand[cx] |= 1ull << (bi & 63);
   } else {
     *aw &= ~bit;
-    *cw |= 1ull << (bi & 63);
+    h->cand[cx] |= 1ull << (bi & 63);
   }
 }
 
@@ -1833,7 +1857,12 @@ static void thr_stack(pthread_attr_t *attr) {
 
 static void thr_register(uintptr_t top) {
   fault_stack();
-  Thr *t = calloc(1, sizeof(Thr));
+  // Whole cache lines of its own (Apple's are 128 bytes): the caches at its
+  // start are written at every allocation.
+  Thr *t = NULL;
+  size_t tsz = (sizeof(Thr) + 127) & ~(size_t)127;
+  if (posix_memalign((void **)&t, 128, tsz)) bend_fail("out of memory");
+  memset(t, 0, tsz);
   *(Thr **)(top & ~(BEND_STK - 1)) = t;
   t->top = top;
   t->id = pthread_self();
@@ -1844,6 +1873,7 @@ static void thr_register(uintptr_t top) {
   pthread_mutex_lock(&gc_lock);
   if (gc_nthr == GC_MAXTHR) bend_fail("too many threads");
   gc_thrs[gc_nthr] = t;
+  t->cand = gc_nthr == 0 ? gc_cand : gc_reserve(GC_RQCLS * GC_CANDW * sizeof(uint64_t), NULL);
   int n1 = gc_nthr + 1;  // tcc's __atomic_store_n evaluates its value twice
   __atomic_store_n(&gc_nthr, n1, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&gc_lock);

@@ -268,6 +268,11 @@ struct PDeque;
 typedef struct Thr {
   GcCache cache[2][GC_NCLS];
   uint32_t rcur[GC_NCLS];   // where the next search for a reuse block starts
+  size_t since;             // bytes handed out not yet added to gc_since
+  // Its candidate bits (see gc_cand; the first thread's are gc_cand): the
+  // blocks where it freed slots, which it reuses. Only it reads and writes
+  // them (when counting references, all threads use gc_cand).
+  uint64_t *cand;
   V *rcs; size_t rcn, rccap; // reference counting: the objects rc_free_obj has yet to free
   uintptr_t top;
   volatile uintptr_t sp;
@@ -351,7 +356,12 @@ extern V *gc_rem_prev;
 extern size_t gc_nprev;
 extern size_t gc_capprev;
 // Per class, a bit per block: matches freed slots in it (GC_CANDW words a
-// class).
+// class). Each thread has its own (Thr.cand), and reuses the blocks where
+// it freed: a block another thread freed in, or allocates in, has lines
+// that thread holds, and taking its free slots made every access slower
+// (with shared bits, two threads each sorting a tree of its own took a
+// third more cycles than one thread sorting both, and tree-bitonic on 12
+// threads 95G cycles, 74G with a thread's own).
 #define GC_CANDW (GC_MAXBLK / 64)
 extern uint64_t *gc_cand;
 // More than one thread runs Bend code (frees must then be atomic).
@@ -468,6 +478,20 @@ static inline void gc_window(GcCache *k, uint32_t jw, uint64_t f) {
 // Bumping through a fresh block: the slots of its word jw go to the cache,
 // and the first is handed out.
 V *gc_bump_word(GcCache *k, uint32_t jw, size_t sw);
+
+// Bytes a thread's caches hand out go to gc_since GC_SINCE_BATCH at a time:
+// one shared counter added to at each refill is a cache line all threads
+// write, and it made each thread's refills slower as threads were added.
+// (A collection may come up to that many bytes a thread late.) k is in its
+// thread's Thr, whose first field is the caches.
+#define GC_SINCE_BATCH ((size_t)64 << 10)
+static inline void gc_handed(GcCache *k, int atomic, unsigned c, size_t n) {
+  Thr *t = (Thr *)(k - (atomic ? GC_NCLS : 0) - c);
+  if ((t->since += n) >= GC_SINCE_BATCH) {
+    atomic_fetch_add_explicit(&gc_since, t->since, memory_order_relaxed);
+    t->since = 0;
+  }
+}
 
 // Slow path: the next word of a block being bumped through, the rest of the
 // block's free words, or another block.
@@ -619,7 +643,7 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
 #endif
   (void)line;
   BEND_POISON_AT(v, w);
-  uint64_t *cw = &h->cand[(size_t)(w - 2) * GC_CANDW + (bi >> 6)];
+  size_t cx = (size_t)(w - 2) * GC_CANDW + (bi >> 6);
   // A freed slot is young when it is handed out again: the thread that
   // hands it out clears its mark (gc_next_bits). Cleared here, after the
   // allocation bit, it could be the mark of the object another thread made
@@ -634,12 +658,11 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   // rebuilt them under it (tests/par_free.bend).
   if (UNLIKELY(h->mt)) {
     __atomic_fetch_and(aw, ~bit, __ATOMIC_RELEASE);
-    // (a sample of the frees keeps the shared candidate words cool)
-    if ((i & 15) == 0 && !(*cw & (1ull << (bi & 63))))
-      __atomic_fetch_or(cw, 1ull << (bi & 63), __ATOMIC_RELAXED);
+    // (a sample of the frees: the thread's bits are a few loads away)
+    if ((i & 15) == 0) thr_self->cand[cx] |= 1ull << (bi & 63);
   } else {
     *aw &= ~bit;
-    *cw |= 1ull << (bi & 63);
+    h->cand[cx] |= 1ull << (bi & 63);
   }
 }
 
