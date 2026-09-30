@@ -1274,18 +1274,9 @@ def PS.stn(+ps: PS) -> Nat:
 def P.stn() -> P(Nat):
   +ps => Done{(PS.stn(ps), ps)}
 
-def SB.drop(xs: List<&2, SB>, n: Nat) -> List<&2, SB>:
-  match xs n:
-    case ys 0n:
-      ys
-    case y <> t 1n+m:
-      SB.drop(t, m)
-    case Nil{} k:
-      Nil{}
-
 def P.close.go(+n0: Nat, ps: PS) -> Result<&1, &1, Err, Unit & PS>:
   PS{cur, stk, +stn, frs, book, src, ns, dir, al} = ps
-  Done{(Unit{}, PS{cur, SB.drop(stk, Nat.sub(stn, n0)), Nat.min(stn, n0), frs, book, src, ns, dir, al})}
+  Done{(Unit{}, PS{cur, List.drop(&2, SB, stk, Nat.sub(stn, n0)), Nat.min(stn, n0), frs, book, src, ns, dir, al})}
 
 # Drops the binders opened since the scope had n0 of them.
 def P.close(+n0: Nat) -> P(Unit):
@@ -4831,13 +4822,6 @@ def P.imports.go(n: Nat, +one: Bool, +acc: List<&2, String>) -> P(List<&2, Strin
 def P.imports(+acc: List<&2, String>) -> P(List<&2, String>):
   P.imports.go(Fuel.max(), False{}, acc)
 
-def Tld.law_x(t: Maybe<&2, Tld>) -> Nat:
-  match t:
-    case Some{TDef{n, x, ty, v, u, b, imps}}:
-      x
-    case other:
-      0n
-
 def Tld.with_imps(t: Maybe<&2, Tld>, ims: List<&2, String>) -> Tld:
   match t:
     case Some{TDef{n, x, ty, v, u, b, old}}:
@@ -4848,7 +4832,7 @@ def Tld.with_imps(t: Maybe<&2, Tld>, ims: List<&2, String>) -> Tld:
 def P.def.foreign(+k: String) -> P(Unit):
   do P<Unit>:
     b : Book <- P.book()
-    P.if(Unit, Nat.is_gt(Tld.law_x(book_tld(b, k)), 0n), P.fail(Unit, "a body (a template is not foreign)"),
+    P.if(Unit, Nat.is_gt(Tld.x(book_tld(b, k)), 0n), P.fail(Unit, "a body (a template is not foreign)"),
       P.pure(Unit, Unit{}))
     ims : List<&2, String> <- P.imports(Nil{})
     +b2 : Book <- P.book()
@@ -4887,7 +4871,7 @@ def Tld.law_fill(t: Maybe<&2, Tld>, n: Nat, u2: Bool) -> Tld:
 def P.def.fill(u: Bool, +k: String, +n0: Nat, +tele: List<&2, TC>) -> P(Unit):
   do P<Unit>:
     b : Book <- P.book()
-    +lx : Nat <- P.pure(Nat, Tld.law_x(book_tld(b, k)))
+    +lx : Nat <- P.pure(Nat, Tld.x(book_tld(b, k)))
     P.if(Unit, TC.all_qnt(tele), P.pure(Unit, Unit{}), P.fail(Unit, "a name"))
     P.if(Unit, Nat.is_lt(List.length(&2, TC, tele), lx),
       P.fail(Unit, "a name for each ~ clause of the law (" ++ Nat.show(lx) ++ ")"), P.pure(Unit, Unit{}))
@@ -5673,17 +5657,8 @@ def typeless.note(+book: Book, tm: Tm) -> String:
     case other:
       ""
 
-def List.take_strn(n: Nat, xs: List<&2, String>) -> List<&2, String>:
-  match n xs:
-    case 0n ys:
-      Nil{}
-    case 1n+m y <> t:
-      y <> List.take_strn(m, t)
-    case k Nil{}:
-      Nil{}
-
 def List.take_str(xs: List<&2, String>, n: U32) -> List<&2, String>:
-  List.take_strn(U32.to_nat(n), xs)
+  List.take(&2, String, xs, U32.to_nat(n))
 
 def ctx_sorted(ctx: List<&2, Tm>) -> List<&2, Tm>:
   List.reverse(&2, Tm, ctx)
@@ -5706,15 +5681,6 @@ def err.ctx_lines(+fi: FI, +book: Book, ctx: List<&2, Tm>, +bnd: List<&2, String
         List.reverse(&2, String, List.take_str(bnd, i))) ++ err.ctx_lines(fi, book, t, bnd, wid)
     case x <> t:
       err.ctx_lines(fi, book, t, bnd, wid)
-
-def List.drop_str(xs: List<&2, String>, n: Nat) -> List<&2, String>:
-  match xs n:
-    case ys 0n:
-      ys
-    case y <> t 1n+m:
-      List.drop_str(t, m)
-    case Nil{} k:
-      Nil{}
 
 def err.lines.each(lns: List<&2, String>, +i: Nat, +end: Nat, +at: Nat, +w: Nat, +car: String) -> String:
   match lns:
@@ -5762,7 +5728,7 @@ def err.lines.go(+lns: List<&2, String>, +at: Nat, +lft: String, +n: Nat) -> Str
   +beg = Nat.max(1n, Nat.sub(at, 1n))
   +end = Nat.min(List.length(&2, String, lns), Nat.add(at, 1n))
   +w = String.length(Nat.show(end))
-  err.lines.each(List.drop_str(lns, Nat.sub(beg, 1n)), beg, end, at, w,
+  err.lines.each(List.drop(&2, String, lns, Nat.sub(beg, 1n)), beg, end, at, w,
     err.car(w, lft, err.nth(lns, Nat.sub(at, 1n)), n))
 
 # The source lines around a span (the official three-line excerpt), the
@@ -6292,15 +6258,6 @@ def Tld.is_base(t: Tld) -> Bool:
     case other:
       False{}
 
-def List.drop_tm(xs: List<&2, Tm>, n: Nat) -> List<&2, Tm>:
-  match xs n:
-    case ys 0n:
-      ys
-    case y <> t 1n+m:
-      List.drop_tm(t, m)
-    case Nil{} k:
-      Nil{}
-
 def infer.ref.fin(+l: CL, +k: String, +s: Sp, b: Bool, +tld: Tld, +ctx: List<&2, Tm>, +x: Nat) -> K(IR):
   match tld:
     case TADT{n, g, ty, cs, tbase}:
@@ -6812,13 +6769,6 @@ def inst.closed.go(
     case Fail{e}:
       Fail{inst.closed.err(e, l, tm, ctx, d)}
 
-def List.take_tm(xs: List<&2, Tm>, n: Nat) -> List<&2, Tm>:
-  match xs n:
-    case y <> t 1n+m:
-      y <> List.take_tm(t, m)
-    case ys k:
-      Nil{}
-
 def Tld.dn(t: Tld) -> Nat:
   match t:
     case TDef{n, x, ty, v, u, b, imps}:
@@ -7065,7 +7015,7 @@ def check.run(fuel0: Nat, sel: CSel) -> CSel.ty(sel):
             +o : String <- check.run(fuel, SDefInst{l, Ref{k, s, b}, tld, sp, ctx, d})
             book : Book <- K.book()
             +x : Nat <- K.pure(Nat, Tld.x_of(tld))
-            infer.ref.self(l, o, s, b, Maybe.default(&2, Tld, book_tld(book, o), tld), ctx, List.drop_tm(sp, x), x)
+            infer.ref.self(l, o, s, b, Maybe.default(&2, Tld, book_tld(book, o), tld), ctx, List.drop(&2, Tm, sp, x), x)
         case SInferRefLive{+l, +k, +s, +b, +tld, +qt, +ctx, +d, +sp}:
           do K<IR>:
             book : Book <- K.book()
@@ -7426,7 +7376,7 @@ def check.run(fuel0: Nat, sel: CSel) -> CSel.ty(sel):
         # The instance of a template for its ~ arguments (made and checked once).
         case SDefInst{+l, +tm, +tld, +sp, +ctx, +d}:
           +x = Tld.x_of(tld)
-          +xs = List.take_tm(sp, x)
+          +xs = List.take(&2, Tm, sp, x)
           K.if(String, Nat.is_lt(List.length(&2, Tm, xs), x),
             K.err(String, ctx, MStr{"a template applied to closed ~ arguments (a def parameter is not comptime)"}, MTm{tm},
               Tm.span(tm), CL.dn(l)), check.run(fuel, SDefInstGo{l, tm, tld, xs, ctx, d}))
