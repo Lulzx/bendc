@@ -11091,11 +11091,68 @@ def Unb.arg.open(+k: String, v: Core.Expr, +names: List<&2, String>, r: UArgs) -
   UArgs{args, lets} = r
   UArgs{List.append(&2, Core.Expr, Unb.vars(names), args), ULet{Core.PCtor{k, Unb.pvars(names)}, v} <> lets}
 
+# Whether e is a value as written (nothing to run).
+def Unb.atom(e: Core.Expr) -> Bool:
+  match e:
+    case Core.EVar{x}:
+      True{}
+    case Core.ENum{n}:
+      True{}
+    case Core.ENat{n}:
+      True{}
+    case Core.EFlt{t}:
+      True{}
+    case Core.EStr{t}:
+      True{}
+    case Core.ETy{n, as}:
+      True{}
+    case Core.EAnn{x, t}:
+      Unb.atom(x)
+    case other:
+      False{}
+
+def Unb.lets.any(ls: List<&2, ULet>) -> Bool:
+  match ls:
+    case Nil{}:
+      False{}
+    case l <> t:
+      True{}
+
+def Unb.arg.keep.go(hit: Bool, a: Core.Expr, +x: String, args: List<&2, Core.Expr>, lets: List<&2, ULet>) -> UArgs:
+  match hit:
+    case True{}:
+      UArgs{Core.EVar{x} <> args, ULet{Core.PVar{x}, a} <> lets}
+    case False{}:
+      UArgs{a <> args, lets}
+
+# An argument that runs before a later one whose lets go around the call
+# is let-bound (as x) ahead of them, so the arguments still run in order
+# (an Array.set through one handle of a fork before an Array.get through
+# the other).
+def Unb.arg.keep(+a: Core.Expr, +x: String, r: UArgs) -> UArgs:
+  match r:
+    case UArgs{args, +lets}:
+      Unb.arg.keep.go(Bool.and(Unb.lets.any(lets), Bool.not(Unb.atom(a))), a, x, args, lets)
+
+def Unb.arg.pre(xs: List<&2, String>) -> String:
+  match xs:
+    case Nil{}:
+      "_ub"
+    case x <> t:
+      x
+
+# Fields es, built in place (x0, x1, .. for those Unb.arg.keep binds).
+def Unb.arg.keeps(es: List<&2, Core.Expr>, +x: String, +i: U32, r: UArgs) -> UArgs:
+  match es:
+    case Nil{}:
+      r
+    case e <> t:
+      Unb.arg.keep(e, x ++ U32.show(i), Unb.arg.keeps(t, x, U32.inc(i), r))
+
 def Unb.arg.ctor(same: Bool, +k: String, es: List<&2, Core.Expr>, +names: List<&2, String>, r: UArgs) -> UArgs:
   match same:
     case True{}:
-      UArgs{args, lets} = r
-      UArgs{List.append(&2, Core.Expr, es, args), lets}
+      Unb.arg.keeps(es, Unb.arg.pre(names) ++ "k", 0, r)
     case False{}:
       Unb.arg.open(k, Core.ECtor{k, es}, names, r)
 
@@ -11123,20 +11180,19 @@ def Unb.arg.flat(a: Core.Expr, +k: String, +n: Nat, +names: List<&2, String>, r:
     case other:
       Unb.arg.open(k, other, names, r)
 
-def Unb.arg(hit: Bool, a: Core.Expr, u: Unb, +names: List<&2, String>, r: UArgs) -> UArgs:
+def Unb.arg(hit: Bool, a: Core.Expr, u: Unb, +pre: String, +names: List<&2, String>, r: UArgs) -> UArgs:
   match hit:
     case True{}:
       Unb{+k, +ts} = u
       Unb.arg.flat(a, k, List.length(&2, String, ts), names, r)
     case False{}:
-      UArgs{args, lets} = r
-      UArgs{a <> args, lets}
+      Unb.arg.keep(a, pre ++ "k", r)
 
 def Unb.cargs(us: List<&2, Unb>, as: List<&2, Core.Expr>, +n: U32, +i: U32) -> UArgs:
   match us as:
     case +u <> ut a <> at:
-      Unb.arg(Unb.is(u), a, u, Unb.names("_ub" ++ U32.show(n) ++ "_" ++ U32.show(i) ++ "_", Unb.tys.of(u), 0),
-        Unb.cargs(ut, at, n, U32.inc(i)))
+      +pre = "_ub" ++ U32.show(n) ++ "_" ++ U32.show(i) ++ "_"
+      Unb.arg(Unb.is(u), a, u, pre, Unb.names(pre, Unb.tys.of(u), 0), Unb.cargs(ut, at, n, U32.inc(i)))
     case ul al:
       UArgs{al, Nil{}}
 
@@ -11276,12 +11332,19 @@ def Unb.push.deep(a: Core.Expr, e: Core.Expr) -> Core.Expr:
     case other:
       Expr.push(a, other)
 
-def Unb.pull.one(hit: Bool, a: Core.Expr, +x: String, e: Core.Expr) -> Core.Expr:
-  match hit:
-    case True{}:
-      Unb.float(Core.PVar{x}, a, Unb.push.deep(Core.EVar{x}, e))
-    case False{}:
-      Unb.push.deep(a, e)
+def Unb.is.let(e: Core.Expr) -> Bool:
+  match e:
+    case Core.ELet{p, v, b}:
+      True{}
+    case other:
+      False{}
+
+# (An argument that runs before a later one let-bound is let-bound too, so
+# the arguments still run in order: see Unb.arg.keep.)
+def Unb.pull.one(hit: Bool, +a: Core.Expr, +x: String, +e: Core.Expr) -> Core.Expr:
+  Bool.pick(Unit -> Core.Expr, Bool.or(hit, Bool.and(Unb.is.let(e), Bool.not(Unb.atom(a)))),
+    u => Unb.float(Core.PVar{x}, a, Unb.push.deep(Core.EVar{x}, e)),
+    u => Unb.push.deep(a, e))(Unit{})
 
 # e with each call's arguments that call a def with a flat result let-bound
 # before it (_ufD_I: the call's depth D, the argument's place I from the
