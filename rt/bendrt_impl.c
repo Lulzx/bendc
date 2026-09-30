@@ -99,6 +99,7 @@ __attribute__((noreturn)) void bend_fail(const char *msg) {
 #define GC_SIG SIGUSR2
 #define GC_RQCLS 15
 #define ARR_SPARES 8
+#define GC_NPOOL 3
 const uint16_t gc_cls_w[GC_NCLS] = {
   2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
   20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256,
@@ -114,7 +115,7 @@ uint32_t *gc_back;               // large tail: distance back to its head
 GcRun *gc_runs;                  // free block runs below gc_top
 size_t gc_nruns;
 pthread_mutex_t gc_lock = PTHREAD_MUTEX_INITIALIZER;
-GcBlk *gc_partial[2][GC_NCLS];
+GcBlk *gc_partial[GC_NPOOL][GC_NCLS];
 _Atomic size_t gc_since;         // bytes handed out since the last collection
 size_t gc_limit = (size_t)8 << 20;
 size_t gc_limit_min = (size_t)8 << 20;
@@ -138,6 +139,11 @@ V *gc_rem_prev;  // the last collection's, sorted (while this one roots)
 size_t gc_nprev, gc_capprev;
 #define GC_CANDW (GC_MAXBLK / 64)
 uint64_t *gc_cand;
+#define BK_BARE 1
+#define BK_SH 2
+uint8_t *gc_bk;
+uint64_t *gc_sbits;
+uint64_t *gc_dbits;
 int gc_mt;
 int bend_rc_req;
 GcHot gc_hot;
@@ -196,9 +202,14 @@ void gc_init(void) {
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
+  gc_sbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
+  gc_dbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
+  // (2^32 bytes of address space, all but the pages the heap's blocks and
+  // the device's arena index never touched)
+  gc_bk = gc_reserve((size_t)1 << (48 - GC_BLK_SHIFT), NULL);
   gc_hot = (GcHot){(uintptr_t)gc_base, 0,
     (uintptr_t)gc_abits - ((uintptr_t)gc_base >> GC_BLK_SHIFT) * 64 * sizeof(uint64_t), 0, 0, bend_rc_req, 0,
-    (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT)};
+    (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT), gc_bk};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -241,11 +252,17 @@ GcBlk *gc_new_small(int atomic, unsigned c) {
   memset(b, 0, sizeof(GcBlk));
   memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
   memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
+  if (atomic == 2) {
+    memset(&gc_sbits[at * 64], 0, 64 * sizeof(uint64_t));
+    memset(&gc_dbits[at * 64], 0, 64 * sizeof(uint64_t));
+  }
+  __atomic_store_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], atomic == 2 ? BK_BARE : 0, __ATOMIC_RELAXED);
+  b->pool = (uint8_t)atomic;
   b->words = gc_cls_w[c];
   b->nobj = (uint32_t)((GC_BLK - GC_HDR) / (b->words * 8));
   *GC_META(b) = (GcMeta){(uint32_t)(((uint64_t)1 << 32) / (b->words * 8)) + 1, 0, (uint8_t)c, (uint16_t)b->words};
   b->nblk = 1;
-  b->atomic = (uint8_t)atomic;
+  b->atomic = atomic == 1;
   b->cls = (uint8_t)c;
   b->owned = 1;
   __atomic_store_n(&gc_kind[at], 1, __ATOMIC_RELEASE);
@@ -302,7 +319,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   // that is a small one stays one, and a new one is owned before it is one.
   GcBlk *b = NULL;
   k->reuse = 0;
-  if (!atomic && c < (gc_hot.rc ? GC_NCLS : GC_RQCLS)) {
+  if (atomic != 1 && c < (gc_hot.rc ? GC_NCLS : GC_RQCLS)) {
     Thr *t = thr_self;
     t->claiming = 1;
     atomic_signal_fence(memory_order_seq_cst);
@@ -311,7 +328,8 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
     // (under the collector, the thread's candidate bytes, 8 blocks a word:
     // f gets bit 8k + 7 for each byte k that is c + 1)
     uint64_t *cb = (uint64_t *)(t->candb + ((uintptr_t)gc_base >> GC_BLK_SHIFT));
-    uint64_t lo = 0x0101010101010101ull, pat = lo * (c + 1);
+    // (a bare node's block is 16 + c + 1)
+    uint64_t lo = 0x0101010101010101ull, pat = lo * ((atomic == 2 ? 16 : 0) + c + 1);
     int sh = shared ? 6 : 3;
     uintptr_t nw = (gc_top + (1u << sh) - 1) >> sh;
     uintptr_t at = t->rcur[c] < gc_top ? t->rcur[c] : 0;
@@ -330,11 +348,11 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
         uintptr_t bi = shared ? (w << 6) + (uintptr_t)__builtin_ctzll(f) : (w << 3) + ((uintptr_t)__builtin_ctzll(f) >> 3);
         f &= f - 1;
         if (shared) __atomic_fetch_and(&cand[w], ~(1ull << (bi & 63)), __ATOMIC_RELAXED);
-        else if (((uint8_t *)cb)[bi] != c + 1) continue;  // (the test's false positives)
+        else if (((uint8_t *)cb)[bi] != (pat & 0xff)) continue;  // (the test's false positives)
         else ((uint8_t *)cb)[bi] = 0;
         if (bi >= gc_top || __atomic_load_n(&gc_kind[bi], __ATOMIC_ACQUIRE) != 1) continue;
         GcBlk *q = gc_blk(bi);
-        if (q->cls != c || q->atomic || __atomic_load_n(&q->owned, __ATOMIC_RELAXED)) continue;
+        if (q->cls != c || q->pool != atomic || __atomic_load_n(&q->owned, __ATOMIC_RELAXED)) continue;
         uint8_t z = 0;
         if (!__atomic_compare_exchange_n(&q->owned, &z, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) continue;
         uint32_t used = 0;
@@ -397,6 +415,7 @@ __attribute__((noinline)) V *gc_alloc_large(size_t w, int atomic) {
   memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
   memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
   *GC_META(b) = (GcMeta){0, 1, 0, 0};
+  for (size_t j = 0; j < n; j++) gc_bk[((uintptr_t)b >> GC_BLK_SHIFT) + j] = 0;
   b->words = (uint32_t)w;
   b->nobj = 1;
   b->nblk = (uint32_t)n;
@@ -428,6 +447,15 @@ __attribute__((noinline)) void bend_share_slow(V v) {
   if (i >= b->nobj || b->atomic) return;
   if ((uintptr_t)v != (uintptr_t)gc_objs(b) + (uintptr_t)i * b->words * sizeof(V)) return;
   if (!(GC_ALLOC(b)[i >> 6] & (1ull << (i & 63)))) return;
+  if (b->pool == 2) {
+    // A bare node: its shared bit, and its block's BK_SH.
+    size_t x = gc_bi(b) * 64 + (i >> 6);
+    uint64_t bit = 1ull << (i & 63);
+    if (!(__atomic_load_n(&gc_sbits[x], __ATOMIC_RELAXED) & bit)) __atomic_fetch_or(&gc_sbits[x], bit, __ATOMIC_RELAXED);
+    uint8_t *k = &gc_bk[v >> GC_BLK_SHIFT];
+    if (!(__atomic_load_n(k, __ATOMIC_RELAXED) & BK_SH)) __atomic_store_n(k, BK_BARE | BK_SH, __ATOMIC_RELAXED);
+    return;
+  }
   V *p = (V *)v;
   V w0 = __atomic_load_n(&p[0], __ATOMIC_RELAXED);
   if (w0 >= ((V)1 << 22)) {
@@ -442,8 +470,14 @@ __attribute__((noinline)) void bend_share_slow(V v) {
 uintptr_t bend_arena_lo, bend_arena_n;
 __attribute__((noinline)) void bend_share_arena(V v) {
   if ((v & 7) || (uintptr_t)v - bend_arena_lo >= bend_arena_n) return;
+  if (((V *)v)[-1] & ((V)1 << 61)) return;
   V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
   if (!(w0 & BEND_SH) && w0 < ((V)1 << 22)) __atomic_fetch_or((V *)v, BEND_SH, __ATOMIC_RELAXED);
+}
+void bend_arena_set(uintptr_t lo, uintptr_t n) {
+  bend_arena_lo = lo;
+  bend_arena_n = n;
+  memset(gc_bk + (lo >> GC_BLK_SHIFT), BK_SH, ((lo + n - 1) >> GC_BLK_SHIFT) - (lo >> GC_BLK_SHIFT) + 1);
 }
 __attribute__((noinline)) void bend_deep(V v, unsigned w) {
   V *p = (V *)v;
@@ -459,6 +493,28 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w) {
 #define BEND_IN_HEAP(v) ((void)0)
 #endif
 #define BEND_TAG_WORD(v) (((V *)(v))[0])
+#define FLB(v, i) (((V *)(v))[i])
+#define IS_B(v) (!((v) & 1))
+__attribute__((noinline)) int bend_shared_bare(V v, unsigned n) {
+  V *p = (V *)v;
+  size_t x = 0;
+  uint64_t bit = 0;
+  if ((uintptr_t)v - gc_hot.base < gc_hot.span) {
+    uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
+    unsigned sw = n < 2 ? 2 : n;
+    uint32_t i = (uint32_t)((((uintptr_t)v & (GC_BLK - 1)) - GC_HDR) / (sw * sizeof(V)));
+    x = bi * 64 + (i >> 6);
+    bit = 1ull << (i & 63);
+    if (!(__atomic_load_n(&gc_sbits[x], __ATOMIC_RELAXED) & bit)) return 0;
+    if (__atomic_load_n(&gc_dbits[x], __ATOMIC_ACQUIRE) & bit) return 1;
+  }
+  for (unsigned j = 0; j < n; j++) {
+    if (UNLIKELY((uintptr_t)p[j] - bend_arena_lo < bend_arena_n)) bend_share_arena(p[j]);
+    else bend_share(p[j]);
+  }
+  if (bit) __atomic_fetch_or(&gc_dbits[x], bit, __ATOMIC_RELEASE);
+  return 1;
+}
 #ifdef BEND_DEBUG_FREE
 #define bend_take(v, w) bend_take_at(v, w, __LINE__)
 #else
@@ -572,7 +628,7 @@ size_t rc_live(void) {
       for (int j = 0; j < 64; j++) n += (size_t)__builtin_popcountll(gc_abits[bi * 64 + j]);
   // (less the slots the caches hold, not handed out: see GcCache)
   for (int i = 0; i < gc_nthr; i++)
-    for (int a = 0; a < 2; a++)
+    for (int a = 0; a < GC_NPOOL; a++)
       for (int c = 0; c < GC_NCLS; c++) {
         GcCache *k = &gc_thrs[i]->cache[a][c];
         if (k->bump < k->end) n -= (size_t)(k->end - k->bump) / gc_cls_w[c];
@@ -739,7 +795,7 @@ void gc_handler(int sig) {
 }
 void gc_dirty_caches(void) {
   for (int i = 0; i < gc_nthr; i++)
-    for (int a = 0; a < 2; a++)
+    for (int a = 0; a < GC_NPOOL; a++)
       for (int c = 0; c < GC_NCLS; c++) {
         GcBlk *b = gc_thrs[i]->cache[a][c].blk;
         if (b) gc_dirty[gc_bi(b)] = 1;
@@ -763,13 +819,24 @@ void gc_sweep(void) {
         GC_ALLOC(b)[j] &= GC_MARK(b)[j];
         used += (size_t)__builtin_popcountll(GC_ALLOC(b)[j]);
       }
+      if (b->pool == 2) {
+        // (a dead node's shared bits go with it; the block keeps BK_SH while
+        // a live one is shared)
+        uint64_t sh = 0;
+        for (int j = 0; j < words; j++) {
+          gc_sbits[bi * 64 + j] &= GC_ALLOC(b)[j];
+          gc_dbits[bi * 64 + j] &= GC_ALLOC(b)[j];
+          sh |= gc_sbits[bi * 64 + j];
+        }
+        gc_bk[(uintptr_t)b >> GC_BLK_SHIFT] = BK_BARE | (sh ? BK_SH : 0);
+      }
       if (used == 0) {
         gc_kind[bi] = 0;
       } else {
         live += used * b->words * sizeof(V);
         if (used < b->nobj) {
-          b->next = gc_partial[b->atomic][b->cls];
-          gc_partial[b->atomic][b->cls] = b;
+          b->next = gc_partial[b->pool][b->cls];
+          gc_partial[b->pool][b->cls] = b;
         }
       }
     } else if (kd == 2) {
@@ -998,6 +1065,7 @@ void thr_register(uintptr_t top) {
 #define RUF(u, w) do { if (u) rc_free_at(u, w); } while (0)
 #define RUG(tok, w) ((tok) ? bend_ru_dirty(tok) : halloc(w))
 #define RUFG(u, w) do { if (u) bend_free_slot((u), (w), 0); } while (0)
+#define RUGB(tok, n) ((tok) ? bend_ru_dirty(tok) : halloc_b(n))
 #define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))
 void rc_let_go_arr(V a) {

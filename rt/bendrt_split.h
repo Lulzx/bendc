@@ -219,6 +219,7 @@ typedef struct GcBlk {
   uint8_t large;
   uint8_t owned;     // in a thread's cache (or being made): not swept, not claimed
   uint8_t cls;
+  uint8_t pool;      // its caches' (Thr.cache): 0 nodes and closures, 1 atomic, 2 bare nodes
   struct GcBlk *next;
 } GcBlk;
 
@@ -265,8 +266,12 @@ struct PDeque;
 #define GC_RQCLS 15
 #define ARR_SPARES 8
 
+// A thread's caches by pool (GcBlk.pool): 0 for objects with a first word
+// (nodes, closures, arrays), 1 for atomic objects, 2 for bare nodes (see
+// "Bare nodes").
+#define GC_NPOOL 3
 typedef struct Thr {
-  GcCache cache[2][GC_NCLS];
+  GcCache cache[GC_NPOOL][GC_NCLS];
   uint32_t rcur[GC_NCLS];   // where the next search for a reuse block starts
   size_t since;             // bytes handed out not yet added to gc_since
   // Its candidate bytes (see gc_cand), less the heap's first block index:
@@ -309,7 +314,7 @@ extern uint32_t *gc_back;
 extern GcRun *gc_runs;
 extern size_t gc_nruns;
 extern pthread_mutex_t gc_lock;
-extern GcBlk *gc_partial[2][GC_NCLS];
+extern GcBlk *gc_partial[GC_NPOOL][GC_NCLS];
 extern _Atomic size_t gc_since;
 // A collection comes after gc_limit bytes: gc_limit_min times gc_grow, or
 // gc_factor times what lived at the last one if that is more. A minor
@@ -369,6 +374,16 @@ extern size_t gc_capprev;
 // block and class (GC_CANDW words a class), set by rc_free_slot.
 #define GC_CANDW (GC_MAXBLK / 64)
 extern uint64_t *gc_cand;
+// Bare nodes (see "Bare nodes"): gc_bk, a byte per 64 KB of the address
+// space (the heap's blocks, and the device's arena): BK_BARE for a block of
+// bare nodes, BK_SH when one of them may be shared (the device's arena is
+// all BK_SH). gc_sbits and gc_dbits, per block like gc_abits: a bare node's
+// shared bit, and its fields', once they are marked (bend_deep's BEND_DEEP).
+#define BK_BARE 1
+#define BK_SH 2
+extern uint8_t *gc_bk;
+extern uint64_t *gc_sbits;
+extern uint64_t *gc_dbits;
 // More than one thread runs Bend code (frees must then be atomic).
 extern int gc_mt;
 // Set by a program compiled with BEND_RC=1 before it starts (see "Reference
@@ -391,6 +406,7 @@ typedef struct GcHot {
   // dirty[node >> GC_BLK_SHIFT], one shift (reuse tokens mark 3G blocks
   // dirty in a tree-bitonic run; the subtraction was 10G instructions)
   uintptr_t dirty;
+  uint8_t *bk;  // gc_bk
 } GcHot;
 extern GcHot gc_hot;
 extern GcRange *gc_roots;
@@ -473,6 +489,11 @@ static inline uint64_t gc_next_bits(GcCache *k) {
     if (f) {
       uint64_t *m = &GC_MARK(b)[k->j];
       if (__atomic_load_n(m, __ATOMIC_RELAXED) & f) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
+      if (b->pool == 2) {
+        size_t x = gc_bi(b) * 64 + k->j;
+        if (__atomic_load_n(&gc_sbits[x], __ATOMIC_RELAXED) & f) __atomic_fetch_and(&gc_sbits[x], ~f, __ATOMIC_RELAXED);
+        if (__atomic_load_n(&gc_dbits[x], __ATOMIC_RELAXED) & f) __atomic_fetch_and(&gc_dbits[x], ~f, __ATOMIC_RELAXED);
+      }
       return f;
     }
   }
@@ -500,7 +521,7 @@ V *gc_bump_word(GcCache *k, uint32_t jw, size_t sw);
 // thread's Thr, whose first field is the caches.
 #define GC_SINCE_BATCH ((size_t)64 << 10)
 static inline void gc_handed(GcCache *k, int atomic, unsigned c, size_t n) {
-  Thr *t = (Thr *)(k - (atomic ? GC_NCLS : 0) - c);
+  Thr *t = (Thr *)(k - (size_t)atomic * GC_NCLS - c);
   if ((t->since += n) >= GC_SINCE_BATCH) {
     atomic_fetch_add_explicit(&gc_since, t->since, memory_order_relaxed);
     t->since = 0;
@@ -587,13 +608,18 @@ __attribute__((noinline)) void bend_share_slow(V v);
 // even and above 2^32).
 extern uintptr_t bend_arena_lo;
 extern uintptr_t bend_arena_n;
+// (a headerless node there, K_BARE in the word before it, has no tag word:
+// the arena's blocks are BK_SH in gc_bk, and a take shares its fields)
 __attribute__((noinline)) void bend_share_arena(V v);
+// The device's arena: [lo, lo + n), its blocks all shared in gc_bk.
+void bend_arena_set(uintptr_t lo, uintptr_t n);
 static inline void bend_share(V v) {
   // A word first, on its own branch (the heap bounds are then not loaded).
   if (LIKELY(v < ((V)1 << 32))) return;
   if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
   V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
-  if ((w0 & BEND_SH) && w0 < ((V)1 << 22)) return;
+  // (a bare node's first word is a field: see "Bare nodes")
+  if ((w0 & BEND_SH) && w0 < ((V)1 << 22) && !(gc_hot.bk[v >> GC_BLK_SHIFT] & BK_BARE)) return;
   bend_share_slow(v);
 }
 
@@ -619,6 +645,7 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w);
 #define BEND_IN_HEAP(v) ((void)0)
 #endif
 static inline void bend_free_slot(V v, unsigned w, unsigned line);
+static inline int bend_take_bare(V v, unsigned n);
 // A take reads the tag word as the match's test did (IS_N), a plain load the
 // compiler folds into that one. Only a shared node's word needs acquire (its
 // BEND_DEEP publishes its fields' marks: see bend_deep): the fence is on that
@@ -626,6 +653,7 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line);
 // a fork or a join, which order what was written before).
 #define BEND_TAG_WORD(v) (((V *)(v))[0])
 static inline int bend_take_at(V v, unsigned w, unsigned line) {
+  if (w >= 256) return bend_take_bare(v, w - 256);
   V w0 = BEND_TAG_WORD(v);
   if (w0 & BEND_SH) {
     atomic_thread_fence(memory_order_acquire);
@@ -638,11 +666,15 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
   return 0;
 }
 
-// Frees the slot of an unshared node v of w (2 to 16) words in the heap.
+// Frees the slot of an unshared node v of w (2 to 16) words in the heap, or
+// (w 256 + n) of a bare node of n fields.
 static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   const GcHot *h = &gc_hot;
+  // (its slot's words, and its candidate byte: see Thr.candb)
+  unsigned sw = w >= 256 ? (w - 256 < 2 ? 2 : w - 256) : w;
+  uint8_t cv = (uint8_t)(w >= 256 ? 16 + sw - 1 : w - 1);
   uintptr_t bi = (uintptr_t)v >> GC_BLK_SHIFT;  // (less the base's: see GcHot)
-  uint32_t i = (uint32_t)((((uintptr_t)v & (GC_BLK - 1)) - GC_HDR) / (w * sizeof(V)));
+  uint32_t i = (uint32_t)((((uintptr_t)v & (GC_BLK - 1)) - GC_HDR) / (sw * sizeof(V)));
   uint64_t bit = 1ull << (i & 63);
   uint64_t *aw = (uint64_t *)(h->abits + (bi * 64 + (i >> 6)) * sizeof(uint64_t));
 #ifdef BEND_DEBUG_FREE
@@ -656,13 +688,14 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
     if ((long)nfreed == stop) abort();
     V who = (V)(((uintptr_t)pthread_self() >> 12) & 0xff);
     bend_debug_record(nfreed & 0xfffff);
-    for (unsigned j = 0; j < w; j++) ((V *)v)[j] = ((V)0xDEAD << 48) | (who << 40) | ((nfreed & 0xfffff) << 20) | line;
+    for (unsigned j = 0; j < sw; j++) ((V *)v)[j] = ((V)0xDEAD << 48) | (who << 40) | ((nfreed & 0xfffff) << 20) | line;
+    (void)cv;
     (void)bit; (void)aw;
   }
   return;
 #endif
   (void)line;
-  BEND_POISON_AT(v, w);
+  BEND_POISON_AT(v, sw);
   // A freed slot is young when it is handed out again: the thread that
   // hands it out clears its mark (gc_next_bits). Cleared here, after the
   // allocation bit, it could be the mark of the object another thread made
@@ -678,11 +711,67 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   if (UNLIKELY(h->mt)) {
     __atomic_fetch_and(aw, ~bit, __ATOMIC_RELEASE);
     // (a sample of the frees: the thread's bits are a few loads away)
-    if ((i & 15) == 0) ((uint8_t *)thr_self->candb)[bi] = (uint8_t)(w - 1);
+    if ((i & 15) == 0) ((uint8_t *)thr_self->candb)[bi] = cv;
   } else {
     *aw &= ~bit;
-    ((uint8_t *)h->candb)[bi] = (uint8_t)(w - 1);
+    ((uint8_t *)h->candb)[bi] = cv;
   }
+}
+
+// Bare nodes
+// ----------
+//
+// A node of a type with one constructor that has fields, the others nullary
+// or word leaves (a tree's leaves), has no tag word: a match tells it by its
+// pointer alone (IS_B: not odd), and it is its fields (FLB). bendc makes
+// them (kind 8, h in BEND_OPT) for types the runtime does not read itself,
+// under the collector, in C and on the device. They are in blocks of their
+// own (pool 2, BK_BARE in gc_bk), and a bare node's shared flags are bits
+// beside its allocation bit (gc_sbits, gc_dbits), set by bend_share_slow.
+// A take reads its block's byte only: a block none of whose nodes is shared
+// (no BK_SH) frees it with no more tests, and a take of a reuse token is a
+// load of the byte. A take's words are 256 + its fields (bend_take, RUFG).
+#define FLB(v, i) (((V *)(v))[i])
+#define IS_B(v) (!((v) & 1))
+// v's block has shared nodes, or v is in the device's arena (all shared):
+// 1 when v is shared, its fields then marked shared as bend_deep does.
+void bend_share_arena(V v);
+__attribute__((noinline)) int bend_shared_bare(V v, unsigned n);
+static inline int bend_take_bare(V v, unsigned n) {
+  if (UNLIKELY(gc_hot.bk[v >> GC_BLK_SHIFT] & BK_SH) && bend_shared_bare(v, n)) return 1;
+  bend_free_slot(v, 256 + n, 0);
+  return 0;
+}
+static inline V bend_take_ru_bare(V v, unsigned n) {
+  if (UNLIKELY(gc_hot.bk[v >> GC_BLK_SHIFT] & BK_SH) && bend_shared_bare(v, n)) return 0;
+  BEND_POISON_AT(v, n < 2 ? 2 : n);
+  return v;
+}
+static inline V *halloc_b(size_t n) { return gc_alloc_x(n < 2 ? 2 : n, 2, 0); }
+static inline V *halloc_b_hole(size_t n) { return gc_alloc_x(n < 2 ? 2 : n, 2, 1); }
+static inline V B1(V a) { V *p = halloc_b(1); p[0] = a; return (V)p; }
+static inline V B2(V a, V b) { V *p = halloc_b(2); p[0] = a; p[1] = b; return (V)p; }
+static inline V B3(V a, V b, V c) { V *p = halloc_b(3); p[0] = a; p[1] = b; p[2] = c; return (V)p; }
+static inline V B4(V a, V b, V c, V d) { V *p = halloc_b(4); p[0] = a; p[1] = b; p[2] = c; p[3] = d; return (V)p; }
+static inline V BN(int n, const V *xs) {
+  V *p = halloc_b((size_t)n);
+  for (int i = 0; i < n; i++) p[i] = xs[i];
+  return (V)p;
+}
+// A D_ node: its first word holds BEND_HOLE until the others are stored (as
+// CH2's tag word does).
+static inline V BH1(V a) { V *p = halloc_b_hole(1); BEND_BARRIER(); p[0] = a; return (V)p; }
+static inline V BH2(V a, V b) { V *p = halloc_b_hole(2); p[1] = b; BEND_BARRIER(); p[0] = a; return (V)p; }
+static inline V BH3(V a, V b, V c) { V *p = halloc_b_hole(3); p[1] = b; p[2] = c; BEND_BARRIER(); p[0] = a; return (V)p; }
+static inline V BH4(V a, V b, V c, V d) {
+  V *p = halloc_b_hole(4); p[1] = b; p[2] = c; p[3] = d; BEND_BARRIER(); p[0] = a; return (V)p;
+}
+static inline V BHN(int n, const V *xs) {
+  V *p = halloc_b_hole((size_t)n);
+  for (int i = 1; i < n; i++) p[i] = xs[i];
+  BEND_BARRIER();
+  p[0] = xs[0];
+  return (V)p;
 }
 
 // With BEND_DEBUG_FREE, a freed node records the generated C line that
@@ -1251,6 +1340,7 @@ static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
 // it does an old Array.)
 // RUFG frees a token no constructor took.
 static inline V bend_take_ru(V v, unsigned w) {
+  if (w >= 256) return bend_take_ru_bare(v, w - 256);
   V w0 = BEND_TAG_WORD(v);
   if (w0 & BEND_SH) {
     atomic_thread_fence(memory_order_acquire);
@@ -1288,6 +1378,17 @@ static inline V CGN(V u, V t, int n, const V *xs) {
   return (V)p;
 }
 #define RUFG(u, w) do { if (u) bend_free_slot((u), (w), 0); } while (0)
+// Bare nodes (see "Bare nodes") in a token's slot.
+#define RUGB(tok, n) ((tok) ? bend_ru_dirty(tok) : halloc_b(n))
+static inline V BG1(V u, V a) { V *p = RUGB(u, 1); p[0] = a; p[1] = 0; return (V)p; }
+static inline V BG2(V u, V a, V b) { V *p = RUGB(u, 2); p[0] = a; p[1] = b; return (V)p; }
+static inline V BG3(V u, V a, V b, V c) { V *p = RUGB(u, 3); p[0] = a; p[1] = b; p[2] = c; return (V)p; }
+static inline V BG4(V u, V a, V b, V c, V d) { V *p = RUGB(u, 4); p[0] = a; p[1] = b; p[2] = c; p[3] = d; return (V)p; }
+static inline V BGN(V u, int n, const V *xs) {
+  V *p = RUGB(u, n);
+  for (int i = 0; i < n; i++) p[i] = xs[i];
+  return (V)p;
+}
 
 // Arrays
 // ------
@@ -1362,7 +1463,7 @@ static inline void bend_dead(V v) {
   if (LIKELY(v < ((V)1 << 32))) return;
   if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
   V w0 = gc_hot.mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
-  if ((w0 | 31) == (ARR_TAG | 31)) arr_dead(v);
+  if ((w0 | 31) == (ARR_TAG | 31) && !(gc_hot.bk[v >> GC_BLK_SHIFT] & BK_BARE)) arr_dead(v);
 }
 
 // 2^c cells from src (a shared source's are shared) into a new array.

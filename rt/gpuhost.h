@@ -371,8 +371,7 @@ static int gpu_setup(const GpuProg *prog) {
   gpu_An = ((KA_SEQ + gpu_qcap) * sizeof(KAU) + 0xffff) & ~(size_t)0xffff;
   gpu_A = mmap(NULL, gpu_An, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
   if (gpu_H == MAP_FAILED || gpu_A == MAP_FAILED) return GPU_OFF;
-  bend_arena_lo = (uintptr_t)gpu_H;
-  bend_arena_n = gpu_Hmax;
+  bend_arena_set((uintptr_t)gpu_H, gpu_Hmax);
   gpu_pin_min = (KW)gpu_env("BEND_GPU_PIN_MB", 32) << 20;
   gpu_lanes = (KW)gpu_env("BEND_GPU_LANES", sim ? 64 : 8192);
   // (the simulator runs every call on the device: it tests that code)
@@ -427,8 +426,8 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
     if (!(h & GPU_SEEN)) {
       // First visit: push the children.
       gpu_H[i - 1] = h | GPU_SEEN;
-      if (GPU_NARROW(gpu_H[i])) continue;
-      for (KW k = 0; k < h; k++) {
+      if (!(h & K_BARE) && GPU_NARROW(gpu_H[i])) continue;
+      for (KW k = 0; k < (h & ~K_BARE); k++) {
         KW w = gpu_H[i + k];
         if (GPU_OBJ(w) && !(gpu_H[KIX_H(P, w) - 1] & (GPU_FWD | GPU_SEEN))) {
           if (sp == cap) { cap *= 2; stk = realloc(stk, cap * sizeof(KW)); }
@@ -438,8 +437,10 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
       continue;
     }
     // Second visit: the children are copied.
-    KW n = h & ~GPU_SEEN;
-    if (GPU_NARROW(gpu_H[i])) {
+    // (a headerless node, K_BARE: its first word is a field, see k_bnode)
+    int bare = (h & K_BARE) != 0;
+    KW n = h & ~(GPU_SEEN | K_BARE);
+    if (!bare && GPU_NARROW(gpu_H[i])) {
       unsigned d = (unsigned)(gpu_H[i] & 31);
       V *p = halloc(1 + ((size_t)1 << d));
       p[0] = ARR_HDR(d);
@@ -450,17 +451,17 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
       sp--;
       continue;
     }
-    V *p = halloc(n);
+    V *p = bare ? halloc_b(n) : halloc(n);
     for (KW k = 0; k < n; k++) {
       KW w = gpu_H[i + k];
-      if (k == 0 && (w >> 52) == 0x7ff) {
+      if (k == 0 && !bare && (w >> 52) == 0x7ff) {
         Fn fn = NULL;
         for (const GpuFn *e = prog->fns; e->f; e++) {
           if (e->l == (w & 0xffffffffu)) fn = e->f;
         }
         if (!fn) { ok = 0; gpu_note("%s", "the value holds a function the CPU has no code for"); break; }
         w = (V)fn;
-      } else if (k == 0) {
+      } else if (k == 0 && !bare) {
         w &= RC_ADDR;  // (a word the device copied from a counted object: its count is not the copy's)
       } else if (GPU_OBJ(w)) {
         KW hw = gpu_H[KIX_H(P, w) - 1];

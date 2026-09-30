@@ -4264,6 +4264,20 @@ def Gen.pat.node(opens: Bool, +ar: U32, +path: String, r: PatR) -> PatR:
     case False{}:
       r
 
+# A headerless node the pattern opens (kind 8): its size is 256 + its
+# fields, for bend_take (see bend_take_bare).
+def Gen.pat.bnode(+ar: U32, +path: String, r: PatR) -> PatR:
+  PatR{conds, binds} = r
+  PatR{conds, Bind{Bool.pick(String, Gen.is_field(path), "%sub", "%top") ++ U32.show(U32.add(256, ar)),
+    path} <> binds}
+
+# A field's path: i 99 is the value itself (a newtype), from 200 up the
+# (i - 200)-th field of a headerless node.
+def Gen.pat.fld(+path: String, +i: U32) -> String:
+  Bool.pick(String, U32.is_eq(i, 99), path,
+    Bool.pick(String, U32.is_ge(i, 200), "FLB(" ++ path ++ ", " ++ U32.show(U32.sub(i, 200)) ++ ")",
+      "FLD(" ++ path ++ ", " ++ U32.show(i) ++ ")"))
+
 # An ANode's halves, copies (arr_half); "%arr" has the case load them once.
 def Gen.pat.arr(+path: String, r: PatR) -> PatR:
   PatR{conds, binds} = r
@@ -4356,8 +4370,7 @@ def Gen.pat.go(
           match st:
             case 0n:
               Gen.pat.go(Core.PCtor{name, Nil{}}, 0n, g, path, U32.inc(i), None{}, 0n,
-                Gen.pat.go(a, 3n, g, Bool.pick(String, U32.is_eq(i, 99), path,
-                  "FLD(" ++ path ++ ", " ++ U32.show(i) ++ ")"), 0, None{}, 0n, r))
+                Gen.pat.go(a, 3n, g, Gen.pat.fld(path, i), 0, None{}, 0n, r))
             case 1n:
               match info:
                 case None{}:
@@ -4382,9 +4395,12 @@ def Gen.pat.go(
                         Gen.pat.go(Core.PCtor{name, [a]}, 0n, g, path, 0, None{}, 0n, Gen.pat.cond("arr_cls(" ++ path ++ ") == 0", r)))
                     case 6n:
                       Gen.pat.cond("arr_cls(" ++ path ++ ") != 0", r)
-                    case 7n+q:
+                    case 7n:
                       Gen.pat.go(a, 3n, g, "LI_V(" ++ path ++ ")", 0, None{}, 0n,
                         Gen.pat.tag(single, "IS_LI(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r))
+                    case 8n+q:
+                      Gen.pat.go(Core.PCtor{name, [a]}, 0n, g, path, 200, None{}, 0n,
+                        Gen.pat.bnode(ar, path, Gen.pat.tag(single, "IS_B(" ++ path ++ ")", r)))
             case 2n:
               match info:
                 case None{}:
@@ -4411,8 +4427,7 @@ def Gen.pat.go(
           match st:
             case 0n:
               Gen.pat.go(Core.PCtor{name, [b]}, 0n, g, path, U32.inc(i), None{}, 0n,
-                Gen.pat.go(a, 3n, g, Bool.pick(String, U32.is_eq(i, 99), path,
-                  "FLD(" ++ path ++ ", " ++ U32.show(i) ++ ")"), 0, None{}, 0n, r))
+                Gen.pat.go(a, 3n, g, Gen.pat.fld(path, i), 0, None{}, 0n, r))
             case 1n:
               match info:
                 case None{}:
@@ -4434,10 +4449,13 @@ def Gen.pat.go(
                         Gen.pat.cond("(" ++ path ++ ") != 0", r))
                     case 5n:
                       Gen.pat.go(Core.PCtor{name, [a, b]}, 0n, g, path, 0, None{}, 0n, Gen.pat.cond("arr_cls(" ++ path ++ ") == 0", r))
-                    case 6n+q:
+                    case 6n:
                       Gen.pat.arr(path, Gen.pat.go(b, 3n, g, "arr_half(" ++ path ++ ", 1)", 0, None{}, 0n,
                         Gen.pat.go(a, 3n, g, "arr_half(" ++ path ++ ", 0)", 0, None{}, 0n,
                           Gen.pat.cond("arr_cls(" ++ path ++ ") != 0", r))))
+                    case 7n+q:
+                      Gen.pat.go(Core.PCtor{name, [a, b]}, 0n, g, path, 200, None{}, 0n,
+                        Gen.pat.bnode(ar, path, Gen.pat.tag(single, "IS_B(" ++ path ++ ")", r)))
             case 2n:
               match info:
                 case None{}:
@@ -4465,8 +4483,7 @@ def Gen.pat.go(
           match st:
             case 0n:
               Gen.pat.go(Core.PCtor{name, t}, 0n, g, path, U32.inc(i), None{}, 0n,
-                Gen.pat.go(h, 3n, g, Bool.pick(String, U32.is_eq(i, 99), path,
-                  "FLD(" ++ path ++ ", " ++ U32.show(i) ++ ")"), 0, None{}, 0n, r))
+                Gen.pat.go(h, 3n, g, Gen.pat.fld(path, i), 0, None{}, 0n, r))
             case 1n:
               match info:
                 case None{}:
@@ -4488,8 +4505,11 @@ def Gen.pat.go(
                         Gen.pat.cond("(" ++ path ++ ") != 0", r))
                     case 5n:
                       Gen.pat.go(Core.PCtor{name, h <> t}, 0n, g, path, 0, None{}, 0n, Gen.pat.cond("arr_cls(" ++ path ++ ") == 0", r))
-                    case 6n+q:
+                    case 6n:
                       Gen.pat.cond("arr_cls(" ++ path ++ ") != 0", r)
+                    case 7n+q:
+                      Gen.pat.go(Core.PCtor{name, h <> t}, 0n, g, path, 200, None{}, 0n,
+                        Gen.pat.bnode(ar, path, Gen.pat.tag(single, "IS_B(" ++ path ++ ")", r)))
             case 2n:
               match info:
                 case None{}:
@@ -4697,6 +4717,14 @@ def Gen.ctor.node(+tag: U32, +ds: List<&2, Doc>) -> Doc:
     Doc.list([DStr{"CN(" ++ U32.show(tag) ++ ", " ++ U32.show(n) ++ ", "},
       Gen.arr(ds), DStr{")"}]))
 
+# A headerless node (kind 8): B2 and the like (see bendrt.h); with a
+# token, BG2 and the like.
+def Gen.ctor.bnode(+h: String, +tok: String, +ds: List<&2, Doc>) -> Doc:
+  +n = Gen.len(ds)
+  Bool.pick(Doc, U32.is_le(n, 4),
+    Doc.list([DStr{h ++ U32.show(n) ++ "(" ++ tok}, Gen.commas(ds), DStr{")"}]),
+    Doc.list([DStr{h ++ "N(" ++ tok ++ U32.show(n) ++ ", "}, Gen.arr(ds), DStr{")"}]))
+
 # A D_ node, with a hole: CH2 and the like (see bendrt.h).
 def Gen.ctor.hnode(+tag: U32, +ds: List<&2, Doc>) -> Doc:
   +n = Gen.len(ds)
@@ -4722,8 +4750,10 @@ def Gen.ctor.kind(+tag: U32, kind: Nat, ds: List<&2, Doc>) -> Doc:
       Doc.list([DStr{"arr_leaf("}, Doc.list(ds), DStr{")"}])
     case 6n:
       Doc.list([DStr{"arr_node("}, Gen.commas(ds), DStr{")"}])
-    case 7n+p:
+    case 7n:
       Doc.list([DStr{"LI(" ++ U32.show(tag) ++ ", "}, Doc.list(ds), DStr{")"}])
+    case 8n+p:
+      Gen.ctor.bnode("B", "", ds)
 
 # A node built in token tok's slot (h: "CR", or "CRH" for a D_ node).
 def Gen.ctor.ru(+tok: String, +h: String, +tag: U32, +ds: List<&2, Doc>) -> Doc:
@@ -4737,7 +4767,8 @@ def Gen.ctor.ru(+tok: String, +h: String, +tag: U32, +ds: List<&2, Doc>) -> Doc:
 # (CG: under the collector, the slot is young again, see bendrt.h)
 def Gen.ctor.kind.ru(rc: Bool, +tok: String, +tag: U32, +kind: Nat, +ds: List<&2, Doc>) -> Doc:
   Bool.pick(Doc, String.is_empty(tok), Gen.ctor.kind(tag, kind, ds),
-    Gen.ctor.ru(tok, Bool.pick(String, rc, "CR", "CG"), tag, ds))
+    Bool.pick(Doc, Nat.is_eq(kind, 8n), Gen.ctor.bnode("BG", tok ++ ", ", ds),
+      Gen.ctor.ru(tok, Bool.pick(String, rc, "CR", "CG"), tag, ds)))
 
 def Gen.ctor.hnode.ru(+tok: String, +tag: U32, +ds: List<&2, Doc>) -> Doc:
   Bool.pick(Doc, String.is_empty(tok), Gen.ctor.hnode(tag, ds), Gen.ctor.ru(tok, "CRH", tag, ds))
@@ -7785,7 +7816,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case Some{CInfo{+tag, ar, +kind, single}}:
               do Gen<Doc>:
                 +ds : List<&2, Doc> <- Gen.rec(fu, GSBitsArgs{g, env, P.which(name, ["U32", "F32"]), args})
-                +tok : String <- Gen.ru.take(Bool.and(Gen.free(g), U32.is_zero(kind)), U32.inc(Gen.len(ds)))
+                +tok : String <- Gen.ru.take(Bool.and(Gen.free(g), Bool.or(U32.is_zero(kind), U32.is_eq(kind, 8))),
+                  Bool.pick(U32, U32.is_eq(kind, 8), U32.add(256, Gen.len(ds)), U32.inc(Gen.len(ds))))
                 return Gen.ctor.kind.ru(Gen.rc(g), tok, tag, U32.to_nat(kind), ds)
         case GSCtor{+g, +env, +name, args}:
           Gen.rec(fu, GSCtorInfo{g, env, name, G.ctor(g, name), args})
@@ -13048,12 +13080,14 @@ def Gen.printer.test(+kind: U32, +tag: U32, single: Bool) -> String:
   Bool.pick(String, single, "if (1)",
     Bool.pick(String, U32.is_eq(kind, 1), "if (v == IMM(" ++ U32.show(tag) ++ "))",
       Bool.pick(String, U32.is_eq(kind, 7), "if (IS_LI(v, " ++ U32.show(tag) ++ "))",
-        "if (!(v & 1) && TAG(v) == " ++ U32.show(tag) ++ ")")))
+        Bool.pick(String, U32.is_eq(kind, 8), "if (IS_B(v))",
+          "if (!(v & 1) && TAG(v) == " ++ U32.show(tag) ++ ")"))))
 
 # The path of a constructor's fields, for its printer (a word leaf's one
 # field is its payload).
 def Gen.printer.path(+kind: U32) -> String:
-  Bool.pick(String, U32.is_eq(kind, 2), "v", Bool.pick(String, U32.is_eq(kind, 7), "LI_F(v, ", "FLD(v, "))
+  Bool.pick(String, U32.is_eq(kind, 2), "v", Bool.pick(String, U32.is_eq(kind, 7), "LI_F(v, ",
+    Bool.pick(String, U32.is_eq(kind, 8), "FLB(v, ", "FLD(v, ")))
 
 # A dependent pair prints as a pair.
 def Ty.alias(+h: String) -> String:
@@ -15314,6 +15348,14 @@ def K.ctor.fields(ds: List<&2, Doc>, +i: U32) -> Doc:
     case d <> t:
       Doc.list([DStr{"c->H[w + " ++ U32.show(U32.inc(i)) ++ "] = "}, d, DStr{";\n"}, K.ctor.fields(t, U32.inc(i))])
 
+# A headerless node's fields (kind 8): from its first word.
+def K.ctor.bfields(ds: List<&2, Doc>, +i: U32) -> Doc:
+  match ds:
+    case Nil{}:
+      DNil{}
+    case d <> t:
+      Doc.list([DStr{"c->H[w + " ++ U32.show(i) ++ "] = "}, d, DStr{";\n"}, K.ctor.bfields(t, U32.inc(i))])
+
 def K.ctor.kind(+tag: U32, kind: Nat, +ds: List<&2, Doc>) -> KM(Doc):
   match kind:
     case 0n:
@@ -15334,8 +15376,14 @@ def K.ctor.kind(+tag: U32, kind: Nat, +ds: List<&2, Doc>) -> KM(Doc):
       KM.pure(Doc, DStr{"k_arr(c)"})
     case 6n:
       KM.pure(Doc, DStr{"k_arr(c)"})
-    case 7n+p:
+    case 7n:
       KM.pure(Doc, Doc.list([DStr{"KLI(" ++ U32.show(tag) ++ ", "}, Doc.list(ds), DStr{")"}]))
+    case 8n+p:
+      do KM<Doc>:
+        +k : U32 <- K.slot()
+        K.put(Doc.list([DStr{"{ KW p = k_bnode(c, " ++ U32.show(Gen.len(ds)) ++
+          "); KW w = KIX(c, p);\n"}, K.ctor.bfields(ds, 0), DStr{S(k) ++ " = p; }\n"}]))
+        return DStr{S(k)}
 
 # A string literal, built cell by cell from its end.
 def K.str.cells(cs: List<&2, U32>) -> Doc:
@@ -15423,7 +15471,9 @@ def K.pat.go(n: Nat, k: KPatSel) -> KPatSel.ty(k):
               r
             case h <> t:
               K.pat.go(fu, KPFields{g, t, path, U32.inc(i), K.pat.go(fu, KPPat{g, h,
-                Bool.pick(String, U32.is_eq(i, 99), path, "KFLD(" ++ path ++ ", " ++ U32.show(i) ++ ")"), r})})
+                Bool.pick(String, U32.is_eq(i, 99), path,
+                  Bool.pick(String, U32.is_ge(i, 200), "KFLB(" ++ path ++ ", " ++ U32.show(U32.sub(i, 200)) ++ ")",
+                    "KFLD(" ++ path ++ ", " ++ U32.show(i) ++ ")")), r})})
         case KPKind{+g, kind, +tag, +single, args, +path, r}:
           match kind:
             case 0n:
@@ -15440,9 +15490,11 @@ def K.pat.go(n: Nat, k: KPatSel) -> KPatSel.ty(k):
               K.pat.zeros(Pats.vars(args, Nil{}), Gen.pat.cond("k_arr(c)", r))
             case 6n:
               K.pat.zeros(Pats.vars(args, Nil{}), Gen.pat.cond("k_arr(c)", r))
-            case 7n+p:
+            case 7n:
               K.pat.go(fu, KPFields{g, args, "KLI_V(" ++ path ++ ")", 99,
                 Gen.pat.tag(single, "KIS_LI(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)})
+            case 8n+p:
+              K.pat.go(fu, KPFields{g, args, path, 200, Gen.pat.tag(single, "!((" ++ path ++ ") & 1)", r)})
         case KPCtor{+g, info, name, args, +path, r}:
           match info:
             case None{}:
@@ -15681,6 +15733,22 @@ def KX.node(+tag: U32, +ds: List<&2, Doc>) -> KM(Doc):
     return Doc.list([DStr{"({ "}, KX.temps(ds, k, 0), DStr{"KW " ++ KX.v(k) ++ " = k_node(c, " ++ U32.show(tag) ++ ", " ++
       U32.show(n) ++ "); " ++ KX.fields(n, k, 0) ++ KX.v(k) ++ "; })"}])
 
+def KX.bfields.go(n: Nat, +k: U32, +i: U32) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+m:
+      "c->H[KIX(c, " ++ KX.v(k) ++ ") + " ++ U32.show(i) ++ "] = " ++ KX.v(k) ++ "_" ++ U32.show(i) ++ "; " ++
+        KX.bfields.go(m, k, U32.inc(i))
+
+# A headerless node (kind 8, see k_bnode).
+def KX.bnode(+ds: List<&2, Doc>) -> KM(Doc):
+  +n = Gen.len(ds)
+  do KM<Doc>:
+    +k : U32 <- K.fresh()
+    return Doc.list([DStr{"({ "}, KX.temps(ds, k, 0), DStr{"KW " ++ KX.v(k) ++ " = k_bnode(c, " ++
+      U32.show(n) ++ "); " ++ KX.bfields.go(U32.to_nat(n), k, 0) ++ KX.v(k) ++ "; })"}])
+
 def KX.ctor.kind(+tag: U32, kind: Nat, ds: List<&2, Doc>) -> KM(Doc):
   match kind:
     case 0n:
@@ -15697,8 +15765,10 @@ def KX.ctor.kind(+tag: U32, kind: Nat, ds: List<&2, Doc>) -> KM(Doc):
       KM.pure(Doc, DStr{"k_arr(c)"})
     case 6n:
       KM.pure(Doc, DStr{"k_arr(c)"})
-    case 7n+p:
+    case 7n:
       KM.pure(Doc, Doc.list([DStr{"KLI(" ++ U32.show(tag) ++ ", "}, Doc.list(ds), DStr{")"}]))
+    case 8n+p:
+      KX.bnode(ds)
 
 def KX.ret(t: KTgt, d: Doc) -> Doc:
   match t:
@@ -21844,10 +21914,66 @@ def G.li(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
     case False{}:
       g
 
+# Headerless nodes (kind 8, h in BEND_OPT, not when counting references):
+# in a type whose one constructor with fields (1 to 15 of them) is its only
+# node, the others nullary or word leaves, that constructor's node has no
+# header word: its fields start at the node, and the node's pointer, even,
+# tells it from the others' odd immediates (IS_B, FLB and B1.. in bendrt.h).
+# Types with parameters or that the runtime reads keep their headers.
+def G.hless.w(c: CInfo) -> Nat:
+  CInfo{tag, +ar, +kind, single} = c
+  Bool.pick(Nat, U32.is_zero(kind),
+    Bool.pick(Nat, Bool.and(U32.is_ge(ar, 1), U32.is_le(ar, 15)), 1n, 99n),
+    Bool.pick(Nat, Bool.or(U32.is_eq(kind, 1), U32.is_eq(kind, 7)), 0n, 99n))
+
+def G.hless.cnt(cs: List<&2, Ctor>, +m: Map<&2, CInfo>, +n: Nat) -> Nat:
+  match cs:
+    case Nil{}:
+      n
+    case Ctor{+name, fields} <> t:
+      G.hless.cnt(t, m, Nat.add(n, G.hless.w(Pair.snd(Map<&2, CInfo>, CInfo,
+        Map.get(CInfo, CInfo{0, 0, 4, False{}}, m, name)))))
+
+def G.hless.set(c: CInfo) -> CInfo:
+  CInfo{+tag, +ar, +kind, +single} = c
+  CInfo{tag, ar, Bool.pick(U32, U32.is_zero(kind), 8, kind), single}
+
+def G.hless.ctors(cs: List<&2, Ctor>, +m: Map<&2, CInfo>) -> Map<&2, CInfo>:
+  match cs:
+    case Nil{}:
+      m
+    case Ctor{+name, fields} <> t:
+      G.hless.ctors(t, Map.set(&2, CInfo, m, name, G.hless.set(Pair.snd(Map<&2, CInfo>, CInfo,
+        Map.get(CInfo, CInfo{0, 0, 4, False{}}, m, name)))))
+
+def G.hless.type(+name: String, ps: List<&2, String>, +cs: List<&2, Ctor>, +m: Map<&2, CInfo>) -> Map<&2, CInfo>:
+  Bool.pick(Map<&2, CInfo>, Bool.and(Bool.and(Nat.is_eq(List.length(&2, String, ps), 0n),
+    Bool.not(Str.has(["String", "Image", "Event", "IO.OP", "App", "Word", "U32", "F32", "Char",
+      "Nat", "Array", "Bool", "Unit", "Cmp", "Empty"], name))),
+    Bool.and(Nat.is_ge(List.length(&2, Ctor, cs), 2n), Nat.is_eq(G.hless.cnt(cs, m, 0n), 1n))), G.hless.ctors(cs, m), m)
+
+def G.hless.decls(ds: List<&2, Decl>, +m: Map<&2, CInfo>) -> Map<&2, CInfo>:
+  match ds:
+    case Nil{}:
+      m
+    case DType{+name, ps, +cs} <> t:
+      G.hless.decls(t, G.hless.type(name, ps, cs, m))
+    case d <> t:
+      G.hless.decls(t, m)
+
+def G.hless(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
+  match on:
+    case True{}:
+      G{ctors, defs, bodies, dps} = g
+      G{G.hless.decls(ds, ctors), defs, bodies, dps}
+    case False{}:
+      g
+
 def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
   +ds = Unb.program(unb, Unb.program(unb, Nest.program(unb, Unb.sum.program(unb, Par.auto(par, Lo.program(opt,
     Arrw.decls(Pick.decls(ds0))))))))
-  +g = Unb.sret(unb, ds, Dps.build(G.li(Opt.on(opt, 119), G.new(ds), ds), ds, free, rc))
+  +g = Unb.sret(unb, ds, Dps.build(G.hless(Bool.and(Opt.on(opt, 104), Bool.not(rc)),
+    G.li(Opt.on(opt, 119), G.new(ds), ds), ds), ds, free, rc))
   Gen.program.fin(g, Gen.cids(g, ds, 0),
     Gen.program.m(g)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
 
