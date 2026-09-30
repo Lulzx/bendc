@@ -700,6 +700,9 @@ Every warmup and timed sample is saved to `build/official/results.json`
 (`BEND_BENCH_RESULTS` overrides the path), including stdout, exit status, time,
 peak RSS, and stderr. GPU samples from bendc enable diagnostics and record
 completed calls and CPU fallbacks; a matching answer can still come from fallback.
+On macOS, `BEND_BENCH_CPU_COUNTERS=1` also records retired CPU instructions and
+elapsed CPU cycles with `/usr/bin/time -l`. RSS then comes from the measured
+child. For GPU rows these counters describe the host process, not the device.
 
 The machine was an Apple M4 Pro (12 cores, 24 GB, macOS 27), with official bend 2.0.32. It was
 shared with other jobs, and the load average stayed between 9 and 12 during the run. The runs of

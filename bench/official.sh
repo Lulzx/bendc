@@ -30,7 +30,7 @@ UP=${BEND_UP:-/tmp/bendup32}
 BEND=${BEND:-bend}
 export BEND_NO_TELEMETRY=1
 python3 - "$BENDC" "$BASE" "$UP" "$BEND" "$R" "$NT" "$RC" "$@" <<'PY'
-import json, os, subprocess, sys, tempfile, time
+import json, os, re, subprocess, sys, tempfile, time
 bendc, base, up, bend, R, nt, rc = sys.argv[1:8]
 R, rc = int(R), rc == '1'
 only = sys.argv[8:]
@@ -50,6 +50,9 @@ receipt = os.environ.get('BEND_BENCH_RESULTS', 'build/official/results.json')
 results = {'bendc': os.path.abspath(bendc), 'bend': bend, 'base': base,
            'upstream': up, 'runs': R, 'threads': nt, 'rc': rc,
            'started': time.time(), 'samples': []}
+cpu_counters = os.environ.get('BEND_BENCH_CPU_COUNTERS') == '1'
+if cpu_counters and sys.platform != 'darwin':
+    sys.exit('BEND_BENCH_CPU_COUNTERS needs macOS /usr/bin/time -l')
 
 def save():
     os.makedirs(os.path.dirname(os.path.abspath(receipt)), exist_ok=True)
@@ -68,7 +71,8 @@ def run(cmd, cwd):
     # A file keeps diagnostics without a second pipe that could fill while
     # stdout is read; wait4 still supplies this process's peak RSS.
     with tempfile.TemporaryFile() as err:
-        p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=err)
+        measured = ['/usr/bin/time', '-l', *cmd] if cpu_counters else cmd
+        p = subprocess.Popen(measured, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=err)
         o = p.stdout.read().decode()
         _, status, ru = os.wait4(p.pid, 0)
         err.seek(0)
@@ -77,11 +81,22 @@ def run(cmd, cwd):
     status = os.waitstatus_to_exitcode(status)
     # wait4 reports bytes on Darwin and KiB on Linux.
     mem = ru.ru_maxrss / ((1 << 20) if sys.platform == 'darwin' else 1024)
+    counters = {}
+    if cpu_counters:
+        for key, label in [('cpu_instructions_retired', 'instructions retired'),
+                           ('cpu_cycles_elapsed', 'cycles elapsed'),
+                           ('peak_rss_bytes', 'maximum resident set size')]:
+            match = re.search(r'^\s*(\d+)\s+' + label + r'\s*$', diagnostics, re.MULTILINE)
+            if not match:
+                sys.exit('missing %s in /usr/bin/time output for %s' % (label, cmd))
+            counters[key] = int(match.group(1))
+        # wait4 now measures time's wrapper; its child supplied the RSS.
+        mem = counters.pop('peak_rss_bytes') / (1 << 20)
     results['samples'].append({'bench': b, 'mode': m, 'binary': cmd[0],
                               'flags': cmd[1:], 'warmup': i == 0,
                               'seconds': t, 'peak_rss_mb': mem,
                               'exit': status, 'output': o.strip(),
-                              'stderr': diagnostics,
+                              'stderr': diagnostics, **counters,
                               'gpu_fallbacks': diagnostics.count('running on the CPU'),
                               'gpu_completed_calls': diagnostics.count('bend gpu: done in')})
     save()
