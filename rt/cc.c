@@ -66,6 +66,11 @@ static Term cc_fail(Env e, const char *msg) {
   return io_fail(e, 1, msg);
 }
 
+// A program compiles with -fno-tree-slp-vectorize (clang and gcc both take
+// it, tcc ignores it). The straight-line vectorizer gained nothing on the
+// benchmarks, and in nbody whether it packed the 3-body loop into 2-lane
+// vectors turned on unrelated code before the loop, costing 18% of the
+// cycles when it did.
 Term cc_end_run(Env e, Term *f, IoWork *w) {
   (void)w;
   u64 n;
@@ -96,7 +101,7 @@ Term cc_end_run(Env e, Term *f, IoWork *w) {
 #else
   const char *libs = "-lm -lpthread -ldl";
 #endif
-  snprintf(cmd, cl, "%s -O2 -w -DBEND_RT_SPLIT -I '%s' '%s' '%s' -o '%s' %s", cc, rt, cc_tmp, obj, out, libs);
+  snprintf(cmd, cl, "%s -O2 -fno-tree-slp-vectorize -w -DBEND_RT_SPLIT -I '%s' '%s' '%s' -o '%s' %s", cc, rt, cc_tmp, obj, out, libs);
   int rc = system(cmd);
   free(cmd);
   free(out);
@@ -145,7 +150,7 @@ Term cc_link_run(Env e, Term *f, IoWork *w) {
 #else
   const char *libs = "-lm -lpthread -ldl";
 #endif
-  snprintf(cmd, cl, "%s -O2 -w -I '%s' '%s' '%s.o' '%s' '%s' -o '%s' %s", cc, rt, cc_tmp, out, nobj, obj, out, libs);
+  snprintf(cmd, cl, "%s -O2 -fno-tree-slp-vectorize -w -I '%s' '%s' '%s.o' '%s' '%s' -o '%s' %s", cc, rt, cc_tmp, out, nobj, obj, out, libs);
   int rc = system(cmd);
   free(cmd);
   if (rc != 0) { free(out); return cc_fail(e, "linking failed"); }

@@ -286,6 +286,7 @@ typedef struct Thr {
   // their class; a collection forgets them (arr_hook).
   V spare[ARR_SPARES];
   uint32_t nspare;
+  uint64_t plast; // when a parallel let past its site's cutoff last forked (par_small)
 } Thr;
 
 static void gc_park(Thr *t);
@@ -1992,7 +1993,9 @@ static V arr_half(V a, unsigned hi) {
   return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), gc_hot.rc || arr_shared(a), ((V *)a)[0] & RC_TS);
 }
 
-static inline V *arr_at(V a, V i) { return arr_cells(a) + ((uint32_t)i & (((V)1 << arr_cls(a)) - 1)); }
+// The mask is 32 bits wide (the index is a U32): on arm64 that is a shift and
+// a bic, with no 64-bit mask to build.
+static inline V *arr_at(V a, V i) { return arr_cells(a) + ((uint32_t)i & ~(~0u << arr_cls(a))); }
 
 static inline V F_Array_dsize(V a) { return C2(0, a, (V)((uint64_t)1 << arr_cls(a))); }
 // The checker's memo cells (check.bend's memo.*): an array of a cell's
@@ -2388,7 +2391,7 @@ static inline uint32_t F_U32_dmod(uint32_t a, uint32_t b) { return b == 0 ? a : 
 static inline uint32_t F_U32_dnot(uint32_t a) { return U(~U(a)); }
 static inline uint32_t F_U32_dand(uint32_t a, uint32_t b) { return U(a) & U(b); }
 static inline uint32_t F_U32_dor(uint32_t a, uint32_t b) { return U(a) | U(b); }
-static inline uint32_t F_U32_dxor(V a, V b) { return U(a) ^ U(b); }
+static inline uint32_t F_U32_dxor(uint32_t a, uint32_t b) { return U(a) ^ U(b); }
 static inline uint32_t F_U32_dshl(uint32_t a) { return U(U(a) << 1); }
 static inline uint32_t F_U32_dshr(uint32_t a) { return U(a) >> 1; }
 static inline uint32_t F_U32_dshln(uint32_t a, V n) { return n >= 32 ? 0 : U(U(a) << U(n)); }
@@ -2404,8 +2407,8 @@ static inline uint32_t F_U32_dis__zero(uint32_t a) { return BOOL(U(a) == 0); }
 static inline uint32_t F_U32_dis__even(uint32_t a) { return BOOL((a & 1) == 0); }
 static inline V F_U32_dto__nat(V a) { return a; }
 static inline uint32_t F_U32_dfrom__nat(V n) { return nat_low32(n); }
-static inline uint32_t F_U32_dmin(V a, V b) { return U(a) < U(b) ? U(a) : U(b); }
-static inline uint32_t F_U32_dmax(V a, V b) { return U(a) < U(b) ? U(b) : U(a); }
+static inline uint32_t F_U32_dmin(uint32_t a, uint32_t b) { return U(a) < U(b) ? U(a) : U(b); }
+static inline uint32_t F_U32_dmax(uint32_t a, uint32_t b) { return U(a) < U(b) ? U(b) : U(a); }
 static inline V F_U32_dpow(V a, V n) {
   // a^n mod 2^32; an odd a has an order dividing 2^30, an even one reaches 0.
   V e = n;
@@ -2541,7 +2544,7 @@ static V F_F32_dread(V s) {
 #define P_HELD 3
 #define P_WAIT 4
 
-typedef struct PTask { V clo; V res; V state; V depth; } PTask;
+typedef struct PTask { V clo; V res; V state; V depth; int *site; } PTask;
 
 // The fork depth of the running code, and the frontier past which a def
 // with a sequential clone (S_name, see bendc) runs its parallel lets in
@@ -2568,6 +2571,57 @@ static pthread_cond_t par_cv = PTHREAD_COND_INITIALIZER;
 // Joiners that wait for a stolen task (P_WAIT) sleep on par_jcv.
 static pthread_cond_t par_jcv = PTHREAD_COND_INITIALIZER;
 static _Atomic int par_sleepers;
+
+// Task ages. A queued task holds the time it was forked (in res, until it
+// is done), in units of 16 ticks since the pool started; a thief takes it
+// only once it is par_age old.
+#if defined(__aarch64__) && !defined(__TINYC__)
+static inline uint64_t par_ticks(void) {
+  uint64_t v;
+  __asm__ __volatile__("mrs %0, cntvct_el0" : "=r"(v));
+  return v;
+}
+static uint64_t par_tick_hz(void) {
+  uint64_t f;
+  __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(f));
+  return f;
+}
+#else
+static inline uint64_t par_ticks(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
+}
+static uint64_t par_tick_hz(void) { return 1000000000u; }
+#endif
+static uint64_t par_t0;
+static uint64_t par_age = 0;
+static inline uint64_t par_now(void) { return (par_ticks() - par_t0) >> 4; }
+
+// Each parallel let has a cutoff (its site, a static int of the generated
+// code): 0, or 1 + the fork depth from which it runs its values in order.
+// Joining a task its forker ran itself tells how long the rest of the let
+// took meanwhile: under par_age, the let's values are too small to fork at
+// that depth and below; a task that waited longer, or that a thief took,
+// lets its depth fork again. Past the cutoff, a thread still forks once
+// every par_age, to find out whether the values grew.
+static inline int par_small(int *site) {
+  int c = __atomic_load_n(site, __ATOMIC_RELAXED);
+  if (c == 0 || par_depth < c - 1) return 0;
+  Thr *me = thr_self;
+  uint64_t now = par_now();
+  if (now - me->plast < par_age) return 1;
+  me->plast = now;
+  return 0;
+}
+static inline void par_site_small(int *site, int d) {
+  int c = __atomic_load_n(site, __ATOMIC_RELAXED);
+  if (c == 0 || c > d) __atomic_store_n(site, d, __ATOMIC_RELAXED);
+}
+static inline void par_site_big(int *site, int d) {
+  int c = __atomic_load_n(site, __ATOMIC_RELAXED);
+  if (c != 0 && c <= d) __atomic_store_n(site, d + 1, __ATOMIC_RELAXED);
+}
 
 static PDeque *pdq_new(void) {
   PDeque *d = calloc(1, sizeof(PDeque));
@@ -2603,6 +2657,7 @@ static PTask *pdq_steal(PDeque *d) {
     PTask *x = __atomic_load_n(&d->buf[t & d->mask], __ATOMIC_RELAXED);
     // (x may be gone, when the CAS fails; a task is held only before it
     // is let go)
+    if (par_now() - (uint64_t)__atomic_load_n(&x->res, __ATOMIC_RELAXED) < par_age) return NULL;
     if (__atomic_load_n(&x->state, __ATOMIC_ACQUIRE) == P_HELD) {
       if (!atomic_load_explicit(&d->want, memory_order_relaxed))
         atomic_store_explicit(&d->want, 1, memory_order_relaxed);
@@ -2724,6 +2779,12 @@ static void par_hook(void) {
 static void par_start(void) {
   pthread_mutex_lock(&par_mu);
   if (!atomic_load(&par_started)) {
+    {
+      const char *e = getenv("BEND_STEAL_AGE_US");
+      uint64_t us = e && *e ? (uint64_t)atoll(e) : 20;
+      par_age = par_tick_hz() / 16 * us / 1000000;
+      par_t0 = par_ticks();
+    }
     gc_mt = 1;
     gc_hot.mt = 1;
     gc_hot.rcmt = gc_hot.rc;
@@ -2762,7 +2823,7 @@ static inline void par_serve_if(PDeque *d) {
 // thread whose deque is nearly empty queues it (the oldest tasks, which
 // thieves take, are the big ones); otherwise the fork is the closure itself,
 // tagged with bit 1, and its join just applies it.
-static V par_fork(V clo) {
+static V par_fork_at(int *site, V clo) {
 #ifdef BEND_DEBUG_FREE
   // Debugging, on one thread: BEND_DEBUG_EAGER runs forks as they are made,
   // in the order other threads may run them (the result boxed, tagged 4).
@@ -2779,18 +2840,26 @@ static V par_fork(V clo) {
   long tp = atomic_load_explicit(&d->top, memory_order_relaxed);
   if (b - tp >= 4) return clo | 2;
   if (UNLIKELY(!atomic_load_explicit(&par_started, memory_order_relaxed))) par_start();
-  PTask *t = (PTask *)halloc(4);
+  PTask *t = (PTask *)halloc(5);
   t->clo = clo;
+  t->site = site;
   t->depth = (V)par_depth;
+  uint64_t now = par_now();
+  t->res = (V)now;
   t->state = gc_hot.rc ? P_HELD : P_QUEUED;
   __atomic_store_n(&d->buf[b & d->mask], t, __ATOMIC_RELAXED);
   atomic_thread_fence(memory_order_release);
   atomic_store_explicit(&d->bot, b + 1, memory_order_relaxed);
+  // A sleeper is woken for the oldest task here once it is old enough.
   if (atomic_load_explicit(&par_sleepers, memory_order_relaxed) > 0 &&
-      atomic_load_explicit(&par_searching, memory_order_relaxed) == 0)
-    pthread_cond_signal(&par_cv);
+      atomic_load_explicit(&par_searching, memory_order_relaxed) == 0) {
+    PTask *o = __atomic_load_n(&d->buf[tp & d->mask], __ATOMIC_RELAXED);
+    if (b > tp && now - (uint64_t)o->res >= par_age) pthread_cond_signal(&par_cv);
+  }
   return (V)t;
 }
+
+static V par_fork(V clo) { return par_fork_at(NULL, clo); }
 
 // Waits for a forked task and returns its value.
 static V par_join(V tv) {
@@ -2802,7 +2871,11 @@ static V par_join(V tv) {
   PTask *p = pdq_pop(d);
   if (p == t) {
     V clo = t->clo;
-    if (gc_hot.rc) rc_free_at((V)t, 4);
+    if (t->site) {
+      if (par_now() - (uint64_t)t->res < par_age) par_site_small(t->site, (int)t->depth);
+      else par_site_big(t->site, (int)t->depth);
+    }
+    if (gc_hot.rc) rc_free_at((V)t, 5);
     return apply(clo, 0);
   }
   if (p) par_exec(p);
@@ -2829,7 +2902,8 @@ static V par_join(V tv) {
     pthread_mutex_unlock(&par_mu);
   }
   V r = t->res;
-  if (gc_hot.rc) rc_free_at((V)t, 4);
+  if (t->site) par_site_big(t->site, (int)t->depth);
+  if (gc_hot.rc) rc_free_at((V)t, 5);
   return r;
 }
 

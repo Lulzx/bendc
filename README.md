@@ -478,9 +478,27 @@ finishes the task (it used to `sched_yield` and nap). This matters for programs 
 tasks often while the other threads have little to do. One example is `bendc` built with `bendc -o`
 and without `BEND_NO_FREE`, so with frees and implicit parallelism. It makes 2.8M forks, and 1.7M
 of them are stolen while compiling `bendc.bend`. Its CPU time went from 18s to 10.6s (59G to 35G
-cycles, 3.2s to 2.7s wall). That build is still slower than one thread (1.9s, 6G cycles), because
-the tasks are too small. That is why `bendc` builds itself with `BEND_NO_FREE`, which turns the
+cycles, 3.2s to 2.7s wall). The tasks were still too small to pay for their forks; the size
+cutoff below fixes that. `bendc` builds itself with `BEND_NO_FREE`, which turns the frees and the
 implicit forks off. The benchmarks keep every worker busy, and their times and CPU are unchanged.
+
+Forks also have a size cutoff, measured at run time. A task nobody steals runs inline, but a
+thief that takes a tiny task gains nothing and pays for the move. Two rules keep small tasks with
+their forker:
+
+- A queued task holds the time it was forked. A thief skips it until it is 20µs old
+  (`BEND_STEAL_AGE_US`), and a fork wakes a sleeping worker only when the oldest task in its deque
+  is that old.
+- Each parallel let in the generated C has a cutoff of its own (`static int pcsN`, the site).
+  When the forker joins a task it ran itself, the time since the fork is how long the let's other
+  values took. Under 20µs, the let runs its values in order at that fork depth and below. A task
+  that waited longer, or that a thief took, lifts the cutoff at its depth. Past the cutoff a
+  thread still forks once every 20µs, to notice when the values grow.
+
+A test that forks 2M walks of depth-6 trees took 29s on 12 threads before (0.9s on one); it now
+takes 0.97s. `fib 44`, `sort` and the benchmarks are unchanged. The frees-and-auto-par build of
+`bendc` above now compiles `bendc.bend` in 2.9s wall and 3.7s CPU, where the same build with
+`BEND_AUTO_PAR=0` takes 2.9s and 2.9s CPU (the `BEND_NO_FREE` build: 1.9s).
 
 Parallel lets are also found. Bend is pure, so the operands of one node (an operator's, a call's
 arguments, a constructor's fields) may run in any order. Where two or more of them call back into
@@ -502,8 +520,9 @@ Some calls always stay where they are:
 - a value of a parallel let the program wrote;
 - a call that ends the block, so that a loop's tail call stays a jump.
 
-Only whether a call recurses or forks makes it heavy, not its size. The cutoff is the fork depth:
-past the frontier, a parallel let runs its values in order.
+Only whether a call recurses or forks makes it heavy, not its size. There are two cutoffs. Past
+the fork depth's frontier, a parallel let runs its values in order. And a parallel let whose
+forks turned out small runs in order at that depth and below (see the site cutoff above).
 
 The pass is on by default and `BEND_AUTO_PAR=0` turns it off. With `BEND_NO_FREE=1` it defaults
 to off (`BEND_AUTO_PAR=1` turns it back on). A compiler's tree walks are small and called often.
@@ -770,6 +789,35 @@ Where bendc loses, and why:
     cycles. A general form must survive threads, forks in the middle of the recursion and
     re-entry through another def. Passing invariants in a struct by pointer only pays when two
     or more of them are invariant, and here one is.
+- **raytrace, merkle, terrain, kmeans and bfs, against the official build's generated C.** SEQ
+  instructions and cycles, one thread, before and after:
+  - raytrace went from 97G to 72.5G instructions (official: 83.5G). The optimizer unrolls a loop
+    into a chain of copies (defs with `%s` in their name), each calling the next from its cases.
+    clang left a copy as a call once it was more than a few instructions. A copy that neither
+    calls itself nor forks, and calls at most one copy in each of its cases, is now always
+    inlined (`BEND_UINL`), as flat-result defs are. The last condition keeps an unrolled tree
+    recursion (two calls to the next copy) from inlining into 2^depth calls. merkle went from
+    53.4G to 47.7G (official: 47.3G). No benchmark got slower.
+  - terrain went from 53.3G to 49.3G instructions and 10.5G to 9.9G cycles (official: 44.7G,
+    8.8G). kmeans went from 54.5G to 50.4G and 10.8G to 9.3G cycles (official: 43.8G, 8.6G).
+    `U32.xor`, `U32.min` and `U32.max` took their operands as 64-bit words. In terrain's noise
+    fill, clang then vectorized the hash in 64-bit lanes, two at a time. Taking `uint32_t` makes
+    them 32-bit lanes. The official build stores `U32` cells as 32-bit words and vectorizes the
+    fill four at a time; bendc's cells are 64-bit, so two.
+  - bfs went from 31.5G to 30.5G instructions (official: 26.2G), with cycles unchanged at 16.0G
+    (official: 15.4G). An array index is now masked with a 32-bit mask (`~(~0u << class)`, a
+    shift and a `bic`). The rest of the instruction gap is the grid's mask, which is reloaded for
+    each of the four neighbours. The load is conditional, so clang cannot hoist it out of the
+    loop. Computing it on entry to `look` saved 1.8G instructions but no cycles, so that change
+    was not kept. bfs's time goes to mispredicted branches (wall or not, seen or not), in both
+    builds.
+  - nbody showed that clang's straight-line (SLP) vectorizer is fragile here. After the `U32.xor`
+    change, which only touches the code before the 3-body loop, it packed the loop into 2-lane
+    vectors differently: 28G to 36G instructions, 21.9G to 25.8G cycles. Without that vectorizer
+    the loop is scalar: 43G instructions, 21.5G cycles. Programs now compile with
+    `-fno-tree-slp-vectorize` (`rt/cc.c`); no other benchmark moved by more than the noise.
+  - symreg (57G against 51G) spends the difference in `bend_take` on a tree that is always
+    shared; that is part of the allocation and reference-counting work.
 - **tree-bitonic and tree-matmul.** Most of the time goes to allocating and freeing each tree
   node. The reference-counting work (in-place reuse) addresses this cost.
 - **GPU.** raytrace and symreg run their GPU mode 15 to 20 times slower than the official build.
