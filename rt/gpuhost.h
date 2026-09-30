@@ -700,12 +700,14 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
         if (gpu_A[KA_GROW] == 0 || gpu_A[KA_ERR] != 0) break;
         // (by as much as the calls that ran out would take: they took the
         // arena too, and as many calls again as the ones that did not; when
-        // every call ran out, what they took is free again)
+        // every call ran out, what they took is free again, and nothing says
+        // how much they take: 8 times, as the first use of a buffer costs with
+        // its size (merkle takes 338 MB, and 1 GB cost 25 ms more than 512 MB))
         KW left = 0;
         for (KW l = 0; l < gpu_lanes; l++) left += H[P.lane0 + l] == PC_KQ;
         if (left == waiting) gpu_A[KA_HEAP] = used;
         size_t f = 4;
-        while (f < 16 && f * (waiting - left) < 2 * waiting) f *= 2;
+        while (f < (left == waiting ? 8 : 16) && f * (waiting - left) < 2 * waiting) f *= 2;
         if (!gpu_grow(f)) {
           gpu_A[KA_ERR] = KE_HEAP;
           break;

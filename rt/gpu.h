@@ -42,6 +42,11 @@ typedef atomic_uint KAU;
 #define KAUTO auto
 #define K_ATW(p) ((device atomic_uint *)(p))
 #define K_SIMD_ALL(b) simd_all(b)
+#define K_SIMD_FIRST() simd_is_first()
+#define K_SIMD_BCAST(x) simd_broadcast_first(x)
+#define K_SIMD_PREFIX(x) simd_prefix_exclusive_sum(x)
+#define K_SIMD_MIN(x) simd_min(x)
+#define K_SIMD_SUM(x) simd_sum(x)
 #else
 typedef uint64_t KW;
 typedef uint32_t KU;
@@ -73,6 +78,11 @@ static inline KU k_u_of(float f) { union { uint32_t i; float f; } x; x.f = f; re
 #endif
 #define K_ATW(p) ((KAU *)(p))
 #define K_SIMD_ALL(b) (b)
+#define K_SIMD_FIRST() true
+#define K_SIMD_BCAST(x) (x)
+#define K_SIMD_PREFIX(x) 0u
+#define K_SIMD_MIN(x) (x)
+#define K_SIMD_SUM(x) (x)
 #endif
 
 // The control words (A).
@@ -304,22 +314,38 @@ KINLINE void k_ret(KTHR KCtx *c, KW x) {
 // empty (the host clears only the slots a call used).
 #define KQ_SEQ(i) (K_LOAD(&c->A[KA_SEQ + (i)]) + (KU)(i))
 #define KQ_SET(i, s) K_STORE(&c->A[KA_SEQ + (i)], (s) - (KU)(i))
+//
+// The lanes of a SIMD group that push (or pop) together take their slots
+// together: the group's first lane reads the tail (head), each lane checks
+// the slot at its place past it, and one CAS takes the free (published)
+// slots in a row. (A CAS a lane, with 4096 lanes forking at one level, made
+// the forks of a call take 10 ms.) A pop takes only published slots, so no
+// lane waits for another.
+KINLINE KU k_simd_run(bool ok, KU i) {
+  KU n = K_SIMD_MIN(ok ? ~0u : i);
+  return n == ~0u ? K_SIMD_SUM(1u) : n;
+}
 KINLINE bool k_push_task(KTHR KCtx *c, KW pc, KW fp, KW rv, KW dep) {
   KW mask = c->P->qcap - 1;
-  KU pos = K_LOAD(&c->A[KA_QTAIL]);
+  KU pos;
   for (int tries = 0;; tries++) {
     if (tries > 100000) return false;
-    KU seq = KQ_SEQ(pos & mask);
-    KI dif = (KI)(seq - pos);
-    if (dif == 0) {
-      KU e = pos;
-      if (K_CAS(&c->A[KA_QTAIL], e, pos + 1)) break;
-      pos = e;
-    } else if (dif < 0) {
-      return false;
-    } else {
-      pos = K_LOAD(&c->A[KA_QTAIL]);
+    KU i = K_SIMD_PREFIX(1u);
+    KU t = 0;
+    if (K_SIMD_FIRST()) t = K_LOAD(&c->A[KA_QTAIL]);
+    t = K_SIMD_BCAST(t);
+    pos = t + i;
+    KI dif = (KI)(KQ_SEQ(pos & mask) - pos);
+    KU n = k_simd_run(dif == 0, i);
+    // (full: the group's first slot is a lap behind, no pop freed it)
+    if (K_SIMD_BCAST(n == 0 && dif < 0 ? 1u : 0u) != 0) return false;
+    KU won = 0;
+    if (K_SIMD_FIRST() && n > 0) {
+      KU e = t;
+      won = K_CAS(&c->A[KA_QTAIL], e, t + n) ? 1u : 0u;
     }
+    won = K_SIMD_BCAST(won);
+    if (won != 0 && i < n) break;
   }
   KW q = c->P->qd + (KW)(pos & mask) * 4;
   c->H[q] = pc;
@@ -333,21 +359,19 @@ KINLINE bool k_push_task(KTHR KCtx *c, KW pc, KW fp, KW rv, KW dep) {
 
 KINLINE bool k_pop_task(KTHR KCtx *c) {
   KW mask = c->P->qcap - 1;
-  KU pos = K_LOAD(&c->A[KA_QHEAD]);
-  for (int tries = 0;; tries++) {
-    if (tries > 64) return false;
-    KU seq = KQ_SEQ(pos & mask);
-    KI dif = (KI)(seq - (pos + 1));
-    if (dif == 0) {
-      KU e = pos;
-      if (K_CAS(&c->A[KA_QHEAD], e, pos + 1)) break;
-      pos = e;
-    } else if (dif < 0) {
-      return false;
-    } else {
-      pos = K_LOAD(&c->A[KA_QHEAD]);
-    }
+  KU i = K_SIMD_PREFIX(1u);
+  KU h = 0;
+  if (K_SIMD_FIRST()) h = K_LOAD(&c->A[KA_QHEAD]);
+  h = K_SIMD_BCAST(h);
+  KU pos = h + i;
+  KU n = k_simd_run(KQ_SEQ(pos & mask) == pos + 1, i);
+  KU won = 0;
+  if (K_SIMD_FIRST() && n > 0) {
+    KU e = h;
+    won = K_CAS(&c->A[KA_QHEAD], e, h + n) ? 1u : 0u;
   }
+  won = K_SIMD_BCAST(won);
+  if (won == 0 || i >= n) return false;
   K_FENCE();
   KW q = c->P->qd + (KW)(pos & mask) * 4;
   c->pc = c->H[q];
@@ -795,9 +819,18 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   for (KW step = 0; step < budget; step++) {
     if (c->pc == PC_KQ) break;
     if (c->pc == PC_IDLE) {
-      if (K_LOAD(&A[KA_DONE]) != 0 || K_LOAD(&A[KA_ERR]) != 0) break;
-      if (!k_pop_task(c)) {
-        if (K_LOAD(&A[KA_ACTIVE]) == 0) break;
+      // (the first idle lane of the SIMD group reads the counters for the
+      // group: 8192 lanes polling them slowed the forks 3x)
+      KU st = 0;
+      if (K_SIMD_FIRST()) {
+        st = K_LOAD(&A[KA_DONE]) != 0 || K_LOAD(&A[KA_ERR]) != 0 ? 1u : 0u;
+        if (K_LOAD(&A[KA_QHEAD]) != K_LOAD(&A[KA_QTAIL])) st |= 2u;
+        else if (K_LOAD(&A[KA_ACTIVE]) == 0) st |= 4u;
+      }
+      st = K_SIMD_BCAST(st);
+      if (st & 1u) break;
+      if (!(st & 2u) || !k_pop_task(c)) {
+        if (st & 4u) break;
         continue;
       }
       K_ADD(&A[KA_ACTIVE], 1u);
