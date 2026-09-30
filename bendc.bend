@@ -8078,7 +8078,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 c : Doc <- Gen.rec(fu, GSLam{g, env, Core.PVar{"_"}, v})
                 rest : Doc <- Gen.rec(fu, GSParVals{g, env, k, U32.inc(i), t})
-                return Doc.list([RC.fork(Gen.rc(g), g, env, v), DStr{"V " ++ Gen.par.name(k, i) ++ "t = par_fork("}, c, DStr{");\n"},
+                return Doc.list([RC.fork(Gen.rc(g), g, env, v), DStr{"V " ++ Gen.par.name(k, i) ++ "t = par_fork_at(&pcs" ++ U32.show(k) ++ ", "}, c, DStr{");\n"},
                   rest, DStr{"V " ++ Gen.par.name(k, i) ++ " = par_join(" ++ Gen.par.name(k, i) ++
                   "t);\n"}])
         # The values in order: declared (in S_name), or assigned (at the
@@ -8093,7 +8093,9 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 rest : Doc <- Gen.rec(fu, GSParSeq{g, env, k, U32.inc(i), t, decl})
                 return Doc.list([DStr{Bool.pick(String, decl, "V ", "") ++ Gen.par.name(k, i) ++ " = "}, d, DStr{";\n"}, rest])
         # A seq def's parallel let: forks above the frontier (par_depth), and
-        # in order below it, through S_name.
+        # in order below it, through S_name. It runs in order too past its
+        # own cutoff (pcsN, see par_small in the runtime): the depth from
+        # which its values were measured too small to fork.
         case GSParFront{+g, +env, +sn, +k, +vs}:
           +n = List.length(&2, Core.Expr, vs)
           +lg = U32.show(Gen.par.lg(n))
@@ -8101,7 +8103,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             sq : Doc <- Gen.rec(fu, GSParSeq{g, env, k, 0, vs, False{}})
             +j : U32 <- Gen.fresh()
             fk : Doc <- Gen.rec(fu, GSParVals{g, env, j, 0, vs})
-            return Doc.list([DStr{Gen.par.decls(n, k, 0) ++ "\nif (par_depth >= par_front) {\n" ++ Gen.par.def(sn)}, sq,
+            return Doc.list([DStr{Gen.par.decls(n, k, 0) ++ "\nstatic int pcs" ++ U32.show(j) ++ ";\nif (par_depth >= par_front || par_small(&pcs" ++
+              U32.show(j) ++ ")) {\n" ++ Gen.par.def(sn)}, sq,
               DStr{Gen.par.undef(sn) ++ "} else {\npar_depth += " ++ lg ++ ";\n"}, fk,
               DStr{Gen.par.copy(n, k, j, 0) ++ "\npar_depth -= " ++ lg ++ ";\n}\n"}])
         case GSParSq{sq, +g, +env, +sn, +k, +vs}:
@@ -8478,6 +8481,50 @@ def Gen.def.dst(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr, +
       False{}, 0), ", ") ++ "); return r; }\n"})
     Gen.wrapper(name, wargs)
 
+# Whether e names k anywhere (under lambdas too). A list field is its
+# head, then the node rebuilt with the rest.
+def Expr.mentions(e: Core.Expr, +k: String) -> Bool:
+  match e:
+    case Core.EVar{+n}:
+      Str.eq(n, k)
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Expr.mentions(f, k)
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.ECall{f, t}, k))(Unit{})
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          False{}
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.ECtor{n, t}, k))(Unit{})
+    case Core.ELam{p, b}:
+      Expr.mentions(b, k)
+    case Core.ELet{p, +v, +b}:
+      Bool.pick(Unit -> Bool, Expr.mentions(v, k), u => True{}, u => Expr.mentions(b, k))(Unit{})
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.EMatch{t, cases}, k))(Unit{})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case +c <> t:
+              Bool.pick(Unit -> Bool, Expr.mentions(c, k), u => True{},
+                u => Expr.mentions(Core.EMatch{Nil{}, t}, k))(Unit{})
+    case Core.ECase{ps, b}:
+      Expr.mentions(b, k)
+    case Core.ESucc{n, x}:
+      Expr.mentions(x, k)
+    case Core.EOp{op, +a, +b}:
+      Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(b, k))(Unit{})
+    case Core.EAnn{x, ty}:
+      Expr.mentions(x, k)
+    case other:
+      False{}
+
 def Pat.is_par(p: Core.Pat) -> Bool:
   match p:
     case Core.PCtor{+n, ps}:
@@ -8525,16 +8572,86 @@ def Expr.has_par(e: Core.Expr) -> Bool:
     case other:
       False{}
 
+def Expr.copies.name(f: Core.Expr, +n: U32) -> U32:
+  match f:
+    case Core.EVar{+g}:
+      Bool.pick(U32, String.contains(g, "%s"), U32.inc(n), n)
+    case other:
+      n
+
+# n, plus 1 when the call of f whose last argument this is (xs is empty)
+# calls a copy the optimizer made (a def whose name has %s).
+def Expr.copies.head(f: Core.Expr, xs: List<&2, Core.Expr>, +n: U32) -> U32:
+  match xs:
+    case Nil{}:
+      Expr.copies.name(f, n)
+    case other:
+      n
+
+# n plus the number of calls with arguments in e to copies the optimizer
+# made, counting a match by its case with the most.
+def Expr.copies(e: Core.Expr, +n: U32) -> U32:
+  match e:
+    case Core.ECall{+f, args}:
+      match args:
+        case Nil{}:
+          n
+        case a <> +t:
+          Expr.copies(Core.ECall{f, t}, Expr.copies(a, Expr.copies.head(f, t, n)))
+    case Core.ECtor{k, args}:
+      match args:
+        case Nil{}:
+          n
+        case a <> t:
+          Expr.copies(Core.ECtor{k, t}, Expr.copies(a, n))
+    case Core.ELam{p, b}:
+      Expr.copies(b, n)
+    case Core.ELet{p, v, b}:
+      Expr.copies(b, Expr.copies(v, n))
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Expr.copies(Core.EMatch{t, cases}, Expr.copies(a, n))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              n
+            case c <> t:
+              U32.max(Expr.copies(c, n), Expr.copies(Core.EMatch{Nil{}, t}, n))
+    case Core.ECase{ps, b}:
+      Expr.copies(b, n)
+    case Core.ESucc{k, x}:
+      Expr.copies(x, n)
+    case Core.EOp{op, a, b}:
+      Expr.copies(b, Expr.copies(a, n))
+    case Core.EAnn{x, ty}:
+      Expr.copies(x, n)
+    case other:
+      n
+
+# Whether a def is a copy the optimizer made (specialized or unrolled: its
+# name has %s) that neither calls itself nor forks, and calls at most one
+# copy. Such copies come in chains (an unrolled loop: each copy calls the
+# next), which clang leaves as calls when a copy is more than a few
+# instructions; they are inlined into their callers (BEND_UINL), as
+# flat-result defs are. A copy that calls copies twice or more is left
+# alone: an unrolled tree recursion (tests/autopar.bend's gen) would
+# otherwise inline into a tree of 2^depth calls.
+def Gen.def.inl(+name: String, +body: Core.Expr) -> Bool:
+  Bool.and(Bool.and(String.contains(name, "%s"), U32.is_lt(Expr.copies(body, 0), 2)),
+    Bool.not(Bool.or(Expr.mentions(body, name), Expr.has_par(body))))
+
 def Gen.def.boxed(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
   +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
 ) -> Gen(Unit):
   +us = Gen.u32(g, name, mask)
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
+  +dhead = Bool.pick(String, Gen.def.inl(name, body), "BEND_UINL" ++ String.drop(head, 6n), head)
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n"})
     +e : Core.Expr = RC.tmp.body(Gen.rc(g), g, Env.names(env), R.ops(body, "Nat"))
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, e)
-    Gen.code(Doc.list([DStr{head ++ " {\n" ++ Gen.u32.open(us) ++ RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))),
+    Gen.code(Doc.list([DStr{dhead ++ " {\n" ++ Gen.u32.open(us) ++ RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))),
       RC.tmp.used(Fuel.max(), name, mask, e, Nil{}), 0) ++ "top:;\n"}, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
     Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
@@ -9312,50 +9429,6 @@ def Arrw.decls(ds: List<&2, Decl>) -> List<&2, Decl>:
 # they become a parallel let, as if written a b = .. ..; the fork limit
 # and a seq def's sequential clone then keep the small calls cheap. Only
 # runtime operands move: a call's erased and dead arguments stay.
-
-# Whether e names k anywhere (under lambdas too). A list field is its
-# head, then the node rebuilt with the rest.
-def Expr.mentions(e: Core.Expr, +k: String) -> Bool:
-  match e:
-    case Core.EVar{+n}:
-      Str.eq(n, k)
-    case Core.ECall{f, args}:
-      match args:
-        case Nil{}:
-          Expr.mentions(f, k)
-        case +a <> t:
-          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.ECall{f, t}, k))(Unit{})
-    case Core.ECtor{n, args}:
-      match args:
-        case Nil{}:
-          False{}
-        case +a <> t:
-          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.ECtor{n, t}, k))(Unit{})
-    case Core.ELam{p, b}:
-      Expr.mentions(b, k)
-    case Core.ELet{p, +v, +b}:
-      Bool.pick(Unit -> Bool, Expr.mentions(v, k), u => True{}, u => Expr.mentions(b, k))(Unit{})
-    case Core.EMatch{scrs, cases}:
-      match scrs:
-        case +a <> t:
-          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.EMatch{t, cases}, k))(Unit{})
-        case Nil{}:
-          match cases:
-            case Nil{}:
-              False{}
-            case +c <> t:
-              Bool.pick(Unit -> Bool, Expr.mentions(c, k), u => True{},
-                u => Expr.mentions(Core.EMatch{Nil{}, t}, k))(Unit{})
-    case Core.ECase{ps, b}:
-      Expr.mentions(b, k)
-    case Core.ESucc{n, x}:
-      Expr.mentions(x, k)
-    case Core.EOp{op, +a, +b}:
-      Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(b, k))(Unit{})
-    case Core.EAnn{x, ty}:
-      Expr.mentions(x, k)
-    case other:
-      False{}
 
 # Whether k is free in e: as Expr.mentions, but a pattern that binds k hides
 # its scope.

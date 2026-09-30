@@ -1212,6 +1212,17 @@ pthread_mutex_t par_mu = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t par_cv = PTHREAD_COND_INITIALIZER;
 pthread_cond_t par_jcv = PTHREAD_COND_INITIALIZER;
 _Atomic int par_sleepers;
+#if defined(__aarch64__) && !defined(__TINYC__)
+uint64_t par_tick_hz(void) {
+  uint64_t f;
+  __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(f));
+  return f;
+}
+#else
+uint64_t par_tick_hz(void) { return 1000000000u; }
+#endif
+uint64_t par_t0;
+uint64_t par_age = 0;
 PDeque *pdq_new(void) {
   PDeque *d = calloc(1, sizeof(PDeque));
   d->mask = (1 << 16) - 1;
@@ -1244,6 +1255,7 @@ PTask *pdq_steal(PDeque *d) {
     PTask *x = __atomic_load_n(&d->buf[t & d->mask], __ATOMIC_RELAXED);
     // (x may be gone, when the CAS fails; a task is held only before it
     // is let go)
+    if (par_now() - (uint64_t)__atomic_load_n(&x->res, __ATOMIC_RELAXED) < par_age) return NULL;
     if (__atomic_load_n(&x->state, __ATOMIC_ACQUIRE) == P_HELD) {
       if (!atomic_load_explicit(&d->want, memory_order_relaxed))
         atomic_store_explicit(&d->want, 1, memory_order_relaxed);
@@ -1337,6 +1349,12 @@ void par_hook(void) {
 void par_start(void) {
   pthread_mutex_lock(&par_mu);
   if (!atomic_load(&par_started)) {
+    {
+      const char *e = getenv("BEND_STEAL_AGE_US");
+      uint64_t us = e && *e ? (uint64_t)atoll(e) : 20;
+      par_age = par_tick_hz() / 16 * us / 1000000;
+      par_t0 = par_ticks();
+    }
     gc_mt = 1;
     gc_hot.mt = 1;
     gc_hot.rcmt = gc_hot.rc;
@@ -1364,7 +1382,7 @@ __attribute__((noinline)) void par_serve(PDeque *d) {
     }
   }
 }
-V par_fork(V clo) {
+V par_fork_at(int *site, V clo) {
 #ifdef BEND_DEBUG_FREE
   // Debugging, on one thread: BEND_DEBUG_EAGER runs forks as they are made,
   // in the order other threads may run them (the result boxed, tagged 4).
@@ -1381,18 +1399,25 @@ V par_fork(V clo) {
   long tp = atomic_load_explicit(&d->top, memory_order_relaxed);
   if (b - tp >= 4) return clo | 2;
   if (UNLIKELY(!atomic_load_explicit(&par_started, memory_order_relaxed))) par_start();
-  PTask *t = (PTask *)halloc(4);
+  PTask *t = (PTask *)halloc(5);
   t->clo = clo;
+  t->site = site;
   t->depth = (V)par_depth;
+  uint64_t now = par_now();
+  t->res = (V)now;
   t->state = gc_hot.rc ? P_HELD : P_QUEUED;
   __atomic_store_n(&d->buf[b & d->mask], t, __ATOMIC_RELAXED);
   atomic_thread_fence(memory_order_release);
   atomic_store_explicit(&d->bot, b + 1, memory_order_relaxed);
+  // A sleeper is woken for the oldest task here once it is old enough.
   if (atomic_load_explicit(&par_sleepers, memory_order_relaxed) > 0 &&
-      atomic_load_explicit(&par_searching, memory_order_relaxed) == 0)
-    pthread_cond_signal(&par_cv);
+      atomic_load_explicit(&par_searching, memory_order_relaxed) == 0) {
+    PTask *o = __atomic_load_n(&d->buf[tp & d->mask], __ATOMIC_RELAXED);
+    if (b > tp && now - (uint64_t)o->res >= par_age) pthread_cond_signal(&par_cv);
+  }
   return (V)t;
 }
+V par_fork(V clo) { return par_fork_at(NULL, clo); }
 V par_join(V tv) {
   if (tv & 4) return ((V *)(tv & ~(V)4))[0];
   if (tv & 2) return apply(tv & ~(V)2, 0);
@@ -1402,7 +1427,11 @@ V par_join(V tv) {
   PTask *p = pdq_pop(d);
   if (p == t) {
     V clo = t->clo;
-    if (gc_hot.rc) rc_free_at((V)t, 4);
+    if (t->site) {
+      if (par_now() - (uint64_t)t->res < par_age) par_site_small(t->site, (int)t->depth);
+      else par_site_big(t->site, (int)t->depth);
+    }
+    if (gc_hot.rc) rc_free_at((V)t, 5);
     return apply(clo, 0);
   }
   if (p) par_exec(p);
@@ -1429,7 +1458,8 @@ V par_join(V tv) {
     pthread_mutex_unlock(&par_mu);
   }
   V r = t->res;
-  if (gc_hot.rc) rc_free_at((V)t, 4);
+  if (t->site) par_site_big(t->site, (int)t->depth);
+  if (gc_hot.rc) rc_free_at((V)t, 5);
   return r;
 }
 int cpu_count(void) {
