@@ -17171,11 +17171,128 @@ def KQ.tail.go(+g: G, +env: Env(), +e: U32, s: Split) -> KM(Unit):
     K.put(Doc.list([DStr{"{ "}, KX.temps(ds, k, 0), DStr{KQ.pass(k, U32.to_nat(Gen.len(ds)), 0) ++
       "if (c->err) { *ok = false; return 0; }\npc = " ++ U32.show(e) ++ "; break; }\n"}]))
 
+# Typed reclamation for closed, headered recursive Data. Scalar fields
+# are never inspected as pointers; all other fields must have the same Data
+# type. Only producers with scalar inputs are selected: calls that take a
+# tree usually allocate just their live output, so copying it buys nothing.
+# Runtime-owned layouts, parameters, arrays and unknown fields reject.
+def KQ.tree.field.ok(+name: String, +t: Core.Expr) -> Bool:
+  Bool.or(Str.eq(P.head(t), name), Gen.scalar.ty(P.head(t)))
+
+def KQ.tree.fields.ok(+name: String, fs: List<&2, Field>) -> Bool:
+  match fs:
+    case Nil{}:
+      True{}
+    case Field{x, t} <> rest:
+      Bool.and(KQ.tree.field.ok(name, t), KQ.tree.fields.ok(name, rest))
+
+def KQ.tree.fields.mask(+name: String, fs: List<&2, Field>, +i: U32) -> U32:
+  match fs:
+    case Nil{}:
+      0
+    case Field{x, t} <> rest:
+      U32.or(Bool.pick(U32, Str.eq(P.head(t), name), U32.shln(1, U32.to_nat(i)), 0), KQ.tree.fields.mask(name, rest, U32.inc(i)))
+
+def KQ.tree.ctor.ok(m: Maybe<&2, CInfo>, +i: U32) -> Bool:
+  match m:
+    case Some{CInfo{tag, ar, +kind, single}}:
+      Bool.and(U32.is_eq(tag, i), Bool.or(U32.is_zero(kind), U32.is_eq(kind, 1)))
+    case None{}:
+      False{}
+
+def KQ.tree.ctors.ok(+g: G, +name: String, cs: List<&2, Ctor>, +i: U32) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case Ctor{x, +fs} <> rest:
+      Bool.and(KQ.tree.ctor.ok(G.ctor(g, x), i), Bool.and(U32.is_le(U32.from_nat(List.length(&2, Field, fs)), 30),
+        Bool.and(KQ.tree.fields.ok(name, fs), KQ.tree.ctors.ok(g, name, rest, U32.inc(i)))))
+
+def KQ.tree.ctors.rec(+name: String, cs: List<&2, Ctor>) -> Bool:
+  match cs:
+    case Nil{}:
+      False{}
+    case Ctor{x, fs} <> rest:
+      Bool.or(Bool.not(U32.is_zero(KQ.tree.fields.mask(name, fs, 1))), KQ.tree.ctors.rec(name, rest))
+
+def KQ.tree.masks(+name: String, cs: List<&2, Ctor>) -> String:
+  match cs:
+    case Nil{}:
+      ""
+    case Ctor{x, fs} <> rest:
+      ", " ++ U32.show(KQ.tree.fields.mask(name, fs, 1)) ++ KQ.tree.masks(name, rest)
+
+def KQ.tree.type(+g: G, +name: String, d: Decl) -> String:
+  match d:
+    case DType{n, ps, +cs}:
+      +allowed = Bool.not(Str.has(["String", "Image", "Event", "IO.OP", "App", "Word", "U32", "F32", "Char",
+        "Nat", "Array", "Bool", "Unit", "Cmp", "Empty"], name))
+      Bool.pick(String, Bool.and(allowed, Bool.and(Nat.is_eq(List.length(&2, String, ps), 0n),
+        Bool.and(U32.is_le(U32.from_nat(List.length(&2, Ctor, cs)), 32), Bool.and(KQ.tree.ctors.ok(g, name, cs, 0), KQ.tree.ctors.rec(name, cs))))),
+        U32.show(U32.from_nat(List.length(&2, Ctor, cs))) ++ KQ.tree.masks(name, cs), "")
+    case other:
+      ""
+
+def KQ.tree.ps(+name: String, ps: List<&2, Core.Param>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Core.Param{x, mode, +ty} <> rest:
+      Bool.and(Gen.scalar.ty(ty), KQ.tree.ps(name, rest))
+
+def KQ.tree.schema.go(+name: String, +shape: String, m: Maybe<&2, String>) -> KM(String):
+  match m:
+    case Some{id}:
+      KM.pure(String, id)
+    case None{}:
+      do KM<String>:
+        +k : U32 <- K.fresh()
+        +id : String = U32.show(k)
+        K.memo.put("%kqtree " ++ name, id)
+        K.memo.put("%kqtree-def", "KCONST KW K_TREE_" ++ id ++ "[] = {" ++ shape ++ "};\n")
+        K.memo.put("%kqtree-case", "case " ++ id ++ ": return K_TREE_" ++ id ++ ";\n")
+        return id
+
+def KQ.tree.schema(+name: String, +shape: String) -> KM(String):
+  do KM<String>:
+    m : Maybe<&2, String> <- K.memo.get("%kqtree " ++ name)
+    KQ.tree.schema.go(name, shape, m)
+
+def KQ.tree.entry.go(+name: String, +shape: String, empty: Bool) -> KM(Unit):
+  match empty:
+    case True{}:
+      KM.pure(Unit, Unit{})
+    case False{}:
+      do KM<Unit>:
+        +id : String <- KQ.tree.schema(name, shape)
+        K.putS("K_TREE_MARK(" ++ id ++ ");\n")
+
+def KQ.tree.entry(+g: G, d: Decl) -> KM(Unit):
+  match d:
+    case DDef{n, ps, body, ret}:
+      +name = P.head(ret)
+      +shape = Bool.pick(String, KQ.tree.ps(name, ps), KQ.tree.type(g, name, G.body(g, "%" ++ name)), "")
+      KQ.tree.entry.go(name, shape, String.is_empty(shape))
+    case other:
+      KM.pure(Unit, Unit{})
+
+def KQ.tree.memo(+key: String, memo: List<&2, Bind>) -> String:
+  match memo:
+    case Nil{}:
+      ""
+    case Bind{k, v} <> rest:
+      Bool.pick(String, Str.eq(key, k), v, "") ++ KQ.tree.memo(key, rest)
+
+def KQ.tree.defs(+memo: List<&2, Bind>) -> String:
+  "KCONST KW K_TREE_EMPTY[] = {0};\n" ++ KQ.tree.memo("%kqtree-def", memo) ++
+    "KINLINE KCP KW *k_tree_schema(KW id) {\nswitch(id) {\n" ++ KQ.tree.memo("%kqtree-case", memo) ++
+    "default: return K_TREE_EMPTY;\n}\n}\n"
+
 # A value to return: to the caller's resume label, or out of KQ_name.
 def KQ.ret(+g: G, +env: Env(), e: Core.Expr) -> KM(Unit):
   do KM<Unit>:
     d : Doc <- KX.expr(g, env, e)
-    K.put(Doc.list([DStr{"RV = "}, d, DStr{";\nif (sp == 0) return RV;\nsp -= 1; pc = KQ_ST(sp); break;\n"}]))
+    K.put(Doc.list([DStr{"RV = "}, d, DStr{";\nK_TREE_RET;\nif (sp == 0) return RV;\nsp -= 1; pc = KQ_ST(sp); break;\n"}]))
 
 # A parallel let runs in order: a let per value.
 def KQ.par.lets(ps: List<&2, Core.Pat>, vs: List<&2, Core.Expr>, body: Core.Expr) -> Core.Expr:
@@ -17358,11 +17475,12 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                 K.memo.put("%kqe " ++ name ++ " " ++ name, U32.show(l))
                 K.start(l)
                 K.putS(KQ.entry(k, n, 0) ++ "\n")
+                KQ.tree.entry(g, G.body(g, name))
                 KQ.go(fu, KQSStmt{g, KQ.sig(ps, mask, k, 0), KSelf{name, l, mask}, KQ.anf(g, bound, R.ops(body, "Nat"))})
                 K.start(0)
                 blocks : Doc <- K.cap.take(saved)
                 K.flat.add(Doc.list([DStr{"\nKINLINE KW KQ_" ++ Gen.mangle(name) ++ "(KTHR KCtx *c" ++ KQ.params(n, 0) ++
-                  ", KTHR bool *ok) {\nKQ_STACK;\nKW sp = 0, pc = " ++ U32.show(l) ++ ", RV = 0, st = c->kqlim;\n" ++ KQ.init(n, 0) ++
+                  ", KTHR bool *ok) {\nKQ_STACK; K_TREE_STACK;\nKW sp = 0, pc = " ++ U32.show(l) ++ ", RV = 0, st = c->kqlim;\n" ++ KQ.init(n, 0) ++
                   KQ.init.rest(Nat.sub(12n, n), U32.from_nat(n)) ++
                   "for (;;) {\nif (st-- == 0 || c->err != 0) { *ok = false; return 0; }\nswitch (pc) {\n"}, blocks,
                   DStr{"default:\n*ok = false;\nreturn 0;\n}\n}\n}\n"}]))
@@ -17434,6 +17552,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                 +k : U32 <- K.fresh()
                 K.start(l)
                 K.putS(KQ.entry(k, U32.to_nat(K.kept(mask)), 0) ++ "\n")
+                KQ.tree.entry(g, G.body(g, f))
                 KQ.go(fu, KQSStmt{g, KQ.sig(ps, mask, k, 0), KSelf{f, l, mask}, KQ.anf(g, K.params(ps, mask), R.ops(body, "Nat"))})
                 K.restore(saved)
             case other:
@@ -18848,7 +18967,7 @@ def K.fin(r: Unit & KSt) -> KOut:
   KSt{+n, sl, +curl, cur, out, +fns, todo, +frames, errs, flat, +memo} = st
   KOut{Doc.flat(Doc.list([DStr{"#define K_NLABELS " ++ U32.show(n) ++ "\n" ++ K.defines(fns) ++ "KCONST KW K_FRAME[] = {" ++
     K.frame_table(frames, 0, n) ++ "0};\n\nKINLINE KW k_frame_size(KW l) {\n  return l < K_NLABELS ? K_FRAME[l] : 0;\n}\n\n"},
-    flat, DStr{"\nKINLINE KW k_kq(KTHR KCtx *c, KTHR bool *ok) {\nswitch (c->kq) {\n" ++ KQ.cases.of(memo) ++
+    DStr{KQ.tree.defs(memo)}, flat, DStr{"\nKINLINE KW k_kq(KTHR KCtx *c, KTHR bool *ok) {\nswitch (c->kq) {\n" ++ KQ.cases.of(memo) ++
     "default:\n*ok = false;\nreturn 0;\n}\n}\n#ifndef __METAL_VERSION__\n#define K_KQH_LIST " ++ KQ.hosts.of(memo) ++
     "\n#endif\n"}, DStr{"\nKINLINE void k_cases(KTHR KCtx *c) {\nswitch (c->pc) {\n"}, out, K.block_doc(curl, cur),
     DStr{"default: {\nk_fail(c, KE_PC);\nbreak;\n}\n}\n}\n"}])), K.wraps(fns), errs}

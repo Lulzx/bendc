@@ -304,6 +304,80 @@ KINLINE void k_rewind(KTHR KCtx *c, KW h0, KW e0, KW b0) {
 }
 #define KSCAL(e) ({ KW kh0_ = c->hp, ke0_ = c->he, kb0_ = c->blocks; KU kr_ = (e); if (c->err == 0) k_rewind(c, kh0_, ke0_, kb0_); kr_; })
 
+
+// Prototype for a closed, headered recursive Data. Masks name self-typed
+// fields by payload position (bit zero is the constructor header).
+KINLINE bool k_tree_new(KTHR KCtx *c, KW h0, KW e0, KW b0, KW v) {
+  if (!k_in(c,v)) return false;
+  KW ix=KIX(c,v);
+  if (ix>h0 && ix<e0) return true;
+  for (KW at=c->blocks;at!=b0;at=c->H[at])
+    if (ix>at+2 && ix<at+c->H[at+1]*K_CHUNK) return true;
+  return false;
+}
+KINLINE KW k_tree_copy_node(KTHR KCtx *src,KTHR KCtx *out,KW v) {
+  KW ix=KIX(src,v), n=src->H[ix-1];
+  if (n & K_BARE) { k_fail(out,KE_MATCH);return 0; }
+  KW r=k_alloc(out,n);
+  if (out->err) return 0;
+  for(KW i=0;i<n;i++) out->H[KIX(out,r)+i]=src->H[ix+i];
+  return r;
+}
+KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
+                       KCP KW *masks,KW nmasks) {
+  if(c->err || !k_tree_new(c,h0,e0,b0,r)) return r;
+  KCtx out=*c;out.hp=out.he=out.hs=0;out.blocks=b0;
+  KW root=k_tree_copy_node(c,&out,r);
+  KW src[64],dst[64],next[64],depth=1,steps=0;
+  src[0]=r;dst[0]=root;next[0]=1;
+  bool abort=false;
+  while(depth && !out.err) {
+    KW d=depth-1,ix=KIX(c,src[d]),n=c->H[ix-1],tag=c->H[ix]&0xffcfffff;
+    if(tag>=nmasks || n>=64 || ++steps>131072) {abort=true;break;}
+    KW mask=masks[tag];
+    while(next[d]<n && !(mask&((KW)1<<next[d]))) next[d]++;
+    if(next[d]==n) {depth--;continue;}
+    KW i=next[d]++,v=c->H[ix+i];
+    if(!k_tree_new(c,h0,e0,b0,v)) continue;
+    if(depth==64) {abort=true;break;}
+    KW copied=k_tree_copy_node(c,&out,v);
+    if(out.err) break;
+    out.H[KIX(&out,dst[d])+i]=copied;
+    src[depth]=v;dst[depth]=copied;next[depth]=1;depth++;
+  }
+  if(abort || out.err) {
+    // Only private output was written. The source and its span links remain
+    // valid; return output spans to the lane, and propagate heap failures.
+    k_rewind(&out,0,0,b0);
+    c->spare=out.spare;
+    if(out.err) k_fail(c,out.err);
+    return r;
+  }
+  while(c->blocks!=b0) {
+    KW at=c->blocks;c->blocks=c->H[at];c->H[at]=out.spare;out.spare=at;
+  }
+  c->hp=out.hp;c->he=out.he;c->hs=out.hs;
+  c->blocks=out.blocks;c->spare=out.spare;k_anone(c);
+  return root;
+}
+
+#define K_TREE_STACK KW kt_birth[32][5], kt_nb=0
+#define K_TREE_MARK(id) do { \
+  if(kt_nb==0 || kt_birth[kt_nb-1][3]!=sp) { \
+    if(kt_nb==32){*ok=false;return 0;} \
+    kt_birth[kt_nb][0]=c->hp;kt_birth[kt_nb][1]=c->he; \
+    kt_birth[kt_nb][2]=c->blocks;kt_birth[kt_nb][3]=sp; \
+    kt_birth[kt_nb][4]=(id);kt_nb++; \
+  } \
+} while(0)
+#define K_TREE_RET do { \
+  while(kt_nb && kt_birth[kt_nb-1][3]==sp) { \
+    kt_nb--;KCP KW *kt_schema=k_tree_schema(kt_birth[kt_nb][4]); \
+    RV=k_tree_compact(c,kt_birth[kt_nb][0],kt_birth[kt_nb][1],kt_birth[kt_nb][2],RV,kt_schema+1,kt_schema[0]); \
+    if(c->err){*ok=false;return 0;} \
+  } \
+} while(0)
+
 // A flat def keeps a Nat parameter in a KU: a Nat past 2^32 - 1 fails the call
 // over to the CPU (a counted loop never gets there). KSET assigns a parameter
 // at a tail call, with that check for a KU (a U32, F32 or Bool passes it).

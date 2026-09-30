@@ -1,0 +1,58 @@
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <string.h>
+#include <math.h>
+#include "gpu.h"
+KINLINE KW k_frame_size(KW l) { (void)l; return 0; }
+KINLINE void k_cases(KCtx *c) { k_fail(c, KE_PC); }
+KINLINE KW k_kq(KCtx *c, bool *ok) { (void)c; *ok=false; return 0; }
+static KW masks[]={0,6};
+static KW leaf(KCtx*c,KW a) {KW p=k_node(c,0,3),i=KIX(c,p);c->H[i+1]=a;c->H[i+2]=2;c->H[i+3]=3;return p;}
+static KW pair(KCtx*c,KW a,KW b) {KW p=k_node(c,1,2),i=KIX(c,p);c->H[i+1]=a;c->H[i+2]=b;return p;}
+static KW make(KCtx*c,int d,KW a) {if(!d)return leaf(c,a);KW l=make(c,d-1,a),r=make(c,d-1,a);return pair(c,l,r);}
+static KW merge(KCtx*c,KW a,KW b) {if(!k_tag(c,a))return leaf(c,k_word(c,a,1)+k_word(c,b,1));KW l=merge(c,k_word(c,a,1),k_word(c,b,1));KW r=merge(c,k_word(c,a,2),k_word(c,b,2));return pair(c,l,r);}
+static KW sum(KCtx*c,KW a) {return !k_tag(c,a)?k_word(c,a,1):sum(c,k_word(c,a,1))+sum(c,k_word(c,a,2));}
+static KW fold(KCtx*c,int depth,int compact) {
+  KW h0=c->hp,e0=c->he,b0=c->blocks,r;
+  if(!depth)r=make(c,3,1);
+  else {KW l=fold(c,depth-1,compact);if(c->err)return 0;KW right=fold(c,depth-1,compact);if(c->err)return 0;r=merge(c,l,right);}
+  return compact?k_tree_compact(c,h0,e0,b0,r,masks,2):r;
+}
+static void init(KCtx*c,KParams*p,KW*h,KAU*a,KW words) {memset(c,0,sizeof(*c));memset(p,0,sizeof(*p));memset(h,0,words*8);memset(a,0,32*4);p->ab=(KW)h;p->an=words*8;p->heap0=256;p->heapw=words-256;c->H=h;c->A=a;c->ab=p->ab;c->an=p->an;c->P=p;K_STORE(a+KA_HEAP,1);}
+int main(void) {
+  KW words=65536;KW*h=calloc(words,8);KAU a[32];KCtx c;KParams p;
+  for(int compact=0;compact<2;compact++) {
+    init(&c,&p,h,a,words);KW r=0;int count=0;
+    for(;count<128;count++) {
+      KW h0=c.hp,e0=c.he,b0=c.blocks;
+      r=fold(&c,10,compact);if(c.err)break;assert(sum(&c,r)==8192);
+      k_rewind(&c,h0,e0,b0);
+    }
+
+    if(compact)assert(count==128 && a[KA_HEAP]<80);else assert(count<128 && c.err==KE_HEAP);
+  }
+  // A scalar equal to an arena pointer must not be rewritten.
+  init(&c,&p,h,a,words);KW scalar=KPTR(&c,513),r=leaf(&c,scalar);
+  r=k_tree_compact(&c,0,0,0,r,masks,2);assert(k_word(&c,r,1)==scalar);
+  // DAG aliases may be copied separately; their values must survive.
+  init(&c,&p,h,a,words);KW l=leaf(&c,7);r=pair(&c,l,l);
+  r=k_tree_compact(&c,0,0,0,r,masks,2);assert(sum(&c,r)==14);
+  // Older objects in the starting span must retain both address and data.
+  init(&c,&p,h,a,words);KW older=leaf(&c,7),h0=c.hp,e0=c.he,b0=c.blocks;
+  r=pair(&c,older,leaf(&c,9));
+  r=k_tree_compact(&c,h0,e0,b0,r,masks,2);
+  assert(k_word(&c,r,1)==older && sum(&c,r)==16 && sum(&c,older)==7);
+  assert(k_tree_compact(&c,c.hp,c.he,c.blocks,older,masks,2)==older);
+  // Depth guard aborts without modifying the source graph.
+  init(&c,&p,h,a,words);r=leaf(&c,1);for(int i=0;i<70;i++)r=pair(&c,r,leaf(&c,0));
+  KW old=r,check=sum(&c,r);r=k_tree_compact(&c,0,0,0,r,masks,2);assert(r==old && c.err==0 && sum(&c,r)==check);
+  // Output allocation failure preserves the source for host retry.
+  init(&c,&p,h,a,words);r=make(&c,7,9);old=r;check=sum(&c,r);
+  p.heapw=a[KA_HEAP]*K_CHUNK;
+  r=k_tree_compact(&c,0,0,0,r,masks,2);assert(r==old && c.err==KE_HEAP && sum(&c,r)==check);
+  free(h);puts("ok");
+}
