@@ -288,10 +288,10 @@ typedef struct Thr {
   GcCache cache[2][GC_NCLS];
   uint32_t rcur[GC_NCLS];   // where the next search for a reuse block starts
   size_t since;             // bytes handed out not yet added to gc_since
-  // Its candidate bits (see gc_cand; the first thread's are gc_cand): the
-  // blocks where it freed slots, which it reuses. Only it reads and writes
-  // them (when counting references, all threads use gc_cand).
-  uint64_t *cand;
+  // Its candidate bytes (see gc_cand), less the heap's first block index:
+  // byte node >> GC_BLK_SHIFT is c + 1 when it freed a slot of class c in
+  // the node's block, which it then reuses. Only it reads and writes them.
+  uintptr_t candb;
   V *rcs; size_t rcn, rccap; // reference counting: the objects rc_free_obj has yet to free
   uintptr_t top;
   volatile uintptr_t sp;
@@ -374,13 +374,17 @@ static V *gc_rem;
 static size_t gc_nrem, gc_caprem;
 static V *gc_rem_prev;  // the last collection's, sorted (while this one roots)
 static size_t gc_nprev, gc_capprev;
-// Per class, a bit per block: matches freed slots in it (GC_CANDW words a
-// class). Each thread has its own (Thr.cand), and reuses the blocks where
-// it freed: a block another thread freed in, or allocates in, has lines
-// that thread holds, and taking its free slots made every access slower
-// (with shared bits, two threads each sorting a tree of its own took a
-// third more cycles than one thread sorting both, and tree-bitonic on 12
-// threads 95G cycles, 74G with a thread's own).
+// Reuse candidates: the blocks where matches freed slots, by class. Under
+// the collector each thread has its own (Thr.candb), and reuses the blocks
+// where it freed: a block another thread freed in, or allocates in, has
+// lines that thread holds, and taking its free slots made every access
+// slower (with shared bits, two threads each sorting a tree of its own took
+// a third more cycles than one thread sorting both, and tree-bitonic on 12
+// threads 95G cycles, 74G with a thread's own). They are a byte per block
+// (the block's class + 1), one store on a free, where a bit per block and
+// class was a load, an or and a store at a computed word (8 instructions
+// of the free's 31). Counted programs share these bits instead, a bit per
+// block and class (GC_CANDW words a class), set by rc_free_slot.
 #define GC_CANDW (GC_MAXBLK / 64)
 static uint64_t *gc_cand;
 // More than one thread runs Bend code (frees must then be atomic).
@@ -391,7 +395,13 @@ static int bend_rc_req;
 // What bend_take and bend_share read, together (one address to load).
 typedef struct GcHot {
   uintptr_t base, span;  // the heap: gc_base, and gc_top in bytes
-  uint64_t *abits, *cand;
+  // gc_abits less the heap's first block's 64 words: a node's words are at
+  // abits + (node >> GC_BLK_SHIFT) * 64 (the heap is aligned to a block, so
+  // the node's offset in its block is its low 16 bits: no base to subtract)
+  uintptr_t abits;
+  // The first thread's candidate bytes (Thr.candb): a free is one byte
+  // stored, candb[node >> GC_BLK_SHIFT] = class + 1.
+  uintptr_t candb;
   int mt;
   int rc;  // reference counting (a program compiled with BEND_RC=1): no collections
   int rcmt; // rc and mt: a slot's allocation bit is set atomically
@@ -460,7 +470,10 @@ static void *gc_reserve(size_t bytes, void *hint) {
 
 static void gc_init(void) {
   // A high address keeps small numbers from looking like heap pointers.
-  gc_base = gc_reserve(GC_MAXBLK << GC_BLK_SHIFT, (void *)((uintptr_t)1 << 44));
+  // (aligned to a block: a node's block is node >> GC_BLK_SHIFT less the
+  // base's, and its offset in it its low bits)
+  gc_base = gc_reserve((GC_MAXBLK + 1) << GC_BLK_SHIFT, (void *)((uintptr_t)1 << 44));
+  gc_base = (char *)(((uintptr_t)gc_base + GC_BLK - 1) & ~(GC_BLK - 1));
   if ((uintptr_t)gc_base < ((uintptr_t)1 << 32)) bend_fail("the heap must be above 4 GB (bend_share)");
   gc_kind = gc_reserve(GC_MAXBLK, NULL);
   gc_dirty = gc_reserve(GC_MAXBLK, NULL);
@@ -472,7 +485,8 @@ static void gc_init(void) {
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
-  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0,
+  gc_hot = (GcHot){(uintptr_t)gc_base, 0,
+    (uintptr_t)gc_abits - ((uintptr_t)gc_base >> GC_BLK_SHIFT) * 64 * sizeof(uint64_t), 0, 0, bend_rc_req, 0,
     (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT)};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
@@ -641,18 +655,31 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
     t->claiming = 1;
     atomic_signal_fence(memory_order_seq_cst);
     int shared = gc_hot.rc;  // (counting: rc_free_slot sets gc_cand's bits)
-    uint64_t *cand = (shared ? gc_cand : t->cand) + (size_t)c * GC_CANDW;
-    uintptr_t nw = (gc_top + 63) >> 6;
+    uint64_t *cand = shared ? gc_cand + (size_t)c * GC_CANDW : NULL;
+    // (under the collector, the thread's candidate bytes, 8 blocks a word:
+    // f gets bit 8k + 7 for each byte k that is c + 1)
+    uint64_t *cb = (uint64_t *)(t->candb + ((uintptr_t)gc_base >> GC_BLK_SHIFT));
+    uint64_t lo = 0x0101010101010101ull, pat = lo * (c + 1);
+    int sh = shared ? 6 : 3;
+    uintptr_t nw = (gc_top + (1u << sh) - 1) >> sh;
     uintptr_t at = t->rcur[c] < gc_top ? t->rcur[c] : 0;
     for (uintptr_t n = 0; b == NULL && n <= nw; n++) {
-      uintptr_t w = ((at >> 6) + n) % (nw ? nw : 1);
-      uint64_t f = cand[w];
-      if (n == 0) f &= ~0ull << (at & 63);
+      uintptr_t w = ((at >> sh) + n) % (nw ? nw : 1);
+      uint64_t f;
+      if (shared) {
+        f = cand[w];
+        if (n == 0) f &= ~0ull << (at & 63);
+      } else {
+        uint64_t x = cb[w] ^ pat;
+        f = (x - lo) & ~x & (lo << 7);
+        if (n == 0) f &= ~0ull << ((at & 7) * 8);
+      }
       while (f && b == NULL) {
-        uintptr_t bi = (w << 6) + (uintptr_t)__builtin_ctzll(f);
+        uintptr_t bi = shared ? (w << 6) + (uintptr_t)__builtin_ctzll(f) : (w << 3) + ((uintptr_t)__builtin_ctzll(f) >> 3);
         f &= f - 1;
         if (shared) __atomic_fetch_and(&cand[w], ~(1ull << (bi & 63)), __ATOMIC_RELAXED);
-        else cand[w] &= ~(1ull << (bi & 63));
+        else if (((uint8_t *)cb)[bi] != c + 1) continue;  // (the test's false positives)
+        else ((uint8_t *)cb)[bi] = 0;
         if (bi >= gc_top || __atomic_load_n(&gc_kind[bi], __ATOMIC_ACQUIRE) != 1) continue;
         GcBlk *q = gc_blk(bi);
         if (q->cls != c || q->atomic || __atomic_load_n(&q->owned, __ATOMIC_RELAXED)) continue;
@@ -882,9 +909,16 @@ __attribute__((noinline)) static void bend_deep(V v, unsigned w) {
 #define BEND_IN_HEAP(v) ((void)0)
 #endif
 static inline void bend_free_slot(V v, unsigned w, unsigned line);
+// A take reads the tag word as the match's test did (IS_N), a plain load the
+// compiler folds into that one. Only a shared node's word needs acquire (its
+// BEND_DEEP publishes its fields' marks: see bend_deep): the fence is on that
+// path. An unshared node is the thread's alone (it came to the thread through
+// a fork or a join, which order what was written before).
+#define BEND_TAG_WORD(v) (((V *)(v))[0])
 static inline int bend_take_at(V v, unsigned w, unsigned line) {
-  V w0 = __atomic_load_n((V *)v, __ATOMIC_ACQUIRE);
+  V w0 = BEND_TAG_WORD(v);
   if (w0 & BEND_SH) {
+    atomic_thread_fence(memory_order_acquire);
     if (!(w0 & BEND_DEEP)) bend_deep(v, w);
     return 1;
   }
@@ -897,11 +931,10 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
 // Frees the slot of an unshared node v of w (2 to 16) words in the heap.
 static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   const GcHot *h = &gc_hot;
-  uintptr_t off = (uintptr_t)v - h->base;
-  uintptr_t bi = off >> GC_BLK_SHIFT;
-  uint32_t i = (uint32_t)(((off & (GC_BLK - 1)) - GC_HDR) / (w * sizeof(V)));
+  uintptr_t bi = (uintptr_t)v >> GC_BLK_SHIFT;  // (less the base's: see GcHot)
+  uint32_t i = (uint32_t)((((uintptr_t)v & (GC_BLK - 1)) - GC_HDR) / (w * sizeof(V)));
   uint64_t bit = 1ull << (i & 63);
-  uint64_t *aw = &h->abits[bi * 64 + (i >> 6)];
+  uint64_t *aw = (uint64_t *)(h->abits + (bi * 64 + (i >> 6)) * sizeof(uint64_t));
 #ifdef BEND_DEBUG_FREE
   // Debugging: the node is poisoned with the line that freed it and the
   // free's number, and kept. BEND_DEBUG_FREE_AT=n aborts at free number n.
@@ -920,7 +953,6 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
 #endif
   (void)line;
   BEND_POISON_AT(v, w);
-  size_t cx = (size_t)(w - 2) * GC_CANDW + (bi >> 6);
   // A freed slot is young when it is handed out again: the thread that
   // hands it out clears its mark (gc_next_bits). Cleared here, after the
   // allocation bit, it could be the mark of the object another thread made
@@ -936,10 +968,10 @@ static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   if (UNLIKELY(h->mt)) {
     __atomic_fetch_and(aw, ~bit, __ATOMIC_RELEASE);
     // (a sample of the frees: the thread's bits are a few loads away)
-    if ((i & 15) == 0) thr_self->cand[cx] |= 1ull << (bi & 63);
+    if ((i & 15) == 0) ((uint8_t *)thr_self->candb)[bi] = (uint8_t)(w - 1);
   } else {
     *aw &= ~bit;
-    h->cand[cx] |= 1ull << (bi & 63);
+    ((uint8_t *)h->candb)[bi] = (uint8_t)(w - 1);
   }
 }
 
@@ -1892,7 +1924,8 @@ static void thr_register(uintptr_t top) {
   pthread_mutex_lock(&gc_lock);
   if (gc_nthr == GC_MAXTHR) bend_fail("too many threads");
   gc_thrs[gc_nthr] = t;
-  t->cand = gc_nthr == 0 ? gc_cand : gc_reserve(GC_RQCLS * GC_CANDW * sizeof(uint64_t), NULL);
+  t->candb = (uintptr_t)gc_reserve(GC_MAXBLK, NULL) - ((uintptr_t)gc_base >> GC_BLK_SHIFT);
+  if (gc_nthr == 0) gc_hot.candb = t->candb;
   int n1 = gc_nthr + 1;  // tcc's __atomic_store_n evaluates its value twice
   __atomic_store_n(&gc_nthr, n1, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&gc_lock);
@@ -1973,8 +2006,9 @@ static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
 // it does an old Array.)
 // RUFG frees a token no constructor took.
 static inline V bend_take_ru(V v, unsigned w) {
-  V w0 = __atomic_load_n((V *)v, __ATOMIC_ACQUIRE);
+  V w0 = BEND_TAG_WORD(v);
   if (w0 & BEND_SH) {
+    atomic_thread_fence(memory_order_acquire);
     if (!(w0 & BEND_DEEP)) bend_deep(v, w);
     return 0;
   }
