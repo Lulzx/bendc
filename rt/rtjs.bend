@@ -208,6 +208,8 @@ def src.p3() -> String:
   "const F_Chk_dmemo_dhas = (m, v) => m[0] !== undefined && m[0] === v;\n" ++
   "const F_Chk_dmemo_dget = (m) => m[1];\n" ++
   "const F_Chk_dmemo_dset = (m, v, x) => (m[1] = x, m[0] = v, x);\n" ++
+  "const F_Chk_dmemo_dsame = (m, n) => m === n;\n" ++
+  "const F_Chk_dmemo_dlink = (same, m, n) => (same && m[0] !== undefined && n[0] !== undefined && (m[1] = n[1]), same);\n" ++
   "const F_Array_dget = (a, i) => ({ $: \"Tuple\", fst: a, snd: a[i % a.length] });\n" ++
   "const F_Array_dswap = (a, i, v) => array_rmw(a, i, () => v);\n" ++
   "const F_Array_dset = (a, i, v) => ((a[i % a.length] = v), a);\n" ++

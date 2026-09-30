@@ -3861,6 +3861,7 @@ def Natives() -> List<&2, String>:
    "Nat.mod", "Nat.cmp", "Nat.is_eq", "Nat.is_ne", "Nat.is_lt", "Nat.is_le",
    "Nat.is_gt", "Nat.is_ge", "Nat.min", "Nat.max", "Nat.pow", "Nat.show",
    "Chk.memo.new", "Chk.memo.has", "Chk.memo.get", "Chk.memo.set",
+   "Chk.memo.same", "Chk.memo.link",
    "F32.add", "F32.sub", "F32.mul", "F32.div", "F32.mod", "F32.pow", "F32.atan2",
    "F32.is_eq", "F32.is_ne", "F32.is_lt", "F32.is_le", "F32.is_gt", "F32.is_ge",
    "F32.neg", "F32.abs", "F32.sqrt", "F32.exp", "F32.log", "F32.log2",
@@ -10457,6 +10458,62 @@ def Unb.infer(e: Core.Expr, +x: String, +cm: Map<&2, Unb>) -> Unb:
     case other:
       Unb.none()
 
+# Whether e opens x (followed as Unb.infer follows it) with a constructor
+# other than k: then x is of no one flat type (a family's, say, whose
+# indices pick its constructor).
+def Unb.clash.v(v: Core.Expr, +x: String) -> Bool:
+  match v:
+    case Core.EVar{+y}:
+      Str.eq(x, y)
+    case other:
+      False{}
+
+def Unb.clash.let(p: Core.Pat, +v: Core.Expr, +x: String, +k: String) -> Bool:
+  match p:
+    case Core.PCtor{+k2, qs}:
+      Bool.and(Unb.clash.v(v, x), Bool.not(Str.eq(k2, k)))
+    case other:
+      False{}
+
+def Unb.clash(e: Core.Expr, +x: String, +k: String) -> Bool:
+  match e:
+    case Core.ELet{+pt, +v, b}:
+      +y = Unb.infer.next(pt, v, x)
+      Bool.or(Bool.or(Unb.clash.let(pt, v, x, k), Unb.clash(v, x, k)),
+        Bool.pick(Unit -> Bool, String.is_empty(y), u => False{}, u => Unb.clash(b, y, k))(Unit{}))
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          False{}
+        case a <> t:
+          Bool.or(Unb.clash(a, x, k), Unb.clash(Core.ECall{f, t}, x, k))
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          False{}
+        case a <> t:
+          Bool.or(Unb.clash(a, x, k), Unb.clash(Core.ECtor{n, t}, x, k))
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          Bool.or(Unb.clash(a, x, k), Unb.clash(Core.EMatch{t, cases}, x, k))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case c <> t:
+              Bool.or(Unb.clash(c, x, k), Unb.clash(Core.EMatch{Nil{}, t}, x, k))
+    case Core.ECase{+ps, b}:
+      Bool.and(Bool.not(Str.has(Pats.vars(ps, Nil{}), x)), Unb.clash(b, x, k))
+    case Core.EAnn{y, ty}:
+      Unb.clash(y, x, k)
+    case other:
+      False{}
+
+def Unb.infer.one(+body: Core.Expr, +x: String, +cm: Map<&2, Unb>) -> Unb:
+  +u = Unb.infer(body, x, cm)
+  Bool.pick(Unit -> Unb, Bool.and(Unb.is(u), Unb.clash(body, x, Unb.ctor.of(u))), w => Unb.none(), w => u)(Unit{})
+
 # Whether e answers the variable x itself (in a tail position, x not
 # rebound on the way): then x is of the def's result type.
 def Unb.tail(e: Core.Expr, +x: String) -> Bool:
@@ -10482,7 +10539,7 @@ def Unb.cand.two(+u: Unb, +x: String, +ts: Map<&2, Unb>, +rt: String, +body: Cor
   Bool.pick(Unit -> Unb, Bool.or(Unb.is(u), Bool.not(Unb.tail(body, x))), w => u, w => Unb.find(ts, rt))(Unit{})
 
 def Unb.cand.one(+u: Unb, +x: String, +ts: Map<&2, Unb>, +cm: Map<&2, Unb>, +rt: String, +body: Core.Expr) -> Unb:
-  Bool.pick(Unit -> Unb, Unb.is(u), w => u, w => Unb.cand.two(Unb.infer(body, x, cm), x, ts, rt, body))(Unit{})
+  Bool.pick(Unit -> Unb, Unb.is(u), w => u, w => Unb.cand.two(Unb.infer.one(body, x, cm), x, ts, rt, body))(Unit{})
 
 # A def's parameters that may go unboxed: plain or shared, of a flat type
 # (or of one Unb.infer finds).
@@ -10749,11 +10806,13 @@ def Unb.subs(ps: List<&2, Core.Param>, us: List<&2, Unb>, e: Core.Expr) -> Core.
 
 # A let binding x to a full call of a def with a flat result opens it into
 # variables, when each use of x allows it (see Unb.use): x is then its
-# constructor rebuilt from them.
-def Unb.lvar.go(hit: Bool, +x: String, +u: Unb, v: Core.Expr, b: Core.Expr) -> Core.Expr:
+# constructor rebuilt from them. Their names carry n, how many names are
+# bound around the let, so a let of the same name inside b (inlined bodies
+# reuse names) opens into other ones, which the substitution cannot catch.
+def Unb.lvar.go(hit: Bool, +x: String, +n: Nat, +u: Unb, v: Core.Expr, b: Core.Expr) -> Core.Expr:
   match hit:
     case True{}:
-      +xs = Unb.names("_ubl_" ++ x ++ "_", Unb.tys.of(u), 0)
+      +xs = Unb.names("_ubl_" ++ x ++ "_" ++ Nat.show(n) ++ "_", Unb.tys.of(u), 0)
       Core.ELet{Core.PCtor{Unb.ctor.of(u), Unb.pvars(xs)}, v, Unb.sub(b, x, Core.ECtor{Unb.ctor.of(u), Unb.vars(xs)})}
     case False{}:
       Core.ELet{Core.PVar{x}, v, b}
@@ -10765,7 +10824,8 @@ def Unb.lvar.call(+tail: Bool, +x: String, +rm: Map<&2, URet>, +rk: String, +wm:
       +r = G.get(URet, URet{Unb.none(), 0}, rm, f)
       Unb.lvar.go(Bool.and(Bool.and(Unb.is(URet.u(r)), Bool.not(Str.has(bound, f))),
         Bool.and(U32.is_eq(URet.n(r), U32.from_nat(List.length(&2, Core.Expr, args))),
-          U32.is_eq(Unb.use(b, tail, x, Unb.ctor.of(URet.u(r)), rk, wm), 1))), x, URet.u(r), Core.ECall{Core.EVar{f}, args}, b)
+          U32.is_eq(Unb.use(b, tail, x, Unb.ctor.of(URet.u(r)), rk, wm), 1))), x, List.length(&2, String, bound), URet.u(r),
+        Core.ECall{Core.EVar{f}, args}, b)
     case other:
       Core.ELet{Core.PVar{x}, other, b}
 
@@ -11063,11 +11123,68 @@ def Unb.arg.open(+k: String, v: Core.Expr, +names: List<&2, String>, r: UArgs) -
   UArgs{args, lets} = r
   UArgs{List.append(&2, Core.Expr, Unb.vars(names), args), ULet{Core.PCtor{k, Unb.pvars(names)}, v} <> lets}
 
+# Whether e is a value as written (nothing to run).
+def Unb.atom(e: Core.Expr) -> Bool:
+  match e:
+    case Core.EVar{x}:
+      True{}
+    case Core.ENum{n}:
+      True{}
+    case Core.ENat{n}:
+      True{}
+    case Core.EFlt{t}:
+      True{}
+    case Core.EStr{t}:
+      True{}
+    case Core.ETy{n, as}:
+      True{}
+    case Core.EAnn{x, t}:
+      Unb.atom(x)
+    case other:
+      False{}
+
+def Unb.lets.any(ls: List<&2, ULet>) -> Bool:
+  match ls:
+    case Nil{}:
+      False{}
+    case l <> t:
+      True{}
+
+def Unb.arg.keep.go(hit: Bool, a: Core.Expr, +x: String, args: List<&2, Core.Expr>, lets: List<&2, ULet>) -> UArgs:
+  match hit:
+    case True{}:
+      UArgs{Core.EVar{x} <> args, ULet{Core.PVar{x}, a} <> lets}
+    case False{}:
+      UArgs{a <> args, lets}
+
+# An argument that runs before a later one whose lets go around the call
+# is let-bound (as x) ahead of them, so the arguments still run in order
+# (an Array.set through one handle of a fork before an Array.get through
+# the other).
+def Unb.arg.keep(+a: Core.Expr, +x: String, r: UArgs) -> UArgs:
+  match r:
+    case UArgs{args, +lets}:
+      Unb.arg.keep.go(Bool.and(Unb.lets.any(lets), Bool.not(Unb.atom(a))), a, x, args, lets)
+
+def Unb.arg.pre(xs: List<&2, String>) -> String:
+  match xs:
+    case Nil{}:
+      "_ub"
+    case x <> t:
+      x
+
+# Fields es, built in place (x0, x1, .. for those Unb.arg.keep binds).
+def Unb.arg.keeps(es: List<&2, Core.Expr>, +x: String, +i: U32, r: UArgs) -> UArgs:
+  match es:
+    case Nil{}:
+      r
+    case e <> t:
+      Unb.arg.keep(e, x ++ U32.show(i), Unb.arg.keeps(t, x, U32.inc(i), r))
+
 def Unb.arg.ctor(same: Bool, +k: String, es: List<&2, Core.Expr>, +names: List<&2, String>, r: UArgs) -> UArgs:
   match same:
     case True{}:
-      UArgs{args, lets} = r
-      UArgs{List.append(&2, Core.Expr, es, args), lets}
+      Unb.arg.keeps(es, Unb.arg.pre(names) ++ "k", 0, r)
     case False{}:
       Unb.arg.open(k, Core.ECtor{k, es}, names, r)
 
@@ -11095,20 +11212,19 @@ def Unb.arg.flat(a: Core.Expr, +k: String, +n: Nat, +names: List<&2, String>, r:
     case other:
       Unb.arg.open(k, other, names, r)
 
-def Unb.arg(hit: Bool, a: Core.Expr, u: Unb, +names: List<&2, String>, r: UArgs) -> UArgs:
+def Unb.arg(hit: Bool, a: Core.Expr, u: Unb, +pre: String, +names: List<&2, String>, r: UArgs) -> UArgs:
   match hit:
     case True{}:
       Unb{+k, +ts} = u
       Unb.arg.flat(a, k, List.length(&2, String, ts), names, r)
     case False{}:
-      UArgs{args, lets} = r
-      UArgs{a <> args, lets}
+      Unb.arg.keep(a, pre ++ "k", r)
 
 def Unb.cargs(us: List<&2, Unb>, as: List<&2, Core.Expr>, +n: U32, +i: U32) -> UArgs:
   match us as:
     case +u <> ut a <> at:
-      Unb.arg(Unb.is(u), a, u, Unb.names("_ub" ++ U32.show(n) ++ "_" ++ U32.show(i) ++ "_", Unb.tys.of(u), 0),
-        Unb.cargs(ut, at, n, U32.inc(i)))
+      +pre = "_ub" ++ U32.show(n) ++ "_" ++ U32.show(i) ++ "_"
+      Unb.arg(Unb.is(u), a, u, pre, Unb.names(pre, Unb.tys.of(u), 0), Unb.cargs(ut, at, n, U32.inc(i)))
     case ul al:
       UArgs{al, Nil{}}
 
@@ -11248,12 +11364,19 @@ def Unb.push.deep(a: Core.Expr, e: Core.Expr) -> Core.Expr:
     case other:
       Expr.push(a, other)
 
-def Unb.pull.one(hit: Bool, a: Core.Expr, +x: String, e: Core.Expr) -> Core.Expr:
-  match hit:
-    case True{}:
-      Unb.float(Core.PVar{x}, a, Unb.push.deep(Core.EVar{x}, e))
-    case False{}:
-      Unb.push.deep(a, e)
+def Unb.is.let(e: Core.Expr) -> Bool:
+  match e:
+    case Core.ELet{p, v, b}:
+      True{}
+    case other:
+      False{}
+
+# (An argument that runs before a later one let-bound is let-bound too, so
+# the arguments still run in order: see Unb.arg.keep.)
+def Unb.pull.one(hit: Bool, +a: Core.Expr, +x: String, +e: Core.Expr) -> Core.Expr:
+  Bool.pick(Unit -> Core.Expr, Bool.or(hit, Bool.and(Unb.is.let(e), Bool.not(Unb.atom(a)))),
+    u => Unb.float(Core.PVar{x}, a, Unb.push.deep(Core.EVar{x}, e)),
+    u => Unb.push.deep(a, e))(Unit{})
 
 # e with each call's arguments that call a def with a flat result let-bound
 # before it (_ufD_I: the call's depth D, the argument's place I from the
@@ -13826,19 +13949,95 @@ def Main.ids.skip(+t0: String) -> Nat:
   +n = Main.ids.len(t)
   Bool.pick(Nat, Main.ids.ok(t, n), Nat.add(n, 4n), 0n)
 
+def Main.ids.more(m: Maybe<&2, Nat>, +n: Nat) -> Maybe<&2, Nat>:
+  match m:
+    case Some{k}:
+      Some{Nat.add(k, n)}
+    case None{}:
+      None{}
+
+def Main.ids.got(m: Maybe<&2, Nat>, +n: Nat) -> Nat:
+  match m:
+    case Some{k}:
+      Nat.add(k, n)
+    case None{}:
+      0n
+
+def Main.ids.eol(+c: U32) -> Bool:
+  Bool.or(Bool.or(U32.is_eq(c, 10), U32.is_eq(c, 13)), Bool.or(U32.is_eq(c, 8232), U32.is_eq(c, 8233)))
+
+# The length of a line comment's rest: to the end of the line, where a
+# backslash before the newline goes on.
+def Main.ids.line(s: String) -> Nat:
+  match s:
+    case SCon{Chr{92}, SCon{Chr{10}, t}}:
+      Nat.add(Main.ids.line(t), 2n)
+    case SCon{Chr{+c}, t}:
+      Bool.pick(Unit -> Nat, Main.ids.eol(c), u => 0n, u => Nat.add(Main.ids.line(t), 1n))(Unit{})
+    case SNil{}:
+      0n
+
+# The length of a block comment's rest, up to and with its */, or None.
+def Main.ids.block(s: String) -> Maybe<&2, Nat>:
+  match s:
+    case SCon{Chr{42}, SCon{Chr{47}, t}}:
+      Some{2n}
+    case SCon{c, t}:
+      Main.ids.more(Main.ids.block(t), 1n)
+    case SNil{}:
+      None{}
+
+# The length of a quoted literal's rest, up to and with its closing quote
+# q, or None when it does not close; a newline ends it unless nl.
+def Main.ids.str(s: String, +q: U32, +nl: Bool) -> Maybe<&2, Nat>:
+  match s:
+    case SCon{Chr{92}, SCon{c, t}}:
+      Main.ids.more(Main.ids.str(t, q, nl), 2n)
+    case SCon{Chr{+c}, t}:
+      Bool.pick(Unit -> Maybe<&2, Nat>, U32.is_eq(c, q), u => Some{1n},
+        u => Bool.pick(Unit -> Maybe<&2, Nat>, Bool.or(U32.is_eq(c, 92), Bool.and(Bool.not(nl), U32.is_eq(c, 10))),
+          u => None{}, u => Main.ids.more(Main.ids.str(t, q, nl), 1n))(Unit{}))(Unit{})
+    case SNil{}:
+      None{}
+
+# The length of the comment, string or character literal s starts with, or
+# 0: the ids in one are left alone, as cpp leaves them (Bend 2.0.34).
+def Main.ids.lit(s: String) -> Nat:
+  match s:
+    case SCon{Chr{47}, SCon{Chr{47}, t}}:
+      Nat.add(Main.ids.line(t), 2n)
+    case SCon{Chr{47}, SCon{Chr{42}, t}}:
+      Main.ids.got(Main.ids.block(t), 2n)
+    case SCon{Chr{34}, t}:
+      Main.ids.got(Main.ids.str(t, 34, False{}), 1n)
+    case SCon{Chr{39}, t}:
+      Main.ids.got(Main.ids.str(t, 39, False{}), 1n)
+    case SCon{Chr{96}, t}:
+      Main.ids.got(Main.ids.str(t, 96, True{}), 1n)
+    case other:
+      0n
+
+def Main.ids.quote(+c: U32) -> Bool:
+  Bool.or(Bool.or(U32.is_eq(c, 47), U32.is_eq(c, 34)), Bool.or(U32.is_eq(c, 39), U32.is_eq(c, 96)))
+
 # s with each CID(..) and FID(..) replaced; prev: the last character was
-# part of a word; skip: characters an id replaced, still to drop.
-def Main.ids(s: String, prev: Bool, +env: IdEnv, skip: Nat) -> String:
+# part of a word; skip: characters to drop (an id replaced them) or, when
+# keep, to copy (a comment or literal holds them).
+def Main.ids(s: String, prev: Bool, +env: IdEnv, skip: Nat, +keep: Bool) -> String:
   match s skip:
     case SNil{} k:
       SNil{}
-    case SCon{c, t} 1n+k:
-      Main.ids(t, True{}, env, k)
+    case SCon{+c, +t} 1n+ +k:
+      Bool.pick(Unit -> String, keep, u => SCon{c, Main.ids(t, False{}, env, k, keep)},
+        u => Main.ids(t, True{}, env, k, keep))(Unit{})
     case SCon{Chr{+c}, +t} 0n:
-      Bool.pick(Unit -> String, Bool.and(Bool.not(prev), Bool.and(Bool.or(U32.is_eq(c, 67), U32.is_eq(c, 70)),
-        String.starts_with(t, "ID("))),
-        u => Main.ids.head(c, t, env) ++ Main.ids(t, True{}, env, Main.ids.skip(t)),
-        u => SCon{Chr{c}, Main.ids(t, Main.ids.word(c), env, 0n)})(Unit{})
+      +n = Bool.pick(Unit -> Nat, Main.ids.quote(c), u => Main.ids.lit(SCon{Chr{c}, t}), u => 0n)(Unit{})
+      Bool.pick(Unit -> String, Nat.is_gt(n, 0n),
+        u => SCon{Chr{c}, Main.ids(t, False{}, env, Nat.sub(n, 1n), True{})},
+        u => Bool.pick(Unit -> String, Bool.and(Bool.not(prev), Bool.and(Bool.or(U32.is_eq(c, 67), U32.is_eq(c, 70)),
+          String.starts_with(t, "ID("))),
+          u => Main.ids.head(c, t, env) ++ Main.ids(t, True{}, env, Main.ids.skip(t), False{}),
+          u => SCon{Chr{c}, Main.ids(t, Main.ids.word(c), env, 0n, False{})})(Unit{}))(Unit{})
 
 def Main.ids.pre(segs: List<&2, String>, +acc: String, out: List<&2, String>) -> List<&2, String>:
   match segs:
@@ -13865,7 +14064,7 @@ def Main.ids.owner(ds: List<&2, Decl>, +p: String) -> String:
 
 # The effect source at p, its ids written for this program.
 def Main.ids.src(+ds: List<&2, Decl>, +known: Set(), +js: Bool, +p: String, src: String) -> String:
-  Main.ids(src, False{}, IdEnv{Main.ids.ns(Main.ids.owner(ds, p)), known, js}, 0n)
+  Main.ids(src, False{}, IdEnv{Main.ids.ns(Main.ids.owner(ds, p)), known, js}, 0n, False{})
 
 # Every name the program declares.
 def Main.ids.known(ds: List<&2, Decl>) -> Set():
@@ -19713,10 +19912,13 @@ def Opt.fits(+flags: String, +b: Core.Tm) -> Bool:
   Bool.or(Opt.size.le(b, Opt.budget(flags)),
     Bool.and(Bool.and(Opt.shape(b), Opt.shape.builds(b)), Opt.size.le(b, U32.mul(3, Opt.budget(flags)))))
 
+# Array.join is not: inlined, it drops its second array, and a dead let
+# would then lose that side's writes (atomics through a fork's other
+# handle, which the first one sees).
 def Opt.small(+flags: String, +rank: Map<&2, U32>, +d: Core.Def) -> Bool:
   match d:
     case Core.Def{+name, ps, +b, ret}:
-      Bool.and(Bool.and(Opt.fits(flags, b), Bool.not(G.is_native(name))),
+      Bool.and(Bool.and(Opt.fits(flags, b), Bool.and(Bool.not(G.is_native(name)), Bool.not(Str.eq(name, "Array.join")))),
         Bool.and(Bool.not(String.starts_with(name, "IO.")),
           Opt.before(Inl.names(b, 3, Nil{}), rank, Pair.snd(Map<&2, U32>, U32, Map.get(U32, 0, rank, name)))))
 

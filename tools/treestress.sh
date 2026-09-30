@@ -4,8 +4,8 @@ set -eu
 cd "$(dirname "$0")/.."
 N=${1:-5}
 case "$N" in ''|*[!0-9]*|0) echo "usage: $0 [positive run count]" >&2; exit 2;; esac
-BASE=${BEND_BASE:-$PWD/build/base32/base.bend}
-UP=${BEND_UP:-/tmp/bendup32}
+BASE=${BEND_BASE:-$PWD/build/base34/base.bend}
+UP=${BEND_UP:-/tmp/bendup34}
 for name in tree-bitonic tree-matmul tree-radix; do
   dir=build/treestress/$name
   mkdir -p "$dir"

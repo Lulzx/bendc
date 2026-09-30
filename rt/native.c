@@ -81,6 +81,7 @@ N2(Nat_dmod) N2(Nat_dcmp) N2(Nat_dis__eq) N2(Nat_dis__ne) N2(Nat_dis__lt) N2(Nat
 N2(Nat_dis__gt) N2(Nat_dis__ge) N2(Nat_dmin) N2(Nat_dmax) N2(Nat_dpow) N1(Nat_dshow)
 
 N1(Chk_dmemo_dnew) N2(Chk_dmemo_dhas) N1(Chk_dmemo_dget) N3(Chk_dmemo_dset)
+N2(Chk_dmemo_dsame) N3(Chk_dmemo_dlink)
 
 N2(F32_dadd) N2(F32_dsub) N2(F32_dmul) N2(F32_ddiv) N2(F32_dmod) N2(F32_dpow) N2(F32_datan2)
 N2(F32_dis__eq) N2(F32_dis__ne) N2(F32_dis__lt) N2(F32_dis__le) N2(F32_dis__gt) N2(F32_dis__ge)
