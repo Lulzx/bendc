@@ -9,9 +9,6 @@ import Base
 def Fuel.max() -> Nat:
   U32.to_nat(4000000000)
 
-def Str.eq(+a: String, +b: String) -> Bool:
-  String.eq(a, b)
-
 def Str.chr(c: U32) -> String:
   SCon{Chr{c}, SNil{}}
 
@@ -1481,12 +1478,6 @@ def P.word(+w: String) -> P(Bool):
 
 # Declarations
 # ============
-
-def P.get() -> P(PS):
-  +ps => Done{(ps, ps)}
-
-def P.put(ps: PS) -> P(Unit):
-  old => Done{(Unit{}, ps)}
 
 def P.qual(+k: String) -> P(String):
   +ps => Done{(PS.qual(ps, k), ps)}
@@ -5194,9 +5185,6 @@ def P.decls() -> P(Unit):
 type Us is Data:
   Us{i: U32, q: Q}
 
-def Nat.to_u32(n: Nat) -> U32:
-  U32.from_nat(n)
-
 def Q.eq(a: Q, b: Q) -> Bool:
   match a b:
     case QNone{} QNone{}:
@@ -5290,29 +5278,8 @@ def book_order(+book: Book) -> List<&2, String>:
   Book{tlds, ctrs, +order, hols, open, tmps, tcnt, files} = book
   List.reverse(&2, String, order)
 
-def Sp.is_none(s: Sp) -> Bool:
-  match s:
-    case NoSp{}:
-      True{}
-    case other:
-      False{}
-
-def is_ctr(+t: Tm, +k: String, n: Nat) -> Bool:
-  match t:
-    case Ctr{+k2, +xs, s}:
-      Bool.and(String.eq(k, k2), Nat.is_eq(List.length(&2, Tm, xs), n))
-    case other:
-      False{}
-
 def term_args(t: Tm) -> List<&2, Tm>:
   Pair.snd(Tm, List<&2, Tm>, term_unapply(t))
-
-def tld_n(t: Tld) -> Nat:
-  match t:
-    case TDef{n, x, ty, v, u, b, imps}:
-      n
-    case TADT{n, g, ty, cs, tbase}:
-      n
 
 def term_wnf(+book: Book, t: Tm) -> Tm:
   wnf.run(Fuel.max(), SWnfGo{book, t, Nil{}, LNo{}})
@@ -5544,15 +5511,6 @@ def cmp.run(fuel0: Nat, sel: CmpSel) -> Bool:
 
 def term_compare(le: Bool, +book: Book, lhs: Tm, rhs: Tm, +dep: U32) -> Bool:
   cmp.run(Fuel.max(), STermCompare{le, book, lhs, rhs, dep})
-
-def Lst.last(-A: Data, d: A, xs: List<&2, A>) -> A:
-  match xs:
-    case Nil{}:
-      d
-    case h <> Nil{}:
-      h
-    case h <> t:
-      Lst.last(A, d, t)
 
 def err.make(+book: Book, ctx: List<&2, Tm>, exp: Msg, obs: Msg, spn: Sp, dn: String) -> Err:
   Err{book, ctx, exp, obs, spn, dn, ""}
@@ -5837,24 +5795,6 @@ def err_show(e: Err) -> String:
     Bool.pick(String, Bool.and(String.is_empty(df), String.is_empty(sp)), "", "\nLocation:" ++ df ++ sp) ++
     Bool.pick(String, String.is_empty(nte), "", "\n" ++ nte)
 
-def PS.frs(+ps: PS) -> U32:
-  PS{cur, stk, stn, +frs, book, src, ns, dir, al} = ps
-  frs
-
-def Pt.is_var(+p: Pt) -> Bool:
-  match p:
-    case PVar{k, i, q, s}:
-      True{}
-    case other:
-      False{}
-
-def Row.first(r: Body) -> Pt:
-  match r:
-    case Row{p <> t, f}:
-      p
-    case other:
-      PVar{"_", 0, QLone{}, NoSp{}}
-
 #
 # K(A): a check that may fail with an Err and may add template instances to
 # the book.
@@ -6067,13 +6007,6 @@ def book_adt(+adt: Tm, +ctx: List<&2, Tm>, +dn: String) -> K(AD):
   do K<AD>:
     b : Book <- K.book()
     book_adt.go(adt, book_tld(b, Tm.name(adt)), ctx, dn)
-
-def ADT.xs(t: Tm) -> List<&2, Tm>:
-  match t:
-    case ADT{k, xs, s, r}:
-      xs
-    case other:
-      Nil{}
 
 def AD.cs(a: AD) -> List<&2, CtrD>:
   AD{n, g, t, cs} = a
@@ -6455,13 +6388,6 @@ def Tld.t(t: Tld) -> Tm:
     case TADT{n, g, ty, cs, tbase}:
       ty
 
-def Tld.is_def(t: Tld) -> Bool:
-  match t:
-    case TDef{n, x, ty, v, u, b, imps}:
-      True{}
-    case other:
-      False{}
-
 def check.infer.cmp(+l: CL, +tm: Tm, xi: IR, +ty: Tm, +ctx: List<&2, Tm>, +d: U32, ok: Bool) -> K(List<&2, Us>):
   IR{xty, xus, x} = xi
   match ok:
@@ -6686,9 +6612,6 @@ def jl.nums(ns: List<&2, U32>) -> Nat:
       0n
     case i <> t:
       Nat.add(jl.num(i), jl.nums(t))
-
-def jl.q(q: Q) -> Nat:
-  12n
 
 # list: the sum over p's fields (p a PCtr) instead of p.
 def jl.pat.go(p: Pt, list: Bool) -> Nat:
@@ -7925,10 +7848,6 @@ def book_valid(order: List<&2, String>, +full: Book) -> K(Unit):
   +ks = book_valid.lasts(List.reverse(&2, String, order), Set.new(), Nil{})
   b0 => book_valid.par(ks, full, b0)
 
-def CtrD.k(c: CtrD) -> String:
-  CtrD{k, n, t} = c
-  k
-
 type Imp is Data:
   Imp{path: String, alias: String, beg: U32}
 
@@ -7980,9 +7899,6 @@ type Hdr is Data:
 type HSt is Data:
   HGo{off: Nat, done: List<&2, String>, imps: List<&2, Imp>}
   HStop{h: Hdr}
-
-def header.go.rest(t: List<&2, String>, done: List<&2, String>, imps: List<&2, Imp>) -> Hdr:
-  Hdr{List.append(&2, String, List.reverse(&2, String, done), t), imps, None{}}
 
 def header.rest(
   +src: String, +l: String, t: List<&2, String>, +off: Nat, done: List<&2, String>, imps: List<&2, Imp>, blank: Bool
@@ -8321,15 +8237,6 @@ def report.bad_all(+b: Book, ks: List<&2, String>) -> List<&2, String>:
       Nil{}
     case +k <> t:
       Str.filter_in.if(k, report.bad_all(b, t), Tld.bad(book_tld(b, k)))
-
-def List.drop_str2(xs: List<&2, String>, n: Nat) -> List<&2, String>:
-  match xs n:
-    case ys 0n:
-      ys
-    case y <> t 1n+m:
-      List.drop_str2(t, m)
-    case Nil{} k:
-      Nil{}
 
 def Book.tlds(+b: Book) -> Map<&2, Tld>:
   Book{+tlds, ctrs, order, hols, open, tmps, tcnt, files} = b

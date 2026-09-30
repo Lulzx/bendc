@@ -937,12 +937,6 @@ def IO.list2(xs: List<String>) -> List<&2, String>:
     case h <> t:
       h <> IO.list2(t)
 
-def IO.write_err(+s: String) -> IO(Unit):
-  IO.print_err(String.take(s, Nat.sub(String.length(s), 1n)))
-
-# AST
-# ===
-
 type Stmt is Data:
   SLet{pat: Core.Pat, val: Core.Expr}
   SBind{name: String, val: Core.Expr}
@@ -2841,10 +2835,6 @@ def P.file.err(ts: Toks()) -> String:
 def P.file.fin(r: List<&2, Decl> & Toks()) -> List<&2, Decl> & String:
   (ds, ts) = r
   (ds, P.file.err(ts))
-
-# Skips the remaining lines of a block, including its dedent.
-def P.skip_rest() -> Parser(Unit):
-  ts => (Unit{}, P.skip_block.go(ts, 1))
 
 def P.eff.go(ts: Toks(), acc: List<&2, String>) -> List<&2, String> & Toks():
   match ts:
@@ -5042,13 +5032,6 @@ def Gen.scalar.c(c: String) -> Bool:
     case other:
       False{}
 
-def Gen.scalar.find(m: Maybe<&2, String>) -> Bool:
-  match m:
-    case Some{c}:
-      Gen.scalar.c(c)
-    case None{}:
-      False{}
-
 # What a variable holds, as Gen.scalar.let says: a let's U32 local is
 # "(uN)" (a uint32_t), any other scalar's name is in parentheses.
 def Gen.scalar.u32.find(m: Maybe<&2, String>) -> U32:
@@ -5057,14 +5040,6 @@ def Gen.scalar.u32.find(m: Maybe<&2, String>) -> U32:
       Bool.pick(U32, String.starts_with(c, "(u"), 2, Bool.pick(U32, Gen.scalar.c(c), 1, 0))
     case None{}:
       0
-
-# Whether a let's value is a variable holding a scalar.
-def Gen.scalar.var(+env: Env(), v: Core.Expr) -> Bool:
-  match v:
-    case Core.EVar{+y}:
-      Gen.scalar.find(Env.find(env, y))
-    case other:
-      False{}
 
 # The natives whose result is a U32, and those whose result is another
 # scalar (a Bool, a Nat, an F32).
@@ -7186,9 +7161,6 @@ def K.fl.go(n: Nat, k: FlSel) -> FlSel.ty(k):
           do KM<Bool>:
             m : Maybe<&2, String> <- K.memo.get(K.seq.key(grp, name))
             K.fl.go(fu, FLIsseqMemo{grp, g, name, m})
-
-def K.fl.expr(g: G, self: KSelf, bound: List<&2, String>, e: Core.Expr, tail: Bool) -> KM(Bool):
-  K.fl.go(Fuel.max(), FLFlExpr{g, self, bound, e, tail})
 
 def K.isflat(g: G, name: String) -> KM(Bool):
   K.fl.go(Fuel.max(), FLIsflat{g, name})
@@ -11680,14 +11652,6 @@ type NComp is Data:
 type NRet is Data:
   NRet{cs: List<&2, NComp>, n: Nat}
 
-def NRet.cs(r: NRet) -> List<&2, NComp>:
-  NRet{cs, n} = r
-  cs
-
-def NRet.n(r: NRet) -> Nat:
-  NRet{cs, n} = r
-  n
-
 def Nest.put.type(ok: Bool, +key: String, c: Ctor, m: Map<&2, Ctor>) -> Map<&2, Ctor>:
   match ok:
     case True{}:
@@ -14434,9 +14398,6 @@ def Path.norm(+p: String) -> String:
   +body = String.join(List.reverse(&2, String, Path.fold(String.split(p, '/'), Nil{}, abs)), "/")
   Bool.pick(String, abs, "/" ++ body, Bool.pick(String, String.is_empty(body), ".", body))
 
-def Path.join(+a: String, +b: String) -> String:
-  Path.norm(a ++ "/" ++ b)
-
 def Path.segs(+p: String) -> List<&2, String>:
   Bool.pick(List<&2, String>, String.eq(p, "."), Nil{}, String.split(p, '/'))
 
@@ -17066,13 +17027,6 @@ def KQ.reenv(live: Env(), +k: U32, +i: U32) -> Env():
     case Bind{x, c} <> t:
       Bind{x, KX.v(k) ++ "_" ++ U32.show(i)} <> KQ.reenv(t, k, U32.inc(i))
 
-def KQ.args(ds: List<&2, Doc>, +i: U32) -> Doc:
-  match ds:
-    case Nil{}:
-      DNil{}
-    case d <> t:
-      Doc.list([DStr{KQ.arg(i) ++ " = "}, d, DStr{"; "}, KQ.args(t, U32.inc(i))])
-
 def K.docs.of(e: Env()) -> List<&2, Doc>:
   match e:
     case Nil{}:
@@ -17551,13 +17505,6 @@ def K.frame_table.go(k: Nat, +frames: List<&2, Bind>, +l: U32) -> String:
 def K.frame_table(+frames: List<&2, Bind>, +l: U32, +n: U32) -> String:
   K.frame_table.go(Bool.pick(Nat, U32.is_ge(l, n), 0n, U32.to_nat((n - l : U32))), frames, l)
 
-def Path.base(+p: String) -> String:
-  String.drop(p, String.length(Mod.dir(p)))
-
-def CS.book(+st: CS) -> Chk.Book:
-  CS{+book, seen, n0} = st
-  book
-
 def J.opt(m: Map<&2, JCI>) -> Map<&2, Maybe<&2, JCI>>:
   match m:
     case MTip{}:
@@ -17577,15 +17524,6 @@ def J.ctor(+j: JG, +name: String) -> Maybe<&2, JCI>:
 # JS array (Array: ALeaf{x} is [x], and ANode's halves are slices).
 def J.kind(+ty: String) -> Nat:
   P.which(ty, ["", "Bool", "Nat", "String", "Char", "U32", "F32", "Array"])
-
-def J.nth(xs: List<&2, String>, n: Nat) -> String:
-  match xs n:
-    case x <> t 0n:
-      x
-    case x <> t 1n+m:
-      J.nth(t, m)
-    case Nil{} k:
-      "_"
 
 def J.str(s: String) -> Doc:
   DStr{"\"" ++ J.lit(s) ++ "\""}
@@ -17862,9 +17800,6 @@ def J.var.found(+j: JG, +name: String, m: Maybe<&2, String>) -> Gen(Doc):
 
 def J.var(+j: JG, +env: Env(), +name: String) -> Gen(Doc):
   J.var.found(j, name, Env.find(env, name))
-
-def J.nulls(all: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
-  all
 
 def J.ret(t: Tgt, d: Doc) -> Doc:
   match t:
@@ -19808,13 +19743,6 @@ def Opt.pm.bind(x: Core.Pt, t: Core.Tm, r: OPm) -> OPm:
     case other:
       other
 
-def Opt.pm.and(a: OPm, b: OPm) -> OPm:
-  match a:
-    case PmYes{ps, ts}:
-      b
-    case other:
-      other
-
 def Opt.pm.if(c: Bool, r: OPm) -> OPm:
   match c:
     case True{}:
@@ -20016,22 +19944,6 @@ def Opt.miss(r: OR) -> Bool:
       String.eq(m, "%miss")
     case other:
       False{}
-
-# The term of a rule's result (a known case's lets).
-def Opt.res(r: OR) -> Core.Tm:
-  match r:
-    case RKeep{t}:
-      t
-    case RTo{t}:
-      t
-    case RSub{x, v, b}:
-      Core.CLet{Core.PtVar{x}, v, b}
-    case RAll{t}:
-      t
-    case RLets{k, t}:
-      t
-    case RLet1{p, v, t}:
-      Core.CLet{p, v, t}
 
 # The body a case ends in, under its lets.
 def Opt.end(t: Core.Tm) -> Core.Tm:
