@@ -458,7 +458,8 @@ KINLINE KW KF_Map_dhas(KTHR KCtx *c, KW a, KW b) { k_fail(c, KE_FX); return 0; }
 // 2^c 32-bit cells, half the memory traffic of words (terrain's tiles 1.35x
 // faster). No such array reaches the CPU: the host widens it as it copies
 // the result out (gpu_copy_out), and a call's result that holds one stays
-// out of the arena for the CPU (Gen.gpu.pin: no arrays).
+// out of the arena for the CPU (Gen.gpu.pin: no arrays). The CPU's own
+// arrays of scalars are narrow too (ARR_NW in bendrt.h), read as such.
 #define K_ARR_HDR(n) ((KW)0xFFF00 | (KW)(n))
 #define K_ARR_NW ((KW)0x20)
 KINLINE bool k_arr(KTHR KCtx *c) { k_fail(c, KE_FX); return false; }
@@ -474,7 +475,12 @@ KINLINE KW k_amask(KTHR KCtx *c, KW a) { return ((KW)1 << (k_word(c, a, 0) & 31)
 KINLINE KW k_aslow(KTHR KCtx *c, KW a, KW i, KW v, bool sw) {
   if (!k_in(c, a)) {
     if (sw) k_fail(c, KE_FX);
-    return sw ? 0 : c->G[((a - c->gb) >> 3) + 1 + ((KW)(KU)i & k_amask(c, a))];
+    if (sw) return 0;
+    KW o = (a - c->gb) >> 3, h = c->G[o];
+    KU m = ((KU)1 << (h & 31)) - 1;
+    // (a narrow CPU array: 32-bit cells, see ARR_NW in bendrt.h)
+    if (h & K_ARR_NW) return ((KDEV KU *)(c->G + o + 1))[(KU)i & m];
+    return c->G[o + 1 + ((KU)i & m)];
   }
   KW w = KIX(c, a), h = c->H[w];
   KU j = (KU)i & (((KU)1 << (h & 31)) - 1);
