@@ -395,7 +395,10 @@ typedef struct GcHot {
   int mt;
   int rc;  // reference counting (a program compiled with BEND_RC=1): no collections
   int rcmt; // rc and mt: a slot's allocation bit is set atomically
-  uint8_t *dirty;  // gc_dirty
+  // gc_dirty less the heap's first block index: a node's byte is
+  // dirty[node >> GC_BLK_SHIFT], one shift (reuse tokens mark 3G blocks
+  // dirty in a tree-bitonic run; the subtraction was 10G instructions)
+  uintptr_t dirty;
 } GcHot;
 static GcHot gc_hot;
 static GcRange *gc_roots;
@@ -469,7 +472,8 @@ static void gc_init(void) {
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
-  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0, gc_dirty};
+  gc_hot = (GcHot){(uintptr_t)gc_base, 0, gc_abits, gc_cand, 0, bend_rc_req, 0,
+    (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT)};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -1985,7 +1989,7 @@ static inline V bend_take_ru(V v, unsigned w) {
 }
 static inline V *bend_ru_dirty(V u) {
   const GcHot *h = &gc_hot;
-  uint8_t *d = &h->dirty[((uintptr_t)u - h->base) >> GC_BLK_SHIFT];
+  uint8_t *d = (uint8_t *)(h->dirty + ((uintptr_t)u >> GC_BLK_SHIFT));
   if (!__atomic_load_n(d, __ATOMIC_RELAXED)) __atomic_store_n(d, 1, __ATOMIC_RELAXED);
   BEND_BARRIER();
   return (V *)u;
