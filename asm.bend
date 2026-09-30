@@ -155,10 +155,6 @@ def cmpi(+rn: U32, +k: U32) -> U32:
 def cmp(+rn: U32, +rm: U32) -> U32:
   reg3(3942645791, 0, rn, rm)
 
-# cmp wn, wm (6B00001F)
-def cmpw(+rn: U32, +rm: U32) -> U32:
-  reg3(1795162143, 0, rn, rm)
-
 # Three-register operations, by base word.
 def add(+rd: U32, +rn: U32, +rm: U32) -> U32:
   reg3(2332033024, rd, rn, rm)
@@ -183,12 +179,6 @@ def subw(+rd: U32, +rn: U32, +rm: U32) -> U32:
 
 def mulw(+rd: U32, +rn: U32, +rm: U32) -> U32:
   reg3(453016576, rd, rn, rm)
-
-def mul(+rd: U32, +rn: U32, +rm: U32) -> U32:
-  reg3(2600500224, rd, rn, rm)
-
-def udiv(+rd: U32, +rn: U32, +rm: U32) -> U32:
-  reg3(2596276224, rd, rn, rm)
 
 def lslv(+rd: U32, +rn: U32, +rm: U32) -> U32:
   reg3(2596282368, rd, rn, rm)
@@ -244,10 +234,6 @@ def ldrw(+rt: U32, +rn: U32, +k: U32) -> U32:
 # str wt, [rn, #k] (B9000000), k a multiple of 4.
 def strw(+rt: U32, +rn: U32, +k: U32) -> U32:
   (3103784960 .|. (((k >> 2n : U32) << 10n : U32) .|. ((rn << 5n : U32) .|. rt : U32) : U32) : U32)
-
-# ldr rt, [rn, rm, lsl #3] and str rt, [rn, rm, lsl #3] (F8607800, F8207800).
-def ldrx(+rt: U32, +rn: U32, +rm: U32) -> U32:
-  reg3(4167071744, rt, rn, rm)
 
 def strx(+rt: U32, +rn: U32, +rm: U32) -> U32:
   reg3(4162877440, rt, rn, rm)
@@ -315,13 +301,6 @@ def sp_fp() -> U32:
 
 def ret() -> U32:
   3596551104
-
-# blr rn (D63F0000), br rn (D61F0000).
-def blr(+rn: U32) -> U32:
-  (3594452992 .|. (rn << 5n : U32) : U32)
-
-def br(+rn: U32) -> U32:
-  (3592355840 .|. (rn << 5n : U32) : U32)
 
 # fmov sd, wn (1E270000); fmov wd, sn (1E260000).
 def fmovsw(+rd: U32, +rn: U32) -> U32:
@@ -423,17 +402,11 @@ def ls() -> U32:
 def ge() -> U32:
   10
 
-def lt() -> U32:
-  11
-
 def mi() -> U32:
   4
 
 def gt() -> U32:
   12
-
-def le() -> U32:
-  13
 
 # rd = k, any 64-bit word given as its halves (movz, then a movk for each
 # nonzero 16 bits past the first).

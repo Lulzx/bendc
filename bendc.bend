@@ -15,9 +15,6 @@ import ./asm.bend as As
 def Str.eq(+a: String, +b: String) -> Bool:
   String.eq(a, b)
 
-def Str.chr(c: U32) -> String:
-  SCon{Chr{c}, SNil{}}
-
 def Str.rev(s: String) -> String:
   String.reverse(s)
 
@@ -936,12 +933,6 @@ def IO.list2(xs: List<String>) -> List<&2, String>:
       Nil{}
     case h <> t:
       h <> IO.list2(t)
-
-def IO.write_err(+s: String) -> IO(Unit):
-  IO.print_err(String.take(s, Nat.sub(String.length(s), 1n)))
-
-# AST
-# ===
 
 type Stmt is Data:
   SLet{pat: Core.Pat, val: Core.Expr}
@@ -2842,10 +2833,6 @@ def P.file.fin(r: List<&2, Decl> & Toks()) -> List<&2, Decl> & String:
   (ds, ts) = r
   (ds, P.file.err(ts))
 
-# Skips the remaining lines of a block, including its dedent.
-def P.skip_rest() -> Parser(Unit):
-  ts => (Unit{}, P.skip_block.go(ts, 1))
-
 def P.eff.go(ts: Toks(), acc: List<&2, String>) -> List<&2, String> & Toks():
   match ts:
     case Nil{}:
@@ -4028,7 +4015,7 @@ def Gen.mangle.chr(+x: U32) -> String:
   Bool.pick(String, U32.is_eq(x, 46), "_d",
     Bool.pick(String, U32.is_eq(x, 95), "__",
       Bool.pick(String, Bool.or(Char.is_alpha(Chr{x}), Char.is_digit(Chr{x})),
-        Str.chr(x), "_x" ++ U32.show(x))))
+        Chk.Str.chr(x), "_x" ++ U32.show(x))))
 
 def Gen.mangle(s: String) -> String:
   match s:
@@ -4044,7 +4031,7 @@ def Gen.w(name: String) -> String:
   "W_" ++ Gen.mangle(name)
 
 def Gen.host.chr(+x: U32) -> String:
-  Bool.pick(String, U32.is_eq(x, 46), "_", Str.chr(x))
+  Bool.pick(String, U32.is_eq(x, 46), "_", Chk.Str.chr(x))
 
 def Gen.host(s: String) -> String:
   match s:
@@ -4055,9 +4042,9 @@ def Gen.host(s: String) -> String:
 
 # Octal escape of one byte.
 def Gen.oct(+b: U32) -> String:
-  "\\" ++ Str.chr((48 + ((b >> 6n : U32) .&. 7 : U32) : U32)) ++
-    Str.chr((48 + ((b >> 3n : U32) .&. 7 : U32) : U32)) ++
-    Str.chr((48 + (b .&. 7 : U32) : U32))
+  "\\" ++ Chk.Str.chr((48 + ((b >> 6n : U32) .&. 7 : U32) : U32)) ++
+    Chk.Str.chr((48 + ((b >> 3n : U32) .&. 7 : U32) : U32)) ++
+    Chk.Str.chr((48 + (b .&. 7 : U32) : U32))
 
 def Gen.utf8(+x: U32) -> String:
   Bool.pick(String, U32.is_lt(x, 128), Gen.oct(x),
@@ -4075,7 +4062,7 @@ def Gen.utf8(+x: U32) -> String:
 # A code point as C string-literal text (UTF-8, escaped).
 def Gen.lit_chr(+x: U32) -> String:
   Bool.pick(String, Bool.and(Bool.and(U32.is_ge(x, 32), U32.is_lt(x, 127)),
-    Bool.not(Str.has(["\"", "\\", "?"], Str.chr(x)))), Str.chr(x),
+    Bool.not(Str.has(["\"", "\\", "?"], Chk.Str.chr(x)))), Chk.Str.chr(x),
     Gen.utf8(x))
 
 def Gen.lit(s: String) -> String:
@@ -5074,13 +5061,6 @@ def Gen.scalar.c(c: String) -> Bool:
     case other:
       False{}
 
-def Gen.scalar.find(m: Maybe<&2, String>) -> Bool:
-  match m:
-    case Some{c}:
-      Gen.scalar.c(c)
-    case None{}:
-      False{}
-
 # What a variable holds, as Gen.scalar.let says: a let's U32 local is
 # "(uN)" (a uint32_t), any other scalar's name is in parentheses.
 def Gen.scalar.u32.find(m: Maybe<&2, String>) -> U32:
@@ -5089,14 +5069,6 @@ def Gen.scalar.u32.find(m: Maybe<&2, String>) -> U32:
       Bool.pick(U32, String.starts_with(c, "(u"), 2, Bool.pick(U32, Gen.scalar.c(c), 1, 0))
     case None{}:
       0
-
-# Whether a let's value is a variable holding a scalar.
-def Gen.scalar.var(+env: Env(), v: Core.Expr) -> Bool:
-  match v:
-    case Core.EVar{+y}:
-      Gen.scalar.find(Env.find(env, y))
-    case other:
-      False{}
 
 # The natives whose result is a U32, and those whose result is another
 # scalar (a Bool, a Nat, an F32).
@@ -7218,9 +7190,6 @@ def K.fl.go(n: Nat, k: FlSel) -> FlSel.ty(k):
           do KM<Bool>:
             m : Maybe<&2, String> <- K.memo.get(K.seq.key(grp, name))
             K.fl.go(fu, FLIsseqMemo{grp, g, name, m})
-
-def K.fl.expr(g: G, self: KSelf, bound: List<&2, String>, e: Core.Expr, tail: Bool) -> KM(Bool):
-  K.fl.go(Fuel.max(), FLFlExpr{g, self, bound, e, tail})
 
 def K.isflat(g: G, name: String) -> KM(Bool):
   K.fl.go(Fuel.max(), FLIsflat{g, name})
@@ -11835,14 +11804,6 @@ type NComp is Data:
 type NRet is Data:
   NRet{cs: List<&2, NComp>, n: Nat}
 
-def NRet.cs(r: NRet) -> List<&2, NComp>:
-  NRet{cs, n} = r
-  cs
-
-def NRet.n(r: NRet) -> Nat:
-  NRet{cs, n} = r
-  n
-
 def Nest.put.type(ok: Bool, +key: String, c: Ctor, m: Map<&2, Ctor>) -> Map<&2, Ctor>:
   match ok:
     case True{}:
@@ -13677,13 +13638,6 @@ def Mod.set(xs: List<&2, String>, s: Set()) -> Set():
     case x <> t:
       Mod.set(t, Set.add(s, x))
 
-def Mod.param_names(ps: List<&2, Core.Param>) -> List<&2, String>:
-  match ps:
-    case Nil{}:
-      Nil{}
-    case Core.Param{n, m, t} <> rest:
-      n <> Mod.param_names(rest)
-
 def Mod.var(+q: Qual, +bound: List<&2, String>, +x: String) -> String:
   Bool.pick(String, Str.has(bound, x), x, Mod.q(q, x))
 
@@ -13775,7 +13729,7 @@ def Mod.ctors(+q: Qual, cs: List<&2, Ctor>) -> List<&2, Ctor>:
 def Mod.decl(+q: Qual, d: Decl) -> Decl:
   match d:
     case DDef{n, +ps, b, r}:
-      DDef{Mod.q(q, n), ps, Mod.expr(q, Mod.param_names(ps), b), Mod.expr(q, Nil{}, r)}
+      DDef{Mod.q(q, n), ps, Mod.expr(q, Ty.pnames(ps), b), Mod.expr(q, Nil{}, r)}
     case DEff{n, ps, ims}:
       DEff{Mod.q(q, n), ps, ims}
     case DLaw{n, ps, r}:
@@ -14355,15 +14309,8 @@ def LM.pvars(xs: List<&2, String>) -> List<&2, Core.Pat>:
     case x <> t:
       Core.PVar{x} <> LM.pvars(t)
 
-def LM.evars(xs: List<&2, String>) -> List<&2, Core.Expr>:
-  match xs:
-    case Nil{}:
-      Nil{}
-    case x <> t:
-      Core.EVar{x} <> LM.evars(t)
-
 def LM.app(h: Core.Expr, +xs: List<&2, String>) -> List<&2, Core.Pat> & Core.Expr:
-  (LM.pvars(xs), Core.ECall{h, LM.evars(xs)})
+  (LM.pvars(xs), Core.ECall{h, Unb.vars(xs)})
 
 def LM.cons(p: Core.Pat, r: List<&2, Core.Pat> & Core.Expr) -> List<&2, Core.Pat> & Core.Expr:
   (ps, b) = r
@@ -14667,9 +14614,6 @@ def Path.norm(+p: String) -> String:
   +body = String.join(List.reverse(&2, String, Path.fold(String.split(p, '/'), Nil{}, abs)), "/")
   Bool.pick(String, abs, "/" ++ body, Bool.pick(String, String.is_empty(body), ".", body))
 
-def Path.join(+a: String, +b: String) -> String:
-  Path.norm(a ++ "/" ++ b)
-
 def Path.segs(+p: String) -> List<&2, String>:
   Bool.pick(List<&2, String>, String.eq(p, "."), Nil{}, String.split(p, '/'))
 
@@ -14968,7 +14912,7 @@ def J.hex.go(k: Nat, +n: U32, +acc: String) -> String:
       "<hex: out of digits>"
     case 1n+j:
       +d = (n .&. 15 : U32)
-      +c = Str.chr(Bool.pick(U32, U32.is_lt(d, 10), (48 + d : U32), (87 + d : U32)))
+      +c = Chk.Str.chr(Bool.pick(U32, U32.is_lt(d, 10), (48 + d : U32), (87 + d : U32)))
       Bool.pick(Unit -> String, U32.is_lt(n, 16), u => c ++ acc, u => J.hex.go(j, (n >> 4n : U32), c ++ acc))(Unit{})
 
 def J.hex(+n: U32) -> String:
@@ -14977,7 +14921,7 @@ def J.hex(+n: U32) -> String:
 # A JS string literal.
 def J.lit_chr(+x: U32) -> String:
   Bool.pick(String, Bool.and(Bool.and(U32.is_ge(x, 32), U32.is_lt(x, 127)),
-    Bool.not(Str.has(["\"", "\\"], Str.chr(x)))), Str.chr(x),
+    Bool.not(Str.has(["\"", "\\"], Chk.Str.chr(x)))), Chk.Str.chr(x),
     "\\u{" ++ J.hex(x) ++ "}")
 
 def J.lit(s: String) -> String:
@@ -15822,13 +15766,6 @@ def K.caps.inner(caps: Env(), +i: U32) -> Env():
       Nil{}
     case Bind{x, c} <> t:
       Bind{x, S(i)} <> K.caps.inner(t, U32.inc(i))
-
-def K.caps.outer(caps: Env()) -> List<&2, Doc>:
-  match caps:
-    case Nil{}:
-      Nil{}
-    case Bind{x, c} <> t:
-      DStr{c} <> K.caps.outer(t)
 
 def K.slots.go(+n: U32, st: KSt) -> U32 & KSt:
   KSt{m, sl, curl, cur, out, fns, todo, frames, errs, flat, memo} = st
@@ -17076,7 +17013,7 @@ def K.go(n: Nat, k: KSel) -> KSel.ty(k):
             +size : U32 <- K.leave(old)
             K.frame(l, size)
             K.restore(saved)
-            K.clo(l, U32.inc(n), K.caps.outer(caps))
+            K.clo(l, U32.inc(n), Gen.caps.outer(caps))
         # A self tail call: the arguments (already in slots) become the parameters.
         case KSTail{+g, +env, +entry, s}:
           Split{kept, all, extra, full} = s
@@ -17335,13 +17272,6 @@ def KQ.reenv(live: Env(), +k: U32, +i: U32) -> Env():
     case Bind{x, c} <> t:
       Bind{x, KX.v(k) ++ "_" ++ U32.show(i)} <> KQ.reenv(t, k, U32.inc(i))
 
-def KQ.args(ds: List<&2, Doc>, +i: U32) -> Doc:
-  match ds:
-    case Nil{}:
-      DNil{}
-    case d <> t:
-      Doc.list([DStr{KQ.arg(i) ++ " = "}, d, DStr{"; "}, KQ.args(t, U32.inc(i))])
-
 def K.docs.of(e: Env()) -> List<&2, Doc>:
   match e:
     case Nil{}:
@@ -17375,14 +17305,6 @@ def KQ.ret(+g: G, +env: Env(), e: Core.Expr) -> KM(Unit):
   do KM<Unit>:
     d : Doc <- KX.expr(g, env, e)
     K.put(Doc.list([DStr{"RV = "}, d, DStr{";\nif (sp == 0) return RV;\nsp -= 1; pc = KQ_ST(sp); break;\n"}]))
-
-# A parallel let runs in order: a let per value.
-def KQ.par.lets(ps: List<&2, Core.Pat>, vs: List<&2, Core.Expr>, body: Core.Expr) -> Core.Expr:
-  match ps vs:
-    case p <> pt v <> vt:
-      Core.ELet{p, v, KQ.par.lets(pt, vt, body)}
-    case a b:
-      body
 
 def KQ.par.vals(v: Core.Expr) -> List<&2, Core.Expr>:
   match v:
@@ -17703,7 +17625,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                 gc : Bool <- KQ.gcall(g, env, self, v)
                 KQ.go(fu, KQSLetVar{g, env, self, x, v, body, gc})
             case Core.PCtor{+n, +ps}:
-              KM.if(Unit, Str.eq(n, "%par"), KQ.go(fu, KQSStmt{g, env, self, KQ.par.lets(ps, KQ.par.vals(v), body)}),
+              KM.if(Unit, Str.eq(n, "%par"), KQ.go(fu, KQSStmt{g, env, self, Anf.par.lets(ps, KQ.par.vals(v), body)}),
                 KQ.go(fu, KQSLetPatQ{g, env, self, Core.PCtor{n, ps}, v, body}))
             case other:
               KQ.go(fu, KQSLetPatQ{g, env, self, other, v, body})
@@ -17820,13 +17742,6 @@ def K.frame_table.go(k: Nat, +frames: List<&2, Bind>, +l: U32) -> String:
 def K.frame_table(+frames: List<&2, Bind>, +l: U32, +n: U32) -> String:
   K.frame_table.go(Bool.pick(Nat, U32.is_ge(l, n), 0n, U32.to_nat((n - l : U32))), frames, l)
 
-def Path.base(+p: String) -> String:
-  String.drop(p, String.length(Mod.dir(p)))
-
-def CS.book(+st: CS) -> Chk.Book:
-  CS{+book, seen, n0} = st
-  book
-
 def J.opt(m: Map<&2, JCI>) -> Map<&2, Maybe<&2, JCI>>:
   match m:
     case MTip{}:
@@ -17846,15 +17761,6 @@ def J.ctor(+j: JG, +name: String) -> Maybe<&2, JCI>:
 # JS array (Array: ALeaf{x} is [x], and ANode's halves are slices).
 def J.kind(+ty: String) -> Nat:
   P.which(ty, ["", "Bool", "Nat", "String", "Char", "U32", "F32", "Array"])
-
-def J.nth(xs: List<&2, String>, n: Nat) -> String:
-  match xs n:
-    case x <> t 0n:
-      x
-    case x <> t 1n+m:
-      J.nth(t, m)
-    case Nil{} k:
-      "_"
 
 def J.str(s: String) -> Doc:
   DStr{"\"" ++ J.lit(s) ++ "\""}
@@ -18131,9 +18037,6 @@ def J.var.found(+j: JG, +name: String, m: Maybe<&2, String>) -> Gen(Doc):
 
 def J.var(+j: JG, +env: Env(), +name: String) -> Gen(Doc):
   J.var.found(j, name, Env.find(env, name))
-
-def J.nulls(all: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
-  all
 
 def J.ret(t: Tgt, d: Doc) -> Doc:
   match t:
@@ -18671,15 +18574,12 @@ def J.def.body(+j: JG, +name: String, +mask: List<&2, Bool>, body: Core.Expr, si
       J.loop.head(params)}, b, DStr{"}\n}\n"}]))
     J.wrapper(name, mask)
 
-def J.host.chr(+x: U32) -> String:
-  Bool.pick(String, U32.is_eq(x, 46), "_", Str.chr(x))
-
 def J.host(s: String) -> String:
   match s:
     case SNil{}:
       ""
     case SCon{Chr{x}, t}:
-      J.host.chr(x) ++ J.host(t)
+      Gen.host.chr(x) ++ J.host(t)
 
 def J.effs.js.if(h: String, +host: String, rest: List<&2, String>, keep: Bool) -> List<&2, String>:
   match keep:
@@ -19368,13 +19268,6 @@ def Inl.tms.len(ts: List<&2, Core.Tm>) -> Nat:
     case t <> r:
       1n+Inl.tms.len(r)
 
-def Inl.pts.len(ps: List<&2, Core.Pt>) -> Nat:
-  match ps:
-    case Nil{}:
-      0n
-    case p <> r:
-      1n+Inl.pts.len(r)
-
 def Inl.args.len(as: List<&2, Core.Arg>) -> Nat:
   match as:
     case Nil{}:
@@ -19573,7 +19466,7 @@ def Inl.go(+n: Nat, +c: Map<&2, Core.Def>, mode: IM, +t: Core.Tm) -> Core.Tm:
                 case Core.PtCtr{+k, +qs}:
                   match v:
                     case Core.CCtr{+k2, +as}:
-                      Bool.pick(Unit -> Core.Tm, Bool.and(Bool.and(String.eq(k, k2), Bool.not(String.eq(k, "%par"))), Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as))),
+                      Bool.pick(Unit -> Core.Tm, Bool.and(Bool.and(String.eq(k, k2), Bool.not(String.eq(k, "%par"))), Nat.is_eq(Core.Pts.len(qs), Inl.tms.len(as))),
                         u => Core.CMat{as, [Core.CCse{qs, b}]},
                         u => Core.CLet{Core.PtCtr{k, qs}, Core.CCtr{k2, as}, b})(Unit{})
                     case other:
@@ -19650,7 +19543,7 @@ type OD is Data:
   OKeep{d: Decl}
 
 def Opt.on(+flags: String, +c: U32) -> Bool:
-  String.contains(flags, Str.chr(c))
+  String.contains(flags, Chk.Str.chr(c))
 
 def Opt.dname(d: Core.Def) -> String:
   match d:
@@ -20080,13 +19973,6 @@ def Opt.pm.bind(x: Core.Pt, t: Core.Tm, r: OPm) -> OPm:
     case other:
       other
 
-def Opt.pm.and(a: OPm, b: OPm) -> OPm:
-  match a:
-    case PmYes{ps, ts}:
-      b
-    case other:
-      other
-
 def Opt.pm.if(c: Bool, r: OPm) -> OPm:
   match c:
     case True{}:
@@ -20238,14 +20124,14 @@ def Opt.pt.vars(ps: List<&2, Core.Pt>) -> List<&2, Core.Tm>:
 # Lets that bind the terms to fresh variables qs, then the patterns to
 # those: no term sees a pattern's variable.
 def Opt.bound.fresh(+qs: List<&2, Core.Pt>, +ps: List<&2, Core.Pt>, ts: List<&2, Core.Tm>, +b: Core.Tm) -> OR:
-  RLets{Nat.add(Inl.pts.len(ps), Inl.pts.len(ps)), Opt.lets(qs, ts, Opt.lets(ps, Opt.pt.vars(qs), b))}
+  RLets{Nat.add(Core.Pts.len(ps), Core.Pts.len(ps)), Opt.lets(qs, ts, Opt.lets(ps, Opt.pt.vars(qs), b))}
 
 def Opt.bound.go(r: OPm, +b: Core.Tm) -> OR:
   match r:
     case PmYes{+ps, +ts}:
       +avoid = Inl.names(Core.CCtr{"", ts}, 0, Nil{})
       Bool.pick(Unit -> OR, Inl.apart(Opt.pvars(ps), avoid),
-        u => RLets{Inl.pts.len(ps), Opt.lets(ps, ts, b)},
+        u => RLets{Core.Pts.len(ps), Opt.lets(ps, ts, b)},
         u => Opt.bound.fresh(Opt.freshen(Inl.names(b, 0, Inl.names(b, 1, Inl.names(Core.CCtr{"", ts}, 1,
           List.append(&2, String, Opt.pvars(ps), avoid)))), ps), ps, ts, b))(Unit{})
     case other:
@@ -20288,22 +20174,6 @@ def Opt.miss(r: OR) -> Bool:
       String.eq(m, "%miss")
     case other:
       False{}
-
-# The term of a rule's result (a known case's lets).
-def Opt.res(r: OR) -> Core.Tm:
-  match r:
-    case RKeep{t}:
-      t
-    case RTo{t}:
-      t
-    case RSub{x, v, b}:
-      Core.CLet{Core.PtVar{x}, v, b}
-    case RAll{t}:
-      t
-    case RLets{k, t}:
-      t
-    case RLet1{p, v, t}:
-      Core.CLet{p, v, t}
 
 # The body a case ends in, under its lets.
 def Opt.end(t: Core.Tm) -> Core.Tm:
@@ -20558,7 +20428,7 @@ def Opt.let.ctr(+k: String, +qs: List<&2, Core.Pt>, v: Core.Tm, +b: Core.Tm) -> 
   match v:
     case Core.CCtr{+k2, +as}:
       Bool.pick(Unit -> OR, Bool.and(Bool.and(String.eq(k, k2), Bool.not(String.eq(k, "%par"))),
-          Nat.is_eq(Inl.pts.len(qs), Inl.tms.len(as))),
+          Nat.is_eq(Core.Pts.len(qs), Inl.tms.len(as))),
         u => Opt.bound(Opt.pms(qs, as, PmYes{Nil{}, Nil{}}), b),
         u => RKeep{Core.CLet{Core.PtCtr{k, qs}, Core.CCtr{k2, as}, b}})(Unit{})
     case Core.CLet{+p2, +v2, +b2}:
@@ -24845,10 +24715,6 @@ def N.params.in(k: Nat, +i: U32, +wide: Bool) -> As.Code:
       As.CCat{Bool.pick(As.Code, wide, As.CCat{N.w(As.ldr(9, 0, (i * 8 : U32))), N.st(9, i)}, N.st(i, i)),
         N.params.in(j, U32.inc(i), wide)}
 
-def N.split.kept(s: Split) -> List<&2, Core.Expr>:
-  Split{kept, all, extra, full} = s
-  kept
-
 def N.split0(mask: List<&2, Bool>, args: List<&2, Core.Expr>) -> Split:
   Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}})
 
@@ -25907,7 +25773,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
         case NSTailSelf{+g, +env, self, args}:
           match self:
             case NSelf{sn, +mask, +top}:
-              +kept = N.split.kept(N.split0(mask, args))
+              +kept = KX.kept.split(N.split0(mask, args))
               +n = U32.from_nat(List.length(&2, Core.Expr, kept))
               +tw = N.tw.get(env)
               +ks = N.tw.strip(kept, env, tw, 0)
@@ -25921,7 +25787,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
         case NSTailGo{+g, +env, +name, info, args}:
           match info:
             case DInfo{+kind, +mask}:
-              +kept = N.split.kept(N.split0(mask, args))
+              +kept = KX.kept.split(N.split0(mask, args))
               do NG<As.Code>:
                 N.ref(name)
                 +base : U32 <- N.slots(N.cx(env, kept))
@@ -25957,7 +25823,7 @@ def N.rec(n: Nat, k: NS) -> NG(As.Code):
         case NSDstCall{+g, +env, +d, +id, +name, +args, ok}:
           match ok:
             case True{}:
-              +kept = N.split.kept(N.split0(DInfo.mask(G.def(g, name)), args))
+              +kept = KX.kept.split(N.split0(DInfo.mask(G.def(g, name)), args))
               do NG<As.Code>:
                 N.ref(name)
                 +base : U32 <- N.slots(N.cx(env, kept))
