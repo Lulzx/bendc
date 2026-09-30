@@ -17392,7 +17392,7 @@ def KQ.tree.fields.mask(+name: String, fs: List<&2, Field>, +i: U32) -> U32:
 def KQ.tree.ctor.ok(m: Maybe<&2, CInfo>, +i: U32) -> Bool:
   match m:
     case Some{CInfo{tag, ar, +kind, single}}:
-      Bool.and(U32.is_eq(tag, i), Bool.or(U32.is_zero(kind), U32.is_eq(kind, 1)))
+      Bool.and(U32.is_eq(tag, i), Bool.or(Bool.or(U32.is_zero(kind), U32.is_eq(kind, 1)), Bool.or(U32.is_eq(kind, 7), U32.is_eq(kind, 8))))
     case None{}:
       False{}
 
@@ -17411,12 +17411,23 @@ def KQ.tree.ctors.rec(+name: String, cs: List<&2, Ctor>) -> Bool:
     case Ctor{x, fs} <> rest:
       Bool.or(Bool.not(U32.is_zero(KQ.tree.fields.mask(name, fs, 1))), KQ.tree.ctors.rec(name, rest))
 
-def KQ.tree.masks(+name: String, cs: List<&2, Ctor>) -> String:
+def KQ.tree.mask(+name: String, fs: List<&2, Field>, +kind: U32) -> U32:
+  U32.or(Bool.pick(U32, U32.is_eq(kind, 8), 2147483648, 0),
+    KQ.tree.fields.mask(name, fs, Bool.pick(U32, U32.is_eq(kind, 8), 0, 1)))
+
+def KQ.tree.kind(m: Maybe<&2, CInfo>) -> U32:
+  match m:
+    case Some{CInfo{tag, ar, kind, single}}:
+      kind
+    case None{}:
+      4294967295
+
+def KQ.tree.masks(+g: G, +name: String, cs: List<&2, Ctor>) -> String:
   match cs:
     case Nil{}:
       ""
     case Ctor{x, fs} <> rest:
-      ", " ++ U32.show(KQ.tree.fields.mask(name, fs, 1)) ++ KQ.tree.masks(name, rest)
+      ", " ++ U32.show(KQ.tree.mask(name, fs, KQ.tree.kind(G.ctor(g, x)))) ++ KQ.tree.masks(g, name, rest)
 
 def KQ.tree.type(+g: G, +name: String, d: Decl) -> String:
   match d:
@@ -17425,7 +17436,7 @@ def KQ.tree.type(+g: G, +name: String, d: Decl) -> String:
         "Nat", "Array", "Bool", "Unit", "Cmp", "Empty"], name))
       Bool.pick(String, Bool.and(allowed, Bool.and(Nat.is_eq(List.length(&2, String, ps), 0n),
         Bool.and(U32.is_le(U32.from_nat(List.length(&2, Ctor, cs)), 32), Bool.and(KQ.tree.ctors.ok(g, name, cs, 0), KQ.tree.ctors.rec(name, cs))))),
-        U32.show(U32.from_nat(List.length(&2, Ctor, cs))) ++ KQ.tree.masks(name, cs), "")
+        U32.show(U32.from_nat(List.length(&2, Ctor, cs))) ++ KQ.tree.masks(g, name, cs), "")
     case other:
       ""
 
@@ -17434,7 +17445,7 @@ def KQ.tree.ps(+name: String, ps: List<&2, Core.Param>) -> Bool:
     case Nil{}:
       True{}
     case Core.Param{x, mode, +ty} <> rest:
-      Bool.and(Gen.scalar.ty(ty), KQ.tree.ps(name, rest))
+      Bool.and(Bool.or(Gen.scalar.ty(ty), Str.eq(ty, name)), KQ.tree.ps(name, rest))
 
 def KQ.tree.schema.go(+name: String, +shape: String, m: Maybe<&2, String>) -> KM(String):
   match m:

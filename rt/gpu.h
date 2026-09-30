@@ -273,6 +273,9 @@ KINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
   KW lo = c->he == e0 ? h0 : c->hs;
   KW b = c->ab + (lo << 3), n = (c->hp - lo) << 3;
   if (r - b >= n) {
+    // A graph rooted in an earlier arena span can still reach the last
+    // one. Keep it; a scalar or immediate result cannot reach its objects.
+    if (c->he != e0 && k_in(c, r)) return r;
     c->hp = lo;
     return r;
   }
@@ -305,8 +308,8 @@ KINLINE void k_rewind(KTHR KCtx *c, KW h0, KW e0, KW b0) {
 #define KSCAL(e) ({ KW kh0_ = c->hp, ke0_ = c->he, kb0_ = c->blocks; KU kr_ = (e); if (c->err == 0) k_rewind(c, kh0_, ke0_, kb0_); kr_; })
 
 
-// Reclamation for a closed, headered recursive Data. Masks name self-typed
-// fields by payload position (bit zero is the constructor header).
+// Reclamation for a closed recursive Data. Masks name Self fields by their
+// actual payload positions; bit 31 marks the unique headerless constructor.
 KINLINE bool k_tree_new(KTHR KCtx *c, KW h0, KW e0, KW b0, KW v) {
   if (!k_in(c,v)) return false;
   KW ix=KIX(c,v);
@@ -316,12 +319,28 @@ KINLINE bool k_tree_new(KTHR KCtx *c, KW h0, KW e0, KW b0, KW v) {
   return false;
 }
 KINLINE KW k_tree_copy_node(KTHR KCtx *src,KTHR KCtx *out,KW v) {
-  KW ix=KIX(src,v), n=src->H[ix-1];
-  if (n & K_BARE) { k_fail(out,KE_MATCH);return 0; }
+  KW ix=KIX(src,v), raw=src->H[ix-1], n=raw & ~K_BARE;
   KW r=k_alloc(out,n);
   if (out->err) return 0;
+  out->H[KIX(out,r)-1]=raw;
   for(KW i=0;i<n;i++) out->H[KIX(out,r)+i]=src->H[ix+i];
   return r;
+}
+// Bit 31 denotes the type's unique headerless constructor. Immediate word
+// leaves remain outside the arena and need no copying or schema lookup.
+#define K_TREE_BARE_MASK ((KW)1 << 31)
+KINLINE bool k_tree_layout(KTHR KCtx *c,KW v,KCP KW *masks,KW nmasks,
+                           KTHR KW *mask,KTHR KW *first) {
+  KW ix=KIX(c,v), raw=c->H[ix-1];
+  if(raw & K_BARE) {
+    for(KW tag=0;tag<nmasks;tag++) if(masks[tag] & K_TREE_BARE_MASK) {
+      *mask=masks[tag] & ~K_TREE_BARE_MASK;*first=0;return true;
+    }
+    return false;
+  }
+  KW tag=c->H[ix]&0xffcfffff;
+  if(tag>=nmasks || (masks[tag] & K_TREE_BARE_MASK)) return false;
+  *mask=masks[tag];*first=1;return true;
 }
 KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
                        KCP KW *masks,KW nmasks) {
@@ -329,12 +348,12 @@ KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
   KCtx out=*c;out.hp=out.he=out.hs=0;out.blocks=b0;
   KW root=k_tree_copy_node(c,&out,r);
   KW src[64],dst[64],next[64],depth=1,steps=0;
-  src[0]=r;dst[0]=root;next[0]=1;
+  src[0]=r;dst[0]=root;next[0]=0;
   bool abort=false;
   while(depth && !out.err) {
-    KW d=depth-1,ix=KIX(c,src[d]),n=c->H[ix-1],tag=c->H[ix]&0xffcfffff;
-    if(tag>=nmasks || n>=64 || ++steps>131072) {abort=true;break;}
-    KW mask=masks[tag];
+    KW d=depth-1,ix=KIX(c,src[d]),n=c->H[ix-1] & ~K_BARE,mask,first;
+    if(n>=64 || ++steps>131072 || !k_tree_layout(c,src[d],masks,nmasks,&mask,&first)) {abort=true;break;}
+    if(next[d]<first) next[d]=first;
     while(next[d]<n && !(mask&((KW)1<<next[d]))) next[d]++;
     if(next[d]==n) {depth--;continue;}
     KW i=next[d]++,v=c->H[ix+i];
@@ -343,7 +362,7 @@ KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
     KW copied=k_tree_copy_node(c,&out,v);
     if(out.err) break;
     out.H[KIX(&out,dst[d])+i]=copied;
-    src[depth]=v;dst[depth]=copied;next[depth]=1;depth++;
+    src[depth]=v;dst[depth]=copied;next[depth]=0;depth++;
   }
   if(abort || out.err) {
     // Only private output was written. The source and its span links remain
@@ -359,8 +378,9 @@ KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
   if(out.blocks!=b0 && out.H[out.blocks]==b0 && out.hp-out.hs<=e0-h0) {
     KW lo=out.hs,words=out.hp-lo,base=KPTR(&out,lo),bytes=words<<3;
     for(KW at=lo;at<out.hp;) {
-      KW n=out.H[at],tag=out.H[at+1]&0xffcfffff,mask=masks[tag];
-      c->H[h0+at-lo]=n;
+      KW raw=out.H[at],n=raw & ~K_BARE,mask=0,first=0;
+      (void)k_tree_layout(&out,KPTR(&out,at+1),masks,nmasks,&mask,&first);
+      c->H[h0+at-lo]=raw;
       for(KW i=0;i<n;i++) {
         KW v=out.H[at+1+i];
         if((mask&((KW)1<<i)) && v-base<bytes) v=KPTR(c,h0)+(v-base);
