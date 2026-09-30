@@ -134,6 +134,8 @@ static void (*g_pool_pop)(void *);
 static GId g_dev, g_queue, g_pso, g_pso_kq, g_bufH, g_bufA, g_bufG;
 static KW g_bufG_len;
 static unsigned long g_tpg;
+static unsigned long long g_hint_hash;
+static size_t g_hint_peak;
 
 #define G_SEND(T) ((T)g_send)
 static GId g_msg(GId o, const char *s) { return G_SEND(GId (*)(GId, GSel))(o, g_sel(s)); }
@@ -174,6 +176,44 @@ static int g_cache_path(char *out, size_t n, unsigned long long h, int dir) {
     mkdir(out, 0755);
   }
   return snprintf(out, n, "%s/Library/Caches/bend/%016llx.gpu", home, h) < (int)n;
+}
+
+// A successful call teaches the next process its arena's initial size.
+// Hints only affect growth: explicit sizes win, and malformed or stale
+// hints are ignored. The code hash keeps unrelated programs separate.
+static int g_hint_path(char *out, size_t n, unsigned long long h, int dir) {
+  char base[PATH_MAX];
+  return g_cache_path(base, sizeof base, h, dir) &&
+    snprintf(out, n, "%s.arena", base) < (int)n;
+}
+static void g_hint_load(unsigned long long h) {
+  if (getenv("BEND_GPU_MB0") || bend_gpu_mb != 0) return;
+  char path[PATH_MAX + 8];
+  if (!g_hint_path(path, sizeof path, h, 0)) return;
+  FILE *f = fopen(path, "r");
+  if (!f) return;
+  unsigned long long mb = 0; char end = 0;
+  int ok = fscanf(f, "bend-arena-1 %llu%c", &mb, &end) == 2 && end == '\n' && fgetc(f) == EOF;
+  fclose(f);
+  if (!ok || mb < 64 || mb > (gpu_Hmax >> 20)) return;
+  size_t n = (size_t)mb << 20;
+  if (n > gpu_Hn) gpu_Hn = n;
+  if (gpu_log == 2) fprintf(stderr, "bend gpu: arena hint %llu MB\n", mb);
+}
+static void g_hint_save(size_t need) {
+  if (need <= g_hint_peak) return;
+  g_hint_peak = need;
+  size_t n = (size_t)64 << 20;
+  while (n < need && n < gpu_Hmax) n = n > gpu_Hmax / 2 ? gpu_Hmax : n * 2;
+  if (n > gpu_Hmax) n = gpu_Hmax;
+  char path[PATH_MAX + 8], tmp[PATH_MAX + 40];
+  if (!g_hint_path(path, sizeof path, g_hint_hash, 1)) return;
+  snprintf(tmp, sizeof tmp, "%s.%d", path, (int)getpid());
+  FILE *f = fopen(tmp, "w");
+  if (!f) return;
+  int ok = fprintf(f, "bend-arena-1 %llu\n", (unsigned long long)(n >> 20)) > 0;
+  if (fclose(f) != 0) ok = 0;
+  if (!ok || rename(tmp, path) != 0) unlink(tmp);
 }
 
 static GId g_url(const char *path) {
@@ -292,6 +332,8 @@ static int g_init(const GpuProg *prog) {
     if (!g_pso || !g_pso_kq) { g_pool_pop(pool); return 0; }
     g_save(h, d, d_kq);
   }
+  g_hint_hash = h;
+  g_hint_load(h);
   g_tpg = G_SEND(unsigned long (*)(GId, GSel))(g_pso, g_sel("maxTotalThreadsPerThreadgroup"));
   if (g_tpg > 256) g_tpg = 256;
   g_queue = g_msg(g_dev, "newCommandQueue");
@@ -642,6 +684,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   memset(H, 0, P.qd * 8);
   // A lane's other words are set before they are read.
   if (gpu_used) memset(H + P.lane0, 0, 10 * gpu_lanes * 8);
+  memset(H + P.lane0 + (10 + KQ_ARGS) * gpu_lanes, 0, 2 * gpu_lanes * 8);
   gpu_used = 1;
   for (KW i = 0; i < nfn; i++) {
     H[P.fn0 + 2 * i] = (KW)(uintptr_t)prog->fns[i].f;
@@ -688,7 +731,6 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
       // (again, after the arena grows, while a call runs out of it)
       for (;;) {
         gpu_A[KA_GROW] = 0;
-        KAU used = gpu_A[KA_HEAP];
         if (gpu_mode == GPU_SIM) {
           for (KW l = 0; l < gpu_lanes; l++) prog->sim_kq(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
         }
@@ -698,14 +740,11 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
         }
 #endif
         if (gpu_A[KA_GROW] == 0 || gpu_A[KA_ERR] != 0) break;
-        // (by as much as the calls that ran out would take: they took the
-        // arena too, and as many calls again as the ones that did not; when
-        // every call ran out, what they took is free again, and nothing says
-        // how much they take: 8 times, as the first use of a buffer costs with
-        // its size (merkle takes 338 MB, and 1 GB cost 25 ms more than 512 MB))
+        // Grow for the calls still waiting. Their discarded spans stay in
+        // each lane's free list, so the global bump must remain monotonic.
         KW left = 0;
         for (KW l = 0; l < gpu_lanes; l++) left += H[P.lane0 + l] == PC_KQ;
-        if (left == waiting) gpu_A[KA_HEAP] = used;
+        // Reusable lane chunks keep their indices; do not rewind the global bump.
         size_t f = 4;
         while (f < (left == waiting ? 8 : 16) && f * (waiting - left) < 2 * waiting) f *= 2;
         if (!gpu_grow(f)) {
@@ -741,6 +780,10 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
       (unsigned long long)rounds, (unsigned long long)((KW)gpu_A[KA_HEAP] * K_CHUNK * 8 >> 20), gpu_secs[0],
       gpu_secs[1]);
   }
+#if BEND_METAL
+  if (gpu_mode == GPU_METAL)
+    g_hint_save((size_t)(P.heap0 + (KW)gpu_A[KA_HEAP] * K_CHUNK) * 8);
+#endif
   // A big result stays where it is (copying it out costs as much as the
   // call, and the next call may take it back), below half the arena.
   KW end = P.heap0 + (KW)gpu_A[KA_HEAP] * K_CHUNK;

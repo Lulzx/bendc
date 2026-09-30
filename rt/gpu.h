@@ -119,7 +119,7 @@ typedef struct {
 #define PC_TASK 3
 #define PC_KQ 4      // waiting to run a KQ_ call (see the kernel's loop)
 #define KQ_ARGS 12
-#define K_LANE (10 + KQ_ARGS)  // words of a lane's saved state
+#define K_LANE (12 + KQ_ARGS)  // words of a lane's saved state
 
 #define K_CHUNK 256
 
@@ -139,6 +139,7 @@ typedef struct {
   KW ab, an, gb, lane;
   KW pc, fp, rv, dep, hp, he, ax;
   KW ko[8];            // a flat call's result fields (see KBOX)
+  KW blocks, spare;    // span chains: live allocations and lane-local free spans
   KW hs;               // where the lane's current heap chunk starts (or its hp at load)
   KW ca, cb; KU cm, cn;  // the narrow arrays the lane last used, and their masks (see k_aget)
   KU err;
@@ -202,18 +203,35 @@ KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : (k_word(c, v,
 // that ran out writes there, and stops.
 KINLINE KW k_alloc(KTHR KCtx *c, KW n) {
   if (c->hp + n + 1 > c->he) {
-    KW need = n + 1 > K_CHUNK ? n + 1 : K_CHUNK;
-    KW k = (need + K_CHUNK - 1) / K_CHUNK;
-    KW at = (KW)K_ADD(&c->A[KA_HEAP], (KU)k);
-    KW start = c->P->heap0 + at * K_CHUNK;
-    if (start + k * K_CHUNK > c->P->heap0 + c->P->heapw) {
-      k_fail(c, KE_HEAP);
-      c->hp = c->P->heap0;
-      c->he = c->hp + K_CHUNK;
-      return KPTR(c, c->P->heap0 + 1);
+    // Two words link each allocation span, outside its object storage.
+    KW k = (n + 3 + K_CHUNK - 1) / K_CHUNK;
+    KW start = 0, prev = 0, at = c->spare;
+    while (at != 0) {
+      if (c->H[at + 1] >= k) {
+        if (prev != 0) c->H[prev] = c->H[at];
+        else c->spare = c->H[at];
+        start = at;
+        k = c->H[at + 1];
+        break;
+      }
+      prev = at;
+      at = c->H[at];
     }
-    c->hp = start;
-    c->hs = start;
+    if (start == 0) {
+      KW idx = (KW)K_ADD(&c->A[KA_HEAP], (KU)k);
+      start = c->P->heap0 + idx * K_CHUNK;
+      if (start + k * K_CHUNK > c->P->heap0 + c->P->heapw) {
+        k_fail(c, KE_HEAP);
+        c->hp = c->P->heap0;
+        c->he = c->hp + K_CHUNK;
+        return KPTR(c, c->P->heap0 + 1);
+      }
+    }
+    c->H[start] = c->blocks;
+    c->H[start + 1] = k;
+    c->blocks = start;
+    c->hp = start + 2;
+    c->hs = c->hp;
     c->he = start + k * K_CHUNK;
   }
   KW i = c->hp;
@@ -265,7 +283,21 @@ KINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
 #define KREG(e) ({ KW kh0_ = c->hp, ke0_ = c->he; KW kr_ = (e); k_region(c, kh0_, ke0_, kr_); })
 // The same for a call whose result is a scalar (a U32, F32 or Bool): it reaches
 // nothing the call allocated.
-#define KSCAL(e) ({ KW kh0_ = c->hp, ke0_ = c->he; KU kr_ = (e); c->hp = c->he == ke0_ ? kh0_ : c->hs; kr_; })
+// No value escapes a scalar call or an abandoned KQ_ call. Return its
+// new spans to this lane; the previous span and its older objects stay live.
+KINLINE void k_rewind(KTHR KCtx *c, KW h0, KW e0, KW b0) {
+  while (c->blocks != b0) {
+    KW at = c->blocks;
+    c->blocks = c->H[at];
+    c->H[at] = c->spare;
+    c->spare = at;
+  }
+  c->hp = h0;
+  c->he = e0;
+  c->hs = b0 ? b0 + 2 : h0;
+  k_anone(c);
+}
+#define KSCAL(e) ({ KW kh0_ = c->hp, ke0_ = c->he, kb0_ = c->blocks; KU kr_ = (e); if (c->err == 0) k_rewind(c, kh0_, ke0_, kb0_); kr_; })
 
 // A flat def keeps a Nat parameter in a KU: a Nat past 2^32 - 1 fails the call
 // over to the CPU (a counted loop never gets there). KSET assigns a parameter
@@ -773,7 +805,9 @@ KINLINE void k_load(KTHR KCtx *c, KCOH KW *H, KDEV KAU *A, KCP KParams *P, KDEV 
   c->dep = ls[3 * n];
   c->hp = ls[4 * n];
   c->he = ls[5 * n];
-  c->hs = c->hp;
+  c->blocks = ls[(10 + KQ_ARGS) * n];
+  c->spare = ls[(11 + KQ_ARGS) * n];
+  c->hs = c->blocks ? c->blocks + 2 : c->hp;
   c->ax = ls[6 * n];
   c->kq = ls[7 * n];
   c->kqret = ls[8 * n];
@@ -794,6 +828,8 @@ KINLINE void k_save(KTHR KCtx *c) {
   ls[7 * n] = c->kq;
   ls[8 * n] = c->kqret;
   ls[9 * n] = c->kqfb;
+  ls[(10 + KQ_ARGS) * n] = c->blocks;
+  ls[(11 + KQ_ARGS) * n] = c->spare;
   for (int i = 0; i < KQ_ARGS; i++) ls[(10 + i) * n] = c->kqa[i];
 }
 
@@ -884,21 +920,20 @@ static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   KTHR KCtx *c = &cx;
   k_load(c, H, A, P, G, lane);
   bool ok = true;
-  KW h0 = c->hp, e0 = c->he;
+  KW h0 = c->hp, e0 = c->he, b0 = c->blocks;
   c->kqlim = (c->kqfb & K_KQLIM) ? K_KQSTEPS : ~(KW)0;
   KW r = k_kq(c, &ok);
   // A call that ran out of arena waits for the host to grow it, and runs
   // again (what it allocated is garbage: its result reached none of it).
   if (c->err == KE_HEAP) {
-    c->hp = h0;
-    c->he = e0;
+    k_rewind(c, h0, e0, b0);
     K_STORE(&A[KA_GROW], 1u);
     k_save(c);
     return;
   }
   // A call that gave up (ok false) runs again through the frames.
   if (!ok) {
-    if (c->he == e0) c->hp = h0;
+    k_rewind(c, h0, e0, b0);
   } else {
     r = k_region(c, h0, e0, r);
   }
