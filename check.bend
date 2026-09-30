@@ -1768,6 +1768,16 @@ def memo.get(m: Tm) -> Tm:
 def memo.set(m: Tm, v: Tm, x: Tm) -> Tm:
   x
 
+# Whether two memos are one (the copies of a cell share its memo).
+def memo.same(m: Tm, n: Tm) -> Bool:
+  False{}
+
+# Two cells found equal become one: when same, the memo m takes the value
+# the memo n keeps, so a shared graph is compared once, not walked as a
+# tree. As Bend it keeps nothing.
+def memo.link(same: Bool, m: Tm, n: Tm) -> Bool:
+  same
+
 def term_cell(+t: Tm, +k: String) -> Tm:
   match t:
     case Cel{k2, s, v, m}:
@@ -5423,6 +5433,7 @@ type CmpSel is Data:
   SCmpRef{book: Book, k: String, k2: String, a: Tm, b: Tm, dep: U32}
   SCmpHead{book: Book, f1: Tm, f2: Tm, dep: U32}
   SCmpGo{le: Bool, book: Book, a: Tm, b: Tm, dep: U32}
+  SCmpCel{le: Bool, book: Book, into: Tm, from: Tm, a: Tm, b: Tm, dep: U32}
 
 # The conversion check, one def: sel picks the step. Out of fuel, terms
 # are not equal.
@@ -5450,10 +5461,25 @@ def cmp.run(fuel0: Nat, sel: CmpSel) -> Bool:
           False{}
         case SCmpGo{le, book, a, b, dep}:
           False{}
+        case SCmpCel{le, book, into, from, a, b, dep}:
+          False{}
     case 1n+ +fuel:
       match sel:
+        # Two copies of one cell are equal; two cells are compared by their
+        # values, and in EQ, once found equal, rhs's points at lhs's.
         case STermCompare{le, +book, lhs, rhs, +dep}:
-          cmp.run(fuel, SCmpWnf{le, book, term_wnf(book, lhs), term_wnf(book, rhs), dep})
+          match lhs rhs:
+            case Cel{k, s, v, +m} Cel{k2, s2, v2, +m2}:
+              Lazy.or(memo.same(m, m2), u => cmp.run(fuel, SCmpCel{le, book, m2, m,
+                term_wnf(book, Cel{k, s, v, m}), term_wnf(book, Cel{k2, s2, v2, m2}), dep}))
+            case x y:
+              cmp.run(fuel, SCmpWnf{le, book, term_wnf(book, x), term_wnf(book, y), dep})
+        case SCmpCel{le, +book, into, from, a, b, +dep}:
+          match le:
+            case False{}:
+              memo.link(cmp.run(fuel, STermCompare{False{}, book, a, b, dep}), into, from)
+            case True{}:
+              cmp.run(fuel, SCmpWnf{True{}, book, a, b, dep})
         case SCmpWnf{+le, +book, +a, +b, +dep}:
           Bool.pick(Unit -> Bool, Bool.or(Tm.is_lam(a), Tm.is_lam(b)),
             un => cmp.run(fuel, STermCompare{le, book, term_apply1(book, a, Var{Tm.lam_k(a, b), dep, NoSp{}}),
@@ -5542,8 +5568,12 @@ def cmp.run(fuel0: Nat, sel: CmpSel) -> Bool:
             case x y:
               False{}
 
-def term_compare(le: Bool, +book: Book, lhs: Tm, rhs: Tm, +dep: U32) -> Bool:
-  cmp.run(Fuel.max(), STermCompare{le, book, lhs, rhs, dep})
+# Two copies of one term are equal before either unfolds: a conversion
+# first compares both sides with every def rigid (the empty book unfolds
+# none), then as before.
+def term_compare(+le: Bool, +book: Book, +lhs: Tm, +rhs: Tm, +dep: U32) -> Bool:
+  Lazy.or(cmp.run(Fuel.max(), STermCompare{le, book_nil(), lhs, rhs, dep}),
+    u => cmp.run(Fuel.max(), STermCompare{le, book, lhs, rhs, dep}))
 
 def Lst.last(-A: Data, d: A, xs: List<&2, A>) -> A:
   match xs:

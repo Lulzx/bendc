@@ -1509,6 +1509,28 @@ static inline V F_Chk_dmemo_dset(V m, V v, V x) {
   bend_drop(m);
   return x;
 }
+// Whether two memos are one: the copies of a cell share its memo.
+static inline V F_Chk_dmemo_dsame(V m, V n) {
+  V r = BOOL(m == n);
+  bend_drop(m);
+  bend_drop(n);
+  return r;
+}
+// Two cells found equal become one: when same (True), m takes the value
+// n keeps, if both were evaluated. (A cell is one checker's, so no reader
+// races the store.)
+static inline V F_Chk_dmemo_dlink(V same, V m, V n) {
+  if (same == IMM(1) && arr_cells(m)[0] != 0 && arr_cells(n)[0] != 0) {
+    V x = arr_cells(n)[1], o = arr_cells(m)[1];
+    if (gc_hot.rc) rc_dup_in(x, ((V *)n)[0] & RC_TS);
+    else bend_share(x);
+    arr_put(m, &arr_cells(m)[1], x);
+    bend_drop(o);
+  }
+  bend_drop(m);
+  bend_drop(n);
+  return same;
+}
 // x, read out of array a, is the array's and the reader's now.
 BEND_UINL void arr_got(V a, V x) {
   if (gc_hot.rc) rc_dup_in(x, ((V *)a)[0] & RC_TS);
@@ -2215,6 +2237,8 @@ Term io_list(Env e, const char *p, u64 n);
 #define io_done(e, v) io_box(e, CID_DONE, v)
 
 Term io_fail(Env e, u32 code, const char *text);
+// An effect's answer: its failure when it set a code, else Done{v}.
+#define io_res(e, w, v) ((w)->code ? io_fail(e, (w)->code, NULL) : io_done(e, v))
 
 extern pthread_mutex_t io_gate;
 extern pthread_cond_t io_bell;

@@ -197,6 +197,8 @@ const F_Chk_dmemo_dnew = (t) => [undefined, undefined];
 const F_Chk_dmemo_dhas = (m, v) => m[0] !== undefined && m[0] === v;
 const F_Chk_dmemo_dget = (m) => m[1];
 const F_Chk_dmemo_dset = (m, v, x) => (m[1] = x, m[0] = v, x);
+const F_Chk_dmemo_dsame = (m, n) => m === n;
+const F_Chk_dmemo_dlink = (same, m, n) => (same && m[0] !== undefined && n[0] !== undefined && (m[1] = n[1]), same);
 const F_Array_dget = (a, i) => ({ $: "Tuple", fst: a, snd: a[i % a.length] });
 const F_Array_dswap = (a, i, v) => array_rmw(a, i, () => v);
 const F_Array_dset = (a, i, v) => ((a[i % a.length] = v), a);

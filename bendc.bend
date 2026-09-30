@@ -3861,6 +3861,7 @@ def Natives() -> List<&2, String>:
    "Nat.mod", "Nat.cmp", "Nat.is_eq", "Nat.is_ne", "Nat.is_lt", "Nat.is_le",
    "Nat.is_gt", "Nat.is_ge", "Nat.min", "Nat.max", "Nat.pow", "Nat.show",
    "Chk.memo.new", "Chk.memo.has", "Chk.memo.get", "Chk.memo.set",
+   "Chk.memo.same", "Chk.memo.link",
    "F32.add", "F32.sub", "F32.mul", "F32.div", "F32.mod", "F32.pow", "F32.atan2",
    "F32.is_eq", "F32.is_ne", "F32.is_lt", "F32.is_le", "F32.is_gt", "F32.is_ge",
    "F32.neg", "F32.abs", "F32.sqrt", "F32.exp", "F32.log", "F32.log2",
