@@ -19720,10 +19720,13 @@ def Opt.fits(+flags: String, +b: Core.Tm) -> Bool:
   Bool.or(Opt.size.le(b, Opt.budget(flags)),
     Bool.and(Bool.and(Opt.shape(b), Opt.shape.builds(b)), Opt.size.le(b, U32.mul(3, Opt.budget(flags)))))
 
+# Array.join is not: inlined, it drops its second array, and a dead let
+# would then lose that side's writes (atomics through a fork's other
+# handle, which the first one sees).
 def Opt.small(+flags: String, +rank: Map<&2, U32>, +d: Core.Def) -> Bool:
   match d:
     case Core.Def{+name, ps, +b, ret}:
-      Bool.and(Bool.and(Opt.fits(flags, b), Bool.not(G.is_native(name))),
+      Bool.and(Bool.and(Opt.fits(flags, b), Bool.and(Bool.not(G.is_native(name)), Bool.not(Str.eq(name, "Array.join")))),
         Bool.and(Bool.not(String.starts_with(name, "IO.")),
           Opt.before(Inl.names(b, 3, Nil{}), rank, Pair.snd(Map<&2, U32>, U32, Map.get(U32, 0, rank, name)))))
 
