@@ -30,7 +30,7 @@ UP=${BEND_UP:-/tmp/bendup32}
 BEND=${BEND:-bend}
 export BEND_NO_TELEMETRY=1
 python3 - "$BENDC" "$BASE" "$UP" "$BEND" "$R" "$NT" "$RC" "$@" <<'PY'
-import os, subprocess, sys, time
+import json, os, subprocess, sys, time
 bendc, base, up, bend, R, nt, rc = sys.argv[1:8]
 R, rc = int(R), rc == '1'
 only = sys.argv[8:]
@@ -46,6 +46,15 @@ MEM = {'tree-bitonic': '768MB', 'gameoflife': '512MB', 'kmeans': '768MB', 'mande
        'symreg': '512MB', 'terrain': '1GB'}
 CC = 'cc -std=c11 -O3 main.c -lpthread'
 METAL = 'cc -std=c11 -O3 -DBEND_METAL=1 -x objective-c -fobjc-arc main.c -lpthread -framework Metal -framework Foundation'
+receipt = os.environ.get('BEND_BENCH_RESULTS', 'build/official/results.json')
+results = {'bendc': os.path.abspath(bendc), 'bend': bend, 'base': base,
+           'upstream': up, 'runs': R, 'threads': nt, 'rc': rc,
+           'started': time.time(), 'samples': []}
+
+def save():
+    os.makedirs(os.path.dirname(os.path.abspath(receipt)), exist_ok=True)
+    with open(receipt, 'w') as f:
+        json.dump(results, f, indent=2)
 
 def sh(cmd, cwd):
     p = subprocess.run(cmd, cwd=cwd, shell=True, capture_output=True, text=True)
@@ -57,8 +66,16 @@ def run(cmd, cwd):
     o = p.stdout.read().decode()
     _, status, ru = os.wait4(p.pid, 0)
     t = time.perf_counter() - t
-    if os.waitstatus_to_exitcode(status): o += ' (exit %d)' % os.waitstatus_to_exitcode(status)
-    return t, ru.ru_maxrss / (1 << 20), o.strip().split('\n')[-1]
+    status = os.waitstatus_to_exitcode(status)
+    # wait4 reports bytes on Darwin and KiB on Linux.
+    mem = ru.ru_maxrss / ((1 << 20) if sys.platform == 'darwin' else 1024)
+    results['samples'].append({'bench': b, 'mode': m, 'binary': cmd[0],
+                              'flags': cmd[1:], 'warmup': i == 0,
+                              'seconds': t, 'peak_rss_mb': mem,
+                              'exit': status, 'output': o.strip()})
+    save()
+    if status: sys.exit('%s: %s exited %d' % (cwd, cmd[0], status))
+    return t, mem, o.strip()
 
 def fmt(c, others):
     t, m = c
@@ -89,4 +106,7 @@ for b in benches:
         row += [fmt(c, best[:k] + best[k + 1:]) for k, c in enumerate(best)]
     row.append(' '.join(sorted(outs)) if len(outs) == 1 else 'DIFFER: ' + ' / '.join(sorted(outs)))
     print('| ' + ' | '.join(row) + ' |', flush=True)
+    if len(outs) != 1: sys.exit('%s: benchmark outputs differ (see %s)' % (b, receipt))
+results['completed'] = time.time()
+save()
 PY

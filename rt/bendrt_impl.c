@@ -25,6 +25,9 @@
 #define BEND_SH ((V)1 << 20)
 #define BEND_DEEP ((V)1 << 21)
 #define BEND_SH_BITS (BEND_SH | BEND_DEEP)
+#define ARR_TAG ((V)0xFFF00)
+#define ARR_NW ((V)0x20)
+#define ARR_W0_NW(w0) (((w0) & (V)0xFFFFFFCFFFE0) == (ARR_TAG | ARR_NW))
 #define BEND_HOLE IMM(0x7ffff)
 #define BEND_BARRIER() __asm__ volatile("" ::: "memory")
 #define FLD(v, i) (((V *)(v))[(i) + 1])
@@ -407,11 +410,16 @@ __attribute__((noinline)) void bend_share_slow(V v) {
     b = gc_blk(bi);
     i = 0;
   }
-  if (i >= b->nobj || b->atomic) return;
+  if (i >= b->nobj) return;
   if ((uintptr_t)v != (uintptr_t)gc_objs(b) + (uintptr_t)i * b->words * sizeof(V)) return;
   if (!(GC_ALLOC(b)[i >> 6] & (1ull << (i & 63)))) return;
   V *p = (V *)v;
   V w0 = __atomic_load_n(&p[0], __ATOMIC_RELAXED);
+  // (an atomic block's objects are narrow arrays: see arr_alloc_x)
+  if (b->atomic) {
+    if (ARR_W0_NW(w0) && !(w0 & BEND_SH)) __atomic_fetch_or(&p[0], BEND_SH, __ATOMIC_RELAXED);
+    return;
+  }
   if (w0 >= ((V)1 << 22)) {
     V n = p[2];
     if (b->words >= 3 && n <= (V)b->words - 3)
@@ -491,6 +499,7 @@ __attribute__((noinline)) void rc_free_obj(V v) {
     uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
     size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
     V *p = (V *)v;
+    if (ARR_W0_NW(p[0])) w = 1;  // (a narrow array's cells are scalars)
     V next = 0;
     for (size_t j = 1; j < w; j++) {
       V x = p[j];
@@ -525,6 +534,7 @@ void rc_immortal(V v) {
     p[0] |= RC_STICKY;
     uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
     size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
+    if (ARR_W0_NW(p[0])) w = 1;
     for (size_t j = 1; j + 1 < w; j++) rc_immortal(p[j]);
     v = w > 1 ? p[w - 1] : 0;
   }
@@ -539,6 +549,7 @@ __attribute__((noinline)) void rc_publish(V v) {
       p[0] = w0 | RC_TS;
       uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
       size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
+      if (ARR_W0_NW(w0)) w = 1;
       for (size_t j = 1; j < w; j++)
         if (p[j] >= ((V)1 << 32)) rc_push(t, p[j]);
     }
@@ -978,12 +989,11 @@ void thr_register(uintptr_t top) {
 #define RUF(u, w) do { if (u) rc_free_at(u, w); } while (0)
 #define RUG(tok, w) ((tok) ? bend_ru_dirty(tok) : halloc(w))
 #define RUFG(u, w) do { if (u) bend_free_slot((u), (w), 0); } while (0)
-#define ARR_TAG ((V)0xFFF00)
 #define ARR_HDR(c) (ARR_TAG | (V)(c))
 void rc_let_go_arr(V a) {
   if (rc_unique(a)) rc_free_at(a, 0);
   else {
-    size_t n = (size_t)1 << arr_cls(a);
+    size_t n = arr_nw(a) ? 0 : (size_t)1 << arr_cls(a);
     V ts = ((V *)a)[0] & RC_TS;
     for (size_t i = 0; i < n; i++) rc_dup_in(arr_cells(a)[i], ts);
     rc_drop(a);
@@ -1008,16 +1018,47 @@ V arr_copy(unsigned c, const V *src, int share, V ts) {
   }
   return a;
 }
+V arr_new_nw_x(V depth, V v) {
+  if (depth > 31) bend_fail("an array past the deepest block class 31");
+  unsigned c = (unsigned)depth;
+  size_t n = (size_t)1 << c;
+  V a = arr_alloc_x(c, ARR_NW);
+  if (c == 0) { arr_cells(a)[0] = (uint32_t)v; return a; }
+  uint32_t *d = arr_ncells(a), x = (uint32_t)v;
+  // (eight cells a step from 8 cells up: clang does not vectorize a loop
+  // whose count is 1 << c)
+  if (n < 8) for (size_t i = 0; i < n; i++) d[i] = x;
+  else
+    for (size_t i = 0; i < n; i += 8) {
+      d[i] = x; d[i + 1] = x; d[i + 2] = x; d[i + 3] = x;
+      d[i + 4] = x; d[i + 5] = x; d[i + 6] = x; d[i + 7] = x;
+    }
+  return a;
+}
+V arr_ncopy(unsigned c, const uint32_t *src) {
+  V a = arr_alloc_x(c, ARR_NW);
+  if (c == 0) arr_cells(a)[0] = src[0];
+  else memcpy(arr_ncells(a), src, ((size_t)4) << c);
+  return a;
+}
 V arr_node(V l, V r) {
   unsigned c = arr_cls(l);
   if (arr_cls(r) != c || c >= 31) bend_fail("runtime fail-stop");
   size_t n = (size_t)1 << c;
+  // (two narrow halves make a narrow array; one of each, a wide one)
+  if (arr_nw(l) && arr_nw(r)) {
+    V a = arr_alloc_x(c + 1, ARR_NW);
+    memcpy(arr_ncells(a), arr_ncells(l), n * 4);
+    memcpy(arr_ncells(a) + n, arr_ncells(r), n * 4);
+    if (gc_hot.rc) { rc_let_go_arr(l); rc_let_go_arr(r); }
+    return a;
+  }
   V a = arr_alloc(c + 1);
   V *d = arr_cells(a);
   int sl = !gc_hot.rc && arr_shared(l), sr = !gc_hot.rc && arr_shared(r);
   arr_dirty(a);
-  for (size_t i = 0; i < n; i++) { V x = arr_cells(l)[i]; if (sl) bend_dup(x); d[i] = x; }
-  for (size_t i = 0; i < n; i++) { V x = arr_cells(r)[i]; if (sr) bend_dup(x); d[n + i] = x; }
+  for (size_t i = 0; i < n; i++) { V x = arr_cell(l, i); if (sl) bend_dup(x); d[i] = x; }
+  for (size_t i = 0; i < n; i++) { V x = arr_cell(r, i); if (sr) bend_dup(x); d[n + i] = x; }
   // (counted, the halves' cells moved here, or got a reference each)
   if (gc_hot.rc) { rc_let_go_arr(l); rc_let_go_arr(r); }
   return a;
@@ -1025,9 +1066,9 @@ V arr_node(V l, V r) {
 V arr_half(V a, unsigned hi) {
   unsigned c = arr_cls(a);
   if (c == 0) bend_fail("runtime fail-stop");
+  if (arr_nw(a)) return arr_ncopy(c - 1, arr_ncells(a) + ((size_t)hi << (c - 1)));
   return arr_copy(c - 1, arr_cells(a) + ((size_t)hi << (c - 1)), gc_hot.rc || arr_shared(a), ((V *)a)[0] & RC_TS);
 }
-#define F_Array_dnew_x37w F_Array_dnew
 #define ARR_ATOMIC(name, op) static inline V F_Array_datomic_d##name(V a, V i, V v) { return C2(0, a, (V)__atomic_##op(arr_word(a, i), (uint32_t)v, __ATOMIC_SEQ_CST)); }
 #ifdef __TINYC__
 #else

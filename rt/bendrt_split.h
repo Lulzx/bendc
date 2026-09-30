@@ -98,6 +98,12 @@ typedef uint64_t Term;
 #define BEND_SH ((V)1 << 20)
 #define BEND_DEEP ((V)1 << 21)
 #define BEND_SH_BITS (BEND_SH | BEND_DEEP)
+// An array's header (see "Arrays"): ARR_TAG, its class, and ARR_NW when its
+// cells are 32 bits. ARR_W0_NW: first word w0 (its flags and count aside)
+// is a narrow array's, whose cells hold no references.
+#define ARR_TAG ((V)0xFFF00)
+#define ARR_NW ((V)0x20)
+#define ARR_W0_NW(w0) (((w0) & (V)0xFFFFFFCFFFE0) == (ARR_TAG | ARR_NW))
 // What a D_ function's node holds where its hole is, until it is filled: a
 // word no pointer can be, that the collector looks for (gc_rem).
 #define BEND_HOLE IMM(0x7ffff)
@@ -1279,10 +1285,23 @@ static inline V CGN(V u, V t, int n, const V *xs) {
 // through one is read through the other. A match on ANode copies the
 // halves; ANode{l, r} copies both into a new array; ALeaf{x} is a 1-cell
 // one. A shared array's cells are shared as they are copied.
-#define ARR_TAG ((V)0xFFF00)
+//
+// An array of scalars that Array.new%w makes (U32, F32, Bool or Char cells:
+// see Arrw in bendc.bend) is narrow, as on the device: its header has
+// ARR_NW, and 2^c 32-bit cells follow it, so a loop over one moves half the
+// bytes and clang vectorizes it twice as wide. Under the collector it sits
+// in an atomic block, which is not scanned (two cells in a word could look
+// like a pointer); counted, the walks over an object's words (rc_free_obj,
+// rc_publish, rc_immortal) stop at its header. Every access tests the flag:
+// an Array.new whose type is a variable makes a wide array of scalars, which
+// Array.get%w may be handed, and a generic Array.get a narrow one.
 #define ARR_HDR(c) (ARR_TAG | (V)(c))
-static inline unsigned arr_cls(V a) { return (unsigned)(((const uint32_t *)a)[0] & 31); }
+// (the header read as a word: a store to a narrow array's 32-bit cells is
+// then known not to change it, and a loop over one keeps its mask)
+static inline unsigned arr_cls(V a) { return (unsigned)(((const V *)a)[0] & 31); }
+static inline int arr_nw(V a) { return (((const V *)a)[0] & ARR_NW) != 0; }
 static inline V *arr_cells(V a) { return (V *)a + 1; }
+static inline uint32_t *arr_ncells(V a) { return (uint32_t *)((V *)a + 1); }
 static inline int arr_shared(V a) {
   V w0 = __atomic_load_n((V *)a, __ATOMIC_RELAXED);
   return gc_hot.rc ? RC_REFS(w0) != 0 : (w0 & BEND_SH) != 0;
@@ -1309,21 +1328,27 @@ void rc_let_go_arr(V a);
 
 // Inline, as is arr_new: in a split build (bendc -o) clang then still knows
 // a new array's size, and a loop over it does not reload the mask.
-static inline V arr_alloc(unsigned c) {
+// A narrow one (nw is ARR_NW) is in an atomic block under the collector,
+// which does not scan it: its cells are scalars.
+// (The header is written on each path: clang then knows it, and its mask.)
+static inline V arr_alloc_x(unsigned c, V nw) {
   if (c > 31) bend_fail("an array past the deepest block class 31");
+  V h = ARR_HDR(c) | nw;
   Thr *t = thr_self;
   if (t)
     for (int i = 0; i < ARR_SPARES; i++) {
       V a = t->spare[i];
-      if (a && arr_cls(a) == c) {
+      if (a && ((V *)a)[0] == h) {
         t->spare[i] = 0;
+        ((V *)a)[0] = h;
         return a;
       }
     }
-  V *p = halloc(1 + ((size_t)1 << c));
-  p[0] = ARR_HDR(c);
+  V *p = nw ? gc_alloc(1 + ((((size_t)1 << c) + 1) >> 1), !gc_hot.rc) : halloc(1 + ((size_t)1 << c));
+  p[0] = h;
   return (V)p;
 }
+static inline V arr_alloc(unsigned c) { return arr_alloc_x(c, 0); }
 
 // Traced, an unshared array no path of the program uses any more (see
 // bend_dead) is one of the thread's spares (the oldest goes when all
@@ -1343,7 +1368,7 @@ static inline void bend_dead(V v) {
   if (LIKELY(v < ((V)1 << 32))) return;
   if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
   V w0 = gc_hot.mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
-  if ((w0 | 31) == (ARR_TAG | 31)) arr_dead(v);
+  if ((w0 | 63) == (ARR_TAG | 63)) arr_dead(v);
 }
 
 // 2^c cells from src (a shared source's are shared) into a new array.
@@ -1367,6 +1392,23 @@ static inline V arr_new(V depth, V v) {
   return a;
 }
 
+// A narrow array of 2^depth v's (Array.new%w). One cell: its word's high
+// half is 0, so a match on ALeaf reads the cell as a word.
+V arr_new_nw_x(V depth, V v);
+// (The new array's header, written again where it is made: the code that
+// uses it then knows it, and needs no shift for the cells' width.)
+static inline V arr_new_nw(V depth, V v) {
+  V a = arr_new_nw_x(depth, v);
+  ((V *)a)[0] = ARR_HDR(depth) | ARR_NW;
+  return a;
+}
+
+// 2^c narrow cells from src into a new narrow array.
+V arr_ncopy(unsigned c, const uint32_t *src);
+
+// Cell i of a, narrow or not.
+static inline V arr_cell(V a, size_t i) { return arr_nw(a) ? (V)arr_ncells(a)[i] : arr_cells(a)[i]; }
+
 static inline V arr_leaf(V x) { return arr_new(0, x); }
 
 V arr_node(V l, V r);
@@ -1376,7 +1418,44 @@ V arr_half(V a, unsigned hi);
 
 // The mask is 32 bits wide (the index is a U32): on arm64 that is a shift and
 // a bic, with no 64-bit mask to build.
-static inline V *arr_at(V a, V i) { return arr_cells(a) + ((uint32_t)i & ~(~0u << arr_cls(a))); }
+static inline uint32_t arr_ix(V a, V i) { return (uint32_t)i & ~(~0u << arr_cls(a)); }
+// (a wide array's cell)
+static inline V *arr_at(V a, V i) { return arr_cells(a) + arr_ix(a, i); }
+// Cell i (masked) of a, narrow or not.
+static inline V arr_rd(V a, V i) {
+  uint32_t j = arr_ix(a, i);
+  return arr_nw(a) ? (V)arr_ncells(a)[j] : arr_cells(a)[j];
+}
+// Cell i of an array of scalars, narrow or wide, as 32 bits: a wide one
+// holds each in its word's low half (the high half is 0). With no branch,
+// and with only 32-bit stores (which cannot change the header), a loop over
+// one keeps the header in a register, and clang vectorizes it.
+static inline uint32_t *arr_w32(V a, V i) {
+  V h = ((const V *)a)[0];
+  uint32_t j = (uint32_t)i & ~(~0u << (h & 31));
+  return (uint32_t *)((V *)a + 1) + ((size_t)j << (((h >> 5) & 1) ^ 1));
+}
+static inline V arr_rdw(V a, V i) { return *arr_w32(a, i); }
+// Stores v in cell i and answers the old cell (arr_xchgw: v is a scalar).
+static inline V arr_xchg(V a, V i, V v) {
+  uint32_t j = arr_ix(a, i);
+  if (arr_nw(a)) {
+    uint32_t *q = arr_ncells(a) + j;
+    V o = *q;
+    *q = (uint32_t)v;
+    return o;
+  }
+  V *p = arr_cells(a) + j;
+  V o = *p;
+  arr_put(a, p, v);
+  return o;
+}
+static inline V arr_xchgw(V a, V i, V v) {
+  uint32_t *q = arr_w32(a, i);
+  V o = *q;
+  *q = (uint32_t)v;
+  return o;
+}
 
 static inline V F_Array_dsize(V a) { return C2(0, a, (V)((uint64_t)1 << arr_cls(a))); }
 // The checker's memo cells (check.bend's memo.*): an array of a cell's
@@ -1417,40 +1496,36 @@ BEND_UINL void arr_got(V a, V x) {
   else bend_share(x);
 }
 BEND_UINL V F_Array_dget(V a, V i) {
-  V x = *arr_at(a, i);
+  V x = arr_rd(a, i);
   arr_got(a, x);
   return C2(0, a, x);
 }
-BEND_UINL V F_Array_dswap(V a, V i, V v) {
-  V *p = arr_at(a, i);
-  V old = *p;
-  arr_put(a, p, v);
-  return C2(0, a, old);
-}
+BEND_UINL V F_Array_dswap(V a, V i, V v) { return C2(0, a, arr_xchg(a, i, v)); }
 BEND_UINL V F_Array_dset(V a, V i, V v) {
+  if (arr_nw(a)) { arr_ncells(a)[arr_ix(a, i)] = (uint32_t)v; return a; }
   V *p = arr_at(a, i);
   bend_drop(*p);
   arr_put(a, p, v);
   return a;
 }
 // Array.get, Array.set and Array.swap on cells of a scalar type (U32, F32,
-// Bool, Char; see Arrw in bendc.bend): the cells are words, with no
-// reference to take or drop, in either build.
-BEND_UINL V F_Array_dget_x37w(V a, V i) { return C2(0, a, *arr_at(a, i)); }
-BEND_UINL V F_Array_dset_x37w(V a, V i, V v) { *arr_at(a, i) = v; return a; }
-BEND_UINL V F_Array_dswap_x37w(V a, V i, V v) {
-  V *p = arr_at(a, i);
-  V old = *p;
-  *p = v;
-  return C2(0, a, old);
-}
+// Bool, Char; see Arrw in bendc.bend): no reference to take or drop, in
+// either build. The array is narrow when Array.new%w made it, but may be
+// wide (an Array.new whose type is a variable).
+BEND_UINL V F_Array_dget_x37w(V a, V i) { return C2(0, a, arr_rdw(a, i)); }
+BEND_UINL V F_Array_dset_x37w(V a, V i, V v) { *arr_w32(a, i) = (uint32_t)v; return a; }
+BEND_UINL V F_Array_dswap_x37w(V a, V i, V v) { return C2(0, a, arr_xchgw(a, i, v)); }
 static inline V F_Array_dnew(V d, V v) { return arr_new(d, v); }
-// (an array of scalars, see Arrw in bendc.bend: narrow on the device only)
-#define F_Array_dnew_x37w F_Array_dnew
-static inline V F_Array_dclone(V a) { return C2(0, a, arr_copy(arr_cls(a), arr_cells(a), 1, ((V *)a)[0] & RC_TS)); }
+// An array of scalars (see Arrw in bendc.bend) is narrow: 32-bit cells.
+static inline V F_Array_dnew_x37w(V d, V v) { return arr_new_nw(d, v); }
+static inline V F_Array_dclone(V a) {
+  if (arr_nw(a)) return C2(0, a, arr_ncopy(arr_cls(a), arr_ncells(a)));
+  return C2(0, a, arr_copy(arr_cls(a), arr_cells(a), 1, ((V *)a)[0] & RC_TS));
+}
 
-// The atomics, on a cell's U32 (its low half: the cell is a U32 below 2^32).
-static inline uint32_t *arr_word(V a, V i) { return (uint32_t *)arr_at(a, i); }
+// The atomics, on a cell's U32 (a wide cell's low half: it is a U32 below
+// 2^32).
+static inline uint32_t *arr_word(V a, V i) { return arr_w32(a, i); }
 #define ARR_ATOMIC(name, op) static inline V F_Array_datomic_d##name(V a, V i, V v) { return C2(0, a, (V)__atomic_##op(arr_word(a, i), (uint32_t)v, __ATOMIC_SEQ_CST)); }
 ARR_ATOMIC(add, fetch_add)
 ARR_ATOMIC(and, fetch_and)

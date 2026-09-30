@@ -445,7 +445,7 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
 |---|---|
 | `U32`, `Char`, `F32` | the raw number (`F32` as IEEE bits) |
 | `Nat` | the raw number, at most 2^48 - 1 (as in the official runtime; past it is an error) |
-| `Array<T>` | pointer to a flat block of 2^depth cells, written in place (a shared array is one block) |
+| `Array<T>` | pointer to a flat block of 2^depth cells, written in place (a shared array is one block); scalar arrays made by `Array.new%w` have 32-bit cells, others 64-bit cells |
 | nullary constructor (`Nil{}`, `True{}`) | `(tag << 3) \| 1` |
 | constructor with fields | pointer to `{tag, fields...}` |
 | one constructor with one field (`Chr{code}`) | the field itself |
@@ -453,7 +453,11 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
 
 Base implements `U32` as a 32-bit vector of `Bool`s, which proofs can reason about. `bendc` replaces
 those defs, and the `Nat`/`F32`/`Array` primitives, with native C; `Nat` arithmetic stops with an
-error past 2^48 - 1, where the official runtime does. Memory is managed by a conservative mark-sweep collector: the threads that run
+error past 2^48 - 1, where the official runtime does. Arrays of `U32`, `F32`, `Bool` and
+`Char` made with a known scalar type use 32-bit cells on both the CPU and GPU. A generic
+constructor can still make a wide array; reads, writes, atomics, cloning and pattern matching
+handle either width. The collector does not scan narrow arrays, and reference counting does
+not walk their scalar cells. Memory is managed by a conservative mark-sweep collector: the threads that run
 Bend code are stopped with a signal while it marks their stacks. It runs after every 8 MB allocated,
 or after half of what lived at the last collection if that is more, so a program whose objects die
 young keeps a small heap. A minor collection marks only what was made since the last one. When two
@@ -1101,6 +1105,10 @@ import is named by its absolute path).
 ```sh
 make test                      # with build/bendc
 ./run_tests.sh build/stage1    # with any stage
+tools/rcstress.sh 30           # repeat the RC threaded builds from the suite
+tools/gcstress.sh 150          # repeat the tracing builds with a 1 MB GC step
+tools/treestress.sh 5          # official tree answers, 8 threads, 1 MB GC step
+tools/threadstress.sh 100      # threaded builds used by the tcc merge gate
 ```
 
 The official repository's own tests are a second, larger suite. `tools/upstream.py` runs every one
