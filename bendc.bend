@@ -13793,19 +13793,95 @@ def Main.ids.skip(+t0: String) -> Nat:
   +n = Main.ids.len(t)
   Bool.pick(Nat, Main.ids.ok(t, n), Nat.add(n, 4n), 0n)
 
+def Main.ids.more(m: Maybe<&2, Nat>, +n: Nat) -> Maybe<&2, Nat>:
+  match m:
+    case Some{k}:
+      Some{Nat.add(k, n)}
+    case None{}:
+      None{}
+
+def Main.ids.got(m: Maybe<&2, Nat>, +n: Nat) -> Nat:
+  match m:
+    case Some{k}:
+      Nat.add(k, n)
+    case None{}:
+      0n
+
+def Main.ids.eol(+c: U32) -> Bool:
+  Bool.or(Bool.or(U32.is_eq(c, 10), U32.is_eq(c, 13)), Bool.or(U32.is_eq(c, 8232), U32.is_eq(c, 8233)))
+
+# The length of a line comment's rest: to the end of the line, where a
+# backslash before the newline goes on.
+def Main.ids.line(s: String) -> Nat:
+  match s:
+    case SCon{Chr{92}, SCon{Chr{10}, t}}:
+      Nat.add(Main.ids.line(t), 2n)
+    case SCon{Chr{+c}, t}:
+      Bool.pick(Unit -> Nat, Main.ids.eol(c), u => 0n, u => Nat.add(Main.ids.line(t), 1n))(Unit{})
+    case SNil{}:
+      0n
+
+# The length of a block comment's rest, up to and with its */, or None.
+def Main.ids.block(s: String) -> Maybe<&2, Nat>:
+  match s:
+    case SCon{Chr{42}, SCon{Chr{47}, t}}:
+      Some{2n}
+    case SCon{c, t}:
+      Main.ids.more(Main.ids.block(t), 1n)
+    case SNil{}:
+      None{}
+
+# The length of a quoted literal's rest, up to and with its closing quote
+# q, or None when it does not close; a newline ends it unless nl.
+def Main.ids.str(s: String, +q: U32, +nl: Bool) -> Maybe<&2, Nat>:
+  match s:
+    case SCon{Chr{92}, SCon{c, t}}:
+      Main.ids.more(Main.ids.str(t, q, nl), 2n)
+    case SCon{Chr{+c}, t}:
+      Bool.pick(Unit -> Maybe<&2, Nat>, U32.is_eq(c, q), u => Some{1n},
+        u => Bool.pick(Unit -> Maybe<&2, Nat>, Bool.or(U32.is_eq(c, 92), Bool.and(Bool.not(nl), U32.is_eq(c, 10))),
+          u => None{}, u => Main.ids.more(Main.ids.str(t, q, nl), 1n))(Unit{}))(Unit{})
+    case SNil{}:
+      None{}
+
+# The length of the comment, string or character literal s starts with, or
+# 0: the ids in one are left alone, as cpp leaves them (Bend 2.0.34).
+def Main.ids.lit(s: String) -> Nat:
+  match s:
+    case SCon{Chr{47}, SCon{Chr{47}, t}}:
+      Nat.add(Main.ids.line(t), 2n)
+    case SCon{Chr{47}, SCon{Chr{42}, t}}:
+      Main.ids.got(Main.ids.block(t), 2n)
+    case SCon{Chr{34}, t}:
+      Main.ids.got(Main.ids.str(t, 34, False{}), 1n)
+    case SCon{Chr{39}, t}:
+      Main.ids.got(Main.ids.str(t, 39, False{}), 1n)
+    case SCon{Chr{96}, t}:
+      Main.ids.got(Main.ids.str(t, 96, True{}), 1n)
+    case other:
+      0n
+
+def Main.ids.quote(+c: U32) -> Bool:
+  Bool.or(Bool.or(U32.is_eq(c, 47), U32.is_eq(c, 34)), Bool.or(U32.is_eq(c, 39), U32.is_eq(c, 96)))
+
 # s with each CID(..) and FID(..) replaced; prev: the last character was
-# part of a word; skip: characters an id replaced, still to drop.
-def Main.ids(s: String, prev: Bool, +env: IdEnv, skip: Nat) -> String:
+# part of a word; skip: characters to drop (an id replaced them) or, when
+# keep, to copy (a comment or literal holds them).
+def Main.ids(s: String, prev: Bool, +env: IdEnv, skip: Nat, +keep: Bool) -> String:
   match s skip:
     case SNil{} k:
       SNil{}
-    case SCon{c, t} 1n+k:
-      Main.ids(t, True{}, env, k)
+    case SCon{+c, +t} 1n+ +k:
+      Bool.pick(Unit -> String, keep, u => SCon{c, Main.ids(t, False{}, env, k, keep)},
+        u => Main.ids(t, True{}, env, k, keep))(Unit{})
     case SCon{Chr{+c}, +t} 0n:
-      Bool.pick(Unit -> String, Bool.and(Bool.not(prev), Bool.and(Bool.or(U32.is_eq(c, 67), U32.is_eq(c, 70)),
-        String.starts_with(t, "ID("))),
-        u => Main.ids.head(c, t, env) ++ Main.ids(t, True{}, env, Main.ids.skip(t)),
-        u => SCon{Chr{c}, Main.ids(t, Main.ids.word(c), env, 0n)})(Unit{})
+      +n = Bool.pick(Unit -> Nat, Main.ids.quote(c), u => Main.ids.lit(SCon{Chr{c}, t}), u => 0n)(Unit{})
+      Bool.pick(Unit -> String, Nat.is_gt(n, 0n),
+        u => SCon{Chr{c}, Main.ids(t, False{}, env, Nat.sub(n, 1n), True{})},
+        u => Bool.pick(Unit -> String, Bool.and(Bool.not(prev), Bool.and(Bool.or(U32.is_eq(c, 67), U32.is_eq(c, 70)),
+          String.starts_with(t, "ID("))),
+          u => Main.ids.head(c, t, env) ++ Main.ids(t, True{}, env, Main.ids.skip(t), False{}),
+          u => SCon{Chr{c}, Main.ids(t, Main.ids.word(c), env, 0n, False{})})(Unit{}))(Unit{})
 
 def Main.ids.pre(segs: List<&2, String>, +acc: String, out: List<&2, String>) -> List<&2, String>:
   match segs:
@@ -13832,7 +13908,7 @@ def Main.ids.owner(ds: List<&2, Decl>, +p: String) -> String:
 
 # The effect source at p, its ids written for this program.
 def Main.ids.src(+ds: List<&2, Decl>, +known: Set(), +js: Bool, +p: String, src: String) -> String:
-  Main.ids(src, False{}, IdEnv{Main.ids.ns(Main.ids.owner(ds, p)), known, js}, 0n)
+  Main.ids(src, False{}, IdEnv{Main.ids.ns(Main.ids.owner(ds, p)), known, js}, 0n, False{})
 
 # Every name the program declares.
 def Main.ids.known(ds: List<&2, Decl>) -> Set():
