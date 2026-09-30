@@ -8432,25 +8432,6 @@ def Gen.u32.open(us: List<&2, String>) -> String:
     case +h <> t:
       "uint32_t " ++ h ++ " = (uint32_t)" ++ h ++ "_;\n" ++ Gen.u32.open(t)
 
-# S_name, a seq def's sequential clone: its parallel lets run in order and
-# its calls to itself stay in S_name (F_name is renamed to it inside).
-def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr, +env: Env(),
-  +params: List<&2, String>) -> Gen(Unit):
-  match sq:
-    case True{}:
-      +us = Gen.u32(g, name, mask)
-      +head = "static V S_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
-      do Gen<Unit>:
-        Gen.proto(DStr{head ++ ";\n"})
-        Gen.memo.add(Bind{"%seqmode", name})
-        b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
-        Gen.memo.add(Bind{"%seqmode", ""})
-        Gen.code(Doc.list([DStr{"#define " ++ Gen.f(name) ++ " S_" ++ Gen.mangle(name) ++ "\n" ++ head ++ " {\n" ++
-          Gen.u32.open(us) ++ "top:;\n"},
-          Gen.own(g, env, env, R.ops(body, "Nat")), b, DStr{"}\n#undef " ++ Gen.f(name) ++ "\n"}]))
-    case False{}:
-      Gen.pure(Unit, Unit{})
-
 # A C parameter or argument list padded to n entries: names z0, z1, ...
 # (names) or zeros.
 def Gen.dst.pad(n: Nat, xs: List<&2, String>, +names: Bool, +i: U32) -> List<&2, String>:
@@ -8641,18 +8622,208 @@ def Gen.def.inl(+name: String, +body: Core.Expr) -> Bool:
   Bool.and(Bool.and(String.contains(name, "%s"), U32.is_lt(Expr.copies(body, 0), 2)),
     Bool.not(Bool.or(Expr.mentions(body, name), Expr.has_par(body))))
 
+# An immediate first case can run without the recursive body's register
+# frame. Every kept argument is a scalar or is matched as a nullary or
+# word-leaf constructor. The first case may bind locals and match them;
+# it cannot call itself, create a closure, or perform an effect.
+# The wrapper uses the same pattern and statement generators as the body.
+def Gen.leaf.kind(c: Maybe<&2, CInfo>) -> Bool:
+  match c:
+    case Some{CInfo{tag, ar, +kind, single}}:
+      Bool.or(U32.is_eq(kind, 1), U32.is_eq(kind, 7))
+    case None{}:
+      False{}
+
+def Gen.leaf.pat(+g: G, p: Core.Pat) -> Bool:
+  match p:
+    case Core.PCtor{name, ps}:
+      Gen.leaf.kind(G.ctor(g, name))
+    case other:
+      False{}
+
+def Gen.leaf.pats(+g: G, ps: List<&2, Core.Pat>, cs: List<&2, String>) -> Bool:
+  match ps cs:
+    case Nil{} Nil{}:
+      True{}
+    case p <> pt c <> ct:
+      Bool.and(Gen.leaf.pat(g, p), Gen.leaf.pats(g, pt, ct))
+    case pl cl:
+      False{}
+
+def Gen.leaf.cname(m: Maybe<&2, String>) -> String:
+  match m:
+    case Some{c}:
+      c
+    case None{}:
+      ""
+
+def Gen.leaf.paths(ss: List<&2, Core.Expr>, +env: Env()) -> List<&2, String>:
+  match ss:
+    case Nil{}:
+      Nil{}
+    case Core.EVar{x} <> t:
+      Gen.leaf.cname(Env.find(env, x)) <> Gen.leaf.paths(t, env)
+    case e <> t:
+      "" <> Gen.leaf.paths(t, env)
+
+def Gen.leaf.scrs(ss: List<&2, Core.Expr>, +env: Env()) -> Bool:
+  match ss:
+    case Nil{}:
+      True{}
+    case Core.EVar{x} <> t:
+      Bool.and(Env.has(env, x), Gen.leaf.scrs(t, env))
+    case e <> t:
+      False{}
+
+def Gen.leaf.scalar(env: Env(), +c: String) -> Bool:
+  match env:
+    case Nil{}:
+      False{}
+    case Bind{x, b} <> t:
+      Bool.or(Str.eq(b, "(" ++ c ++ ")"), Gen.leaf.scalar(t, c))
+
+def Gen.leaf.args(cs: List<&2, String>, +paths: List<&2, String>, +env: Env()) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case +c <> t:
+      Bool.and(Bool.or(Str.has(paths, c), Gen.leaf.scalar(env, c)), Gen.leaf.args(t, paths, env))
+
+def Gen.leaf.fn(info: DInfo) -> Bool:
+  DInfo{+kind, mask} = info
+  Bool.or(U32.is_eq(kind, 0), U32.is_eq(kind, 2))
+
+def Gen.leaf.simple(+g: G, e: Core.Expr) -> Bool:
+  match e:
+    case Core.EVar{x}:
+      True{}
+    case Core.ENum{n}:
+      True{}
+    case Core.ENat{n}:
+      True{}
+    case Core.EFlt{s}:
+      True{}
+    case Core.ECall{Core.EVar{+f}, args}:
+      match args:
+        case Nil{}:
+          Gen.leaf.fn(G.def(g, f))
+        case a <> t:
+          Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, Core.ECall{Core.EVar{f}, t}))
+    case Core.ECtor{+name, args}:
+      match args:
+        case Nil{}:
+          Maybe.is_some(&2, CInfo, G.ctor(g, name))
+        case a <> t:
+          Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, Core.ECtor{name, t}))
+    case Core.ELet{p, v, b}:
+      Bool.and(Gen.leaf.simple(g, v), Gen.leaf.simple(g, b))
+    case Core.EMatch{ss, cs}:
+      match ss:
+        case a <> t:
+          Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, Core.EMatch{t, cs}))
+        case Nil{}:
+          match cs:
+            case Nil{}:
+              True{}
+            case c <> t:
+              Bool.and(Gen.leaf.simple(g, c), Gen.leaf.simple(g, Core.EMatch{Nil{}, t}))
+    case Core.ECase{ps, b}:
+      Gen.leaf.simple(g, b)
+    case Core.ESucc{k, x}:
+      Gen.leaf.simple(g, x)
+    case Core.EOp{op, a, b}:
+      Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, b))
+    case Core.EAnn{x, t}:
+      Gen.leaf.simple(g, x)
+    case other:
+      False{}
+
+def Gen.leaf.case(+g: G, +name: String, +env: Env(), +params: List<&2, String>, body: Core.Expr) -> Maybe<&2, Core.Expr>:
+  match body:
+    case Core.EMatch{+ss, Core.ECase{+ps, +b} <> c <> rest}:
+      +paths = Gen.leaf.paths(ss, env)
+      Bool.pick(Maybe<&2, Core.Expr>, Bool.and(Bool.and(Gen.leaf.scrs(ss, env),
+        Gen.leaf.args(params, paths, env)), Bool.and(Gen.leaf.pats(g, ps, paths),
+        Bool.and(Gen.leaf.simple(g, b), Bool.not(Expr.mentions(b, name))))),
+        Some{Core.EMatch{ss, [Core.ECase{ps, b}]}}, None{})
+    case other:
+      None{}
+
+def Gen.leaf.name(c: Maybe<&2, Core.Expr>, +name: String) -> String:
+  match c:
+    case Some{e}:
+      "H_" ++ name
+    case None{}:
+      name
+
+def Gen.leaf.head(c: Maybe<&2, Core.Expr>, +head: String, +slow: String) -> String:
+  match c:
+    case Some{e}:
+      "static __attribute__((noinline)) V " ++ slow
+    case None{}:
+      head
+
+def Gen.leaf.proto(c: Maybe<&2, Core.Expr>, head: String) -> Doc:
+  match c:
+    case Some{e}:
+      DStr{"static V " ++ head ++ ";\n"}
+    case None{}:
+      DNil{}
+
+def Gen.leaf.wrapper(+g: G, +env: Env(), +self: Self, +params: List<&2, String>, +head: String,
+  +slow: String, +us: List<&2, String>, c: Maybe<&2, Core.Expr>) -> Gen(Unit):
+  match c:
+    case Some{Core.EMatch{ss, Core.ECase{ps, b} <> Nil{}}}:
+      +pr = Gen.pats(g, ps, Gen.leaf.paths(ss, env), PatR{Nil{}, Nil{}})
+      do Gen<Unit>:
+        body : Doc <- Gen.rec(Fuel.max(), GSCaseBody{g, env, self, TRet{}, PatR.binds(pr), b})
+        Gen.code(Doc.list([DStr{"BEND_UINL" ++ String.drop(head, 6n) ++ " {\n" ++ Gen.u32.open(us) ++ "if (" ++
+          Gen.and(List.reverse(&2, String, PatR.conds(pr))) ++ ") {\n"}, body,
+          DStr{"}\nreturn " ++ slow ++ "(" ++ String.join(params, ", ") ++ ");\n}\n"}]))
+    case other:
+      Gen.pure(Unit, Unit{})
+
+# S_name, a seq def's sequential clone: its parallel lets run in order and
+# its calls to itself stay in S_name (F_name is renamed to it inside).
+def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr, +env: Env(),
+  +params: List<&2, String>) -> Gen(Unit):
+  match sq:
+    case True{}:
+      +us = Gen.u32(g, name, mask)
+      +head = "static V S_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
+      +leaf = Gen.leaf.case(g, name, env, params, R.ops(body, "Nat"))
+      +slow = Gen.leaf.name(leaf, "S_" ++ Gen.mangle(name))
+      +slowhead = slow ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
+      +dhead = Gen.leaf.head(leaf, head, slowhead)
+      do Gen<Unit>:
+        Gen.proto(Doc.list([DStr{head ++ ";\n"}, Gen.leaf.proto(leaf, slowhead)]))
+        Gen.memo.add(Bind{"%seqmode", name})
+        b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
+        Gen.leaf.wrapper(g, env, Self{name, mask, params}, params, head, slow, us, leaf)
+        Gen.memo.add(Bind{"%seqmode", ""})
+        Gen.code(Doc.list([DStr{"#define " ++ Gen.f(name) ++ " S_" ++ Gen.mangle(name) ++ "\n" ++ dhead ++ " {\n" ++
+          Gen.u32.open(us) ++ "top:;\n"},
+          Gen.own(g, env, env, R.ops(body, "Nat")), b, DStr{"}\n#undef " ++ Gen.f(name) ++ "\n"}]))
+    case False{}:
+      Gen.pure(Unit, Unit{})
+
 def Gen.def.boxed(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
   +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
 ) -> Gen(Unit):
   +us = Gen.u32(g, name, mask)
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
-  +dhead = Bool.pick(String, Gen.def.inl(name, body), "BEND_UINL" ++ String.drop(head, 6n), head)
+  +leaf = Gen.leaf.case(g, name, env, params, R.ops(body, "Nat"))
+  +slow = Gen.leaf.name(leaf, Gen.f(name))
+  +slowhead = slow ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
+  +dhead = Gen.leaf.head(leaf, Bool.pick(String, Gen.def.inl(name, body),
+    "BEND_UINL" ++ String.drop(head, 6n), head), slowhead)
   do Gen<Unit>:
-    Gen.proto(DStr{head ++ ";\n"})
+    Gen.proto(Doc.list([DStr{head ++ ";\n"}, Gen.leaf.proto(leaf, slowhead)]))
     +e : Core.Expr = RC.tmp.body(Gen.rc(g), g, Env.names(env), R.ops(body, "Nat"))
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, e)
     Gen.code(Doc.list([DStr{dhead ++ " {\n" ++ Gen.u32.open(us) ++ RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))),
       RC.tmp.used(Fuel.max(), name, mask, e, Nil{}), 0) ++ "top:;\n"}, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
+    Gen.leaf.wrapper(g, env, Self{name, mask, params}, params, head, slow, us, leaf)
     Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
 

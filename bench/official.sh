@@ -30,7 +30,7 @@ UP=${BEND_UP:-/tmp/bendup32}
 BEND=${BEND:-bend}
 export BEND_NO_TELEMETRY=1
 python3 - "$BENDC" "$BASE" "$UP" "$BEND" "$R" "$NT" "$RC" "$@" <<'PY'
-import json, os, subprocess, sys, time
+import json, os, subprocess, sys, tempfile, time
 bendc, base, up, bend, R, nt, rc = sys.argv[1:8]
 R, rc = int(R), rc == '1'
 only = sys.argv[8:]
@@ -62,9 +62,17 @@ def sh(cmd, cwd):
 
 def run(cmd, cwd):
     t = time.perf_counter()
-    p = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    o = p.stdout.read().decode()
-    _, status, ru = os.wait4(p.pid, 0)
+    env = os.environ.copy()
+    if m == 2 and cmd[0] in ('./me', './merc'):
+        env['BEND_GPU_LOG'] = '1'
+    # A file keeps diagnostics without a second pipe that could fill while
+    # stdout is read; wait4 still supplies this process's peak RSS.
+    with tempfile.TemporaryFile() as err:
+        p = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=err)
+        o = p.stdout.read().decode()
+        _, status, ru = os.wait4(p.pid, 0)
+        err.seek(0)
+        diagnostics = err.read().decode(errors='replace')
     t = time.perf_counter() - t
     status = os.waitstatus_to_exitcode(status)
     # wait4 reports bytes on Darwin and KiB on Linux.
@@ -72,7 +80,10 @@ def run(cmd, cwd):
     results['samples'].append({'bench': b, 'mode': m, 'binary': cmd[0],
                               'flags': cmd[1:], 'warmup': i == 0,
                               'seconds': t, 'peak_rss_mb': mem,
-                              'exit': status, 'output': o.strip()})
+                              'exit': status, 'output': o.strip(),
+                              'stderr': diagnostics,
+                              'gpu_fallbacks': diagnostics.count('running on the CPU'),
+                              'gpu_completed_calls': diagnostics.count('bend gpu: done in')})
     save()
     if status: sys.exit('%s: %s exited %d' % (cwd, cmd[0], status))
     return t, mem, o.strip()

@@ -696,6 +696,10 @@ with `cc -std=c11 -O3` (and Metal for the GPU). bendc's build is `bendc -o`. Eac
 three modes: SEQ is `--threads 1 --gpu off`, PAR is `--threads 8 --gpu off` (8 is the largest
 power of two under the 12 cores), and GPU is `--gpu SIZE`. The outputs of all builds must agree.
 `--rc` adds bendc's reference-counting build (`BEND_RC=1`) as the `rc` columns.
+Every warmup and timed sample is saved to `build/official/results.json`
+(`BEND_BENCH_RESULTS` overrides the path), including stdout, exit status, time,
+peak RSS, and stderr. GPU samples from bendc enable diagnostics and record
+completed calls and CPU fallbacks; a matching answer can still come from fallback.
 
 The machine was an Apple M4 Pro (12 cores, 24 GB, macOS 27), with official bend 2.0.32. It was
 shared with other jobs, and the load average stayed between 9 and 12 during the run. The runs of
