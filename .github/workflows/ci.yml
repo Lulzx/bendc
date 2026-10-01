@@ -36,7 +36,12 @@ jobs:
         run: make
 
       - name: Test suite
+        id: test_suite
         run: make test
+
+      - name: Inspect pinned GPU tree failure
+        if: failure() && runner.os == 'macOS' && steps.test_suite.outcome == 'failure'
+        run: BEND_BASE="$HOME/.bend/bend2/base.bend" tools/gpu-pin-debug.sh build/bendc
 
       - name: Seed is up to date (bendc.bend compiles to the seed)
         run: make selfcheck
