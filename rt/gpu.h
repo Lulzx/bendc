@@ -262,8 +262,8 @@ KINLINE void k_anone(KTHR KCtx *c) {
 }
 
 // A flat call (KX_ or KQ_) neither forks nor writes into older objects, and
-// an object only points to older ones: what the call allocated is garbage
-// unless its result reaches it. k_region takes it back: all of it when the
+// compacted parents can point to newer descendants: what the call allocated
+// is garbage unless its result reaches it. k_region takes it back: all of it when the
 // result is older than the call (or not an object), else all but the result,
 // moved down, when the result is the only new object it reaches. h0 and e0
 // are the lane's hp and he before the call; when the call took a new chunk,
@@ -281,7 +281,11 @@ KINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
   }
   KW p = (r - c->ab) >> 3, m = c->H[p - 1] & ~K_BARE;
   for (KW i = (c->H[p - 1] & K_BARE) ? 0 : 1; i < m; i++) {
-    if (c->H[p + i] - b < n) return r;
+    // An older child can reach this span through a parent-first compacted
+    // graph. Looking only for direct edges into the span would discard its
+    // live descendants. Keep arena edges; self-contained scalar nodes can
+    // still move down and release their temporary prefix.
+    if (k_in(c, c->H[p + i])) return r;
   }
   for (KW i = 0; i <= m; i++) c->H[lo + i] = c->H[p - 1 + i];
   c->hp = lo + m + 1;

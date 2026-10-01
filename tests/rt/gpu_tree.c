@@ -111,6 +111,19 @@ int main(void) {
     k_rewind(&c,h0,e0,b0);
   }
   assert(a[KA_HEAP]<32);
+  // A new root in the last span can reach live descendants in that span
+  // indirectly, through a compacted child rooted in an earlier one.
+  init(&c,&p,h,a,words);h0=c.hp;e0=c.he;b0=c.blocks;
+  l=bare_make(&c,7,1);l=k_tree_compact(&c,h0,e0,b0,l,bare_masks,2);
+  KW late=c.hs+1,left=h[late],right=h[late+1];
+  assert(KIX(&c,l)<c.hs && h[late-1]==(K_BARE|2));
+  r=bare_pair(&c,l,KLI(0,1));
+  assert(KIX(&c,r)>=c.hs && bare_sum(&c,r)==129);
+  r=k_region(&c,h0,e0,r);
+  assert(h[late]==left && h[late+1]==right && bare_sum(&c,r)==129);
+  KW noise2=k_alloc(&c,130);
+  for(KW j=0;j<130;j++)h[KIX(&c,noise2)+j]=15;
+  assert(bare_sum(&c,r)==129);
   // A scalar field with address-shaped bits is not a Self pointer.
   init(&c,&p,h,a,words);scalar=KPTR(&c,513);r=k_bnode(&c,3);
   c.H[KIX(&c,r)]=scalar;c.H[KIX(&c,r)+1]=KLI(0,23);c.H[KIX(&c,r)+2]=KLI(0,29);
