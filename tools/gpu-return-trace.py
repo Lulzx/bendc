@@ -11,11 +11,18 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('host-trace',0),('index-prefix',0)]:
+for name,kq in [('return-words',0),('volatile-root',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
- if name=='index-prefix':
+ if name=='volatile-root':
+  gpu=gpu.replace('KW root=k_tree_copy_node(c,&out,r);','volatile KW root=k_tree_copy_node(c,&out,r);')
+  gpu=gpu.replace('KW relocated=KPTR(c,h0)+(root-base);','volatile KW relocated=KPTR(c,h0)+(root-base);')
+ elif name=='return-words':
+  record='if(c->lane==0) { K_STORE(&c->A[7],stage); K_STORE(&c->A[8],(KU)value); K_STORE(&c->A[9],(KU)(value>>32)); K_STORE(&c->A[10],(KU)r); K_STORE(&c->A[11],(KU)(r>>32)); K_STORE(&c->A[12],(KU)h0); K_STORE(&c->A[13],(KU)e0); K_STORE(&c->A[14],(KU)c->hp); K_STORE(&c->A[15],(KU)c->he); }'
+  gpu=gpu.replace('    return relocated;', record.replace('stage','1').replace('value','relocated')+'\n    return relocated;')
+  gpu=gpu.replace('  return root;', record.replace('stage','2').replace('value','root')+'\n  return root;')
+ elif name=='index-prefix':
   gpu=gpu.replace('if((mask&((KW)1<<i)) && v-base<bytes) v=KPTR(c,h0)+(v-base);',
     'if((mask&((KW)1<<i)) && k_in(&out,v) && KIX(&out,v)>=lo && KIX(&out,v)<out.hp) v=KPTR(c,h0+KIX(&out,v)-lo);')
   gpu=gpu.replace('KW relocated=KPTR(c,h0)+(root-base);','KW relocated=KPTR(c,h0+KIX(&out,root)-lo);')
@@ -64,7 +71,7 @@ KNOINLINE bool k_trace_node(KTHR KCtx *c,KW root,KU stage) {
   assert gpu.count(old)==1
   gpu=gpu.replace(old,'return r; // diagnostic control only\n  '+old)
 
- if name in ('host-trace','index-prefix'):
+ if name in ('host-trace','index-prefix','return-words','volatile-root'):
   host=(rt/'gpuhost.h').read_text()
   helper=r"""
 static KW trace_roots[512];static unsigned trace_nr;
