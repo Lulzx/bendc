@@ -9,6 +9,7 @@ static V scan_main(void) {
   V root = G_make(13, 3);
   fprintf(stderr, "pin scan: mode=%d root=%llx arena=%llx bytes=%llu\n", gpu_mode,
     (unsigned long long)root, (unsigned long long)(uintptr_t)gpu_H, (unsigned long long)gpu_Hn);
+  if(gpu_A) {fprintf(stderr,"phase trace:");for(int i=7;i<16;i++) fprintf(stderr," %u",gpu_A[i]);fprintf(stderr,"\n");}
   if ((gpu_mode!=GPU_METAL && gpu_mode!=GPU_SIM) ||
       !gpu_A || gpu_A[KA_ERR]!=0 || gpu_A[KA_DONE]!=1) {
     fprintf(stderr,"pin scan: no completed device call to inspect\n");

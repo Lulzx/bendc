@@ -9,11 +9,45 @@ out=root/'build/gpu-return-trace';out.mkdir(parents=True,exist_ok=True)
 with (out/'pin_program.c').open('w') as f:
  subprocess.run(['build/bendc',base,'tests/gpu_growth_pinned.bend'],stdout=f,check=True)
 results=[]
-for name,kq in [('original',0),('safe-region',0)]:
+for name,kq in [('phase-trace',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
- if name=='safe-region':
+ if name=='phase-trace':
+  validator=r"""
+KNOINLINE bool k_trace_tree(KTHR KCtx *c,KW root,KU stage) {
+  KW vals[64],depths[64],sp=1,steps=0;vals[0]=root;depths[0]=0;
+  while(sp) {
+    KW v=vals[--sp],depth=depths[sp];
+    if(KIS_LI(v,0)) continue;
+    bool bad=!k_in(c,v) || (v&7) || depth>=32 || ++steps>131072;
+    if(!bad) bad=c->H[KIX(c,v)-1]!=(K_BARE|2);
+    if(bad || sp+2>64) {
+      KU z=0;
+      if(K_CAS(&c->A[7],z,stage)) {
+        K_STORE(&c->A[8],(KU)v);K_STORE(&c->A[9],(KU)(v>>32));
+        K_STORE(&c->A[10],(KU)root);K_STORE(&c->A[11],(KU)(root>>32));
+        K_STORE(&c->A[12],(KU)depth);K_STORE(&c->A[13],(KU)c->lane);
+        K_STORE(&c->A[14],(KU)c->hp);K_STORE(&c->A[15],(KU)c->blocks);
+      }
+      k_fail(c,KE_MATCH);return false;
+    }
+    KW ix=KIX(c,v);vals[sp]=c->H[ix];depths[sp++]=depth+1;
+    vals[sp]=c->H[ix+1];depths[sp++]=depth+1;
+  }
+  return true;
+}
+"""
+  gpu=gpu.replace('KNOINLINE KW k_tree_compact(',validator+'\nKNOINLINE KW k_tree_compact(')
+  gpu=gpu.replace('  if(c->err || !k_tree_new(c,h0,e0,b0,r)) return r;',
+    '  if(c->err || !k_trace_tree(c,r,1) || !k_tree_new(c,h0,e0,b0,r)) return r;')
+  gpu=gpu.replace('  // A small closed graph fits back',
+    '  if(!k_trace_tree(&out,root,2)) {k_fail(c,out.err);return r;}\n  // A small closed graph fits back')
+  gpu=gpu.replace('    k_rewind(&out,0,0,b0);c->spare=out.spare;',
+    '    if(!k_trace_tree(c,relocated,3)) return relocated;\n    k_rewind(&out,0,0,b0);c->spare=out.spare;')
+  gpu=gpu.replace('    return relocated;',
+    '    (void)k_trace_tree(c,relocated,4);\n    return relocated;')
+ elif name=='safe-region':
   old='if (c->H[p + i] - b < n) return r;'
   assert gpu.count(old)==1
   gpu=gpu.replace(old,'if (k_in(c, c->H[p + i])) return r;')
