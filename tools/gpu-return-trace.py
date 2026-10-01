@@ -6,47 +6,41 @@ root=Path(__file__).resolve().parent.parent
 os.chdir(root)
 base=os.environ.get('BEND_BASE',str(Path.home()/'.bend/bend2/base.bend'))
 out=root/'build/gpu-return-trace';out.mkdir(parents=True,exist_ok=True)
-with (out/'pin_program.c').open('w') as f:
- subprocess.run(['build/bendc',base,'tests/gpu_growth_pinned.bend'],stdout=f,check=True)
+receipt=json.loads((root/'tools/gpu-return-program.json').read_text())
+fixture=root/'tools/gpu-return-program.c'
+assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
+shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('phase-trace',0)]:
+for name,kq in [('original',0),('phase-trace',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
  if name=='phase-trace':
   validator=r"""
-KNOINLINE bool k_trace_tree(KTHR KCtx *c,KW root,KU stage) {
-  KW vals[64],depths[64],sp=1,steps=0;vals[0]=root;depths[0]=0;
-  while(sp) {
-    KW v=vals[--sp],depth=depths[sp];
-    if(KIS_LI(v,0)) continue;
-    bool bad=!k_in(c,v) || (v&7) || depth>=32 || ++steps>131072;
-    if(!bad) bad=c->H[KIX(c,v)-1]!=(K_BARE|2);
-    if(bad || sp+2>64) {
-      KU z=0;
-      if(K_CAS(&c->A[7],z,stage)) {
-        K_STORE(&c->A[8],(KU)v);K_STORE(&c->A[9],(KU)(v>>32));
-        K_STORE(&c->A[10],(KU)root);K_STORE(&c->A[11],(KU)(root>>32));
-        K_STORE(&c->A[12],(KU)depth);K_STORE(&c->A[13],(KU)c->lane);
-        K_STORE(&c->A[14],(KU)c->hp);K_STORE(&c->A[15],(KU)c->blocks);
-      }
-      k_fail(c,KE_MATCH);return false;
-    }
-    KW ix=KIX(c,v);vals[sp]=c->H[ix];depths[sp++]=depth+1;
-    vals[sp]=c->H[ix+1];depths[sp++]=depth+1;
+KNOINLINE bool k_trace_value(KTHR KCtx *c,KW v,KW root,KU stage) {
+  if(KIS_LI(v,0) || (k_in(c,v) && !(v&7) && c->H[KIX(c,v)-1]==(K_BARE|2))) return true;
+  KU z=0;
+  if(K_CAS(&c->A[7],z,stage)) {
+    K_STORE(&c->A[8],(KU)v);K_STORE(&c->A[9],(KU)(v>>32));
+    K_STORE(&c->A[10],(KU)root);K_STORE(&c->A[11],(KU)(root>>32));
+    K_STORE(&c->A[12],(KU)c->hp);K_STORE(&c->A[13],(KU)c->lane);
+    K_STORE(&c->A[14],(KU)c->he);K_STORE(&c->A[15],(KU)c->blocks);
   }
-  return true;
+  k_fail(c,KE_MATCH);return false;
+}
+KNOINLINE bool k_trace_node(KTHR KCtx *c,KW root,KU stage) {
+  if(!k_trace_value(c,root,root,stage)) return false;
+  if(!k_in(c,root)) return true;
+  KW ix=KIX(c,root);
+  return k_trace_value(c,c->H[ix],root,stage) && k_trace_value(c,c->H[ix+1],root,stage);
 }
 """
-  gpu=gpu.replace('KNOINLINE KW k_tree_compact(',validator+'\nKNOINLINE KW k_tree_compact(')
-  gpu=gpu.replace('  if(c->err || !k_tree_new(c,h0,e0,b0,r)) return r;',
-    '  if(c->err || !k_trace_tree(c,r,1) || !k_tree_new(c,h0,e0,b0,r)) return r;')
-  gpu=gpu.replace('  // A small closed graph fits back',
-    '  if(!k_trace_tree(&out,root,2)) {k_fail(c,out.err);return r;}\n  // A small closed graph fits back')
-  gpu=gpu.replace('    k_rewind(&out,0,0,b0);c->spare=out.spare;',
-    '    if(!k_trace_tree(c,relocated,3)) return relocated;\n    k_rewind(&out,0,0,b0);c->spare=out.spare;')
-  gpu=gpu.replace('    return relocated;',
-    '    (void)k_trace_tree(c,relocated,4);\n    return relocated;')
+  gpu=gpu.replace('KINLINE KW k_tree_copy_node(',validator+'\nKINLINE KW k_tree_copy_node(')
+  gpu=gpu.replace('  KW ix=KIX(src,v), raw=', '  if(!k_trace_node(src,v,1)) {k_fail(out,src->err);return 0;}\n  KW ix=KIX(src,v), raw=')
+  gpu=gpu.replace('  return r;\n}\n// Bit 31', '  (void)k_trace_node(out,r,2);\n  return r;\n}\n// Bit 31')
+  gpu=gpu.replace('      c->H[h0+at-lo]=raw;', '      if(!k_trace_node(&out,KPTR(&out,at+1),3)) {k_fail(c,out.err);return r;}\n      c->H[h0+at-lo]=raw;')
+  gpu=gpu.replace('      at+=n+1;', '      if(!k_trace_node(c,KPTR(c,h0+at+1-lo),4)) return r;\n      at+=n+1;')
+  gpu=gpu.replace('    return relocated;', '    (void)k_trace_node(c,relocated,5);\n    return relocated;')
  elif name=='safe-region':
   old='if (c->H[p + i] - b < n) return r;'
   assert gpu.count(old)==1

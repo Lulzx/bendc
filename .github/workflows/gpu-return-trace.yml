@@ -8,12 +8,13 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Install pinned official Base
-        run: tools/install-bend.sh
-      - name: Build unchanged compiler
-        run: make
+      - name: Record hardware and compiler
+        run: |
+          sysctl -n machdep.cpu.brand_string
+          sw_vers
+          clang --version
       - name: Compare isolated producer controls
-        run: BEND_BASE="$HOME/.bend/bend2/base.bend" python3 tools/gpu-return-trace.py
+        run: python3 tools/gpu-return-trace.py
       - name: Save raw control receipts
         if: always()
         uses: actions/upload-artifact@v4
