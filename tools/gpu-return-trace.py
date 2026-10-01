@@ -11,11 +11,22 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('return-words',0),('volatile-root',0)]:
+for name,kq in [('split-prefix',0),('guarded-prefix',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
- if name=='volatile-root':
+ if name=='split-prefix':
+  start=gpu.index('    KW lo=out.hs,words=out.hp-lo,base=KPTR(&out,lo),bytes=words<<3;')
+  end=gpu.index('    k_rewind(&out,0,0,b0);c->spare=out.spare;',start)
+  body=gpu[start:end].replace('out.', 'out->').replace('&out','out')
+  body=body.replace('KW relocated=KPTR(c,h0)+(root-base);','return KPTR(c,h0)+(root-base);')
+  helper='KNOINLINE KW k_tree_pack(KTHR KCtx *c,KTHR KCtx *out,KW h0,KW root,KCP KW *masks,KW nmasks) {\n'+body+'}\n'
+  gpu=gpu[:start]+'    KW words=out.hp-out.hs;\n    KW relocated=k_tree_pack(c,&out,h0,root,masks,nmasks);\n'+gpu[end:]
+  gpu=gpu.replace('KNOINLINE KW k_tree_compact(',helper+'KNOINLINE KW k_tree_compact(')
+ elif name=='guarded-prefix':
+  gpu=gpu.replace('      (void)k_tree_layout(&out,KPTR(&out,at+1),masks,nmasks,&mask,&first);',
+    '      if(n>=64 || n+1>out.hp-at || !k_tree_layout(&out,KPTR(&out,at+1),masks,nmasks,&mask,&first)) {k_fail(c,KE_MATCH);return r;}')
+ elif name=='volatile-root':
   gpu=gpu.replace('KW root=k_tree_copy_node(c,&out,r);','volatile KW root=k_tree_copy_node(c,&out,r);')
   gpu=gpu.replace('KW relocated=KPTR(c,h0)+(root-base);','volatile KW relocated=KPTR(c,h0)+(root-base);')
  elif name=='return-words':
@@ -71,7 +82,7 @@ KNOINLINE bool k_trace_node(KTHR KCtx *c,KW root,KU stage) {
   assert gpu.count(old)==1
   gpu=gpu.replace(old,'return r; // diagnostic control only\n  '+old)
 
- if name in ('host-trace','index-prefix','return-words','volatile-root'):
+ if name in ('host-trace','index-prefix','return-words','volatile-root','split-prefix','guarded-prefix'):
   host=(rt/'gpuhost.h').read_text()
   helper=r"""
 static KW trace_roots[512];static unsigned trace_nr;
