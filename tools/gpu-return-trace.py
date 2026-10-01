@@ -11,7 +11,7 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('original',0),('phase-trace',0)]:
+for name,kq in [('host-trace',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
@@ -59,6 +59,42 @@ KNOINLINE bool k_trace_node(KTHR KCtx *c,KW root,KU stage) {
   old='if(c->err || !k_tree_new(c,h0,e0,b0,r)) return r;'
   assert gpu.count(old)==1
   gpu=gpu.replace(old,'return r; // diagnostic control only\n  '+old)
+
+ if name=='host-trace':
+  host=(rt/'gpuhost.h').read_text()
+  helper=r"""
+static KW trace_roots[512];static unsigned trace_nr;
+static void gpu_trace_roots(KW *H,const KParams *P,const char *phase) {
+  for(unsigned ri=0;ri<trace_nr;ri++) {
+    KW stack[64],depth[64];unsigned sp=1,visits=0;stack[0]=trace_roots[ri];depth[0]=0;
+    while(sp) {
+      KW v=stack[--sp],d=depth[sp];
+      if(KIS_LI(v,0)) continue;
+      KW off=v-P->ab;
+      if((v&7) || off<8 || off>P->an-16 || d>32 || ++visits>32768 || H[(off>>3)-1]!=(K_BARE|2)) {
+        fprintf(stderr,"host phase %s: root %u/%u=%llx bad=%llx depth=%llu visits=%u\n",phase,ri,trace_nr,(unsigned long long)trace_roots[ri],(unsigned long long)v,(unsigned long long)d,visits);return;
+      }
+      KW ix=off>>3;
+      stack[sp]=H[ix];depth[sp++]=d+1;stack[sp]=H[ix+1];depth[sp++]=d+1;
+    }
+  }
+  fprintf(stderr,"host phase %s: %u roots valid\n",phase,trace_nr);
+}
+static void gpu_trace_save(KW *H,const KParams *P) {
+  for(KW l=0;l<P->nlanes;l++) {
+    KW v=H[P->lane0+2*P->nlanes+l],off=v-P->ab;
+    if(H[P->lane0+l]!=PC_IDLE && !(v&7) && off>=8 && off<P->an && H[(off>>3)-1]==(K_BARE|2) && trace_nr<512) trace_roots[trace_nr++]=v;
+  }
+  gpu_trace_roots(H,P,"after-kq");
+}
+"""
+  marker='static int gpu_run('
+  # Place immediately before gpu_run, after all Metal and runtime declarations.
+  pos=host.index(marker)
+  host=host[:pos]+helper+'\n'+host[pos:]
+  host=host.replace('    rounds++;','    gpu_trace_roots(H,&P,"after-main");\n    rounds++;')
+  host=host.replace('      if (gpu_log == 2) {\n        KW n = gpu_lanes', '      gpu_trace_save(H,&P);\n      if (gpu_log == 2) {\n        KW n = gpu_lanes')
+  (rt/'gpuhost.h').write_text(host)
  (rt/'gpu.h').write_text(gpu)
  literal='\n'.join(json.dumps(line+'\n') for line in gpu.split('\n'))
  (rt/'gpu_src.h').write_text('static const char K_GPU_H[]=\n'+literal+';\n')
