@@ -83,6 +83,7 @@ static void gpu_trace_roots(KW *H,const KParams *P,const char *phase) {
 static void gpu_trace_save(KW *H,const KParams *P) {
   for(KW l=0;l<P->nlanes;l++) {
     KW v=H[P->lane0+2*P->nlanes+l],off=v-P->ab;
+    if(l<4) fprintf(stderr,"host lane %llu pc=%llu rv=%llx hp=%llu he=%llu kq=%llu blocks=%llu spare=%llu\n",(unsigned long long)l,(unsigned long long)H[P->lane0+l],(unsigned long long)v,(unsigned long long)H[P->lane0+4*P->nlanes+l],(unsigned long long)H[P->lane0+5*P->nlanes+l],(unsigned long long)H[P->lane0+7*P->nlanes+l],(unsigned long long)H[P->lane0+22*P->nlanes+l],(unsigned long long)H[P->lane0+23*P->nlanes+l]);
     if(H[P->lane0+l]!=PC_IDLE && !(v&7) && off>=8 && off<P->an && H[(off>>3)-1]==(K_BARE|2) && trace_nr<512) trace_roots[trace_nr++]=v;
   }
   gpu_trace_roots(H,P,"after-kq");
