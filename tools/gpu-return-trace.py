@@ -9,7 +9,7 @@ out=root/'build/gpu-return-trace';out.mkdir(parents=True,exist_ok=True)
 with (out/'pin_program.c').open('w') as f:
  subprocess.run(['build/bendc',base,'tests/gpu_growth_pinned.bend'],stdout=f,check=True)
 results=[]
-for name,kq in [('original',0),('host-kq',1),('no-prefix-pack',0),('no-tree-compaction',0)]:
+for name,kq in [('original',0),('original-retry',0),('no-prefix-pack',0),('scratch-prefix',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
@@ -17,6 +17,12 @@ for name,kq in [('original',0),('host-kq',1),('no-prefix-pack',0),('no-tree-comp
   old='if(out.blocks!=b0 && out.H[out.blocks]==b0 && out.hp-out.hs<=e0-h0)'
   assert gpu.count(old)==1
   gpu=gpu.replace(old,'if(false && out.blocks!=b0 && out.H[out.blocks]==b0 && out.hp-out.hs<=e0-h0)')
+ elif name=='scratch-prefix':
+  gpu=gpu.replace('out.hp-out.hs<=e0-h0)', 'out.hp-out.hs<=e0-h0 && out.hp-out.hs<=K_CHUNK)')
+  old='    for(KW at=lo;at<out.hp;) {\n      KW raw=out.H[at],n=raw & ~K_BARE,mask=0,first=0;'
+  new='    KW packed[K_CHUNK];\n    for(KW i=0;i<words;i++) packed[i]=out.H[lo+i];\n    for(KW at=lo;at<out.hp;) {\n      KW raw=packed[at-lo],n=raw & ~K_BARE,mask=0,first=0;'
+  assert gpu.count(old)==1
+  gpu=gpu.replace(old,new).replace('KW v=out.H[at+1+i];','KW v=packed[at+1+i-lo];')
  elif name=='no-tree-compaction':
   old='if(c->err || !k_tree_new(c,h0,e0,b0,r)) return r;'
   assert gpu.count(old)==1
