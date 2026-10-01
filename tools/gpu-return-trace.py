@@ -9,11 +9,15 @@ out=root/'build/gpu-return-trace';out.mkdir(parents=True,exist_ok=True)
 with (out/'pin_program.c').open('w') as f:
  subprocess.run(['build/bendc',base,'tests/gpu_growth_pinned.bend'],stdout=f,check=True)
 results=[]
-for name,kq in [('original',0),('original-retry',0),('no-prefix-pack',0),('scratch-prefix',0)]:
+for name,kq in [('original',0),('safe-region',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
- if name=='no-prefix-pack':
+ if name=='safe-region':
+  old='if (c->H[p + i] - b < n) return r;'
+  assert gpu.count(old)==1
+  gpu=gpu.replace(old,'if (k_in(c, c->H[p + i])) return r;')
+ elif name=='no-prefix-pack':
   old='if(out.blocks!=b0 && out.H[out.blocks]==b0 && out.hp-out.hs<=e0-h0)'
   assert gpu.count(old)==1
   gpu=gpu.replace(old,'if(false && out.blocks!=b0 && out.H[out.blocks]==b0 && out.hp-out.hs<=e0-h0)')
