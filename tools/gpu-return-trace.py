@@ -11,11 +11,42 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('split-prefix',0),('guarded-prefix',0)]:
+for name,kq in [('explicit-birth',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
- if name=='split-prefix':
+ if name=='explicit-birth':
+  start=gpu.index('#define K_TREE_STACK')
+  end=gpu.index('// A flat def keeps a Nat',start)
+  gpu=gpu[:start]+r"""#define K_TREE_STACK KW kt_birth[32][5], kt_nb=0
+#define K_TREE_MARK(id) do { \
+  if(kt_nb>0) { \
+    KW kt_prev=kt_nb-1; \
+    if(kt_birth[kt_prev][3]==sp && k_tree_schema(id)[0]==0 && k_tree_schema(kt_birth[kt_prev][4])[0]==0) \
+      k_rewind(c,kt_birth[kt_prev][0],kt_birth[kt_prev][1],kt_birth[kt_prev][2]); \
+  } \
+  bool kt_add=kt_nb==0; \
+  if(kt_nb>0) kt_add=kt_birth[kt_nb-1][3]!=sp; \
+  if(kt_add) { \
+    if(kt_nb==32){*ok=false;return 0;} \
+    kt_birth[kt_nb][0]=c->hp;kt_birth[kt_nb][1]=c->he; \
+    kt_birth[kt_nb][2]=c->blocks;kt_birth[kt_nb][3]=sp; \
+    kt_birth[kt_nb][4]=(id);kt_nb++; \
+  } \
+} while(0)
+#define K_TREE_RET do { \
+  while(kt_nb>0) { \
+    KW kt_ix=kt_nb-1; \
+    if(kt_birth[kt_ix][3]!=sp) break; \
+    kt_nb=kt_ix;KCP KW *kt_schema=k_tree_schema(kt_birth[kt_ix][4]); \
+    if(kt_schema[0]==0) k_rewind(c,kt_birth[kt_ix][0],kt_birth[kt_ix][1],kt_birth[kt_ix][2]); \
+    else RV=k_tree_compact(c,kt_birth[kt_ix][0],kt_birth[kt_ix][1],kt_birth[kt_ix][2],RV,kt_schema+1,kt_schema[0]); \
+    if(c->err){*ok=false;return 0;} \
+  } \
+} while(0)
+
+"""+gpu[end:]
+ elif name=='split-prefix':
   start=gpu.index('    KW lo=out.hs,words=out.hp-lo,base=KPTR(&out,lo),bytes=words<<3;')
   end=gpu.index('    k_rewind(&out,0,0,b0);c->spare=out.spare;',start)
   body=gpu[start:end].replace('out.', 'out->').replace('&out','out')
@@ -82,7 +113,7 @@ KNOINLINE bool k_trace_node(KTHR KCtx *c,KW root,KU stage) {
   assert gpu.count(old)==1
   gpu=gpu.replace(old,'return r; // diagnostic control only\n  '+old)
 
- if name in ('host-trace','index-prefix','return-words','volatile-root','split-prefix','guarded-prefix'):
+ if name in ('host-trace','index-prefix','return-words','volatile-root','split-prefix','guarded-prefix','explicit-birth'):
   host=(rt/'gpuhost.h').read_text()
   helper=r"""
 static KW trace_roots[512];static unsigned trace_nr;
