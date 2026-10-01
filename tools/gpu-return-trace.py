@@ -11,11 +11,15 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('host-trace',0)]:
+for name,kq in [('host-trace',0),('index-prefix',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
- if name=='phase-trace':
+ if name=='index-prefix':
+  gpu=gpu.replace('if((mask&((KW)1<<i)) && v-base<bytes) v=KPTR(c,h0)+(v-base);',
+    'if((mask&((KW)1<<i)) && k_in(&out,v) && KIX(&out,v)>=lo && KIX(&out,v)<out.hp) v=KPTR(c,h0+KIX(&out,v)-lo);')
+  gpu=gpu.replace('KW relocated=KPTR(c,h0)+(root-base);','KW relocated=KPTR(c,h0+KIX(&out,root)-lo);')
+ elif name=='phase-trace':
   validator=r"""
 KNOINLINE bool k_trace_value(KTHR KCtx *c,KW v,KW root,KU stage) {
   if(KIS_LI(v,0) || (k_in(c,v) && !(v&7) && c->H[KIX(c,v)-1]==(K_BARE|2))) return true;
@@ -60,7 +64,7 @@ KNOINLINE bool k_trace_node(KTHR KCtx *c,KW root,KU stage) {
   assert gpu.count(old)==1
   gpu=gpu.replace(old,'return r; // diagnostic control only\n  '+old)
 
- if name=='host-trace':
+ if name in ('host-trace','index-prefix'):
   host=(rt/'gpuhost.h').read_text()
   helper=r"""
 static KW trace_roots[512];static unsigned trace_nr;
