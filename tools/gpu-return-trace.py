@@ -11,7 +11,7 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('explicit-birth-index',0),('explicit-birth-aligned',0)]:
+for name,kq in [('explicit-birth-flat',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
@@ -47,7 +47,13 @@ for name,kq in [('explicit-birth-index',0),('explicit-birth-aligned',0)]:
 } while(0)
 
 """+gpu[end:]
-  if name.endswith('-index'):
+  if name.endswith('-flat'):
+   import re
+   gpu=gpu.replace('KW kt_birth[32][5], kt_nb=0', 'KW kt_h[32],kt_e[32],kt_b[32],kt_s[32],kt_t[32],kt_nb=0')
+   fields=['kt_h','kt_e','kt_b','kt_s','kt_t']
+   gpu=re.sub(r'kt_birth\[([^]]+)\]\[([0-4])\]',lambda m:fields[int(m[2])]+'['+m[1]+']',gpu)
+   assert 'kt_birth[' not in gpu
+  elif name.endswith('-index'):
    gpu=gpu.replace('if((mask&((KW)1<<i)) && v-base<bytes) v=KPTR(c,h0)+(v-base);',
      'if((mask&((KW)1<<i)) && k_in(&out,v) && KIX(&out,v)>=lo && KIX(&out,v)<out.hp) v=KPTR(c,h0+KIX(&out,v)-lo);')
    gpu=gpu.replace('KW relocated=KPTR(c,h0)+(root-base);','KW relocated=KPTR(c,h0+KIX(&out,root)-lo);')
