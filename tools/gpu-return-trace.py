@@ -11,7 +11,7 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('explicit-birth-flat',0)]:
+for name,kq in [('explicit-birth-zero',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
@@ -47,7 +47,9 @@ for name,kq in [('explicit-birth-flat',0)]:
 } while(0)
 
 """+gpu[end:]
-  if name.endswith('-flat'):
+  if name.endswith('-zero'):
+   gpu=gpu.replace('KW kt_birth[32][5], kt_nb=0','KW kt_birth[32][5]={{0}}, kt_nb=0')
+  elif name.endswith('-flat'):
    import re
    gpu=gpu.replace('KW kt_birth[32][5], kt_nb=0', 'KW kt_h[32],kt_e[32],kt_b[32],kt_s[32],kt_t[32],kt_nb=0')
    fields=['kt_h','kt_e','kt_b','kt_s','kt_t']
@@ -180,7 +182,7 @@ static void gpu_trace_save(KW *H,const KParams *P) {
  results.append({'name':name,'host_kq':kq,'exit':p.returncode,'gpu_header_sha256':hashlib.sha256(gpu.encode()).hexdigest()})
  (out/'results.json').write_text(json.dumps(results,indent=2)+'\n')
  if name.startswith('explicit-birth'):
-  q=subprocess.run([str(binary)],env=dict(env,BEND_SCAN_SPECIAL='1'),capture_output=True)
+  q=subprocess.run([str(binary)],env=dict(env,BEND_SCAN_SPECIAL='1',BEND_GPU_FORK='0'),capture_output=True)
   (d/'special.stderr').write_bytes(q.stderr);print('=== specialized depth7 producer exit',q.returncode,'===',flush=True);print(q.stderr.decode(errors='replace'),flush=True)
   ordinary=d/'ordinary';ordinary_cmd=cmd.copy();ordinary_cmd[ordinary_cmd.index('tools/gpu-return-trace.c')]=str(out/'pin_program.c');ordinary_cmd[ordinary_cmd.index(str(binary))]=str(ordinary)
   subprocess.run(ordinary_cmd,check=True)
