@@ -1565,6 +1565,12 @@ static inline uint32_t *arr_w32(V a, V i) {
   return (uint32_t *)((V *)a + 1) + ((size_t)j << (((h >> 5) & 1) ^ 1));
 }
 static inline V arr_rdw(V a, V i) { return *arr_w32(a, i); }
+// Generated code selects these only after proving all array producers narrow.
+static inline uint32_t *arr_nw32(V a, V i) { return arr_ncells(a) + arr_ix(a, i); }
+static inline V arr_rdn(V a, V i) { return *arr_nw32(a, i); }
+BEND_UINL V F_Array_dget_x37n(V a, V i) { return C2(0, a, arr_rdn(a, i)); }
+BEND_UINL V F_Array_dset_x37n(V a, V i, V v) { *arr_nw32(a, i) = (uint32_t)v; return a; }
+BEND_UINL V F_Array_dswap_x37n(V a, V i, V v) { uint32_t *q = arr_nw32(a, i); V old = *q; *q = (uint32_t)v; return C2(0, a, old); }
 // Stores v in cell i and answers the old cell (arr_xchgw: v is a scalar).
 static inline V arr_xchg(V a, V i, V v) {
   uint32_t j = arr_ix(a, i);

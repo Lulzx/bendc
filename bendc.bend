@@ -949,7 +949,7 @@ type Ctor is Data:
 
 type Decl is Data:
   DDef{name: String, params: List<&2, Core.Param>, body: Core.Expr, ret: Core.Expr}
-  DEff{name: String, params: List<&2, Core.Param>, imports: List<&2, String>}
+  DEff{name: String, params: List<&2, Core.Param>, imports: List<&2, String>, ret: Core.Expr}
   DLaw{name: String, params: List<&2, Core.Param>, ret: Core.Expr}
   DType{name: String, params: List<&2, String>, ctors: List<&2, Ctor>}
   DImport{path: String, alias: String}
@@ -2857,7 +2857,7 @@ def P.def.body(name: String, params: List<&2, Core.Param>, ret: Core.Expr, eff: 
     case True{}:
       do Parser<Decl>:
         imps : List<&2, String> <- P.eff.imports()
-        return DEff{name, params, imps}
+        return DEff{name, params, imps, ret}
     case False{}:
       do Parser<Decl>:
         ss : List<&2, Stmt> <- P.stmts()
@@ -3519,7 +3519,7 @@ def Decl.show(d: Decl) -> String:
   match d:
     case DDef{n, ps, b, r}:
       "def " ++ n ++ "(" ++ Params.show(ps) ++ ") = " ++ Expr.show(b)
-    case DEff{n, ps, ims}:
+    case DEff{n, ps, ims, eret}:
       "eff " ++ n ++ "(" ++ Params.show(ps) ++ ")"
     case DLaw{n, ps, r}:
       "law " ++ n ++ "(" ++ Params.show(ps) ++ ")"
@@ -3968,12 +3968,12 @@ def G.add.def(
       G.mask(G.params(laws, name, ps))}),
     Map.set(&2, Decl, bodies, name, DDef{name, ps, body, G.ret(laws, name, ret)}), dps}
 
-def G.add.eff(+name: String, +ps: List<&2, Core.Param>, ims: List<&2, String>,
+def G.add.eff(+name: String, +ps: List<&2, Core.Param>, ims: List<&2, String>, +ret: Core.Expr,
   +laws: Map<&2, Decl>, g: G) -> G:
   G{ctors, defs, bodies, dps} = g
   G{ctors, Map.set(&2, DInfo, defs, name, DInfo{1, G.mask(G.params(laws, name, ps))}),
-    Map.set(&2, Decl, Map.set(&2, Decl, bodies, name, DEff{name, G.params(laws, name, ps), ims}),
-      "^" ++ name, DLaw{name, Nil{}, G.law.ret(G.get(Decl, DImport{"", ""}, laws, name))}), dps}
+    Map.set(&2, Decl, Map.set(&2, Decl, bodies, name, DEff{name, G.params(laws, name, ps), ims, G.ret(laws, name, ret)}),
+      "^" ++ name, DLaw{name, Nil{}, G.ret(laws, name, ret)}), dps}
 
 def G.add(d: Decl, +laws: Map<&2, Decl>, g: G) -> G:
   match d:
@@ -3983,8 +3983,8 @@ def G.add(d: Decl, +laws: Map<&2, Decl>, g: G) -> G:
       G.add.law(name, ps, g)
     case DDef{name, ps, body, ret}:
       G.add.def(name, ps, body, ret, laws, g)
-    case DEff{name, ps, ims}:
-      G.add.eff(name, ps, ims, laws, g)
+    case DEff{name, ps, ims, eret}:
+      G.add.eff(name, ps, ims, eret, laws, g)
     case DImport{p, a}:
       g
 
@@ -6429,14 +6429,14 @@ def Gen.par.decls(n: Nat, +k: U32, +i: U32) -> String:
     case 0n:
       ""
     case 1n+m:
-      "V " ++ Gen.par.name(k, i) ++ "; " ++ Gen.par.decls(m, k, U32.inc(i))
+      "V " ++ Gen.par.name(k, i) ++ ";\n" ++ Gen.par.decls(m, k, U32.inc(i))
 
 def Gen.par.copy(n: Nat, +k: U32, +j: U32, +i: U32) -> String:
   match n:
     case 0n:
       ""
     case 1n+m:
-      Gen.par.name(k, i) ++ " = " ++ Gen.par.name(j, i) ++ "; " ++ Gen.par.copy(m, k, j, U32.inc(i))
+      Gen.par.name(k, i) ++ " = " ++ Gen.par.name(j, i) ++ ";\n" ++ Gen.par.copy(m, k, j, U32.inc(i))
 
 #
 # The functions a !-call can reach compile into one flat state machine (see
@@ -8999,7 +8999,7 @@ def Gen.def.decl(+g: G, +name: String, +info: DInfo, d: Decl) -> Gen(Unit):
     case DDef{n, ps, body, ret}:
       Gen.def.native(g, name, mask, body, Gen.sig.b(ps, mask, Bor.list(Bor.flags(g, name)), 0,
         Sig{Nil{}, Nil{}, Nil{}}), U32.is_eq(kind, 2))
-    case DEff{n, ps, ims}:
+    case DEff{n, ps, ims, eret}:
       Gen.def.eff(name, Gen.sig(ps, mask, 0, Sig{Nil{}, Nil{}, Nil{}}), ims)
     case other:
       Gen.def.law(name, mask, U32.is_eq(kind, 2))
@@ -9375,7 +9375,7 @@ def Gen.cids(+g: G, ds: List<&2, Decl>, +i: U32) -> String:
       ""
     case DType{n, ps, cs} <> t:
       Gen.cids.ctors(g, cs) ++ Gen.cids(g, t, i)
-    case DEff{+n, ps, ims} <> t:
+    case DEff{+n, ps, ims, eret} <> t:
       Gen.cids.def(Gen.cid(n), "((3u << 16) | " ++ U32.show(i) ++ "u)") ++
         Gen.cids(g, t, U32.inc(i))
     case d <> t:
@@ -13613,7 +13613,7 @@ def Mod.names(ds: List<&2, Decl>, acc: List<&2, String>) -> List<&2, String>:
       acc
     case DDef{n, ps, b, r} <> t:
       Mod.names(t, n <> acc)
-    case DEff{n, ps, ims} <> t:
+    case DEff{n, ps, ims, eret} <> t:
       Mod.names(t, n <> acc)
     case DLaw{n, ps, r} <> t:
       Mod.names(t, n <> acc)
@@ -13730,8 +13730,8 @@ def Mod.decl(+q: Qual, d: Decl) -> Decl:
   match d:
     case DDef{n, +ps, b, r}:
       DDef{Mod.q(q, n), ps, Mod.expr(q, Ty.pnames(ps), b), Mod.expr(q, Nil{}, r)}
-    case DEff{n, ps, ims}:
-      DEff{Mod.q(q, n), ps, ims}
+    case DEff{n, ps, ims, eret}:
+      DEff{Mod.q(q, n), ps, ims, Mod.expr(q, Nil{}, eret)}
     case DLaw{n, ps, r}:
       DLaw{Mod.q(q, n), ps, Mod.expr(q, Nil{}, r)}
     case DType{n, ps, cs}:
@@ -13803,8 +13803,8 @@ def Eff.paths(+dir: String, ps: List<&2, String>) -> List<&2, String>:
 
 def Eff.decl(+dir: String, d: Decl) -> Decl:
   match d:
-    case DEff{n, ps, ims}:
-      DEff{n, ps, Eff.paths(dir, ims)}
+    case DEff{n, ps, ims, eret}:
+      DEff{n, ps, Eff.paths(dir, ims), eret}
     case other:
       other
 
@@ -14011,7 +14011,7 @@ def Main.ids.owner(ds: List<&2, Decl>, +p: String) -> String:
   match ds:
     case Nil{}:
       ""
-    case DEff{+n, ps, ims} <> t:
+    case DEff{+n, ps, ims, eret} <> t:
       Bool.pick(String, Str.has(ims, p), n, Main.ids.owner(t, p))
     case d <> t:
       Main.ids.owner(t, p)
@@ -18968,7 +18968,7 @@ def J.def.decl(+j: JG, +name: String, +info: DInfo, d: Decl) -> Gen(Unit):
   match d:
     case DDef{n, ps, body, ret}:
       J.def.native(j, name, mask, body, Gen.sig(ps, mask, 0, Sig{Nil{}, Nil{}, Nil{}}), U32.is_eq(kind, 2))
-    case DEff{n, +ps, ims}:
+    case DEff{n, +ps, ims, eret}:
       J.def.eff(JG.g(j), name, mask, ps, Gen.sig(ps, mask, 0, Sig{Nil{}, Nil{}, Nil{}}), ims)
     case other:
       Bool.pick(Gen(Unit), U32.is_eq(kind, 2), J.wrapper(name, mask), Gen.pure(Unit, Unit{}))
@@ -19247,7 +19247,7 @@ def Lo.mask.add(+g: G, d: Decl, m: Map<&2, List<&2, Bool>>) -> Map<&2, List<&2, 
       Map.set(&2, List<&2, Bool>, m, name, DInfo.mask(G.def(g, name)))
     case DLaw{+name, ps, r}:
       Map.set(&2, List<&2, Bool>, m, name, DInfo.mask(G.def(g, name)))
-    case DEff{+name, ps, ims}:
+    case DEff{+name, ps, ims, eret}:
       Map.set(&2, List<&2, Bool>, m, name, DInfo.mask(G.def(g, name)))
     case other:
       m
@@ -22370,11 +22370,155 @@ def Unb.sret(on: Bool, +ds: List<&2, Decl>, +g: G) -> G:
     case False{}:
       g
 
+# All scalar-array access sites can use a narrow layout only when every
+# reachable array producer is narrow. The entry has no input arrays. Generic
+# allocation, boxed array constructors, memo cells, unknown code and foreign
+# signatures that can hide arrays all reject. Foreign C itself stays generic.
+def Arrn.scalar.name(n: String) -> Bool:
+  Str.has(["Unit", "U32", "F32", "Bool", "Char", "Nat", "String"], n)
+
+def Arrn.foreign.go(fuel: Nat, todo: List<&2, Core.Expr>) -> Bool:
+  match fuel:
+    case 0n:
+      False{}
+    case 1n+fu:
+      match todo:
+        case Nil{}:
+          True{}
+        case Core.EVar{n} <> rest:
+          Bool.and(Arrn.scalar.name(n), Arrn.foreign.go(fu, rest))
+        case Core.ETy{+n, +args} <> rest:
+          Bool.and(Bool.or(Arrn.scalar.name(n), Str.has(["IO", "Tuple", "Pair"], n)),
+            Bool.and(Bool.or(Str.has(["IO", "Tuple", "Pair"], n), List.is_empty(&2, Core.Expr, args)),
+              Arrn.foreign.go(fu, List.append(&2, Core.Expr, args, rest))))
+        case Core.ECall{Core.EVar{+n}, args} <> rest:
+          Bool.and(Str.has(["IO", "Tuple", "Pair"], n), Arrn.foreign.go(fu, List.append(&2, Core.Expr, args, rest)))
+        case other:
+          False{}
+
+def Arrn.foreign.ty(e: Core.Expr) -> Bool:
+  Arrn.foreign.go(256n, [e])
+
+def Arrn.foreign.ps(ps: List<&2, Core.Param>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case +p <> t:
+      Core.Param{x, m, ty} = p
+      Bool.and(Bool.or(Bool.not(G.keep(p)), Arrn.scalar.name(ty)), Arrn.foreign.ps(t))
+
+# The constructors' arguments and every branch are visited. Pattern matching
+# may split a narrow array; arr_half preserves its width. Constructing ALeaf
+# or ANode is kept generic instead of relying on the incoming halves' shapes.
+def Arrn.device.ret(d: Decl) -> Bool:
+  match d:
+    case DDef{n, ps, body, ret}:
+      Gen.scalar.ty(P.head(ret))
+    case other:
+      False{}
+
+type ArrnWork is Data:
+  ArrnWork{e: Core.Expr, bound: List<&2, String>}
+
+def Arrn.work(xs: List<&2, Core.Expr>, +bound: List<&2, String>) -> List<&2, ArrnWork>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case x <> t:
+      ArrnWork{x, bound} <> Arrn.work(t, bound)
+
+def Arrn.expr.go(fuel: Nat, +g: G, todo: List<&2, ArrnWork>) -> Bool:
+  match fuel:
+    case 0n:
+      False{}
+    case 1n+fu:
+      match todo:
+        case Nil{}:
+          True{}
+        case ArrnWork{e, +bound} <> rest:
+          match e:
+            case Core.ECtor{+n, args}:
+              Bool.and(Bool.not(Str.has(["ALeaf", "ANode"], n)),
+                Arrn.expr.go(fu, g, List.append(&2, ArrnWork, Arrn.work(args, bound), rest)))
+            # Copying a device array back can widen it. Only scalar device
+            # results are eligible. A local target cannot borrow a global's type.
+            case Core.ECall{Core.EVar{"%gpu"}, Core.EVar{+f} <> args}:
+              Bool.and(Bool.not(Str.has(bound, f)), Bool.and(Arrn.device.ret(G.body(g, f)),
+                Arrn.expr.go(fu, g, List.append(&2, ArrnWork, Arrn.work(args, bound), rest))))
+            case Core.EVar{"%gpu"}:
+              False{}
+            case Core.ECall{f, args}:
+              Arrn.expr.go(fu, g, ArrnWork{f, bound} <> List.append(&2, ArrnWork, Arrn.work(args, bound), rest))
+            case Core.ELam{p, b}:
+              Arrn.expr.go(fu, g, ArrnWork{b, Pat.vars(p, bound)} <> rest)
+            case Core.ELet{p, v, b}:
+              Arrn.expr.go(fu, g, ArrnWork{v, bound} <> ArrnWork{b, Pat.vars(p, bound)} <> rest)
+            case Core.EMatch{scrs, cs}:
+              Arrn.expr.go(fu, g, List.append(&2, ArrnWork, Arrn.work(scrs, bound),
+                List.append(&2, ArrnWork, Arrn.work(cs, bound), rest)))
+            case Core.ECase{ps, b}:
+              Arrn.expr.go(fu, g, ArrnWork{b, Pats.vars(ps, bound)} <> rest)
+            case Core.ESucc{k, x}:
+              Arrn.expr.go(fu, g, ArrnWork{x, bound} <> rest)
+            case Core.EOp{op, a, b}:
+              Arrn.expr.go(fu, g, ArrnWork{a, bound} <> ArrnWork{b, bound} <> rest)
+            case Core.EAnn{x, ty}:
+              Arrn.expr.go(fu, g, ArrnWork{x, bound} <> rest)
+            case other:
+              Arrn.expr.go(fu, g, rest)
+
+def Arrn.expr(+g: G, e: Core.Expr, bound: List<&2, String>) -> Bool:
+  Arrn.expr.go(4096n, g, [ArrnWork{e, bound}])
+
+def Arrn.native(+f: String) -> Bool:
+  Bool.or(Str.eq(f, "%gpu"), Bool.and(G.is_native(f), Bool.not(Str.has(["Array.new", "Chk.memo.new"], f))))
+
+def Arrn.go(fuel: Nat, +g: G, k: KTreeClean) -> Bool:
+  match fuel:
+    case 0n:
+      False{}
+    case 1n+fu:
+      match k:
+        case KTWalk{names, +seen}:
+          match names:
+            case Nil{}:
+              True{}
+            case +f <> rest:
+              Arrn.go(fu, g, KTNext{f, rest, seen, Bool.or(Str.has(seen, f), Arrn.native(f))})
+        case KTNext{+f, rest, seen, skip}:
+          match skip:
+            case True{}:
+              Arrn.go(fu, g, KTWalk{rest, seen})
+            case False{}:
+              Arrn.go(fu, g, KTDecl{f, rest, seen, DInfo.kind(G.def(g, f)), G.body(g, f)})
+        case KTDecl{f, rest, seen, kind, d}:
+          match d:
+            case DDef{n, +ps, +body, ret}:
+              Bool.and(U32.is_zero(kind), Bool.and(Arrn.expr(g, body, Ty.pnames(ps)),
+                Arrn.go(fu, g, KTWalk{List.append(&2, String, FV.expr(body, Ty.pnames(ps), Nil{}), rest), f <> seen})))
+            case DEff{n, ps, ims, eret}:
+              Bool.and(Arrn.foreign.ps(ps), Bool.and(Arrn.foreign.ty(eret),
+                Arrn.go(fu, g, KTWalk{rest, f <> seen})))
+            case other:
+              False{}
+
+def Arrn.program(+g: G) -> Bool:
+  Arrn.go(4096n, g, KTWalk{["main"], Nil{}})
+
+def Arrn.begin(on: Bool) -> String:
+  Bool.pick(String, on,
+    "// Proven narrow scalar arrays in this generated Bend program.\n#define arr_rdw arr_rdn\n#define F_Array_dget_x37w F_Array_dget_x37n\n#define F_Array_dset_x37w F_Array_dset_x37n\n#define F_Array_dswap_x37w F_Array_dswap_x37n\n", "")
+
+def Arrn.end(on: Bool) -> String:
+  Bool.pick(String, on,
+    "#undef arr_rdw\n#undef F_Array_dget_x37w\n#undef F_Array_dset_x37w\n#undef F_Array_dswap_x37w\n", "")
+
 def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
+  +narrow = Arrn.program(g)
   COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#define BEND_NATIVE_STR 1\n#define BEND_NATIVE_MAP 1\n#ifdef BEND_RT_SPLIT\n#include \"bendrt_split.h\"\n#else\n#include \"bendrt.h\"\n#endif\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
-    Doc.flat(Doc.list([DStr{"BEND_NSP_BEGIN\n"}, protos, DStr{"\n"}, code, DStr{"BEND_NSP_END\n" ++ Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
+    Doc.flat(Doc.list([DStr{"BEND_NSP_BEGIN\n" ++ Arrn.begin(narrow)}, protos, DStr{"\n"}, code, DStr{Arrn.end(narrow) ++ "BEND_NSP_END\n" ++ Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
     Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
     DStr{"\n" ++ entry}])), errs}
 
@@ -22679,8 +22823,9 @@ def G.hless.effs(ds: List<&2, Decl>) -> List<&2, String>:
   match ds:
     case Nil{}:
       Nil{}
-    case DEff{+n, ps, ims} <> t:
-      List.append(&2, String, n <> G.hless.pexprs(ps), G.hless.effs(t))
+    case DEff{+n, ps, ims, eret} <> t:
+      List.append(&2, String, n <> G.hless.pexprs(ps),
+        List.append(&2, String, G.hless.tnames(8n, [eret]), G.hless.effs(t)))
     case d <> t:
       G.hless.effs(t)
 
@@ -22961,7 +23106,7 @@ def N.eids(ds: List<&2, Decl>, +i: U32, m: Map<&2, U32>) -> Map<&2, U32>:
   match ds:
     case Nil{}:
       m
-    case DEff{+n, ps, ims} <> t:
+    case DEff{+n, ps, ims, eret} <> t:
       N.eids(t, U32.inc(i), Map.set(&2, U32, m, n, (196608 .|. i : U32)))
     case d <> t:
       N.eids(t, i, m)
@@ -25727,7 +25872,7 @@ def N.ctor.code(kind: Nat, +tag: U32, +os: List<&2, NO>) -> As.Code:
     case 4n:
       As.CCat{N.lregs(os, 0), N.natk(1)}
     case 5n:
-      N.cat([N.lregs(os, 1), N.k(0, 0), N.call("arr_new")])
+      N.cat([N.lregs(os, 1), N.k(0, 0), N.call("N_Array_dnew")])
     case 6n+q:
       As.CCat{N.lregs(os, 0), N.call("arr_node")}
 
@@ -26514,7 +26659,7 @@ def N.def.decl(+g: G, +name: String, info: DInfo, d: Decl) -> NG(Unit):
   match d:
     case DDef{n, ps, body, ret}:
       N.def.native(g, name, mask, ps, body, U32.is_eq(kind, 2))
-    case DEff{n, ps, ims}:
+    case DEff{n, ps, ims, eret}:
       N.def.eff(name, mask, ims)
     case other:
       N.def.law(name, mask, U32.is_eq(kind, 2))
