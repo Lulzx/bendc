@@ -11,11 +11,11 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('explicit-birth',0)]:
+for name,kq in [('explicit-birth-index',0),('explicit-birth-aligned',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
- if name=='explicit-birth':
+ if name.startswith('explicit-birth'):
   gpu=gpu.replace('if (c->H[p + i] - b < n) return r;', 'if (k_in(c, c->H[p + i])) return r;')
   start=gpu.index('#define K_TREE_STACK')
   end=gpu.index('// A flat def keeps a Nat',start)
@@ -47,6 +47,14 @@ for name,kq in [('explicit-birth',0)]:
 } while(0)
 
 """+gpu[end:]
+  if name.endswith('-index'):
+   gpu=gpu.replace('if((mask&((KW)1<<i)) && v-base<bytes) v=KPTR(c,h0)+(v-base);',
+     'if((mask&((KW)1<<i)) && k_in(&out,v) && KIX(&out,v)>=lo && KIX(&out,v)<out.hp) v=KPTR(c,h0+KIX(&out,v)-lo);')
+   gpu=gpu.replace('KW relocated=KPTR(c,h0)+(root-base);','KW relocated=KPTR(c,h0+KIX(&out,root)-lo);')
+  elif name.endswith('-aligned'):
+   gpu=gpu.replace('if((mask&((KW)1<<i)) && v-base<bytes) v=KPTR(c,h0)+(v-base);',
+     'if(mask&((KW)1<<i)) { if(!(v&7) && k_in(&out,v)) { KW vi=KIX(&out,v); if(vi>=lo && vi<out.hp) v=KPTR(c,h0+vi-lo); } }')
+   gpu=gpu.replace('KW relocated=KPTR(c,h0)+(root-base);','KW relocated=KPTR(c,h0+1);')
  elif name=='split-prefix':
   start=gpu.index('    KW lo=out.hs,words=out.hp-lo,base=KPTR(&out,lo),bytes=words<<3;')
   end=gpu.index('    k_rewind(&out,0,0,b0);c->spare=out.spare;',start)
@@ -165,10 +173,10 @@ static void gpu_trace_save(KW *H,const KParams *P) {
  print(p.stderr.decode(errors='replace'),flush=True)
  results.append({'name':name,'host_kq':kq,'exit':p.returncode,'gpu_header_sha256':hashlib.sha256(gpu.encode()).hexdigest()})
  (out/'results.json').write_text(json.dumps(results,indent=2)+'\n')
- if name=='explicit-birth':
+ if name.startswith('explicit-birth'):
   ordinary=d/'ordinary';ordinary_cmd=cmd.copy();ordinary_cmd[ordinary_cmd.index('tools/gpu-return-trace.c')]=str(out/'pin_program.c');ordinary_cmd[ordinary_cmd.index(str(binary))]=str(ordinary)
   subprocess.run(ordinary_cmd,check=True)
-  q=subprocess.run([str(ordinary)],env=dict(env,BEND_GPU_MB0='4',BEND_GPU_MB='128',BEND_GPU_LANES='64',BEND_GPU_KQCPU='0',BEND_GPU_PIN_MB='0',BEND_GPU_LOG='2'),capture_output=True)
+  q=subprocess.run([str(ordinary)],env=dict(env,BEND_GPU_MB0='4',BEND_GPU_MB='128',BEND_GPU_LANES='64',BEND_GPU_KQCPU='0',BEND_GPU_PIN_MB='0',BEND_GPU_LOG='1'),capture_output=True)
   (d/'ordinary.stderr').write_bytes(q.stderr);(d/'ordinary.stdout').write_bytes(q.stdout)
   print('=== ordinary full fixture exit',q.returncode,'===',flush=True);print(q.stdout.decode(errors='replace'),flush=True);print(q.stderr.decode(errors='replace'),flush=True)
   for repeat in range(1,3):
