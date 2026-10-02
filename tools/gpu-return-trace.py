@@ -168,7 +168,7 @@ static void gpu_trace_save(KW *H,const KParams *P) {
  if name=='explicit-birth':
   ordinary=d/'ordinary';ordinary_cmd=cmd.copy();ordinary_cmd[ordinary_cmd.index('tools/gpu-return-trace.c')]=str(out/'pin_program.c');ordinary_cmd[ordinary_cmd.index(str(binary))]=str(ordinary)
   subprocess.run(ordinary_cmd,check=True)
-  q=subprocess.run([str(ordinary)],env=env,capture_output=True)
+  q=subprocess.run([str(ordinary)],env=dict(env,BEND_GPU_MB0='4',BEND_GPU_MB='128',BEND_GPU_LANES='64',BEND_GPU_KQCPU='0',BEND_GPU_PIN_MB='0',BEND_GPU_LOG='2'),capture_output=True)
   (d/'ordinary.stderr').write_bytes(q.stderr);(d/'ordinary.stdout').write_bytes(q.stdout)
   print('=== ordinary full fixture exit',q.returncode,'===',flush=True);print(q.stdout.decode(errors='replace'),flush=True);print(q.stderr.decode(errors='replace'),flush=True)
   for repeat in range(1,3):
