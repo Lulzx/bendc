@@ -304,7 +304,9 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
     GcBlk *q = k->blk;
     uint32_t used = 0;
     for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(__atomic_load_n(&GC_ALLOC(q)[j], __ATOMIC_RELAXED));
-    if (q->nobj - used >= q->nobj / 5) {
+    // A large small-class block can have fewer than five slots. Require
+    // a real free slot rather than recursively recycling an exhausted one.
+    if (q->nobj - used >= (q->nobj / 5 ? q->nobj / 5 : 1)) {
       k->bump = k->end = NULL;
       k->j = (uint32_t)-1;
       k->idx = 0;
@@ -359,7 +361,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
         if (!__atomic_compare_exchange_n(&q->owned, &z, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) continue;
         uint32_t used = 0;
         for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(GC_ALLOC(q)[j]);
-        if (q->nobj - used < q->nobj / 5) { __atomic_store_n(&q->owned, 0, __ATOMIC_RELEASE); continue; }
+        if (q->nobj - used < (q->nobj / 5 ? q->nobj / 5 : 1)) { __atomic_store_n(&q->owned, 0, __ATOMIC_RELEASE); continue; }
         b = q;
         k->reuse = 1;
         t->rcur[c] = (uint32_t)bi + 1;
