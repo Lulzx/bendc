@@ -6,7 +6,12 @@
 
 static int scan_failed;
 static V scan_main(void) {
-  V root = G_make(13, 3);
+  int special=getenv("BEND_SCAN_SPECIAL")!=NULL;
+  V root;
+  if(special) { V args[]={1};if(!gpu_call(&K_PROG,KL_make_x37s1291691603x8209995,args,1,1,&root)) {fprintf(stderr,"special producer failed\n");scan_failed=1;return UNIT;} }
+  else root=G_make(13,3);
+  unsigned expected_nodes=special?127:8191,expected_leaves=special?128:8192;
+  uint64_t expected_sum=special?1472:184320;
   fprintf(stderr, "pin scan: mode=%d root=%llx arena=%llx bytes=%llu\n", gpu_mode,
     (unsigned long long)root, (unsigned long long)(uintptr_t)gpu_H, (unsigned long long)gpu_Hn);
   if(gpu_A) {fprintf(stderr,"phase trace:");for(int i=7;i<16;i++) fprintf(stderr," %u",gpu_A[i]);fprintf(stderr,"\n");}
@@ -51,14 +56,14 @@ static V scan_main(void) {
     stack[sp++]=(struct Item){b,item.depth+1,(item.path<<1)|1};
     stack[sp++]=(struct Item){a,item.depth+1,item.path<<1};
   }
-  if (nodes!=8191 || leaves!=8192 || sum!=184320) scan_failed=1;
+  if (nodes!=expected_nodes || leaves!=expected_leaves || sum!=expected_sum) scan_failed=1;
   fprintf(stderr,"pin scan: nodes=%u leaves=%u sum=%llu invalid=%d\n",nodes,leaves,(unsigned long long)sum,scan_failed);
   if (!scan_failed) {
     bend_share(root);
     fprintf(stderr,"pin scan: running ordinary CPU sum\n");
     V actual=F_sum(root);
     fprintf(stderr,"pin scan: CPU sum=%llu\n",(unsigned long long)actual);
-    if (actual!=184320) scan_failed=1;
+    if (actual!=expected_sum) scan_failed=1;
   }
   return UNIT;
 }

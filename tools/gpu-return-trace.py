@@ -174,22 +174,11 @@ static void gpu_trace_save(KW *H,const KParams *P) {
  results.append({'name':name,'host_kq':kq,'exit':p.returncode,'gpu_header_sha256':hashlib.sha256(gpu.encode()).hexdigest()})
  (out/'results.json').write_text(json.dumps(results,indent=2)+'\n')
  if name.startswith('explicit-birth'):
+  q=subprocess.run([str(binary)],env=dict(env,BEND_SCAN_SPECIAL='1'),capture_output=True)
+  (d/'special.stderr').write_bytes(q.stderr);print('=== specialized depth7 producer exit',q.returncode,'===',flush=True);print(q.stderr.decode(errors='replace'),flush=True)
   ordinary=d/'ordinary';ordinary_cmd=cmd.copy();ordinary_cmd[ordinary_cmd.index('tools/gpu-return-trace.c')]=str(out/'pin_program.c');ordinary_cmd[ordinary_cmd.index(str(binary))]=str(ordinary)
   subprocess.run(ordinary_cmd,check=True)
   q=subprocess.run([str(ordinary)],env=dict(env,BEND_GPU_MB0='4',BEND_GPU_MB='128',BEND_GPU_LANES='64',BEND_GPU_KQCPU='0',BEND_GPU_PIN_MB='0',BEND_GPU_LOG='1'),capture_output=True)
   (d/'ordinary.stderr').write_bytes(q.stderr);(d/'ordinary.stdout').write_bytes(q.stdout)
   print('=== ordinary full fixture exit',q.returncode,'===',flush=True);print(q.stdout.decode(errors='replace'),flush=True);print(q.stderr.decode(errors='replace'),flush=True)
-  for repeat in range(1,3):
-   q=subprocess.run([str(binary)],env=env,capture_output=True)
-   (d/f'repeat-{repeat}.stderr').write_bytes(q.stderr)
-   print('=== explicit-birth repeat',repeat,'exit',q.returncode,'===',flush=True);print(q.stderr.decode(errors='replace'),flush=True)
-  for layout in ('full','split'):
-   target=binary
-   if layout=='split':
-    obj=d/'bendrt.o';subprocess.run(['cc','-O2','-w','-I',str(rt),'-c',str(rt/'bendrt_impl.c'),'-o',str(obj)],check=True)
-    target=d/'split';splitcmd=cmd.copy();splitcmd[splitcmd.index(str(binary))]=str(target);splitcmd.insert(1,'-DBEND_RT_SPLIT');splitcmd.append(str(obj));subprocess.run(splitcmd,check=True)
-   for pin in ((512,) if layout=='full' else (0,512)):
-    q=subprocess.run([str(target)],env=dict(env,BEND_GPU_PIN_MB=str(pin)),capture_output=True)
-    (d/f'{layout}-{pin}.stderr').write_bytes(q.stderr)
-    print('=== explicit-birth',layout,'pin',pin,'exit',q.returncode,'===',flush=True);print(q.stderr.decode(errors='replace'),flush=True)
 # A control failure is experimental evidence, not a workflow infrastructure failure.
