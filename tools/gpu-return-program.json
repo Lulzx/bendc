@@ -1,0 +1,6 @@
+{
+  "compiler_source_head": "546f97e571924d5f1c5b75cbeb1b1ccd01ee53a2",
+  "program": "tests/gpu_growth_pinned.bend",
+  "generated_c_sha256": "b05b7a753435b5a50b4e178bcb25da2542d7b414ba1f4657c7e352fffb476ba1",
+  "base_sha256": "c742fae9c49b14f0cc9128429a2c6109364c8a933a142f2c90b9f2e5fd976661"
+}

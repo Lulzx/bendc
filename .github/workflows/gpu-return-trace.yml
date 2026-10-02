@@ -1,0 +1,28 @@
+name: GPU return trace
+on:
+  push:
+    branches: [gpu-return-trace]
+  workflow_dispatch:
+jobs:
+  trace:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Record hardware and compiler
+        run: |
+          sysctl -n machdep.cpu.brand_string
+          sw_vers
+          clang --version
+      - name: Compare isolated producer controls
+        run: python3 tools/gpu-return-trace.py
+      - name: Small independent prefix unit
+        run: |
+          cc -mno-outline -O2 -w -I rt tools/gpu-prefix-unit.c -o build/gpu-prefix-unit -lm -lpthread
+          build/gpu-prefix-unit > build/prefix-unit.log 2>&1 || true
+          cat build/prefix-unit.log
+      - name: Save raw control receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-return-trace
+          path: build/gpu-return-trace
