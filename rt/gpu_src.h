@@ -272,7 +272,7 @@ static const char K_GPU_H[] =
 "// moved down, when the result is the only new object it reaches. h0 and e0\n"
 "// are the lane's hp and he before the call; when the call took a new chunk,\n"
 "// only that chunk's words are taken back.\n"
-"KINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {\n"
+"KNOINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {\n"
 "  if (c->hp == h0) return r;\n"
 "  KW lo = c->he == e0 ? h0 : c->hs;\n"
 "  KW b = c->ab + (lo << 3), n = (c->hp - lo) << 3;\n"

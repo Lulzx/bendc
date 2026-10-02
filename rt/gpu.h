@@ -268,7 +268,7 @@ KINLINE void k_anone(KTHR KCtx *c) {
 // moved down, when the result is the only new object it reaches. h0 and e0
 // are the lane's hp and he before the call; when the call took a new chunk,
 // only that chunk's words are taken back.
-KINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
+KNOINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
   if (c->hp == h0) return r;
   KW lo = c->he == e0 ? h0 : c->hs;
   KW b = c->ab + (lo << 3), n = (c->hp - lo) << 3;
