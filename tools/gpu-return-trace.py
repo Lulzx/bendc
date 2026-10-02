@@ -11,7 +11,7 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('explicit-birth-zero',0)]:
+for name,kq in [('explicit-birth-phase',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
@@ -130,6 +130,32 @@ KNOINLINE bool k_trace_node(KTHR KCtx *c,KW root,KU stage) {
   assert gpu.count(old)==1
   gpu=gpu.replace(old,'return r; // diagnostic control only\n  '+old)
 
+ if name.endswith('-phase'):
+  validator=r"""
+KNOINLINE bool k_trace_value(KTHR KCtx *c,KW v,KW root,KU stage) {
+  if(KIS_LI(v,0) || (k_in(c,v) && !(v&7) && c->H[KIX(c,v)-1]==(K_BARE|2))) return true;
+  KU z=0;
+  if(K_CAS(&c->A[7],z,stage)) {
+    K_STORE(&c->A[8],(KU)v);K_STORE(&c->A[9],(KU)(v>>32));
+    K_STORE(&c->A[10],(KU)root);K_STORE(&c->A[11],(KU)(root>>32));
+    K_STORE(&c->A[12],(KU)c->hp);K_STORE(&c->A[13],(KU)c->lane);
+    K_STORE(&c->A[14],(KU)c->he);K_STORE(&c->A[15],(KU)c->blocks);
+  }
+  k_fail(c,KE_MATCH);return false;
+}
+KNOINLINE bool k_trace_node(KTHR KCtx *c,KW root,KU stage) {
+  if(!k_trace_value(c,root,root,stage)) return false;
+  if(!k_in(c,root)) return true;
+  KW ix=KIX(c,root);
+  return k_trace_value(c,c->H[ix],root,stage) && k_trace_value(c,c->H[ix+1],root,stage);
+}
+"""
+  gpu=gpu.replace('KINLINE KW k_tree_copy_node(',validator+'\nKINLINE KW k_tree_copy_node(')
+  gpu=gpu.replace('  KW ix=KIX(src,v), raw=', '  if(!k_trace_node(src,v,1)) {k_fail(out,src->err);return 0;}\n  KW ix=KIX(src,v), raw=')
+  gpu=gpu.replace('  return r;\n}\n// Bit 31', '  (void)k_trace_node(out,r,2);\n  return r;\n}\n// Bit 31')
+  gpu=gpu.replace('      c->H[h0+at-lo]=raw;', '      if(!k_trace_node(&out,KPTR(&out,at+1),3)) {k_fail(c,out.err);return r;}\n      c->H[h0+at-lo]=raw;')
+  gpu=gpu.replace('      at+=n+1;', '      if(!k_trace_node(c,KPTR(c,h0+at+1-lo),4)) return r;\n      at+=n+1;')
+  gpu=gpu.replace('    return relocated;', '    (void)k_trace_node(c,relocated,5);\n    return relocated;')
  if name in ('host-trace','index-prefix','return-words','volatile-root','split-prefix','guarded-prefix','explicit-birth'):
   host=(rt/'gpuhost.h').read_text()
   helper=r"""
@@ -165,6 +191,12 @@ static void gpu_trace_save(KW *H,const KParams *P) {
   host=host[:pos]+helper+'\n'+host[pos:]
   host=host.replace('    rounds++;','    gpu_trace_roots(H,&P,"after-main");\n    rounds++;')
   host=host.replace('      if (gpu_log == 2) {\n        KW n = gpu_lanes', '      gpu_trace_save(H,&P);\n      if (gpu_log == 2) {\n        KW n = gpu_lanes')
+  (rt/'gpuhost.h').write_text(host)
+ if name.endswith('-phase'):
+  host=(rt/'gpuhost.h').read_text()
+  old='    if (gpu_log) fprintf(stderr, "bend gpu: a lane failed (error %u), running on the CPU\\n", gpu_A[KA_ERR]);'
+  assert old in host
+  host=host.replace(old,old+'\n    fprintf(stderr,"phase words:");for(int i=7;i<16;i++)fprintf(stderr," %u",gpu_A[i]);fprintf(stderr,"\\n");')
   (rt/'gpuhost.h').write_text(host)
  (rt/'gpu.h').write_text(gpu)
  literal='\n'.join(json.dumps(line+'\n') for line in gpu.split('\n'))
