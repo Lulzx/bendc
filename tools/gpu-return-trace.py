@@ -183,7 +183,7 @@ static void gpu_trace_save(KW *H,const KParams *P) {
  (out/'results.json').write_text(json.dumps(results,indent=2)+'\n')
  if name.startswith('explicit-birth'):
   q=subprocess.run([str(binary)],env=dict(env,BEND_SCAN_SPECIAL='1',BEND_GPU_FORK='0'),capture_output=True)
-  (d/'special.stderr').write_bytes(q.stderr);print('=== specialized depth7 producer exit',q.returncode,'===',flush=True);print(q.stderr.decode(errors='replace'),flush=True)
+  (d/'special.stderr').write_bytes(q.stderr);print('=== parent entry forcing depth7 KQ producer exit',q.returncode,'===',flush=True);print(q.stderr.decode(errors='replace'),flush=True)
   ordinary=d/'ordinary';ordinary_cmd=cmd.copy();ordinary_cmd[ordinary_cmd.index('tools/gpu-return-trace.c')]=str(out/'pin_program.c');ordinary_cmd[ordinary_cmd.index(str(binary))]=str(ordinary)
   subprocess.run(ordinary_cmd,check=True)
   q=subprocess.run([str(ordinary)],env=dict(env,BEND_GPU_MB0='4',BEND_GPU_MB='128',BEND_GPU_LANES='64',BEND_GPU_KQCPU='0',BEND_GPU_PIN_MB='0',BEND_GPU_LOG='1'),capture_output=True)
