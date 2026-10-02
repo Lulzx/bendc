@@ -11,7 +11,7 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('explicit-birth-phase',0)]:
+for name,kq in [('explicit-birth-copy',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
@@ -47,7 +47,9 @@ for name,kq in [('explicit-birth-phase',0)]:
 } while(0)
 
 """+gpu[end:]
-  if name.endswith('-zero'):
+  if name.endswith('-copy'):
+   gpu=gpu.replace('KINLINE KW k_tree_copy_node(', 'KNOINLINE KW k_tree_copy_node(')
+  elif name.endswith('-zero'):
    gpu=gpu.replace('KW kt_birth[32][5], kt_nb=0','KW kt_birth[32][5]={{0}}, kt_nb=0')
   elif name.endswith('-flat'):
    import re
