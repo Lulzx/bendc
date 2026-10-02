@@ -407,9 +407,14 @@ KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
 
 #define K_TREE_STACK KW kt_birth[32][5], kt_nb=0
 #define K_TREE_MARK(id) do { \
-  if(kt_nb && kt_birth[kt_nb-1][3]==sp && k_tree_schema(id)[0]==0 && k_tree_schema(kt_birth[kt_nb-1][4])[0]==0) \
-    k_rewind(c,kt_birth[kt_nb-1][0],kt_birth[kt_nb-1][1],kt_birth[kt_nb-1][2]); \
-  if(kt_nb==0 || kt_birth[kt_nb-1][3]!=sp) { \
+  if(kt_nb>0) { \
+    KW kt_prev=kt_nb-1; \
+    if(kt_birth[kt_prev][3]==sp && k_tree_schema(id)[0]==0 && k_tree_schema(kt_birth[kt_prev][4])[0]==0) \
+      k_rewind(c,kt_birth[kt_prev][0],kt_birth[kt_prev][1],kt_birth[kt_prev][2]); \
+  } \
+  bool kt_add=kt_nb==0; \
+  if(kt_nb>0) kt_add=kt_birth[kt_nb-1][3]!=sp; \
+  if(kt_add) { \
     if(kt_nb==32){*ok=false;return 0;} \
     kt_birth[kt_nb][0]=c->hp;kt_birth[kt_nb][1]=c->he; \
     kt_birth[kt_nb][2]=c->blocks;kt_birth[kt_nb][3]=sp; \
@@ -417,10 +422,12 @@ KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
   } \
 } while(0)
 #define K_TREE_RET do { \
-  while(kt_nb && kt_birth[kt_nb-1][3]==sp) { \
-    kt_nb--;KCP KW *kt_schema=k_tree_schema(kt_birth[kt_nb][4]); \
-    if(kt_schema[0]==0) k_rewind(c,kt_birth[kt_nb][0],kt_birth[kt_nb][1],kt_birth[kt_nb][2]); \
-    else RV=k_tree_compact(c,kt_birth[kt_nb][0],kt_birth[kt_nb][1],kt_birth[kt_nb][2],RV,kt_schema+1,kt_schema[0]); \
+  while(kt_nb>0) { \
+    KW kt_ix=kt_nb-1; \
+    if(kt_birth[kt_ix][3]!=sp) break; \
+    kt_nb=kt_ix;KCP KW *kt_schema=k_tree_schema(kt_birth[kt_ix][4]); \
+    if(kt_schema[0]==0) k_rewind(c,kt_birth[kt_ix][0],kt_birth[kt_ix][1],kt_birth[kt_ix][2]); \
+    else RV=k_tree_compact(c,kt_birth[kt_ix][0],kt_birth[kt_ix][1],kt_birth[kt_ix][2],RV,kt_schema+1,kt_schema[0]); \
     if(c->err){*ok=false;return 0;} \
   } \
 } while(0)
