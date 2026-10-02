@@ -11,7 +11,7 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('host-trace',0),('explicit-birth',0)]:
+for name,kq in [('explicit-birth',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
@@ -166,6 +166,11 @@ static void gpu_trace_save(KW *H,const KParams *P) {
  results.append({'name':name,'host_kq':kq,'exit':p.returncode,'gpu_header_sha256':hashlib.sha256(gpu.encode()).hexdigest()})
  (out/'results.json').write_text(json.dumps(results,indent=2)+'\n')
  if name=='explicit-birth':
+  ordinary=d/'ordinary';ordinary_cmd=cmd.copy();ordinary_cmd[ordinary_cmd.index('tools/gpu-return-trace.c')]=str(out/'pin_program.c');ordinary_cmd[ordinary_cmd.index(str(binary))]=str(ordinary)
+  subprocess.run(ordinary_cmd,check=True)
+  q=subprocess.run([str(ordinary)],env=env,capture_output=True)
+  (d/'ordinary.stderr').write_bytes(q.stderr);(d/'ordinary.stdout').write_bytes(q.stdout)
+  print('=== ordinary full fixture exit',q.returncode,'===',flush=True);print(q.stdout.decode(errors='replace'),flush=True);print(q.stderr.decode(errors='replace'),flush=True)
   for repeat in range(1,3):
    q=subprocess.run([str(binary)],env=env,capture_output=True)
    (d/f'repeat-{repeat}.stderr').write_bytes(q.stderr)
