@@ -204,13 +204,13 @@ void gc_init(void) {
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
-  gc_bflags = gc_reserve((GC_MAXBLK << GC_BLK_SHIFT) / sizeof(V), NULL);
+  gc_bflags = gc_reserve((GC_MAXBLK << GC_BLK_SHIFT) / (2 * sizeof(V)), NULL);
   // (2^32 bytes of address space, all but the pages the heap's blocks and
   // the device's arena index never touched)
   gc_bk = gc_reserve((size_t)1 << (48 - GC_BLK_SHIFT), NULL);
   gc_hot = (GcHot){(uintptr_t)gc_base, 0,
     (uintptr_t)gc_abits - ((uintptr_t)gc_base >> GC_BLK_SHIFT) * 64 * sizeof(uint64_t), 0, 0, bend_rc_req, 0,
-    (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT), gc_bk, (uintptr_t)gc_bflags - ((uintptr_t)gc_base >> 3)};
+    (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT), gc_bk, (uintptr_t)gc_bflags - ((uintptr_t)gc_base >> 4)};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -253,8 +253,10 @@ GcBlk *gc_new_small(int atomic, unsigned c) {
   memset(b, 0, sizeof(GcBlk));
   memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
   memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
-  if (atomic == 2) {
-    memset(gc_bflags + at * (GC_BLK / sizeof(V)), 0, GC_BLK / sizeof(V));
+  // New flag pages are already zero. Preserve old block sharing history
+  // until stale flags have been cleared, including changes of pool.
+  if (__atomic_load_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], __ATOMIC_RELAXED) & BK_SH) {
+    memset(gc_bflags + at * (GC_BLK / (2 * sizeof(V))), 0, GC_BLK / (2 * sizeof(V)));
   }
   __atomic_store_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], atomic == 2 ? BK_BARE : 0, __ATOMIC_RELAXED);
   b->pool = (uint8_t)atomic;
@@ -415,7 +417,11 @@ __attribute__((noinline)) V *gc_alloc_large(size_t w, int atomic) {
   memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
   memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
   *GC_META(b) = (GcMeta){0, 1, 0, 0};
-  for (size_t j = 0; j < n; j++) gc_bk[((uintptr_t)b >> GC_BLK_SHIFT) + j] = 0;
+  for (size_t j = 0; j < n; j++) {
+    uintptr_t bi = ((uintptr_t)b >> GC_BLK_SHIFT) + j;
+    if (gc_bk[bi] & BK_SH) memset(gc_bflags + (at + j) * (GC_BLK / (2 * sizeof(V))), 0, GC_BLK / (2 * sizeof(V)));
+    gc_bk[bi] = 0;
+  }
   b->words = (uint32_t)w;
   b->nobj = 1;
   b->nblk = (uint32_t)n;
@@ -449,7 +455,7 @@ __attribute__((noinline)) void bend_share_slow(V v) {
   if (!(GC_ALLOC(b)[i >> 6] & (1ull << (i & 63)))) return;
   if (b->pool == 2) {
     // A bare node: its shared bit, and its block's BK_SH.
-    uint8_t *f = (uint8_t *)(gc_hot.bflags + (v >> 3));
+    uint8_t *f = (uint8_t *)(gc_hot.bflags + (v >> 4));
     if (!(__atomic_load_n(f, __ATOMIC_RELAXED) & 1)) __atomic_fetch_or(f, 1, __ATOMIC_RELAXED);
     uint8_t *k = &gc_bk[v >> GC_BLK_SHIFT];
     if (!(__atomic_load_n(k, __ATOMIC_RELAXED) & BK_SH)) __atomic_store_n(k, BK_BARE | BK_SH, __ATOMIC_RELAXED);

@@ -383,8 +383,10 @@ extern uint64_t *gc_cand;
 // Bare nodes (see "Bare nodes"): gc_bk, a byte per 64 KB of the address
 // space (the heap's blocks, and the device's arena): BK_BARE for a block of
 // bare nodes, BK_SH when one of them may be shared (the device's arena is
-// all BK_SH). gc_bflags has one byte per heap word: a bare node's
+// all BK_SH). gc_bflags has one byte per two heap words: a bare node's
 // shared bit, and its fields', once they are marked (bend_deep's BEND_DEEP).
+// CPU slots have at least two words, so distinct starts have distinct
+// two-word indices even when odd-sized slots are not 16-byte aligned.
 #define BK_BARE 1
 #define BK_SH 2
 extern uint8_t *gc_bk;
@@ -412,7 +414,7 @@ typedef struct GcHot {
   // dirty in a tree-bitonic run; the subtraction was 10G instructions)
   uintptr_t dirty;
   uint8_t *bk;  // gc_bk
-  uintptr_t bflags;  // gc_bflags less the heap's first word index
+  uintptr_t bflags;  // gc_bflags less the heap's first two-word index
 } GcHot;
 extern GcHot gc_hot;
 extern GcRange *gc_roots;
@@ -558,7 +560,7 @@ static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
   } else {
     p = gc_refill(k, atomic, c);
   }
-  if (atomic == 2) *(uint8_t *)(gc_hot.bflags + ((uintptr_t)p >> 3)) = 0;
+  if (atomic == 2 && (gc_hot.bk[(uintptr_t)p >> GC_BLK_SHIFT] & BK_SH)) *(uint8_t *)(gc_hot.bflags + ((uintptr_t)p >> 4)) = 0;
   if (!hole) p[0] = 0;
   p[1] = 0;
   if (!(w >= 2 && w <= 16))
@@ -620,7 +622,7 @@ static inline void bend_share(V v) {
   if (LIKELY(v < ((V)1 << 32))) return;
   if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
   if (gc_hot.bk[v >> GC_BLK_SHIFT] & BK_BARE) {
-    if (__atomic_load_n((uint8_t *)(gc_hot.bflags + (v >> 3)), __ATOMIC_RELAXED) & 1) return;
+    if (__atomic_load_n((uint8_t *)(gc_hot.bflags + (v >> 4)), __ATOMIC_RELAXED) & 1) return;
   } else {
     V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
     if ((w0 & BEND_SH) && w0 < ((V)1 << 22)) return;
@@ -745,7 +747,7 @@ __attribute__((noinline)) int bend_deep_bare(V v, unsigned n, uint8_t *f);
 __attribute__((always_inline)) static inline int bend_shared_bare(V v, unsigned n) {
   uint8_t *f = NULL;
   if ((uintptr_t)v - gc_hot.base < gc_hot.span) {
-    f = (uint8_t *)(gc_hot.bflags + (v >> 3));
+    f = (uint8_t *)(gc_hot.bflags + (v >> 4));
     uint8_t flags = __atomic_load_n(f, __ATOMIC_ACQUIRE);
     if (!(flags & 1)) return 0;
     if (flags & 2) return 1;

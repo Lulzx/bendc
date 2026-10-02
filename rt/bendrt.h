@@ -395,8 +395,10 @@ static uint64_t *gc_cand;
 // Bare nodes (see "Bare nodes"): gc_bk, a byte per 64 KB of the address
 // space (the heap's blocks, and the device's arena): BK_BARE for a block of
 // bare nodes, BK_SH when one of them may be shared (the device's arena is
-// all BK_SH). gc_bflags has one byte per heap word: a bare node's
+// all BK_SH). gc_bflags has one byte per two heap words: a bare node's
 // shared bit, and its fields', once they are marked (bend_deep's BEND_DEEP).
+// CPU slots have at least two words, so distinct starts have distinct
+// two-word indices even when odd-sized slots are not 16-byte aligned.
 #define BK_BARE 1
 #define BK_SH 2
 static uint8_t *gc_bk;
@@ -424,7 +426,7 @@ typedef struct GcHot {
   // dirty in a tree-bitonic run; the subtraction was 10G instructions)
   uintptr_t dirty;
   uint8_t *bk;  // gc_bk
-  uintptr_t bflags;  // gc_bflags less the heap's first word index
+  uintptr_t bflags;  // gc_bflags less the heap's first two-word index
 } GcHot;
 static GcHot gc_hot;
 static GcRange *gc_roots;
@@ -501,13 +503,13 @@ static void gc_init(void) {
   gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
-  gc_bflags = gc_reserve((GC_MAXBLK << GC_BLK_SHIFT) / sizeof(V), NULL);
+  gc_bflags = gc_reserve((GC_MAXBLK << GC_BLK_SHIFT) / (2 * sizeof(V)), NULL);
   // (2^32 bytes of address space, all but the pages the heap's blocks and
   // the device's arena index never touched)
   gc_bk = gc_reserve((size_t)1 << (48 - GC_BLK_SHIFT), NULL);
   gc_hot = (GcHot){(uintptr_t)gc_base, 0,
     (uintptr_t)gc_abits - ((uintptr_t)gc_base >> GC_BLK_SHIFT) * 64 * sizeof(uint64_t), 0, 0, bend_rc_req, 0,
-    (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT), gc_bk, (uintptr_t)gc_bflags - ((uintptr_t)gc_base >> 3)};
+    (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT), gc_bk, (uintptr_t)gc_bflags - ((uintptr_t)gc_base >> 4)};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -559,8 +561,10 @@ static GcBlk *gc_new_small(int atomic, unsigned c) {
   memset(b, 0, sizeof(GcBlk));
   memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
   memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
-  if (atomic == 2) {
-    memset(gc_bflags + at * (GC_BLK / sizeof(V)), 0, GC_BLK / sizeof(V));
+  // New flag pages are already zero. Preserve old block sharing history
+  // until stale flags have been cleared, including changes of pool.
+  if (__atomic_load_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], __ATOMIC_RELAXED) & BK_SH) {
+    memset(gc_bflags + at * (GC_BLK / (2 * sizeof(V))), 0, GC_BLK / (2 * sizeof(V)));
   }
   __atomic_store_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], atomic == 2 ? BK_BARE : 0, __ATOMIC_RELAXED);
   b->pool = (uint8_t)atomic;
@@ -772,7 +776,11 @@ __attribute__((noinline)) static V *gc_alloc_large(size_t w, int atomic) {
   memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
   memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
   *GC_META(b) = (GcMeta){0, 1, 0, 0};
-  for (size_t j = 0; j < n; j++) gc_bk[((uintptr_t)b >> GC_BLK_SHIFT) + j] = 0;
+  for (size_t j = 0; j < n; j++) {
+    uintptr_t bi = ((uintptr_t)b >> GC_BLK_SHIFT) + j;
+    if (gc_bk[bi] & BK_SH) memset(gc_bflags + (at + j) * (GC_BLK / (2 * sizeof(V))), 0, GC_BLK / (2 * sizeof(V)));
+    gc_bk[bi] = 0;
+  }
   b->words = (uint32_t)w;
   b->nobj = 1;
   b->nblk = (uint32_t)n;
@@ -812,7 +820,7 @@ static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
   } else {
     p = gc_refill(k, atomic, c);
   }
-  if (atomic == 2) *(uint8_t *)(gc_hot.bflags + ((uintptr_t)p >> 3)) = 0;
+  if (atomic == 2 && (gc_hot.bk[(uintptr_t)p >> GC_BLK_SHIFT] & BK_SH)) *(uint8_t *)(gc_hot.bflags + ((uintptr_t)p >> 4)) = 0;
   if (!hole) p[0] = 0;
   p[1] = 0;
   if (!(w >= 2 && w <= 16))
@@ -869,7 +877,7 @@ __attribute__((noinline)) static void bend_share_slow(V v) {
   if (!(GC_ALLOC(b)[i >> 6] & (1ull << (i & 63)))) return;
   if (b->pool == 2) {
     // A bare node: its shared bit, and its block's BK_SH.
-    uint8_t *f = (uint8_t *)(gc_hot.bflags + (v >> 3));
+    uint8_t *f = (uint8_t *)(gc_hot.bflags + (v >> 4));
     if (!(__atomic_load_n(f, __ATOMIC_RELAXED) & 1)) __atomic_fetch_or(f, 1, __ATOMIC_RELAXED);
     uint8_t *k = &gc_bk[v >> GC_BLK_SHIFT];
     if (!(__atomic_load_n(k, __ATOMIC_RELAXED) & BK_SH)) __atomic_store_n(k, BK_BARE | BK_SH, __ATOMIC_RELAXED);
@@ -921,7 +929,7 @@ static inline void bend_share(V v) {
   if (LIKELY(v < ((V)1 << 32))) return;
   if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
   if (gc_hot.bk[v >> GC_BLK_SHIFT] & BK_BARE) {
-    if (__atomic_load_n((uint8_t *)(gc_hot.bflags + (v >> 3)), __ATOMIC_RELAXED) & 1) return;
+    if (__atomic_load_n((uint8_t *)(gc_hot.bflags + (v >> 4)), __ATOMIC_RELAXED) & 1) return;
   } else {
     V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
     if ((w0 & BEND_SH) && w0 < ((V)1 << 22)) return;
@@ -1061,7 +1069,7 @@ __attribute__((noinline)) static int bend_deep_bare(V v, unsigned n, uint8_t *f)
 __attribute__((always_inline)) static inline int bend_shared_bare(V v, unsigned n) {
   uint8_t *f = NULL;
   if ((uintptr_t)v - gc_hot.base < gc_hot.span) {
-    f = (uint8_t *)(gc_hot.bflags + (v >> 3));
+    f = (uint8_t *)(gc_hot.bflags + (v >> 4));
     uint8_t flags = __atomic_load_n(f, __ATOMIC_ACQUIRE);
     if (!(flags & 1)) return 0;
     if (flags & 2) return 1;

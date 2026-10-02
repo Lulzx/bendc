@@ -142,7 +142,7 @@ typedef struct {
   KW ko[8];            // a flat call's result fields (see KBOX)
   KW blocks, spare;    // span chains: live allocations and lane-local free spans
   KW hs;               // where the lane's current heap chunk starts (or its hp at load)
-  KW ca, cb; KU cm, cn;  // the narrow arrays the lane last used, and their masks (see k_aget)
+  KW ca, cb, cc; KU cm, cn, co;  // the narrow arrays the lane last used, and their masks (see k_aget)
   KU err;
   KW kq, kqret, kqfb;  // a KQ_ call: its def, where its value goes, the way through frames
   KW kqa[KQ_ARGS];     // and its arguments
@@ -257,8 +257,8 @@ KINLINE bool k_short(KTHR KCtx *c) {
 }
 
 KINLINE void k_anone(KTHR KCtx *c) {
-  c->ca = c->cb = KPTR(c, c->P->heap0 + 1);
-  c->cm = c->cn = 0;
+  c->ca = c->cb = c->cc = KPTR(c, c->P->heap0 + 1);
+  c->cm = c->cn = c->co = 0;
 }
 
 // A flat call (KX_ or KQ_) neither forks nor writes into older objects, and
@@ -679,6 +679,8 @@ KINLINE KW k_aslow(KTHR KCtx *c, KW a, KW i, KW v, bool sw) {
   KW w = KIX(c, a), h = c->H[w];
   KU j = (KU)i & (((KU)1 << (h & 31)) - 1);
   if (h & K_ARR_NW) {
+    c->cc = c->cb;
+    c->co = c->cn;
     c->cb = c->ca;
     c->cn = c->cm;
     c->ca = a;
@@ -695,13 +697,14 @@ KINLINE KW k_aslow(KTHR KCtx *c, KW a, KW i, KW v, bool sw) {
 KINLINE KW k_aget(KTHR KCtx *c, KW a, KW i) {
   if (a == c->ca) return K_NCELLS(c, KIX(c, a))[(KU)i & c->cm];
   if (a == c->cb) return K_NCELLS(c, KIX(c, a))[(KU)i & c->cn];
+  if (a == c->cc) return K_NCELLS(c, KIX(c, a))[(KU)i & c->co];
   return k_aslow(c, a, i, 0, false);
 }
 // (a CPU array: the call fails over, and the write goes to the scratch
 // chunk's first word)
 KINLINE KW k_aswap(KTHR KCtx *c, KW a, KW i, KW v) {
-  if (a == c->ca || a == c->cb) {
-    KCOH KU *q = K_NCELLS(c, KIX(c, a)) + ((KU)i & (a == c->ca ? c->cm : c->cn));
+  if (a == c->ca || a == c->cb || a == c->cc) {
+    KCOH KU *q = K_NCELLS(c, KIX(c, a)) + ((KU)i & (a == c->ca ? c->cm : a == c->cb ? c->cn : c->co));
     KW o = *q;
     *q = (KU)v;
     return o;
@@ -725,6 +728,8 @@ KINLINE KW k_anew(KTHR KCtx *c, KW d, KW v, bool nw) {
   KW w = KIX(c, p);
   if (c->err != 0) n = 1, d = 0;
   if (nw) {
+    c->cc = c->cb;
+    c->co = c->cn;
     c->cb = c->ca;
     c->cn = c->cm;
     c->ca = p;
