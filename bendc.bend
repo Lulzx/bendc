@@ -4234,7 +4234,19 @@ def Env.find(env: Env(), +x: String) -> Maybe<&2, String>:
 def Env.has(+env: Env(), +x: String) -> Bool:
   Maybe.is_some(&2, String, Env.find(env, x))
 
-def Gen.is_field(path: String) -> Bool:
+def PF.path(c: String) -> Bool:
+  String.starts_with(c, "BEND_PF_RAW(")
+
+def PF.args(+c: String) -> String:
+  String.take(String.drop(c, 12n), Nat.sub(String.length(c), 13n))
+
+def PF.field(c: String, i: U32) -> String:
+  "BEND_PF_FLD(" ++ PF.args(c) ++ ", " ++ U32.show(i) ++ ")"
+
+def PF.token(c: String) -> String:
+  "BEND_PF_TOK(" ++ PF.args(c) ++ ")"
+
+def Gen.is_field.old(path: String) -> Bool:
   match path:
     case SCon{Chr{c}, t}:
       U32.is_eq(c, 70)
@@ -4243,6 +4255,10 @@ def Gen.is_field(path: String) -> Bool:
 
 # A node the pattern opens, for bend_take: a binding named %top (a
 # scrutinee) or %sub (a field), then its size in words.
+
+def Gen.is_field(+path: String) -> Bool:
+  Bool.or(String.starts_with(path, "BEND_PF_FLD("), Gen.is_field.old(path))
+
 def Gen.pat.node(opens: Bool, +ar: U32, +path: String, r: PatR) -> PatR:
   match opens:
     case True{}:
@@ -4257,13 +4273,13 @@ def Gen.pat.node(opens: Bool, +ar: U32, +path: String, r: PatR) -> PatR:
 def Gen.pat.bnode(+ar: U32, +path: String, r: PatR) -> PatR:
   PatR{conds, binds} = r
   PatR{conds, Bind{Bool.pick(String, Gen.is_field(path), "%sub", "%top") ++ U32.show(U32.add(256, ar)),
-    path} <> binds}
+    Bool.pick(String, PF.path(path), PF.token(path), path)} <> binds}
 
 # A field's path: i 99 is the value itself (a newtype), from 200 up the
 # (i - 200)-th field of a headerless node.
 def Gen.pat.fld(+path: String, +i: U32) -> String:
   Bool.pick(String, U32.is_eq(i, 99), path,
-    Bool.pick(String, U32.is_ge(i, 200), "FLB(" ++ path ++ ", " ++ U32.show(U32.sub(i, 200)) ++ ")",
+    Bool.pick(String, U32.is_ge(i, 200), Bool.pick(String, PF.path(path), PF.field(path, U32.sub(i, 200)), "FLB(" ++ path ++ ", " ++ U32.show(U32.sub(i, 200)) ++ ")"),
       "FLD(" ++ path ++ ", " ++ U32.show(i) ++ ")"))
 
 # An ANode's halves, copies (arr_half); "%arr" has the case load them once.
@@ -4888,8 +4904,14 @@ def Gen.scr.bor(+env: Env(), e: Core.Expr) -> Bool:
 
 def Gen.scrs.put(+c: String, d: Doc, r: List<&2, String> & Doc) ->
   List<&2, String> & Doc:
-  (cs, code) = r
-  (c <> cs, Doc.list([DStr{"V " ++ c ++ " = "}, d, DStr{";\n"}, code]))
+  match d:
+    case DStr{+path}:
+      (+cs, +code) = r
+      Bool.pick(List<&2, String> & Doc, PF.path(path), (path <> cs, code),
+        (c <> cs, Doc.list([DStr{"V " ++ c ++ " = "}, DStr{path}, DStr{";\n"}, code])))
+    case other:
+      (+cs, +code) = r
+      (c <> cs, Doc.list([DStr{"V " ++ c ++ " = "}, other, DStr{";\n"}, code]))
 
 # Self tail call: rebinds the parameters and jumps back to the top.
 def Gen.tail.assign(cps: List<&2, String>, +i: U32) -> Doc:
@@ -6235,7 +6257,7 @@ def RU.toks(pre: Env(), binds: Env(), +kind: String, +dead: List<&2, String>) ->
   match pre binds:
     case Bind{px, +path} <> pt Bind{+x, +c} <> t:
       RU.toks.if(Str.eq(Gen.take.kind(x), kind), RuT{"u" ++ Gen.take.words(x) ++ "_" ++ c, c, Gen.take.words(x),
-        Bool.pick(Unit -> String, List.is_empty(&2, String, dead), u => "", u => RC.dbits(path, dead, 32n, 0))(Unit{})},
+        Bool.pick(String, String.starts_with(path, "BEND_PF_TOK("), "@flat", Bool.pick(Unit -> String, List.is_empty(&2, String, dead), u => "", u => RC.dbits(path, dead, 32n, 0))(Unit{}))},
         RU.toks(pt, t, kind, dead))
     case pl bl:
       Nil{}
@@ -6247,11 +6269,13 @@ def RU.names(ts: List<&2, RuT>) -> List<&2, String>:
     case RuT{tok, c, w, k} <> t:
       tok <> RU.names(t)
 
-def RU.take(+pre: String, +tok: String, +c: String, +w: String, +k: String, keep: Bool) -> String:
+def RU.take(+pre: String, +tok: String, +c: String, +w: String, +k: String, +keep: Bool) -> String:
   +d = Bool.pick(String, String.is_empty(k), "", "_d")
   +m = Bool.pick(String, String.is_empty(k), "", ", ~(0" ++ k ++ ")")
-  Bool.pick(String, keep, pre ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n",
-    "V " ++ tok ++ " = " ++ pre ++ "_ru" ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n")
+  Bool.pick(String, Str.eq(k, "@flat"),
+    Bool.pick(String, keep, "RUFG(" ++ c ++ ", " ++ w ++ ");\n", "V " ++ tok ++ " = " ++ c ++ ";\n"),
+    Bool.pick(String, keep, pre ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n",
+      "V " ++ tok ++ " = " ++ pre ++ "_ru" ++ d ++ "(" ++ c ++ ", " ++ w ++ m ++ ");\n"))
 
 # The takes of a case's nodes: a token used after them is kept (left: the
 # tokens not used).
@@ -7325,6 +7349,356 @@ def Loads.of(r: Env() & Doc) -> Loads:
 # The code generator is one def, Gen.rec, over a selector: each GS.. names
 # one of its steps and carries that step's arguments; GSel.ty is the step's
 # result. Fuel bounds the recursion (the steps do not all shrink an Expr).
+type Sig is Data:
+  Sig{params: List<&2, String>, env: Env(), wargs: List<&2, String>}
+
+# (fl: the def's borrow flags; a borrowed parameter's C name is marked
+# /*b*/)
+def Gen.sig.b(ps: List<&2, Core.Param>, mask: List<&2, Bool>, +fl: List<&2, Bool>, +i: U32, r: Sig) -> Sig:
+  match ps mask:
+    case Core.Param{x, m, t} <> pt True{} <> mt:
+      Sig{params, env, wargs} = r
+      +c = "a" ++ U32.show(i)
+      Gen.sig.b(pt, mt, Bor.tail(fl), U32.inc(i), Sig{List.append(&2, String, params, [c]),
+        Bind{x, Bool.pick(String, Bor.head(fl), c ++ "/*b*/", Gen.scalar.wrap(Gen.scalar.ty(t), c))} <> env,
+        List.append(&2, String, wargs, ["a[" ++ U32.show(i) ++ "]"])})
+    case Core.Param{x, m, t} <> pt False{} <> mt:
+      Sig{params, env, wargs} = r
+      Gen.sig.b(pt, mt, Bor.tail(fl), U32.inc(i), Sig{params, Bind{x, "0"} <> env, wargs})
+    case pl ml:
+      r
+
+def Gen.sig(ps: List<&2, Core.Param>, mask: List<&2, Bool>, +i: U32, r: Sig) -> Sig:
+  Gen.sig.b(ps, mask, Nil{}, i, r)
+
+def Expr.mentions(e: Core.Expr, +k: String) -> Bool:
+  match e:
+    case Core.EVar{+n}:
+      Str.eq(n, k)
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Expr.mentions(f, k)
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.ECall{f, t}, k))(Unit{})
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          False{}
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.ECtor{n, t}, k))(Unit{})
+    case Core.ELam{p, b}:
+      Expr.mentions(b, k)
+    case Core.ELet{p, +v, +b}:
+      Bool.pick(Unit -> Bool, Expr.mentions(v, k), u => True{}, u => Expr.mentions(b, k))(Unit{})
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.EMatch{t, cases}, k))(Unit{})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case +c <> t:
+              Bool.pick(Unit -> Bool, Expr.mentions(c, k), u => True{},
+                u => Expr.mentions(Core.EMatch{Nil{}, t}, k))(Unit{})
+    case Core.ECase{ps, b}:
+      Expr.mentions(b, k)
+    case Core.ESucc{n, x}:
+      Expr.mentions(x, k)
+    case Core.EOp{op, +a, +b}:
+      Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(b, k))(Unit{})
+    case Core.EAnn{x, ty}:
+      Expr.mentions(x, k)
+    case other:
+      False{}
+
+def Gen.leaf.kind(c: Maybe<&2, CInfo>) -> Bool:
+  match c:
+    case Some{CInfo{tag, ar, +kind, single}}:
+      Bool.or(U32.is_eq(kind, 1), U32.is_eq(kind, 7))
+    case None{}:
+      False{}
+
+def Gen.leaf.pat(+g: G, p: Core.Pat) -> Bool:
+  match p:
+    case Core.PCtor{name, ps}:
+      Gen.leaf.kind(G.ctor(g, name))
+    case other:
+      False{}
+
+def Gen.leaf.pats(+g: G, ps: List<&2, Core.Pat>, cs: List<&2, String>) -> Bool:
+  match ps cs:
+    case Nil{} Nil{}:
+      True{}
+    case p <> pt c <> ct:
+      Bool.and(Gen.leaf.pat(g, p), Gen.leaf.pats(g, pt, ct))
+    case pl cl:
+      False{}
+
+def Gen.leaf.cname(m: Maybe<&2, String>) -> String:
+  match m:
+    case Some{c}:
+      c
+    case None{}:
+      ""
+
+def Gen.leaf.paths(ss: List<&2, Core.Expr>, +env: Env()) -> List<&2, String>:
+  match ss:
+    case Nil{}:
+      Nil{}
+    case Core.EVar{x} <> t:
+      Gen.leaf.cname(Env.find(env, x)) <> Gen.leaf.paths(t, env)
+    case e <> t:
+      "" <> Gen.leaf.paths(t, env)
+
+def Gen.leaf.scrs(ss: List<&2, Core.Expr>, +env: Env()) -> Bool:
+  match ss:
+    case Nil{}:
+      True{}
+    case Core.EVar{x} <> t:
+      Bool.and(Env.has(env, x), Gen.leaf.scrs(t, env))
+    case e <> t:
+      False{}
+
+def Gen.leaf.scalar(env: Env(), +c: String) -> Bool:
+  match env:
+    case Nil{}:
+      False{}
+    case Bind{x, b} <> t:
+      Bool.or(Str.eq(b, "(" ++ c ++ ")"), Gen.leaf.scalar(t, c))
+
+def Gen.leaf.args(cs: List<&2, String>, +paths: List<&2, String>, +env: Env()) -> Bool:
+  match cs:
+    case Nil{}:
+      True{}
+    case +c <> t:
+      Bool.and(Bool.or(Bool.or(Str.has(paths, c), Str.has(paths, c ++ "/*b*/")), Gen.leaf.scalar(env, c)), Gen.leaf.args(t, paths, env))
+
+def Gen.leaf.fn(info: DInfo) -> Bool:
+  DInfo{+kind, mask} = info
+  Bool.or(U32.is_eq(kind, 0), U32.is_eq(kind, 2))
+
+def Gen.leaf.simple(+g: G, e: Core.Expr) -> Bool:
+  match e:
+    case Core.EVar{x}:
+      True{}
+    case Core.ENum{n}:
+      True{}
+    case Core.ENat{n}:
+      True{}
+    case Core.EFlt{s}:
+      True{}
+    case Core.ECall{Core.EVar{+f}, args}:
+      match args:
+        case Nil{}:
+          Gen.leaf.fn(G.def(g, f))
+        case a <> t:
+          Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, Core.ECall{Core.EVar{f}, t}))
+    case Core.ECtor{+name, args}:
+      match args:
+        case Nil{}:
+          Maybe.is_some(&2, CInfo, G.ctor(g, name))
+        case a <> t:
+          Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, Core.ECtor{name, t}))
+    case Core.ELet{p, v, b}:
+      Bool.and(Gen.leaf.simple(g, v), Gen.leaf.simple(g, b))
+    case Core.EMatch{ss, cs}:
+      match ss:
+        case a <> t:
+          Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, Core.EMatch{t, cs}))
+        case Nil{}:
+          match cs:
+            case Nil{}:
+              True{}
+            case c <> t:
+              Bool.and(Gen.leaf.simple(g, c), Gen.leaf.simple(g, Core.EMatch{Nil{}, t}))
+    case Core.ECase{ps, b}:
+      Gen.leaf.simple(g, b)
+    case Core.ESucc{k, x}:
+      Gen.leaf.simple(g, x)
+    case Core.EOp{op, a, b}:
+      Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, b))
+    case Core.EAnn{x, t}:
+      Gen.leaf.simple(g, x)
+    case other:
+      False{}
+
+def Gen.leaf.case(+g: G, +name: String, +env: Env(), +params: List<&2, String>, body: Core.Expr) -> Maybe<&2, Core.Expr>:
+  match body:
+    case Core.EMatch{+ss, Core.ECase{+ps, +b} <> c <> rest}:
+      +paths = Gen.leaf.paths(ss, env)
+      Bool.pick(Maybe<&2, Core.Expr>, Bool.and(Bool.and(Gen.leaf.scrs(ss, env),
+        Gen.leaf.args(params, paths, env)), Bool.and(Gen.leaf.pats(g, ps, paths),
+        Bool.and(Gen.leaf.simple(g, b), Bool.not(Expr.mentions(b, name))))),
+        Some{Core.EMatch{ss, [Core.ECase{ps, b}]}}, None{})
+    case other:
+      None{}
+
+def PF.ctor.go(fuel: Nat, es: List<&2, Core.Expr>, +known: String) -> String:
+  match fuel:
+    case 0n:
+      ""
+    case 1n+ +fu:
+      match es:
+        case Core.ECtor{+n, args} <> t:
+          Bool.pick(Unit -> String, Bool.or(String.is_empty(known), Str.eq(known, n)),
+            u => PF.ctor.go(fu, t, n), u => "")(Unit{})
+        case Core.ELet{p, v, b} <> t:
+          PF.ctor.go(fu, b <> t, known)
+        case Core.EAnn{x, ty} <> t:
+          PF.ctor.go(fu, x <> t, known)
+        case Core.EMatch{ss, cs} <> t:
+          PF.ctor.go(fu, List.append(&2, Core.Expr, cs, t), known)
+        case Core.ECase{ps, b} <> t:
+          PF.ctor.go(fu, b <> t, known)
+        case Nil{}:
+          known
+        case h <> t:
+          ""
+
+def PF.ctor(e: Core.Expr) -> String:
+  PF.ctor.go(Fuel.max(), [e], "")
+
+def PF.arity.of(c: Maybe<&2, CInfo>) -> U32:
+  match c:
+    case Some{CInfo{tag, +ar, kind, single}}:
+      Bool.pick(U32, Bool.and(U32.is_eq(kind, 8), Bool.and(U32.is_le(2, ar), U32.is_le(ar, 8))), ar, 0)
+    case None{}:
+      0
+
+def PF.arity(g: G, n: String) -> U32:
+  PF.arity.of(G.ctor(g, n))
+
+def PF.leaf(g: G, c: Maybe<&2, Core.Expr>) -> U32:
+  match c:
+    case Some{Core.EMatch{ss, Core.ECase{ps, b} <> Nil{}}}:
+      PF.arity(g, PF.ctor(b))
+    case other:
+      0
+
+def PF.def.sig(+g: G, +n: String, +body: Core.Expr, s: Sig) -> U32:
+  match s:
+    case Sig{params, env, wargs}:
+      Bool.pick(U32, Bool.and(Gen.free(g), Bool.not(Gen.rc(g))),
+        PF.leaf(g, Gen.leaf.case(g, n, env, params, R.ops(body, "Nat"))), 0)
+
+def PF.def.of(+g: G, +n: String, d: Decl) -> U32:
+  match d:
+    case DDef{name, ps, body, ret}:
+      PF.def.sig(g, n, body, Gen.sig(ps, DInfo.mask(G.def(g, n)), 0, Sig{Nil{}, Nil{}, Nil{}}))
+    case other:
+      0
+
+def PF.def(+g: G, +n: String) -> U32:
+  PF.def.of(g, n, G.body(g, n))
+
+# x must be read once, as a direct match scrutinee. Other lets may run first.
+
+def PF.scrs(ss: List<&2, Core.Expr>, +x: String) -> Bool:
+  match ss:
+    case Core.EVar{n} <> t:
+      Bool.or(Str.eq(n, x), PF.scrs(t, x))
+    case h <> t:
+      PF.scrs(t, x)
+    case Nil{}:
+      False{}
+
+def PF.pctor(p: Core.Pat) -> Bool:
+  match p:
+    case Core.PCtor{n, ps}:
+      True{}
+    case other:
+      False{}
+
+def PF.case.safe(ss: List<&2, Core.Expr>, ps: List<&2, Core.Pat>, +x: String) -> Bool:
+  match ss ps:
+    case Core.EVar{n} <> st p <> pt:
+      Bool.and(Bool.pick(Bool, Str.eq(n, x), PF.pctor(p), True{}), PF.case.safe(st, pt, x))
+    case h <> st p <> pt:
+      PF.case.safe(st, pt, x)
+    case Nil{} Nil{}:
+      True{}
+    case sl pl:
+      False{}
+
+def PF.matches(+ss: List<&2, Core.Expr>, cs: List<&2, Core.Expr>, +x: String) -> Bool:
+  match cs:
+    case Core.ECase{ps, b} <> t:
+      Bool.and(PF.case.safe(ss, ps, x), PF.matches(ss, t, x))
+    case Nil{}:
+      True{}
+    case h <> t:
+      False{}
+
+def PF.use(e: Core.Expr, +x: String) -> Bool:
+  match e:
+    case Core.ELet{p, v, b}:
+      Bool.and(U32.is_zero(Use.n(x, v)), Bool.and(Bool.not(Str.has(Pat.vars(p, Nil{}), x)), PF.use(b, x)))
+    case Core.EMatch{+ss, +cs}:
+      Bool.and(U32.is_eq(Use.n(x, e), 1), Bool.and(PF.scrs(ss, x), PF.matches(ss, cs, x)))
+    case Core.EAnn{v, ty}:
+      PF.use(v, x)
+    case other:
+      False{}
+
+def PF.call(+g: G, env: Env(), x: String, v: Core.Expr, b: Core.Expr) -> U32:
+  match v:
+    case Core.ECall{Core.EVar{+n}, args}:
+      Bool.pick(U32, Bool.and(Bool.not(Env.has(env, n)), Bool.and(PF.use(b, x),
+        Nat.is_eq(List.length(&2, Bool, DInfo.mask(G.def(g, n))), List.length(&2, Core.Expr, args)))), PF.def(g, n), 0)
+    case other:
+      0
+
+def PF.seq(ps: List<&2, Core.Pat>, vs: List<&2, Core.Expr>, body: Core.Expr) -> Core.Expr:
+  match ps vs:
+    case p <> pt v <> vt:
+      Core.ELet{p, v, PF.seq(pt, vt, body)}
+    case pl vl:
+      body
+
+def PF.par(+g: G, ps: List<&2, Core.Pat>, vs: List<&2, Core.Expr>, +body: Core.Expr) -> Bool:
+  match ps vs:
+    case Core.PVar{x} <> pt Core.ECall{Core.EVar{n}, as} <> vt:
+      Bool.or(Bool.and(PF.use(body, x), U32.is_gt(PF.def(g, n), 0)), PF.par(g, pt, vt, body))
+    case p <> pt v <> vt:
+      PF.par(g, pt, vt, body)
+    case pl vl:
+      False{}
+
+def PF.kept.of(s: Split) -> List<&2, Core.Expr>:
+  match s:
+    case Split{kept, all, extra, full}:
+      kept
+
+def PF.kept(g: G, n: String, args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  PF.kept.of(Gen.split(DInfo.mask(G.def(g, n)), args, Split{Nil{}, Nil{}, Nil{}, False{}}))
+
+def PF.mode(m: Maybe<&2, String>, n: String) -> String:
+  match m:
+    case Some{x}:
+      Bool.pick(String, Str.eq(x, n), "PS_", "PF_")
+    case None{}:
+      "PF_"
+
+def PF.pick(cs: List<&2, String>, +w: String) -> String:
+  match cs:
+    case +c <> t:
+      Bool.pick(Unit -> String, Str.eq(RU.w(c), w), u => c, u => PF.pick(t, w))(Unit{})
+    case Nil{}:
+      ""
+
+def PF.reserve(bs: Env(), +unused: List<&2, String>) -> Doc:
+  match bs:
+    case Bind{+x, +path} <> t:
+      +pick = Bool.pick(String, String.starts_with(path, "BEND_PF_TOK("),
+        PF.pick(unused, Gen.take.words(x)), "")
+      Doc.list([Bool.pick(Doc, String.is_empty(pick), DNil{},
+        DStr{"if (!" ++ path ++ ") { " ++ path ++ " = " ++ pick ++ "; " ++ pick ++ " = 0; }\n"}),
+        PF.reserve(t, RU.minus(unused, [pick]))])
+    case Nil{}:
+      DNil{}
+
 type GSel is Data:
   GSExprs{g: G, env: Env(), xs: List<&2, Core.Expr>}
   GSCallFull{g: G, env: Env(), name: String, mask: List<&2, Bool>, kept: List<&2, Core.Expr>,
@@ -7378,6 +7752,7 @@ type GSel is Data:
     hole: U32}
   GSBlock{g: G, env: Env(), e: Core.Expr}
   GSExpr{g: G, env: Env(), e: Core.Expr}
+  GSPFLet{g: G, env: Env(), self: Self, tgt: Tgt, x: String, v: Core.Expr, body: Core.Expr, ar: U32}
   GSLetVar{g: G, env: Env(), self: Self, tgt: Tgt, x: String, v: Core.Expr, body: Core.Expr, hole: Bool}
   GSCasesNext{g: G, env: Env(), self: Self, tgt: Tgt, cs: List<&2, String>,
     rest: List<&2, Core.Expr>, conds: List<&2, String>, b: Doc, mx: List<&2, RcM>}
@@ -7523,6 +7898,8 @@ def GSel.none(k: GSel) -> GSel.ty(k):
     case GSBlock{g, env, e}:
       DNil{}
     case GSExpr{g, env, e}:
+      DNil{}
+    case GSPFLet{g, env, self, tgt, x, v, body, ar}:
       DNil{}
     case GSLetVar{g, env, self, tgt, x, v, body, hole}:
       DNil{}
@@ -7949,6 +8326,20 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 Gen.error("unexpected expression: " ++ Expr.show(other))
                 return DStr{"0"}
+        case GSPFLet{+g, +env, +self, +tgt, +x, v, +body, +ar}:
+          match v:
+            case Core.ECall{Core.EVar{+n}, args}:
+              do Gen<Doc>:
+                +k : U32 <- Gen.fresh()
+                +out : String <- Gen.pure(String, "pf" ++ U32.show(k))
+                mode : Maybe<&2, String> <- Gen.memo.find("%seqmode")
+                Gen.ref(n)
+                ds : List<&2, Doc> <- Gen.rec(fu, GSExprs{g, env, PF.kept(g, n, args)})
+                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{x, "BEND_PF_RAW(" ++ out ++ ", " ++ U32.show(ar) ++ ")"} <> env, self, tgt, body})
+                return Doc.list([DStr{"V " ++ out ++ "[" ++ U32.show(U32.add(ar, 2)) ++ "];\n" ++
+                  PF.mode(mode, n) ++ Gen.mangle(n) ++ "("}, Gen.commas(List.append(&2, Doc, ds, [DStr{out}])), DStr{");\n"}, b])
+            case other:
+              Gen.pure(Doc, DNil{})
         case GSLetVar{+g, +env, +self, +tgt, +x, +v, +body, hole}:
           match hole:
             case True{}:
@@ -7957,14 +8348,16 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 b : Doc <- Gen.rec(fu, GSStmt{g, env, self, tgt, body})
                 return Doc.list([DStr{Bool.pick(String, Gen.rc(g), "rc_drop(", "(void)(")}, d, DStr{");\n"}, b])
             case False{}:
-              do Gen<Doc>:
-                +k : U32 <- Gen.fresh()
-                +sk : U32 <- Gen.pure(U32, Gen.scalar.let(g, env, v))
-                +c : String <- Gen.pure(String, Gen.scalar.wrap(U32.is_ne(sk, 0),
-                  Bool.pick(String, U32.is_eq(sk, 2), "u", "v") ++ U32.show(k)))
-                d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
-                b : Doc <- Gen.rec(fu, GSStmt{g, Bind{x, c} <> env, self, tgt, body})
-                return Doc.list([DStr{Gen.scalar.cty(sk) ++ c ++ " = "}, d, DStr{";\n"}, Gen.own(g, Bind{x, c} <> env, [Bind{x, c}], body), b])
+              Bool.pick(Unit -> Gen(Doc), U32.is_gt(PF.call(g, env, x, v, body), 0),
+                u => Gen.rec(fu, GSPFLet{g, env, self, tgt, x, v, body, PF.call(g, env, x, v, body)}),
+                u => do Gen<Doc>:
+                  +k : U32 <- Gen.fresh()
+                  +sk : U32 <- Gen.pure(U32, Gen.scalar.let(g, env, v))
+                  +c : String <- Gen.pure(String, Gen.scalar.wrap(U32.is_ne(sk, 0),
+                    Bool.pick(String, U32.is_eq(sk, 2), "u", "v") ++ U32.show(k)))
+                  d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
+                  b : Doc <- Gen.rec(fu, GSStmt{g, Bind{x, c} <> env, self, tgt, body})
+                  return Doc.list([DStr{Gen.scalar.cty(sk) ++ c ++ " = "}, d, DStr{";\n"}, Gen.own(g, Bind{x, c} <> env, [Bind{x, c}], body), b]) )(Unit{})
         case GSCasesNext{+g, +env, +self, +tgt, +cs, rest, conds, b, mx}:
           match conds:
             case Nil{}:
@@ -8014,7 +8407,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               +dead = RC.dead.if(Gen.rc(g), g, Env.names(List.append(&2, Bind, vars, env)), body, pre, mb)
               +ts = List.append(&2, RuT, RU.toks(pre, mb, "%top", dead), List.reverse(&2, RuT, RU.toks(pre, mb, "%sub", dead)))
               do Gen<Doc>:
-                outer : String <- Gen.ru.get(Gen.free(g))
+                +outer : String <- Gen.ru.get(Gen.free(g))
                 Gen.ru.set(Gen.free(g), String.join(List.append(&2, String, RU.names(ts), RU.list(outer)), " "))
                 b : Doc <- Gen.rec(fu, GSStmt{g, List.append(&2, Bind, vars, env), self, tgt, body})
                 after : String <- Gen.ru.get(Gen.free(g))
@@ -8023,7 +8416,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 return Doc.list([loads, RC.arrs(Gen.rc(g), mb), RU.takes.pick(Gen.rc(g), Gen.free(g), ts, left,
                   Gen.takes.stmts(Gen.takes(mb, "%top", "bend_take")) ++
                   Gen.takes.stmts(List.reverse(&2, String, Gen.takes(mb, "%sub", "bend_take")))),
-                  Gen.own(g, List.append(&2, Bind, vars, env), RC.alive(pre, mb, RC.hand(pre, dead)), body), b])
+                  Gen.own(g, List.append(&2, Bind, vars, env), RC.alive(pre, mb, RC.hand(pre, dead)), body),
+                  b])
         case GSCaseBodyGo{opens, +g, +env, +self, +tgt, +binds, +body}:
           match opens:
             case False{}:
@@ -8126,14 +8520,17 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case Self{+sn, sm, sc}:
               do Gen<Doc>:
                 +k : U32 <- Gen.fresh()
-                mode : Maybe<&2, String> <- Gen.memo.find("%seqmode")
-                +outer : String <- Gen.ru.get(Gen.free(g))
-                Gen.ru.set(Gen.free(g), "")
-                pre : Doc <- Gen.rec(fu, GSParPick{Gen.par.mode(mode, sn), g, env, sn, k, vs})
-                Gen.ru.set(Gen.free(g), outer)
-                +qs : List<&2, Core.Pat> <- Gen.pure(List<&2, Core.Pat>, RC.unders(Gen.rc(g), ps))
-                b : Doc <- Gen.rec(fu, GSStmt{g, Gen.par.env(qs, k, 0, env), Self{sn, sm, sc}, tgt, body})
-                return Doc.list([pre, Gen.own(g, Gen.par.env(qs, k, 0, env), Gen.par.env(qs, k, 0, Nil{}), body), b])
+                +mode : Maybe<&2, String> <- Gen.memo.find("%seqmode")
+                Bool.pick(Unit -> Gen(Doc), Bool.and(Nat.is_eq(Gen.par.mode(mode, sn), 1n), PF.par(g, ps, vs, body)),
+                  u => Gen.rec(fu, GSStmt{g, env, self, tgt, PF.seq(ps, vs, body)}),
+                  u => do Gen<Doc>:
+                    +outer : String <- Gen.ru.get(Gen.free(g))
+                    Gen.ru.set(Gen.free(g), "")
+                    pre : Doc <- Gen.rec(fu, GSParPick{Gen.par.mode(mode, sn), g, env, sn, k, vs})
+                    Gen.ru.set(Gen.free(g), outer)
+                    +qs : List<&2, Core.Pat> <- Gen.pure(List<&2, Core.Pat>, RC.unders(Gen.rc(g), ps))
+                    b : Doc <- Gen.rec(fu, GSStmt{g, Gen.par.env(qs, k, 0, env), Self{sn, sm, sc}, tgt, body})
+                    return Doc.list([pre, Gen.own(g, Gen.par.env(qs, k, 0, env), Gen.par.env(qs, k, 0, Nil{}), body), b]))(Unit{})
         case GSLetPar{+g, +env, +self, +tgt, ps, v, body}:
           match v:
             case Core.ECtor{n, vs}:
@@ -8290,16 +8687,16 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case Nil{}:
               Gen.pure(Doc, DStr{"{ bend_fail(\"runtime fail-stop\"); }\n"})
             case Core.ECase{+ps, +body} <> t:
-              +pr = Gen.pats(g, ps, cs, PatR{Nil{}, Nil{}})
+              +pr : PatR = Gen.pats(g, ps, cs, PatR{Nil{}, Nil{}})
               +conds = PatR.conds(pr)
               +binds = PatR.binds(pr)
               do Gen<Doc>:
                 +outer : String <- Gen.ru.get(Gen.free(g))
                 b : Doc <- Gen.rec(fu, GSCaseBody{g, env, self, tgt, binds, body})
-                after : String <- Gen.ru.get(Gen.free(g))
+                +after : String <- Gen.ru.get(Gen.free(g))
                 Gen.ru.set(Gen.free(g), outer)
                 Gen.rec(fu, GSCasesNext{g, env, self, tgt, cs, t, List.reverse(&2, String, conds),
-                  Doc.list([RC.arm.pick(Gen.rc(g), g, Env.names(env), mx, Core.ECase{ps, body}), RU.frees(Bool.pick(String, Gen.rc(g), "RUF", "RUFG"), RU.list(after)), b]), mx})
+                  Doc.list([RC.arm.pick(Gen.rc(g), g, Env.names(env), mx, Core.ECase{ps, body}), PF.reserve(binds, RU.list(after)), RU.frees(Bool.pick(String, Gen.rc(g), "RUF", "RUFG"), RU.list(after)), b]), mx})
             case other <> t:
               Gen.rec(fu, GSCases{g, env, self, tgt, cs, t, mx})
 
@@ -8307,28 +8704,6 @@ def Gen.stmt(+g: G, +env: Env(), +self: Self, +tgt: Tgt, e: Core.Expr) -> Gen(Do
   Gen.rec(Fuel.max(), GSStmt{g, env, self, tgt, e})
 
 # C parameter list and environment of a def.
-type Sig is Data:
-  Sig{params: List<&2, String>, env: Env(), wargs: List<&2, String>}
-
-# (fl: the def's borrow flags; a borrowed parameter's C name is marked
-# /*b*/)
-def Gen.sig.b(ps: List<&2, Core.Param>, mask: List<&2, Bool>, +fl: List<&2, Bool>, +i: U32, r: Sig) -> Sig:
-  match ps mask:
-    case Core.Param{x, m, t} <> pt True{} <> mt:
-      Sig{params, env, wargs} = r
-      +c = "a" ++ U32.show(i)
-      Gen.sig.b(pt, mt, Bor.tail(fl), U32.inc(i), Sig{List.append(&2, String, params, [c]),
-        Bind{x, Bool.pick(String, Bor.head(fl), c ++ "/*b*/", Gen.scalar.wrap(Gen.scalar.ty(t), c))} <> env,
-        List.append(&2, String, wargs, ["a[" ++ U32.show(i) ++ "]"])})
-    case Core.Param{x, m, t} <> pt False{} <> mt:
-      Sig{params, env, wargs} = r
-      Gen.sig.b(pt, mt, Bor.tail(fl), U32.inc(i), Sig{params, Bind{x, "0"} <> env, wargs})
-    case pl ml:
-      r
-
-def Gen.sig(ps: List<&2, Core.Param>, mask: List<&2, Bool>, +i: U32, r: Sig) -> Sig:
-  Gen.sig.b(ps, mask, Nil{}, i, r)
-
 def Gen.wrapper(+name: String, wargs: List<&2, String>) -> Gen(Unit):
   +w = Gen.w(name)
   do Gen<Unit>:
@@ -8466,48 +8841,6 @@ def Gen.def.dst(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr, +
 
 # Whether e names k anywhere (under lambdas too). A list field is its
 # head, then the node rebuilt with the rest.
-def Expr.mentions(e: Core.Expr, +k: String) -> Bool:
-  match e:
-    case Core.EVar{+n}:
-      Str.eq(n, k)
-    case Core.ECall{f, args}:
-      match args:
-        case Nil{}:
-          Expr.mentions(f, k)
-        case +a <> t:
-          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.ECall{f, t}, k))(Unit{})
-    case Core.ECtor{n, args}:
-      match args:
-        case Nil{}:
-          False{}
-        case +a <> t:
-          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.ECtor{n, t}, k))(Unit{})
-    case Core.ELam{p, b}:
-      Expr.mentions(b, k)
-    case Core.ELet{p, +v, +b}:
-      Bool.pick(Unit -> Bool, Expr.mentions(v, k), u => True{}, u => Expr.mentions(b, k))(Unit{})
-    case Core.EMatch{scrs, cases}:
-      match scrs:
-        case +a <> t:
-          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(Core.EMatch{t, cases}, k))(Unit{})
-        case Nil{}:
-          match cases:
-            case Nil{}:
-              False{}
-            case +c <> t:
-              Bool.pick(Unit -> Bool, Expr.mentions(c, k), u => True{},
-                u => Expr.mentions(Core.EMatch{Nil{}, t}, k))(Unit{})
-    case Core.ECase{ps, b}:
-      Expr.mentions(b, k)
-    case Core.ESucc{n, x}:
-      Expr.mentions(x, k)
-    case Core.EOp{op, +a, +b}:
-      Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions(b, k))(Unit{})
-    case Core.EAnn{x, ty}:
-      Expr.mentions(x, k)
-    case other:
-      False{}
-
 def Pat.is_par(p: Core.Pat) -> Bool:
   match p:
     case Core.PCtor{+n, ps}:
@@ -8629,128 +8962,6 @@ def Gen.def.inl(+name: String, +body: Core.Expr) -> Bool:
 # word-leaf constructor. The first case may bind locals and match them;
 # it cannot call itself, create a closure, or perform an effect.
 # The wrapper uses the same pattern and statement generators as the body.
-def Gen.leaf.kind(c: Maybe<&2, CInfo>) -> Bool:
-  match c:
-    case Some{CInfo{tag, ar, +kind, single}}:
-      Bool.or(U32.is_eq(kind, 1), U32.is_eq(kind, 7))
-    case None{}:
-      False{}
-
-def Gen.leaf.pat(+g: G, p: Core.Pat) -> Bool:
-  match p:
-    case Core.PCtor{name, ps}:
-      Gen.leaf.kind(G.ctor(g, name))
-    case other:
-      False{}
-
-def Gen.leaf.pats(+g: G, ps: List<&2, Core.Pat>, cs: List<&2, String>) -> Bool:
-  match ps cs:
-    case Nil{} Nil{}:
-      True{}
-    case p <> pt c <> ct:
-      Bool.and(Gen.leaf.pat(g, p), Gen.leaf.pats(g, pt, ct))
-    case pl cl:
-      False{}
-
-def Gen.leaf.cname(m: Maybe<&2, String>) -> String:
-  match m:
-    case Some{c}:
-      c
-    case None{}:
-      ""
-
-def Gen.leaf.paths(ss: List<&2, Core.Expr>, +env: Env()) -> List<&2, String>:
-  match ss:
-    case Nil{}:
-      Nil{}
-    case Core.EVar{x} <> t:
-      Gen.leaf.cname(Env.find(env, x)) <> Gen.leaf.paths(t, env)
-    case e <> t:
-      "" <> Gen.leaf.paths(t, env)
-
-def Gen.leaf.scrs(ss: List<&2, Core.Expr>, +env: Env()) -> Bool:
-  match ss:
-    case Nil{}:
-      True{}
-    case Core.EVar{x} <> t:
-      Bool.and(Env.has(env, x), Gen.leaf.scrs(t, env))
-    case e <> t:
-      False{}
-
-def Gen.leaf.scalar(env: Env(), +c: String) -> Bool:
-  match env:
-    case Nil{}:
-      False{}
-    case Bind{x, b} <> t:
-      Bool.or(Str.eq(b, "(" ++ c ++ ")"), Gen.leaf.scalar(t, c))
-
-def Gen.leaf.args(cs: List<&2, String>, +paths: List<&2, String>, +env: Env()) -> Bool:
-  match cs:
-    case Nil{}:
-      True{}
-    case +c <> t:
-      Bool.and(Bool.or(Bool.or(Str.has(paths, c), Str.has(paths, c ++ "/*b*/")), Gen.leaf.scalar(env, c)), Gen.leaf.args(t, paths, env))
-
-def Gen.leaf.fn(info: DInfo) -> Bool:
-  DInfo{+kind, mask} = info
-  Bool.or(U32.is_eq(kind, 0), U32.is_eq(kind, 2))
-
-def Gen.leaf.simple(+g: G, e: Core.Expr) -> Bool:
-  match e:
-    case Core.EVar{x}:
-      True{}
-    case Core.ENum{n}:
-      True{}
-    case Core.ENat{n}:
-      True{}
-    case Core.EFlt{s}:
-      True{}
-    case Core.ECall{Core.EVar{+f}, args}:
-      match args:
-        case Nil{}:
-          Gen.leaf.fn(G.def(g, f))
-        case a <> t:
-          Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, Core.ECall{Core.EVar{f}, t}))
-    case Core.ECtor{+name, args}:
-      match args:
-        case Nil{}:
-          Maybe.is_some(&2, CInfo, G.ctor(g, name))
-        case a <> t:
-          Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, Core.ECtor{name, t}))
-    case Core.ELet{p, v, b}:
-      Bool.and(Gen.leaf.simple(g, v), Gen.leaf.simple(g, b))
-    case Core.EMatch{ss, cs}:
-      match ss:
-        case a <> t:
-          Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, Core.EMatch{t, cs}))
-        case Nil{}:
-          match cs:
-            case Nil{}:
-              True{}
-            case c <> t:
-              Bool.and(Gen.leaf.simple(g, c), Gen.leaf.simple(g, Core.EMatch{Nil{}, t}))
-    case Core.ECase{ps, b}:
-      Gen.leaf.simple(g, b)
-    case Core.ESucc{k, x}:
-      Gen.leaf.simple(g, x)
-    case Core.EOp{op, a, b}:
-      Bool.and(Gen.leaf.simple(g, a), Gen.leaf.simple(g, b))
-    case Core.EAnn{x, t}:
-      Gen.leaf.simple(g, x)
-    case other:
-      False{}
-
-def Gen.leaf.case(+g: G, +name: String, +env: Env(), +params: List<&2, String>, body: Core.Expr) -> Maybe<&2, Core.Expr>:
-  match body:
-    case Core.EMatch{+ss, Core.ECase{+ps, +b} <> c <> rest}:
-      +paths = Gen.leaf.paths(ss, env)
-      Bool.pick(Maybe<&2, Core.Expr>, Bool.and(Bool.and(Gen.leaf.scrs(ss, env),
-        Gen.leaf.args(params, paths, env)), Bool.and(Gen.leaf.pats(g, ps, paths),
-        Bool.and(Gen.leaf.simple(g, b), Bool.not(Expr.mentions(b, name))))),
-        Some{Core.EMatch{ss, [Core.ECase{ps, b}]}}, None{})
-    case other:
-      None{}
-
 def Gen.leaf.name(c: Maybe<&2, Core.Expr>, +name: String) -> String:
   match c:
     case Some{e}:
@@ -8782,6 +8993,33 @@ def Gen.leaf.wrapper(+g: G, +env: Env(), +self: Self, +params: List<&2, String>,
         Gen.code(Doc.list([DStr{"BEND_UINL" ++ String.drop(head, 6n) ++ " {\n" ++ Gen.u32.open(us) ++ "if (" ++
           Gen.and(List.reverse(&2, String, PatR.conds(pr))) ++ ") {\n"}, body,
           DStr{"}\nreturn " ++ slow ++ "(" ++ String.join(params, ", ") ++ ");\n}\n"}]))
+    case other:
+      Gen.pure(Unit, Unit{})
+
+# A constructor-qualified flat result. Its leaf branch returns one bare
+# constructor; the fallback keeps the existing function and preserves other
+# constructors as raw values. Only one immediate match may consume the result.
+def PF.emit(+g: G, +env: Env(), +self: Self, +params: List<&2, String>, +name: String,
+  +pre: String, +slow: String, +us: List<&2, String>, c: Maybe<&2, Core.Expr>) -> Gen(Unit):
+  match c:
+    case Some{Core.EMatch{ss, Core.ECase{ps, +b} <> Nil{}}}:
+      +ar = PF.arity(g, PF.ctor(b))
+      Bool.pick(Unit -> Gen(Unit), Bool.not(Bool.and(Gen.free(g), Bool.and(Bool.not(Gen.rc(g)), U32.is_gt(ar, 0)))),
+        u => Gen.pure(Unit, Unit{}),
+        u => do Gen<Unit>:
+          +head : String <- Gen.pure(String, pre ++ Gen.mangle(name) ++ "(" ++ String.join(List.append(&2, String,
+            Gen.cparams.u.go(params, us), ["V *o"]), ", ") ++ ")")
+          Gen.proto(DStr{"static V " ++ head ++ ";\n"})
+          +pr : PatR <- Gen.pure(PatR, Gen.pats(g, ps, Gen.leaf.paths(ss, env), PatR{Nil{}, Nil{}}))
+          body : Doc <- Gen.rec(Fuel.max(), GSCaseBody{g, env, self, TOut{ar, True{}}, PatR.binds(pr), b})
+          Gen.code(Doc.list([DStr{"BEND_UINL V " ++ head ++ " {\n" ++ Gen.u32.open(us) ++
+            "o[" ++ U32.show(ar) ++ "] = 0; o[" ++ U32.show(U32.inc(ar)) ++ "] = 0;\nif (" ++
+            Gen.and(List.reverse(&2, String, PatR.conds(pr))) ++ ") {\n"}, body,
+            DStr{"}\nV pfv = " ++ slow ++ "(" ++ String.join(params, ", ") ++ ");\n" ++
+              "if (IS_B(pfv)) { for (unsigned pfi = 0; pfi < " ++ U32.show(ar) ++ "; pfi++) o[pfi] = FLB(pfv, pfi);\n" ++
+              "o[" ++ U32.show(ar) ++ "] = bend_take_ru(pfv, " ++ U32.show(U32.add(ar, 256)) ++ ");\n" ++
+              "} else { o[" ++ U32.show(U32.inc(ar)) ++ "] = pfv; for (unsigned pfi = 0; pfi < " ++ U32.show(ar) ++
+              "; pfi++) o[pfi] = 0; }\nreturn 0;\n}\n"}])))(Unit{})
     case other:
       Gen.pure(Unit, Unit{})
 
@@ -8835,6 +9073,7 @@ def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Co
         Gen.memo.add(Bind{"%seqmode", name})
         b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
         Gen.leaf.wrapper(g, env, Self{name, mask, params}, params, head, slow, us, leaf)
+        PF.emit(g, env, Self{name, mask, params}, params, name, "PS_", slow, us, leaf)
         Gen.memo.add(Bind{"%seqmode", ""})
         Gen.code(Doc.list([DStr{"#define " ++ Gen.f(name) ++ " S_" ++ Gen.mangle(name) ++ "\n" ++ dhead ++ " {\n" ++
           Gen.u32.open(us) ++ "top:;\n"},
@@ -8860,6 +9099,7 @@ def Gen.def.boxed(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
     Gen.code(Doc.list([DStr{dhead ++ " {\n" ++ Gen.u32.open(us) ++ RC.tmp.decl(Bor.kept(mask, Bor.list(Bor.flags(g, name))),
       RC.tmp.used(Fuel.max(), name, mask, e, Nil{}), 0) ++ "top:;\n"}, fast, Gen.own(g, env, env, e), b, DStr{"}\n"}]))
     Gen.leaf.wrapper(g, env, Self{name, mask, params}, params, head, slow, us, leaf)
+    PF.emit(g, env, Self{name, mask, params}, params, name, "PF_", slow, us, leaf)
     Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
     Gen.def.seq(Bool.and(Expr.has_par(body), Gen.isseq(g, name)), g, name, mask, body, env, params)
 
@@ -22517,7 +22757,7 @@ def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
   +narrow = Arrn.program(g)
-  COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#define BEND_NATIVE_STR 1\n#define BEND_NATIVE_MAP 1\n#ifdef BEND_RT_SPLIT\n#include \"bendrt_split.h\"\n#else\n#include \"bendrt.h\"\n#endif\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
+  COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#define BEND_NATIVE_STR 1\n#define BEND_NATIVE_MAP 1\n#define BEND_PF_RAW(p, k) ((p)[(k)+1])\n#define BEND_PF_FLD(p, k, i) ((p)[i])\n#define BEND_PF_TOK(p, k) ((p)[k])\n#ifdef BEND_RT_SPLIT\n#include \"bendrt_split.h\"\n#else\n#include \"bendrt.h\"\n#endif\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
     Doc.flat(Doc.list([DStr{"BEND_NSP_BEGIN\n" ++ Arrn.begin(narrow)}, protos, DStr{"\n"}, code, DStr{Arrn.end(narrow) ++ "BEND_NSP_END\n" ++ Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
     Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
     DStr{"\n" ++ entry}])), errs}

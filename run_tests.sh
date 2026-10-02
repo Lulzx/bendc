@@ -35,6 +35,11 @@ for src in tests/*.bend; do
     echo "FAIL $name (output)"; diff "$out.txt" "tests/$name.out" | head -10 | sed 's/^/  /'; fail=$((fail+1))
   fi
 done
+if sh tools/pf-codegen-check.sh "$BENDC" "$BASE" tests build/tests/pf_codegen > build/tests/pf_codegen.log 2>&1; then
+  echo "ok   pf_codegen"; pass=$((pass+1))
+else
+  echo "FAIL pf_codegen"; cat build/tests/pf_codegen.log; fail=$((fail+1))
+fi
 # C checks of the runtime (tests/rt/*.c, built whole with $CC): each
 # prints "ok".
 if sh tools/gpu-host-check.sh "$BENDC" "$BASE" > build/tests/gpu_host_codegen.log 2>&1; then
