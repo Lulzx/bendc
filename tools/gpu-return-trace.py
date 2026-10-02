@@ -11,11 +11,12 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('explicit-birth',0)]:
+for name,kq in [('host-trace',0),('explicit-birth',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
  if name=='explicit-birth':
+  gpu=gpu.replace('if (c->H[p + i] - b < n) return r;', 'if (k_in(c, c->H[p + i])) return r;')
   start=gpu.index('#define K_TREE_STACK')
   end=gpu.index('// A flat def keeps a Nat',start)
   gpu=gpu[:start]+r"""#define K_TREE_STACK KW kt_birth[32][5], kt_nb=0
@@ -164,4 +165,18 @@ static void gpu_trace_save(KW *H,const KParams *P) {
  print(p.stderr.decode(errors='replace'),flush=True)
  results.append({'name':name,'host_kq':kq,'exit':p.returncode,'gpu_header_sha256':hashlib.sha256(gpu.encode()).hexdigest()})
  (out/'results.json').write_text(json.dumps(results,indent=2)+'\n')
+ if name=='explicit-birth':
+  for repeat in range(1,3):
+   q=subprocess.run([str(binary)],env=env,capture_output=True)
+   (d/f'repeat-{repeat}.stderr').write_bytes(q.stderr)
+   print('=== explicit-birth repeat',repeat,'exit',q.returncode,'===',flush=True);print(q.stderr.decode(errors='replace'),flush=True)
+  for layout in ('full','split'):
+   target=binary
+   if layout=='split':
+    obj=d/'bendrt.o';subprocess.run(['cc','-O2','-w','-I',str(rt),'-c',str(rt/'bendrt_impl.c'),'-o',str(obj)],check=True)
+    target=d/'split';splitcmd=cmd.copy();splitcmd[splitcmd.index(str(binary))]=str(target);splitcmd.insert(1,'-DBEND_RT_SPLIT');splitcmd.append(str(obj));subprocess.run(splitcmd,check=True)
+   for pin in ((512,) if layout=='full' else (0,512)):
+    q=subprocess.run([str(target)],env=dict(env,BEND_GPU_PIN_MB=str(pin)),capture_output=True)
+    (d/f'{layout}-{pin}.stderr').write_bytes(q.stderr)
+    print('=== explicit-birth',layout,'pin',pin,'exit',q.returncode,'===',flush=True);print(q.stderr.decode(errors='replace'),flush=True)
 # A control failure is experimental evidence, not a workflow infrastructure failure.
