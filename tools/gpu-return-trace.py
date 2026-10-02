@@ -11,7 +11,7 @@ fixture=root/'tools/gpu-return-program.c'
 assert hashlib.sha256(fixture.read_bytes()).hexdigest()==receipt['generated_c_sha256']
 shutil.copyfile(fixture,out/'pin_program.c')
 results=[]
-for name,kq in [('explicit-birth-copy',0)]:
+for name,kq in [('explicit-birth-phase',0)]:
  d=out/name;d.mkdir(exist_ok=True)
  rt=d/'rt';shutil.copytree(root/'rt',rt,dirs_exist_ok=True)
  gpu=(rt/'gpu.h').read_text()
@@ -199,6 +199,8 @@ static void gpu_trace_save(KW *H,const KParams *P) {
   old='    if (gpu_log) fprintf(stderr, "bend gpu: a lane failed (error %u), running on the CPU\\n", gpu_A[KA_ERR]);'
   assert old in host
   host=host.replace(old,old+'\n    fprintf(stderr,"phase words:");for(int i=7;i<16;i++)fprintf(stderr," %u",gpu_A[i]);fprintf(stderr,"\\n");')
+  dump=r' KW tr=(KW)gpu_A[10]|((KW)gpu_A[11]<<32); KW tb=(KW)(uintptr_t)gpu_H; if(tr>=tb+24 && tr-tb+40<gpu_Hn) {KW ti=(tr-tb)>>3;fprintf(stderr,"phase heap root %llx:",(unsigned long long)tr);for(KW j=ti-3;j<ti+5;j++)fprintf(stderr," %llx",(unsigned long long)gpu_H[j]);fprintf(stderr,"\n");}'
+  host=host.replace(old,old+'\n'+dump)
   (rt/'gpuhost.h').write_text(host)
  (rt/'gpu.h').write_text(gpu)
  literal='\n'.join(json.dumps(line+'\n') for line in gpu.split('\n'))
