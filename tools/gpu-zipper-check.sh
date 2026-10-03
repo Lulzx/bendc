@@ -8,15 +8,20 @@ SRC=${3:-tests}
 OUT=${4:-build/probe/gpu-zipper-check}
 RT=${5:-rt}
 mkdir -p "$OUT"
-for name in mixed_wide scalar_types scalar_export wide_nat low_nat; do
+for name in mixed_wide scalar_types scalar_export rp_boundary wide_nat low_nat; do
   "$BENDC" "$BASE" "$SRC/gpu_zipper_$name.bend" > "$OUT/$name.c"
 done
 cp "$OUT/mixed_wide.c" "$OUT/zipper-positive.c"
 # Mixed32 schema specializes; both mixed scalar export and computation use it.
-for name in scalar_types scalar_export; do
+for name in scalar_types scalar_export rp_boundary; do
   grep -Fq 'KZ_merge_try(' "$OUT/$name.c"
   grep -Fq '#define K_GPU_PACKED 1' "$OUT/$name.c"
 done
+# Borrowed/exported trees retain the CPU boundary representation even when
+# internal counting-only trees can use packed CPU headers.
+if grep -Eq 'RPN\(|IS_RP\(' "$OUT/rp_boundary.c"; then
+  echo 'GPU borrowed/export boundary selected CPU packed headers' >&2; exit 1
+fi
 # The ordinary Nat schema stays unpacked even beside a specialized U32 schema.
 grep -Fq 'KZ_combine_try(' "$OUT/mixed_wide.c"
 if grep -Fq 'KZ_wcombine_' "$OUT/mixed_wide.c"; then

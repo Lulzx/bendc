@@ -1,5 +1,9 @@
 #!/bin/sh
 set -eu
+# These assertions cover the tracing backend; bounded programs may choose
+# hybrid reference counting automatically unless the mode is explicit.
+BEND_RC=0
+export BEND_RC
 BENDC=${1:-build/bendc}
 BASE=${2:-build/base34/base.bend}
 SRC=${3:-tests}

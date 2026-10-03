@@ -934,8 +934,20 @@ freed nodes are poisoned and kept, so a use after free stops with the C line tha
 **Reference counting (`BEND_RC=1`).** A program compiled with `BEND_RC=1` counts references
 instead, in the manner of Perceus (Reinking et al., PLDI 2021), and the tracing collector never
 runs: there are no pauses, and memory goes back as soon as the last reference to it is dropped.
-The mode is off by default: see below for where it wins and where it loses. `bendc --native`
-does not implement it: native programs are traced whatever `BEND_RC` says.
+Without an explicit `BEND_RC` setting, the C backend selects reference counting with
+tracing for programs whose reachable calls pass a bounded numeric and effect check.
+That hybrid mode reclaims acyclic objects immediately and retains full tracing for
+cycles; pending destruction work remains a tracing root. Growing `Nat` arithmetic,
+unknown calls and composite GPU returns keep tracing. `BEND_RC=0` explicitly selects
+tracing, `BEND_RC=1` selects counting without automatic tracing, and `BEND_NO_FREE=1`
+disables automatic selection. `BEND_RC_TRACE=1` enables tracing for an explicit counting
+build. `bendc --native` keeps tracing regardless of `BEND_RC`.
+
+Eligible mixed constructors in counting builds can store their first `U32` field
+inside the header, with the remaining fields in ordinary value cells. Foreign and
+GPU boundary types retain their external representation. Allocation blocks are 16KB;
+wide-array destruction uses an iterative continuation rather than a worklist entry
+for every element.
 
 - The count sits in bits 48 to 61 of an object's first word, above the tag, the closure's
   function or the array's header. The count is of the references past the first, so a new

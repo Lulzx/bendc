@@ -1,7 +1,13 @@
 #include "bendrt.h"
 #include <assert.h>
 static V unit(void) {
-  enum { WORDS = 2049, N = 12 };
+  enum { N = 12 };
+  // Retain the three-slot refill regression across allocation block sizes.
+  unsigned WORDS = 0;
+  for (unsigned c = 0; c < GC_NCLS; ++c)
+    if (gc_cls_w[c] <= GC_SMALL && (GC_BLK - GC_HDR) / (gc_cls_w[c] * sizeof(V)) == 3)
+      WORDS = gc_cls_w[c];
+  assert(WORDS);
   V *slots[N + 1];
   for (unsigned j = 0; j < N; ++j) {
     slots[j] = halloc(WORDS);

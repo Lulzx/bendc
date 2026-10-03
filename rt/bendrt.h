@@ -17,6 +17,9 @@
 
 #ifndef BENDRT_H
 #define BENDRT_H
+#ifndef BEND_RC_HYBRID_DEFAULT
+#define BEND_RC_HYBRID_DEFAULT 0
+#endif
 
 #ifdef __linux__
 #define _GNU_SOURCE
@@ -221,11 +224,11 @@ __attribute__((noreturn)) static void bend_fail(const char *msg) {
 // A thread allocates from a private free list; the block behind that list
 // is not swept until the thread moves on to another one.
 
-#define GC_BLK_SHIFT 16
+#define GC_BLK_SHIFT 14
 #define GC_BLK ((uintptr_t)1 << GC_BLK_SHIFT)
 #define GC_MAXBLK ((uintptr_t)1 << 22)
 #define GC_HDR 64
-#define GC_SMALL 2052
+#define GC_SMALL 1024
 #define GC_NCLS 43
 #define GC_MAXTHR 256
 #define GC_SIG SIGUSR2
@@ -288,7 +291,7 @@ struct PDeque;
 // A thread's caches by pool (GcBlk.pool): 0 for objects with a first word
 // (nodes, closures, arrays), 1 for atomic objects, 2 for bare nodes (see
 // "Bare nodes").
-#define GC_NPOOL 3
+#define GC_NPOOL 4
 typedef struct Thr {
   GcCache cache[GC_NPOOL][GC_NCLS];
   uint32_t rcur[GC_NCLS];   // where the next search for a reuse block starts
@@ -401,6 +404,9 @@ static uint64_t *gc_cand;
 // two-word indices even when odd-sized slots are not 16-byte aligned.
 #define BK_BARE 1
 #define BK_SH 2
+#define BK_RP 4
+#define RP_SH ((V)1 << 48)
+#define RP_DEEP ((V)1 << 49)
 static uint8_t *gc_bk;
 static uint8_t *gc_bflags;
 // More than one thread runs Bend code (frees must then be atomic).
@@ -408,6 +414,7 @@ static int gc_mt;
 // Set by a program compiled with BEND_RC=1 before it starts (see "Reference
 // counting").
 static int bend_rc_req;
+static int bend_rc_trace_req;
 // What bend_take and bend_share read, together (one address to load).
 typedef struct GcHot {
   uintptr_t base, span;  // the heap: gc_base, and gc_top in bytes
@@ -524,8 +531,9 @@ static void gc_init(void) {
   // (a heap size set this way stays: BEND_GC_GROW=n lets it grow n times)
   if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20, gc_grow_max = 1;
   if (getenv("BEND_GC_GROW") && atoi(getenv("BEND_GC_GROW")) > 0) gc_grow_max = (unsigned)atoi(getenv("BEND_GC_GROW"));
-  // Reference counting frees every object: the collector never runs.
-  if (bend_rc_req) gc_limit = gc_limit_min = (size_t)-1;
+  // Explicit counting can omit tracing; hybrid builds retain full tracing.
+  if (bend_rc_req && !bend_rc_trace_req && !getenv("BEND_RC_TRACE")) gc_limit = gc_limit_min = (size_t)-1;
+  if (bend_rc_req && (bend_rc_trace_req || getenv("BEND_RC_TRACE"))) gc_all_major = 1;
 }
 
 static inline GcBlk *gc_blk(uintptr_t i) { return (GcBlk *)(gc_base + (i << GC_BLK_SHIFT)); }
@@ -555,6 +563,28 @@ static uintptr_t gc_take_blocks(size_t n) {
 
 static void gc_collect_locked(void);
 
+// RC already reclaims acyclic allocations. Check retained occupancy before
+// spending a full trace on allocation churn. Called with gc_lock held:
+// block metadata/large frees are stable; small allocation bits are atomic.
+// Reserved cache slots count too, so this deliberately overestimates usage.
+static int gc_auto_trace(void) {
+  if (!gc_hot.rc) return 1;
+  size_t used = 0;
+  for (uintptr_t bi=0; bi<gc_top; bi++) {
+    if (gc_kind[bi]==1) {
+      size_t count=0;
+      for (unsigned j=0;j<64;j++)
+        count+=(size_t)__builtin_popcountll(__atomic_load_n(&gc_abits[bi*64+j],__ATOMIC_RELAXED));
+      used+=count*(size_t)gc_meta[bi].words*sizeof(V);
+    } else if (gc_kind[bi]==2) {
+      used+=(size_t)gc_blk(bi)->nblk*GC_BLK;
+    }
+    if (used>=gc_limit_min) return 1;
+  }
+  atomic_store_explicit(&gc_since,0,memory_order_relaxed);
+  return 0;
+}
+
 static GcBlk *gc_new_small(int atomic, unsigned c) {
   uintptr_t at = gc_take_blocks(1);
   GcBlk *b = gc_blk(at);
@@ -566,7 +596,7 @@ static GcBlk *gc_new_small(int atomic, unsigned c) {
   if (__atomic_load_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], __ATOMIC_RELAXED) & BK_SH) {
     memset(gc_bflags + at * (GC_BLK / (2 * sizeof(V))), 0, GC_BLK / (2 * sizeof(V)));
   }
-  __atomic_store_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], atomic == 2 ? BK_BARE : 0, __ATOMIC_RELAXED);
+  __atomic_store_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], atomic == 2 ? BK_BARE : atomic == 3 ? BK_RP : 0, __ATOMIC_RELAXED);
   b->pool = (uint8_t)atomic;
   b->words = gc_cls_w[c];
   b->nobj = (uint32_t)((GC_BLK - GC_HDR) / (b->words * 8));
@@ -691,7 +721,7 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
     // f gets bit 8k + 7 for each byte k that is c + 1)
     uint64_t *cb = (uint64_t *)(t->candb + ((uintptr_t)gc_base >> GC_BLK_SHIFT));
     // (a bare node's block is 16 + c + 1)
-    uint64_t lo = 0x0101010101010101ull, pat = lo * ((atomic == 2 ? 16 : 0) + c + 1);
+    uint64_t lo = 0x0101010101010101ull, pat = lo * ((atomic == 2 ? 16 : atomic == 3 ? 32 : 0) + c + 1);
     int sh = shared ? 6 : 3;
     uintptr_t nw = (gc_top + (1u << sh) - 1) >> sh;
     uintptr_t at = t->rcur[c] < gc_top ? t->rcur[c] : 0;
@@ -733,7 +763,7 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
   int fresh = 0;
   if (b == NULL) {
     pthread_mutex_lock(&gc_lock);
-    if (gc_since >= gc_limit) gc_collect_locked();
+    if (gc_since >= gc_limit && gc_auto_trace()) gc_collect_locked();
     // (A partly free block may have been claimed for reuse since the sweep.)
     b = gc_partial[atomic][c];
     uint8_t z = 0;
@@ -771,7 +801,7 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
 __attribute__((noinline)) static V *gc_alloc_large(size_t w, int atomic) {
   size_t n = (GC_HDR + w * sizeof(V) + GC_BLK - 1) >> GC_BLK_SHIFT;
   pthread_mutex_lock(&gc_lock);
-  if (gc_since >= gc_limit) gc_collect_locked();
+  if (gc_since >= gc_limit && gc_auto_trace()) gc_collect_locked();
   uintptr_t at = gc_take_blocks(n);
   GcBlk *b = gc_blk(at);
   memset(b, 0, sizeof(GcBlk));
@@ -877,6 +907,10 @@ __attribute__((noinline)) static void bend_share_slow(V v) {
   if (i >= b->nobj) return;
   if ((uintptr_t)v != (uintptr_t)gc_objs(b) + (uintptr_t)i * b->words * sizeof(V)) return;
   if (!(GC_ALLOC(b)[i >> 6] & (1ull << (i & 63)))) return;
+  if (b->pool == 3) {
+    __atomic_fetch_or((V *)v, RP_SH, __ATOMIC_RELAXED);
+    return;
+  }
   if (b->pool == 2) {
     // A bare node: its shared bit, and its block's BK_SH.
     uint8_t *f = (uint8_t *)(gc_hot.bflags + (v >> 4));
@@ -930,7 +964,9 @@ static inline void bend_share(V v) {
   // A word first, on its own branch (the heap bounds are then not loaded).
   if (LIKELY(v < ((V)1 << 32))) return;
   if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
-  if (gc_hot.bk[v >> GC_BLK_SHIFT] & BK_BARE) {
+  if (gc_hot.bk[v >> GC_BLK_SHIFT] & BK_RP) {
+    if (__atomic_load_n((V *)v, __ATOMIC_RELAXED) & RP_SH) return;
+  } else if (gc_hot.bk[v >> GC_BLK_SHIFT] & BK_BARE) {
     if (__atomic_load_n((uint8_t *)(gc_hot.bflags + (v >> 4)), __ATOMIC_RELAXED) & 1) return;
   } else {
     V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
@@ -975,7 +1011,30 @@ static inline int bend_take_bare(V v, unsigned n);
 // path. An unshared node is the thread's alone (it came to the thread through
 // a fork or a join, which order what was written before).
 #define BEND_TAG_WORD(v) (((V *)(v))[0])
+static inline int bend_rp_shared(V v, unsigned n) {
+  V w0 = __atomic_load_n((V *)v, __ATOMIC_ACQUIRE);
+  if (!(w0 & RP_SH)) return 0;
+  if (w0 & RP_DEEP) return 1;
+  for (unsigned j=1; j<n; j++) {
+    V x=((V *)v)[j];
+    if (UNLIKELY((uintptr_t)x - bend_arena_lo < bend_arena_n)) bend_share_arena(x);
+    else bend_share(x);
+  }
+  __atomic_fetch_or((V *)v, RP_DEEP, __ATOMIC_RELEASE);
+  return 1;
+}
+// Disjoint from ordinary constructor words (CN/CRN take signed-int arity).
+// Pool qualification also prevents foreign/header-shaped values decoding.
+#define RP_SIZE 0x80000000u
+static inline int bend_rp_size(V v, unsigned w) {
+  if (w < RP_SIZE+2 || w > RP_SIZE+15) return 0;
+  uintptr_t off=(uintptr_t)v-gc_hot.base;
+  if (UNLIKELY(off>=gc_hot.span)) return 0;
+  uintptr_t bi=off>>GC_BLK_SHIFT;
+  return gc_kind[bi]==1 && gc_blk(bi)->pool==3;
+}
 static inline int bend_take_at(V v, unsigned w, unsigned line) {
+  if (bend_rp_size(v,w)) { if (bend_rp_shared(v, w-RP_SIZE)) return 1; bend_free_slot(v,w,line); return 0; }
   if (w >= 256) return bend_take_bare(v, w - 256);
   V w0 = BEND_TAG_WORD(v);
   if (w0 & BEND_SH) {
@@ -994,8 +1053,9 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
 static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   const GcHot *h = &gc_hot;
   // (its slot's words, and its candidate byte: see Thr.candb)
-  unsigned sw = w >= 256 ? (w - 256 < 2 ? 2 : w - 256) : w;
-  uint8_t cv = (uint8_t)(w >= 256 ? 16 + sw - 1 : w - 1);
+  int packed = bend_rp_size(v,w);
+  unsigned sw = packed ? w - RP_SIZE : w >= 256 ? (w - 256 < 2 ? 2 : w - 256) : w;
+  uint8_t cv = (uint8_t)(packed ? 32 + sw - 1 : w >= 256 ? 16 + sw - 1 : w - 1);
   uintptr_t bi = (uintptr_t)v >> GC_BLK_SHIFT;  // (less the base's: see GcHot)
   uint32_t i = (uint32_t)((((uintptr_t)v & (GC_BLK - 1)) - GC_HDR) / (sw * sizeof(V)));
   uint64_t bit = 1ull << (i & 63);
@@ -1137,7 +1197,8 @@ static inline void bend_open(V t, V *o, unsigned k, int take) {
 // ------------------
 //
 // A program compiled with BEND_RC=1 counts references instead (Perceus:
-// Reinking et al., PLDI 2021), and the collector never runs. An object's
+// Reinking et al., PLDI 2021). Hybrid builds also trace retained cycles.
+// An object's
 // count of references past its first sits in bits 48 to 61 of its first word
 // (above a node's tag, a closure's function or an array's header), so a new
 // object, whose first word is written whole, has one reference. Bit 62 makes
@@ -1287,6 +1348,7 @@ static void rc_poison(V v, unsigned w) {
 // Frees object v (valid, of w words when w is not 0), whose fields were
 // moved out.
 static inline void rc_free_at(V v, unsigned w) {
+  if (bend_rp_size(v,w)) w -= RP_SIZE;
   uintptr_t off = (uintptr_t)v - gc_hot.base;
   uintptr_t bi = off >> GC_BLK_SHIFT;
 #ifdef BEND_DEBUG_FREE
@@ -1301,37 +1363,71 @@ static inline void rc_free_at(V v, unsigned w) {
 
 static void rc_push(Thr *t, V v) {
   if (t->rcn == t->rccap) {
+    // A stopped thread's pending prefix is a root. Realloc can free the
+    // old buffer before publishing the new address, so defer stops here.
+    sig_atomic_t prior = t->claiming;
+    t->claiming = 1;
+    atomic_signal_fence(memory_order_seq_cst);
     t->rccap = t->rccap ? t->rccap * 2 : 1024;
     t->rcs = realloc(t->rcs, t->rccap * sizeof(V));
     if (!t->rcs) bend_fail("out of memory");
+    atomic_signal_fence(memory_order_seq_cst);
+    t->claiming = prior;
+    atomic_signal_fence(memory_order_seq_cst);
+    if (!prior && t->deferred) { t->deferred = 0; gc_park(t); }
   }
-  t->rcs[t->rcn++] = v;
+  t->rcs[t->rcn] = v;
+  BEND_BARRIER();
+  t->rcn++;
 }
 
 // Frees v, whose last reference went, and drops its fields: every word but
 // the first that is a reference (a closure's arity and count are numbers,
 // the words of a slot past its object zero). Iterative: the first field
 // that dies next, the others on the thread's stack.
+// Large objects stream their fields. A pending pair (index,parent|2)
+// resumes one parent after its child dies; aligned object pointers have bit1
+// clear. The parent stays allocated/rooted until all its fields are dropped.
 __attribute__((noinline)) static void rc_free_obj(V v) {
   Thr *t = thr_self;
   size_t base = t->rcn;
   for (;;) {
+again:;
+    size_t start=1;
+    if (v & 2) {
+      v &= ~(V)2;
+      start=t->rcs[t->rcn-1];
+      BEND_BARRIER(); t->rcn--;
+    }
     uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
     size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
     V *p = (V *)v;
-    if (ARR_W0_NW(p[0])) w = 1;  // (a narrow array's cells are scalars)
-    V next = 0;
-    for (size_t j = 1; j < w; j++) {
-      V x = p[j];
-      if (rc_obj(x) && rc_release(x)) {
-        if (next) rc_push(t, x);
-        else next = x;
+    if (gc_blk(bi)->pool != 3 && ARR_W0_NW(p[0])) w = 1;
+    if (w>=64) {
+      for (size_t j=start;j<w;j++) {
+        V x=p[j];p[j]=0;BEND_BARRIER();
+        if (rc_obj(x) && rc_release(x)) {
+          if (j+1==w) rc_free_at(v,0);
+          else {rc_push(t,j+1);rc_push(t,v|2);}
+          v=x;goto again;
+        }
       }
+    } else {
+      V next=0;
+      for(size_t j=1;j<w;j++) {
+        V x=p[j];
+        if(rc_obj(x)&&rc_release(x)) {
+          if(next)rc_push(t,x);else next=x;
+        }
+      }
+      rc_free_at(v,0);
+      if(next){v=next;continue;}
+      goto pop;
     }
-    rc_free_at(v, 0);
-    if (next) { v = next; continue; }
-    if (t->rcn == base) return;
-    v = t->rcs[--t->rcn];
+    rc_free_at(v,0);
+pop:;
+    if(t->rcn==base)return;
+    v=t->rcs[t->rcn-1];BEND_BARRIER();t->rcn--;
   }
 }
 
@@ -1372,6 +1468,7 @@ static inline int rc_unique(V v) {
 // A match opened node v, of w words, after reading its fields: its fields
 // are the pattern's now.
 static inline void rc_take(V v, unsigned w) {
+  if (bend_rp_size(v,w)) w -= RP_SIZE;
   if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) return;
   if (LIKELY(rc_unique(v))) rc_free_at(v, w);
   else rc_take_shared(v, w);
@@ -1381,6 +1478,7 @@ static inline void rc_take(V v, unsigned w) {
 // answered, for the case's constructor of the same size to be built in
 // (reuse, see RU); 0 when the node was shared.
 static inline V rc_take_ru(V v, unsigned w) {
+  if (bend_rp_size(v,w)) w -= RP_SIZE;
   if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) return 0;
   if (LIKELY(rc_unique(v))) {
 #ifdef BEND_DEBUG_FREE
@@ -1409,11 +1507,13 @@ static inline void rc_drop_unkept(V v, unsigned w, V keep) {
     if (!rc_kept(keep, j)) rc_drop(((V *)v)[j]);
 }
 static inline void rc_take_d(V v, unsigned w, V keep) {
+  if (bend_rp_size(v,w)) { w -= RP_SIZE; keep >>= 1; }
   if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) { rc_drop_unkept(v, w, keep); return; }
   if (LIKELY(rc_unique(v))) { rc_drop_unkept(v, w, keep); rc_free_at(v, w); }
   else rc_take_shared_d(v, w, keep);
 }
 static inline V rc_take_ru_d(V v, unsigned w, V keep) {
+  if (bend_rp_size(v,w)) { w -= RP_SIZE; keep >>= 1; }
   if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) { rc_drop_unkept(v, w, keep); return 0; }
   if (LIKELY(rc_unique(v))) {
     rc_drop_unkept(v, w, keep);
@@ -1437,6 +1537,16 @@ static inline void rc_let_go(V v, unsigned w) {
 // A reuse slot of w words (rc_take_ru's), or a new one.
 #define RU(tok, w) ((tok) ? (V *)(tok) : halloc(w))
 
+#define IS_RP(v,t) (!((v)&1) && (uint16_t)((V *)(v))[0] == (t))
+#define FLP(v,i) ((i)==0 ? (V)(uint32_t)(((V *)(v))[0] >> 16) : ((V *)(v))[(i)])
+static inline V *bend_ru_dirty(V u);
+static inline V RPN(V tok,V tag,unsigned n,const V *xs) {
+  if (tag >65535 || n<2 || n>15 || xs[0]>UINT32_MAX) bend_fail("invalid packed constructor");
+  V *p = tok ? (gc_hot.rc ? (V *)tok : bend_ru_dirty(tok)) : gc_alloc_x(n,3,0);
+  p[0]=tag | (xs[0]<<16);
+  for(unsigned j=1;j<n;j++) p[j]=xs[j];
+  return (V)p;
+}
 // Marks v and everything it reaches immortal (before other threads see it).
 static void rc_immortal(V v) {
   while (rc_obj(v) && !(*(V *)v & RC_STICKY)) {
@@ -1444,7 +1554,7 @@ static void rc_immortal(V v) {
     p[0] |= RC_STICKY;
     uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
     size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
-    if (ARR_W0_NW(p[0])) w = 1;
+    if (gc_blk(bi)->pool != 3 && ARR_W0_NW(p[0])) w = 1;
     for (size_t j = 1; j + 1 < w; j++) rc_immortal(p[j]);
     v = w > 1 ? p[w - 1] : 0;
   }
@@ -1465,12 +1575,14 @@ __attribute__((noinline)) static void rc_publish(V v) {
       p[0] = w0 | RC_TS;
       uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
       size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
-      if (ARR_W0_NW(w0)) w = 1;
+      if (gc_blk(bi)->pool != 3 && ARR_W0_NW(w0)) w = 1;
       for (size_t j = 1; j < w; j++)
         if (p[j] >= ((V)1 << 32)) rc_push(t, p[j]);
     }
     if (t->rcn == base) return;
-    v = t->rcs[--t->rcn];
+    v = t->rcs[t->rcn - 1];
+    BEND_BARRIER();
+    t->rcn--;
   }
 }
 
@@ -1564,7 +1676,7 @@ static inline void gc_mark(V w) {
   GC_MARK(b)[i >> 6] |= bit;
   if (b->atomic) return;
   if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
-  gc_stk[gc_sp++] = (GcItem){(V *)(o + i * (uintptr_t)b->words * sizeof(V)), b->words};
+  gc_stk[gc_sp++] = (GcItem){(V *)(o + i * (uintptr_t)b->words * sizeof(V)) + (b->pool == 3), b->words - (b->pool == 3)};
 }
 
 static void gc_scan(const void *lo, const void *hi) {
@@ -1679,7 +1791,7 @@ static inline void gc_mark_par(V w, GcMk *m) {
   if (__atomic_fetch_or(mw, bit, __ATOMIC_RELAXED) & bit) return;
   if (b->atomic) return;
   if (m->sp == GC_MKCAP) gc_share(m);
-  m->stk[m->sp++] = (GcItem){(V *)(o + i * (uintptr_t)b->words * sizeof(V)), b->words};
+  m->stk[m->sp++] = (GcItem){(V *)(o + i * (uintptr_t)b->words * sizeof(V)) + (b->pool == 3), b->words - (b->pool == 3)};
 }
 
 static void gc_help(GcMk *m) {
@@ -1878,6 +1990,21 @@ static void gc_rescan_dirty(void) {
         gc_stk[gc_sp++] = (GcItem){gc_objs(b), b->words};
       }
     } else if (gc_kind[bi] == 1 && !b->atomic) {
+      if (b->pool == 3) {
+        uint32_t nw = (b->nobj + 63) >> 6;
+        for (uint32_t j = 0; j < nw; j++) {
+          uint64_t m = al[j] & mk[j];
+          while (m) {
+            unsigned lo = (unsigned)__builtin_ctzll(m);
+            uint32_t ix = j * 64 + lo;
+            m &= m - 1;
+            if (ix >= b->nobj) continue;
+            if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
+            gc_stk[gc_sp++] = (GcItem){gc_objs(b) + (size_t)ix * b->words + 1, b->words - 1};
+          }
+        }
+        continue;
+      }
       // One item per run of old objects side by side (scanned as one range
       // of words): most blocks are dirty when reuse tokens are, and an item
       // per object would touch a mark stack as big as the old objects.
@@ -1945,6 +2072,7 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
   for (int i = 0; i < gc_nthr; i++) {
     Thr *t = gc_thrs[i];
     if (t->live) gc_scan((const void *)t->sp, (const void *)t->top);
+    if (gc_hot.rc && t->rcn) gc_scan(t->rcs, t->rcs + t->rcn);
   }
   gc_rem_unique();
   gc_rooting = 3;  // other roots hold no half-made nodes
@@ -2146,6 +2274,7 @@ static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
 // it does an old Array.)
 // RUFG frees a token no constructor took.
 static inline V bend_take_ru(V v, unsigned w) {
+  if (bend_rp_size(v,w)) { if (bend_rp_shared(v,w-RP_SIZE)) return 0; BEND_POISON_AT(v,w-RP_SIZE); return v; }
   if (w >= 256) return bend_take_ru_bare(v, w - 256);
   V w0 = BEND_TAG_WORD(v);
   if (w0 & BEND_SH) {
@@ -2301,7 +2430,7 @@ static inline void bend_dead(V v) {
   if (LIKELY(v < ((V)1 << 32))) return;
   if ((uintptr_t)v - gc_hot.base >= gc_hot.span) return;
   V w0 = gc_hot.mt ? __atomic_load_n((V *)v, __ATOMIC_ACQUIRE) : __atomic_load_n((V *)v, __ATOMIC_RELAXED);
-  if ((w0 | 63) == (ARR_TAG | 63) && !(gc_hot.bk[v >> GC_BLK_SHIFT] & BK_BARE)) arr_dead(v);
+  if ((w0 | 63) == (ARR_TAG | 63) && !(gc_hot.bk[v >> GC_BLK_SHIFT] & (BK_BARE | BK_RP))) arr_dead(v);
 }
 
 // 2^c cells from src (a shared source's are shared) into a new array.

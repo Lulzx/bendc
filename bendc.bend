@@ -4270,6 +4270,10 @@ def Gen.pat.node(opens: Bool, +ar: U32, +path: String, r: PatR) -> PatR:
 
 # A headerless node the pattern opens (kind 8): its size is 256 + its
 # fields, for bend_take (see bend_take_bare).
+def Gen.pat.pnode(+ar: U32, +path: String, r: PatR) -> PatR:
+  PatR{conds, binds} = r
+  PatR{conds, Bind{Bool.pick(String, Gen.is_field(path), "%sub", "%top") ++ U32.show(U32.add(2147483648, ar)), path} <> binds}
+
 def Gen.pat.bnode(+ar: U32, +path: String, r: PatR) -> PatR:
   PatR{conds, binds} = r
   PatR{conds, Bind{Bool.pick(String, Gen.is_field(path), "%sub", "%top") ++ U32.show(U32.add(256, ar)),
@@ -4279,8 +4283,9 @@ def Gen.pat.bnode(+ar: U32, +path: String, r: PatR) -> PatR:
 # (i - 200)-th field of a headerless node.
 def Gen.pat.fld(+path: String, +i: U32) -> String:
   Bool.pick(String, U32.is_eq(i, 99), path,
+    Bool.pick(String, U32.is_ge(i, 300), "FLP(" ++ path ++ ", " ++ U32.show(U32.sub(i, 300)) ++ ")",
     Bool.pick(String, U32.is_ge(i, 200), Bool.pick(String, PF.path(path), PF.field(path, U32.sub(i, 200)), "FLB(" ++ path ++ ", " ++ U32.show(U32.sub(i, 200)) ++ ")"),
-      "FLD(" ++ path ++ ", " ++ U32.show(i) ++ ")"))
+      "FLD(" ++ path ++ ", " ++ U32.show(i) ++ ")")))
 
 # An ANode's halves, copies (arr_half); "%arr" has the case load them once.
 def Gen.pat.arr(+path: String, r: PatR) -> PatR:
@@ -4402,6 +4407,9 @@ def Gen.pat.go(
                     case 7n:
                       Gen.pat.go(a, 3n, g, "LI_V(" ++ path ++ ")", 0, None{}, 0n,
                         Gen.pat.tag(single, "IS_LI(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r))
+                    case 9n:
+                      Gen.pat.go(Core.PCtor{name, [a]}, 0n, g, path, 300, None{}, 0n,
+                        Gen.pat.pnode(ar, path, Gen.pat.tag(single, "IS_RP(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)))
                     case 8n+q:
                       Gen.pat.go(Core.PCtor{name, [a]}, 0n, g, path, 200, None{}, 0n,
                         Gen.pat.bnode(ar, path, Gen.pat.tag(single, "IS_B(" ++ path ++ ")", r)))
@@ -4457,6 +4465,9 @@ def Gen.pat.go(
                       Gen.pat.arr(path, Gen.pat.go(b, 3n, g, "arr_half(" ++ path ++ ", 1)", 0, None{}, 0n,
                         Gen.pat.go(a, 3n, g, "arr_half(" ++ path ++ ", 0)", 0, None{}, 0n,
                           Gen.pat.cond("arr_cls(" ++ path ++ ") != 0", r))))
+                    case 9n:
+                      Gen.pat.go(Core.PCtor{name, [a, b]}, 0n, g, path, 300, None{}, 0n,
+                        Gen.pat.pnode(ar, path, Gen.pat.tag(single, "IS_RP(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)))
                     case 7n+q:
                       Gen.pat.go(Core.PCtor{name, [a, b]}, 0n, g, path, 200, None{}, 0n,
                         Gen.pat.bnode(ar, path, Gen.pat.tag(single, "IS_B(" ++ path ++ ")", r)))
@@ -4511,6 +4522,9 @@ def Gen.pat.go(
                       Gen.pat.go(Core.PCtor{name, h <> t}, 0n, g, path, 0, None{}, 0n, Gen.pat.cond("arr_cls(" ++ path ++ ") == 0", r))
                     case 6n:
                       Gen.pat.cond("arr_cls(" ++ path ++ ") != 0", r)
+                    case 9n:
+                      Gen.pat.go(Core.PCtor{name, h <> t}, 0n, g, path, 300, None{}, 0n,
+                        Gen.pat.pnode(ar, path, Gen.pat.tag(single, "IS_RP(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)))
                     case 7n+q:
                       Gen.pat.go(Core.PCtor{name, h <> t}, 0n, g, path, 200, None{}, 0n,
                         Gen.pat.bnode(ar, path, Gen.pat.tag(single, "IS_B(" ++ path ++ ")", r)))
@@ -4738,6 +4752,9 @@ def Gen.ctor.hnode(+tag: U32, +ds: List<&2, Doc>) -> Doc:
     Doc.list([DStr{"CHN(" ++ U32.show(tag) ++ ", " ++ U32.show(n) ++ ", "},
       Gen.arr(ds), DStr{")"}]))
 
+def Gen.ctor.pnode(+tag: U32, +ds: List<&2, Doc>, +tok: String) -> Doc:
+  Doc.list([DStr{"RPN(" ++ Bool.pick(String, String.is_empty(tok), "0", tok) ++ ", " ++ U32.show(tag) ++ ", " ++ U32.show(Gen.len(ds)) ++ ", "}, Gen.arr(ds), DStr{")"}])
+
 def Gen.ctor.kind(+tag: U32, kind: Nat, ds: List<&2, Doc>) -> Doc:
   match kind:
     case 0n:
@@ -4756,6 +4773,8 @@ def Gen.ctor.kind(+tag: U32, kind: Nat, ds: List<&2, Doc>) -> Doc:
       Doc.list([DStr{"arr_node("}, Gen.commas(ds), DStr{")"}])
     case 7n:
       Doc.list([DStr{"LI(" ++ U32.show(tag) ++ ", "}, Doc.list(ds), DStr{")"}])
+    case 9n:
+      Gen.ctor.pnode(tag, ds, "")
     case 8n+p:
       Gen.ctor.bnode("B", "", ds)
 
@@ -4770,9 +4789,10 @@ def Gen.ctor.ru(+tok: String, +h: String, +tag: U32, +ds: List<&2, Doc>) -> Doc:
 
 # (CG: under the collector, the slot is young again, see bendrt.h)
 def Gen.ctor.kind.ru(rc: Bool, +tok: String, +tag: U32, +kind: Nat, +ds: List<&2, Doc>) -> Doc:
+  Bool.pick(Doc, Nat.is_eq(kind, 9n), Gen.ctor.pnode(tag, ds, tok),
   Bool.pick(Doc, String.is_empty(tok), Gen.ctor.kind(tag, kind, ds),
     Bool.pick(Doc, Nat.is_eq(kind, 8n), Gen.ctor.bnode("BG", tok ++ ", ", ds),
-      Gen.ctor.ru(tok, Bool.pick(String, rc, "CR", "CG"), tag, ds)))
+      Gen.ctor.ru(tok, Bool.pick(String, rc, "CR", "CG"), tag, ds))))
 
 def Gen.ctor.hnode.ru(+tok: String, +tag: U32, +ds: List<&2, Doc>) -> Doc:
   Bool.pick(Doc, String.is_empty(tok), Gen.ctor.hnode(tag, ds), Gen.ctor.ru(tok, "CRH", tag, ds))
@@ -8168,8 +8188,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case Some{CInfo{+tag, ar, +kind, single}}:
               do Gen<Doc>:
                 +ds : List<&2, Doc> <- Gen.rec(fu, GSBitsArgs{g, env, P.which(name, ["U32", "F32"]), args})
-                +tok : String <- Gen.ru.take(Bool.and(Gen.free(g), Bool.or(U32.is_zero(kind), U32.is_eq(kind, 8))),
-                  Bool.pick(U32, U32.is_eq(kind, 8), U32.add(256, Gen.len(ds)), U32.inc(Gen.len(ds))))
+                +tok : String <- Gen.ru.take(Bool.and(Gen.free(g), Bool.or(U32.is_zero(kind), Bool.or(U32.is_eq(kind, 8), U32.is_eq(kind, 9)))),
+                  Bool.pick(U32, U32.is_eq(kind, 9), U32.add(2147483648, Gen.len(ds)), Bool.pick(U32, U32.is_eq(kind, 8), U32.add(256, Gen.len(ds)), U32.inc(Gen.len(ds)))))
                 return Gen.ctor.kind.ru(Gen.rc(g), tok, tag, U32.to_nat(kind), ds)
         case GSCtor{+g, +env, +name, args}:
           Gen.rec(fu, GSCtorInfo{g, env, name, G.ctor(g, name), args})
@@ -13625,14 +13645,15 @@ def Gen.printer.test(+kind: U32, +tag: U32, single: Bool) -> String:
   Bool.pick(String, single, "if (1)",
     Bool.pick(String, U32.is_eq(kind, 1), "if (v == IMM(" ++ U32.show(tag) ++ "))",
       Bool.pick(String, U32.is_eq(kind, 7), "if (IS_LI(v, " ++ U32.show(tag) ++ "))",
+        Bool.pick(String, U32.is_eq(kind, 9), "if (IS_RP(v, " ++ U32.show(tag) ++ "))",
         Bool.pick(String, U32.is_eq(kind, 8), "if (IS_B(v))",
-          "if (!(v & 1) && TAG(v) == " ++ U32.show(tag) ++ ")"))))
+          "if (!(v & 1) && TAG(v) == " ++ U32.show(tag) ++ ")")))))
 
 # The path of a constructor's fields, for its printer (a word leaf's one
 # field is its payload).
 def Gen.printer.path(+kind: U32) -> String:
   Bool.pick(String, U32.is_eq(kind, 2), "v", Bool.pick(String, U32.is_eq(kind, 7), "LI_F(v, ",
-    Bool.pick(String, U32.is_eq(kind, 8), "FLB(v, ", "FLD(v, ")))
+    Bool.pick(String, U32.is_eq(kind, 9), "FLP(v, ", Bool.pick(String, U32.is_eq(kind, 8), "FLB(v, ", "FLD(v, "))))
 
 # A dependent pair prints as a pair.
 def Ty.alias(+h: String) -> String:
@@ -14355,7 +14376,8 @@ def Main.emit(+ds: List<&2, Decl>, r: COut) -> IO(Unit):
         IO.print_err(String.join(List.reverse(&2, String, e <> t), "\n"))
         IO.die(Unit, 1, "bendc: compilation failed")
 
-# BEND_RC=1: reference counting (see "Reference counting" in bendrt.h).
+
+# BEND_RC=1: reference counting (see bendrt.h).
 def Main.rc(r: Result<&1, &1, U32 & String, String>) -> Bool:
   match r:
     case Done{v}:
@@ -16230,6 +16252,8 @@ def K.ctor.kind(+tag: U32, kind: Nat, +ds: List<&2, Doc>) -> KM(Doc):
       KM.pure(Doc, DStr{"k_arr(c)"})
     case 7n:
       KM.pure(Doc, Doc.list([DStr{"KLI(" ++ U32.show(tag) ++ ", "}, Doc.list(ds), DStr{")"}]))
+    case 9n:
+      K.ctor.kind(tag, 0n, ds)
     case 8n+p:
       do KM<Doc>:
         +k : U32 <- K.slot()
@@ -16338,6 +16362,8 @@ def K.pat.go(n: Nat, k: KPatSel) -> KPatSel.ty(k):
             case 7n:
               K.pat.go(fu, KPFields{g, args, "KLI_V(" ++ path ++ ")", 99,
                 Gen.pat.tag(single, "KIS_LI(" ++ path ++ ", " ++ U32.show(tag) ++ ")", r)})
+            case 9n:
+              K.pat.go(fu, KPKind{g, 0n, tag, single, args, path, r})
             case 8n+p:
               K.pat.go(fu, KPFields{g, args, path, 200, Gen.pat.tag(single, "!((" ++ path ++ ") & 1)", r)})
         case KPCtor{+g, info, name, args, +path, r}:
@@ -16612,6 +16638,8 @@ def KX.ctor.kind(+tag: U32, kind: Nat, ds: List<&2, Doc>) -> KM(Doc):
       KM.pure(Doc, DStr{"k_arr(c)"})
     case 7n:
       KM.pure(Doc, Doc.list([DStr{"KLI(" ++ U32.show(tag) ++ ", "}, Doc.list(ds), DStr{")"}]))
+    case 9n:
+      KX.node(tag, ds)
     case 8n+p:
       KX.bnode(ds)
 
@@ -18131,12 +18159,16 @@ def KZ.cases(+f: String, +lk: String, +bk: String, cases: List<&2, Core.Expr>) -
     case other:
       None{}
 
+# CPU RP kind9 uses ordinary tagged nodes on the GPU (K.pat kind9).
+def KZ.nodekind(+kind: U32) -> Bool:
+  Bool.or(U32.is_zero(kind), U32.is_eq(kind, 9))
+
 def KZ.type(+g: G, +f: String, +ty: String, d: Decl, cases: List<&2, Core.Expr>) -> Maybe<&2, KZip>:
   match d:
     case DType{n, Nil{}, Ctor{+lk, +lf} <> Ctor{+bk, Field{x, +lt} <> Field{y, +rt} <> Nil{}} <> Nil{}}:
       Bool.pick(Maybe<&2, KZip>, Bool.and(KZ.scalar(lf), Bool.and(Nat.is_ge(List.length(&2, Field, lf), 1n),
-        Bool.and(Nat.is_le(List.length(&2, Field, lf), 8n), Bool.and(U32.is_zero(KQ.tree.kind(G.ctor(g, lk))),
-        Bool.and(U32.is_zero(KQ.tree.kind(G.ctor(g, bk))), Bool.and(Str.eq(P.head(lt), ty), Str.eq(P.head(rt), ty))))))),
+        Bool.and(Nat.is_le(List.length(&2, Field, lf), 8n), Bool.and(KZ.nodekind(KQ.tree.kind(G.ctor(g, lk))),
+        Bool.and(KZ.nodekind(KQ.tree.kind(G.ctor(g, bk))), Bool.and(Str.eq(P.head(lt), ty), Str.eq(P.head(rt), ty))))))),
         KZ.cases(f, lk, bk, cases), None{})
     case other:
       None{}
@@ -23159,7 +23191,7 @@ def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
     DStr{"\n" ++ entry}])), errs}
 
 def Gen.rc.main(+g: G) -> String:
-  Bool.pick(String, Gen.rc(g), " bend_rc_req = 1;", "")
+  Bool.pick(String, Gen.rc(g), " bend_rc_req = 1; bend_rc_trace_req = BEND_RC_HYBRID_DEFAULT;", "")
 
 def Gen.entry.ty(+g: G, +ret: Core.Expr, io: Bool) -> Gen(String):
   match io:
@@ -23505,12 +23537,120 @@ def G.hless(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
     case False{}:
       g
 
+# Private packed counted constructors: first field is a monomorphic U32.
+def RP.field(fs: List<&2, Field>) -> Bool:
+  match fs:
+    case Field{n, t} <> rest:
+      Bool.and(Str.eq(Ty.head(t), "U32"), Bool.not(Unb.sum.u32s(rest)))
+    case Nil{}:
+      False{}
+
+def RP.set(c: CInfo, +ok: Bool) -> CInfo:
+  CInfo{+tag, +ar, +kind, +single} = c
+  CInfo{tag, ar, Bool.pick(U32, Bool.and(ok, Bool.and(U32.is_zero(kind),
+    Bool.and(U32.is_le(tag, 65535), Bool.and(U32.is_ge(ar, 2), U32.is_le(ar, 15))))), 9, kind), single}
+
+def RP.ctors(cs: List<&2, Ctor>, +m: Map<&2, CInfo>, +ok: Bool) -> Map<&2, CInfo>:
+  match cs:
+    case Nil{}:
+      m
+    case Ctor{+name, fields} <> rest:
+      RP.ctors(rest, Map.set(&2, CInfo, m, name, RP.set(Pair.snd(Map<&2, CInfo>, CInfo,
+        Map.get(CInfo, CInfo{0, 0, 4, False{}}, m, name)), Bool.and(ok, RP.field(fields)))), ok)
+
+type RPSel is Data:
+  RPE{e: Core.Expr, bound: List<&2, String>}
+  RPL{es: List<&2, Core.Expr>, bound: List<&2, String>}
+
+def RP.gpu.go(fuel: Nat, sel: RPSel) -> List<&2, String>:
+  match fuel:
+    case 0n:
+      ["%unknown"]
+    case 1n+ +f:
+      match sel:
+        case RPL{es, +bound}:
+          match es:
+            case Nil{}:
+              Nil{}
+            case e <> rest:
+              List.append(&2, String, RP.gpu.go(f, RPE{e, bound}), RP.gpu.go(f, RPL{rest, bound}))
+        case RPE{e, +bound}:
+          match e:
+            case Core.ECall{Core.EVar{"%gpu"}, Core.EVar{+n} <> args}:
+              Bool.pick(String, Str.has(bound, n), "%unknown", n) <> RP.gpu.go(f, RPL{args, bound})
+            case Core.ECall{Core.EVar{"%gpu"}, args}:
+              "%unknown" <> RP.gpu.go(f, RPL{args, bound})
+            case Core.ECall{fn, args}:
+              List.append(&2, String, RP.gpu.go(f, RPE{fn, bound}), RP.gpu.go(f, RPL{args, bound}))
+            case Core.ECtor{n, args}:
+              RP.gpu.go(f, RPL{args, bound})
+            case Core.EMatch{xs, cs}:
+              List.append(&2, String, RP.gpu.go(f, RPL{xs, bound}), RP.gpu.go(f, RPL{cs, bound}))
+            case Core.ECase{ps, b}:
+              RP.gpu.go(f, RPE{b, Pats.vars(ps, bound)})
+            case Core.ELet{+p, v, b}:
+              List.append(&2, String, RP.gpu.go(f, RPE{v, bound}), RP.gpu.go(f, RPE{b, Pat.vars(p, bound)}))
+            case Core.ELam{p, b}:
+              RP.gpu.go(f, RPE{b, Pat.vars(p, bound)})
+            case Core.EAnn{x, t}:
+              RP.gpu.go(f, RPE{x, bound})
+            case Core.EOp{op, a, b}:
+              List.append(&2, String, RP.gpu.go(f, RPE{a, bound}), RP.gpu.go(f, RPE{b, bound}))
+            case Core.ESucc{k, x}:
+              RP.gpu.go(f, RPE{x, bound})
+            case other:
+              Nil{}
+
+def RP.gpu.refs(fuel: Nat, e: Core.Expr, bound: List<&2, String>) -> List<&2, String>:
+  RP.gpu.go(fuel, RPE{e, bound})
+
+def RP.gpu.roots(ds: List<&2, Decl>) -> List<&2, String>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case DDef{n, ps, b, ret} <> rest:
+      List.append(&2, String, RP.gpu.refs(100000n, b, Ty.pnames(ps)), RP.gpu.roots(rest))
+    case d <> rest:
+      RP.gpu.roots(rest)
+
+def RP.gpu.types(+roots: List<&2, String>, ds: List<&2, Decl>) -> List<&2, String>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case DDef{+n, ps, b, ret} <> rest:
+      List.append(&2, String, Bool.pick(List<&2, String>, Str.has(roots, n),
+        List.append(&2, String, G.hless.pexprs(ps), G.hless.tnames(8n, [ret])), Nil{}), RP.gpu.types(roots, rest))
+    case d <> rest:
+      RP.gpu.types(roots, rest)
+
+def RP.decls(ds: List<&2, Decl>, +m: Map<&2, CInfo>, +blocked: List<&2, String>, +known: Bool) -> Map<&2, CInfo>:
+  match ds:
+    case Nil{}:
+      m
+    case DType{+name, ps, cs} <> rest:
+      +ok = Bool.and(known, Bool.and(List.is_empty(&2, String, ps), Bool.not(Str.has(blocked, name))))
+      RP.decls(rest, RP.ctors(cs, m, ok), blocked, known)
+    case d <> rest:
+      RP.decls(rest, m, blocked, known)
+
+def RP.program(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
+  match on:
+    case False{}:
+      g
+    case True{}:
+      G{ctors, defs, bodies, dps} = g
+      +roots = Gen.dedup(RP.gpu.roots(ds), Nil{})
+      +blocked = G.hless.reach(16n, Gen.dedup(List.append(&2, String, G.hless.foreign(ds),
+        List.append(&2, String, RP.gpu.types(roots, ds),
+          ["String", "Image", "Event", "IO.OP", "App", "Word", "U32", "F32", "Char", "Nat", "Array", "Bool", "Unit", "Cmp", "Empty"])), Nil{}), ds)
+      G{RP.decls(ds, ctors, blocked, Bool.not(Str.has(roots, "%unknown"))), defs, bodies, dps}
+
 def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
   +beforepar = Lo.program(opt, Arrw.decls(Pick.decls(ds0)))
   +lowered = Unb.program(unb, Unb.program(unb, Nest.program(unb, Unb.sum.program(unb, Par.auto(par, beforepar)))))
   +ds = RO.program(rc, lowered)
   +g = Unb.sret(unb, ds, Dps.build(G.hless(Bool.and(Opt.on(opt, 104), Bool.not(rc)),
-    G.li(Opt.on(opt, 119), G.new(ds), ds), ds), ds, free, rc))
+    RP.program(rc, G.li(Opt.on(opt, 119), G.new(ds), ds), ds), ds), ds, free, rc))
   +hostg = KQ.host.book(g, beforepar)
   Gen.program.fin(hostg, Gen.cids(hostg, ds, 0),
     Gen.program.m(hostg)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
@@ -27611,7 +27751,186 @@ def Main.opt(r: Result<&1, &1, U32 & String, String>) -> String:
 # C for a program: matches free what they open unless BEND_NO_FREE is set
 # (bendc builds itself so: a compiler's heap is mostly shared, short-lived
 # data, which tracing handles for less).
-def Main.emit.c(+ds: List<&2, Decl>) -> IO(Unit):
+# Conservative default hybrid subset. Every numeric value is <=2^32-1:
+# literal Nat is U32; native growing Nat arithmetic and positive successors
+# reject. Unknown effects and indirect calls reject. Fuel exhaustion rejects.
+type HYWork is Data:
+  HYWork{e: Core.Expr, bound: List<&2, String>, narrow: Bool}
+
+def HY.work(xs: List<&2, Core.Expr>, +bound: List<&2, String>, +narrow: Bool) -> List<&2, HYWork>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case e <> rest:
+      HYWork{e, bound, narrow} <> HY.work(rest, bound, narrow)
+
+def HY.natives() -> List<&2, String>:
+  ["U32.inc", "U32.add", "U32.sub", "U32.mul", "U32.div",
+   "U32.mod", "U32.not", "U32.and", "U32.or", "U32.xor",
+   "U32.shl", "U32.shr", "U32.shln", "U32.shrn", "U32.cmp",
+   "U32.is_eq", "U32.is_ne", "U32.is_lt", "U32.is_le", "U32.is_gt",
+   "U32.is_ge", "U32.is_zero", "U32.is_even", "U32.to_nat", "U32.from_nat",
+   "U32.min", "U32.max", "U32.pow", "U32.log2", "U32.to_f32",
+   "Nat.sub", "Nat.divmod", "Nat.div", "Nat.mod", "Nat.cmp",
+   "Nat.is_eq", "Nat.is_ne", "Nat.is_lt", "Nat.is_le", "Nat.is_gt",
+   "Nat.is_ge", "Nat.min", "Nat.max", "Nat.show", "F32.add",
+   "F32.sub", "F32.mul", "F32.div", "F32.mod", "F32.pow",
+   "F32.atan2", "F32.is_eq", "F32.is_ne", "F32.is_lt", "F32.is_le",
+   "F32.is_gt", "F32.is_ge", "F32.neg", "F32.abs", "F32.sqrt",
+   "F32.exp", "F32.log", "F32.log2", "F32.log10", "F32.sin",
+   "F32.cos", "F32.tan", "F32.asin", "F32.acos", "F32.atan",
+   "F32.sinh", "F32.cosh", "F32.tanh", "F32.floor", "F32.ceil",
+   "F32.trunc", "F32.bits", "F32.to_u32", "F32.show", "F32.read",
+   "Map.bit", "Map.get", "Map.has", "String.cmp", "String.eq",
+   "Array.size", "Array.get", "Array.swap", "Array.set", "Array.new",
+   "Array.clone", "Array.get%w", "Array.swap%w", "Array.set%w", "Array.new%w",
+   "Array.atomic.add", "Array.atomic.min", "Array.atomic.max", "Array.atomic.and", "Array.atomic.or",
+   "Array.atomic.xor", "Array.atomic.exch", "Array.atomic.cas", "Array.atomic.fadd"]
+
+def HY.native(+g: G, +f: String) -> Bool:
+  Bool.and(U32.is_eq(DInfo.kind(G.def(g, f)), 2), Str.has(HY.natives(), f))
+
+def HY.op(op: String) -> Bool:
+  Str.has(["-", "/", "%", "&", "|", "^", "==", "!=", "<", ">", "<=", ">=", ">>"], op)
+
+def HY.device(d: Decl) -> Bool:
+  match d:
+    case DDef{n, ps, b, ret}:
+      Str.has(["U32", "F32", "Bool", "Char"], Ty.head(ret))
+    case other:
+      False{}
+
+def HY.expr.go(fuel: Nat, +g: G, todo: List<&2, HYWork>) -> Bool:
+  match fuel:
+    case 0n:
+      False{}
+    case 1n+fu:
+      match todo:
+        case Nil{}:
+          True{}
+        case HYWork{e, +bound, +narrow} <> rest:
+          match e:
+            case Core.ECall{Core.EVar{"%gpu"}, Core.EVar{+f} <> args}:
+              Bool.and(Bool.not(Str.has(bound, f)), Bool.and(HY.device(G.body(g, f)),
+                HY.expr.go(fu, g, List.append(&2, HYWork, HY.work(args, bound, False{}), rest))))
+            case Core.ECall{Core.EVar{+f}, args}:
+              Bool.and(Bool.not(Str.has(bound, f)),
+                HY.expr.go(fu, g, List.append(&2, HYWork, HY.work(args, bound, False{}), rest)))
+            case Core.ECall{f, args}:
+              False{}
+            case Core.EVar{"%gpu"}:
+              False{}
+            case Core.ECtor{n, args}:
+              HY.expr.go(fu, g, List.append(&2, HYWork, HY.work(args, bound, False{}), rest))
+            case Core.ELam{pat, body}:
+              HY.expr.go(fu, g, HYWork{body, Pat.vars(pat, bound), False{}} <> rest)
+            case Core.ELet{pat, v, body}:
+              HY.expr.go(fu, g, HYWork{v, bound, False{}} <> HYWork{body, Pat.vars(pat, bound), narrow} <> rest)
+            case Core.EMatch{scrs, cs}:
+              HY.expr.go(fu, g, List.append(&2, HYWork, HY.work(scrs, bound, False{}),
+                List.append(&2, HYWork, HY.work(cs, bound, narrow), rest)))
+            case Core.ECase{ps, body}:
+              HY.expr.go(fu, g, HYWork{body, Pats.vars(ps, bound), narrow} <> rest)
+            case Core.ESucc{k, x}:
+              Bool.and(U32.is_zero(k), HY.expr.go(fu, g, HYWork{x, bound, False{}} <> rest))
+            case Core.EOp{op, a, b}:
+              Bool.and(Bool.or(narrow, HY.op(op)),
+                HY.expr.go(fu, g, HYWork{a, bound, narrow} <> HYWork{b, bound, narrow} <> rest))
+            case Core.EAnn{x, ty}:
+              HY.expr.go(fu, g, HYWork{x, bound, Str.has(["U32", "F32", "Char"], P.thead(ty))} <> rest)
+            case other:
+              HY.expr.go(fu, g, rest)
+
+def HY.expr(+g: G, e: Core.Expr, bound: List<&2, String>, ret: Core.Expr) -> Bool:
+  HY.expr.go(4096n, g, [HYWork{e, bound, False{}}])
+
+def HY.strings.eq(xs: List<&2, String>, ys: List<&2, String>) -> Bool:
+  match xs ys:
+    case Nil{} Nil{}:
+      True{}
+    case x <> xr y <> yr:
+      Bool.and(Str.eq(x,y), HY.strings.eq(xr,yr))
+    case other rest:
+      False{}
+
+def HY.params.eq(xs: List<&2, Core.Param>, ys: List<&2, Core.Param>) -> Bool:
+  match xs ys:
+    case Nil{} Nil{}:
+      True{}
+    case Core.Param{x,m,t} <> xr Core.Param{y,n,u} <> yr:
+      Bool.and(U32.is_eq(m,n), Bool.and(Str.eq(t,u), HY.params.eq(xr,yr)))
+    case other rest:
+      False{}
+
+def HY.effect(base: List<&2, Decl>, +name: String, +ps: List<&2, Core.Param>, +ims: List<&2, String>, +ret: Core.Expr) -> Bool:
+  match base:
+    case Nil{}:
+      False{}
+    case DEff{+n, bps, bims, bret} <> rest:
+      Bool.pick(Unit -> Bool, Str.eq(n,name),
+        u => Bool.and(Str.has(["IO.print", "IO.write", "IO.print_err"], n),
+          Bool.and(HY.params.eq(ps,bps), Bool.and(HY.strings.eq(ims,bims), Str.eq(Expr.show(ret),Expr.show(bret))))),
+        u => HY.effect(rest,name,ps,ims,ret))(Unit{})
+    case d <> rest:
+      HY.effect(rest,name,ps,ims,ret)
+
+def HY.go(fuel: Nat, +g: G, +base: List<&2, Decl>, k: KTreeClean) -> Bool:
+  match fuel:
+    case 0n:
+      False{}
+    case 1n+fu:
+      match k:
+        case KTWalk{names, +seen}:
+          match names:
+            case Nil{}:
+              True{}
+            case +f <> rest:
+              HY.go(fu, g, base, KTNext{f, rest, seen, Bool.or(Str.has(seen, f), Bool.or(HY.native(g, f), Str.eq(f, "%gpu")))})
+        case KTNext{+f, rest, seen, skip}:
+          match skip:
+            case True{}:
+              HY.go(fu, g, base, KTWalk{rest, seen})
+            case False{}:
+              HY.go(fu, g, base, KTDecl{f, rest, seen, DInfo.kind(G.def(g, f)), G.body(g, f)})
+        case KTDecl{f, rest, seen, +kind, d}:
+          match kind:
+            case 3:
+              HY.go(fu, g, base, KTWalk{rest, f <> seen})
+            case other:
+              match d:
+                case DDef{n, +ps, body, +ret}:
+                  +clean : Core.Expr = R.ops(body, "Nat")
+                  Bool.and(U32.is_zero(kind), Bool.and(HY.expr(g, clean, Ty.pnames(ps), ret),
+                    HY.go(fu, g, base, KTWalk{List.append(&2, String, FV.expr(clean, Ty.pnames(ps), Nil{}), rest), f <> seen})))
+                case DEff{n, ps, ims, ret}:
+                  Bool.and(HY.effect(base,n,ps,ims,ret), HY.go(fu,g,base,KTWalk{rest,f <> seen}))
+                case other:
+                  False{}
+
+def HY.no_args(ms: List<&2, Bool>) -> Bool:
+  match ms:
+    case Nil{}:
+      True{}
+    case m <> rest:
+      Bool.and(Bool.not(m), HY.no_args(rest))
+
+def HY.program(+ds: List<&2, Decl>, base: List<&2, Decl>) -> Bool:
+  +g = G.new(ds)
+  Bool.and(U32.is_zero(DInfo.kind(G.def(g, "main"))),
+    Bool.and(HY.no_args(DInfo.mask(G.def(g, "main"))), HY.go(4096n, g, base, KTWalk{["main"], Nil{}})))
+
+def HY.default(r: Result<&1, &1, U32 & String, String>, +free: Bool, ds: List<&2, Decl>, base: List<&2, Decl>) -> Bool:
+  match r:
+    case Done{v}:
+      False{}
+    case Fail{e}:
+      Bool.and(free, HY.program(ds,base))
+
+def HY.enable(on: Bool, r: COut) -> COut:
+  COut{head, effs, body, errs} = r
+  COut{Bool.pick(String, on, "#define BEND_RC_HYBRID_DEFAULT 1\n", "") ++ head, effs, body, errs}
+
+def Main.emit.c(+ds: List<&2, Decl>, base: List<&2, Decl>) -> IO(Unit):
   do IO<Unit>:
     r : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
     r2 : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_NO_FREE")
@@ -27619,7 +27938,10 @@ def Main.emit.c(+ds: List<&2, Decl>) -> IO(Unit):
     ub : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_UNBOX")
     op : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_OPT")
     rc : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_RC")
-    Main.emit(ds, Gen.program(ds, Main.free(r), Main.auto_par(ap, Main.free(r2)), Main.opt(op), Main.unbox(ub), Main.rc(rc)))
+    rc2 : Result<&1, &1, U32 & String, String> <- IO.get_env("BEND_RC")
+    +canfree : Bool = Main.free(r)
+    +autorc : Bool = HY.default(rc, canfree, ds, base)
+    Main.emit(ds, HY.enable(autorc, Gen.program(ds, canfree, Main.auto_par(ap, Main.free(r2)), Main.opt(op), Main.unbox(ub), Bool.or(Main.rc(rc2), autorc))))
 
 def J.entry.ty(+j: JG, +ret: Core.Expr, io: Bool) -> Gen(String):
   match io:
@@ -27653,18 +27975,18 @@ def J.program.go(+ds: List<&2, Decl>) -> COut:
 def J.program(ds: List<&2, Decl>) -> COut:
   J.program.go(Pick.decls(ds))
 
-def Main.emit.to.go(js: Bool, +ds: List<&2, Decl>) -> IO(Unit):
+def Main.emit.to.go(js: Bool, +ds: List<&2, Decl>, base: List<&2, Decl>) -> IO(Unit):
   match js:
     case True{}:
       Main.emit.js(ds, J.program(ds))
     case False{}:
-      Main.emit.c(ds)
+      Main.emit.c(ds,base)
 
-def Main.emit.to.sh(js: Bool, +ds: List<&2, Decl>) -> IO(Unit):
-  Main.emit.to.go(js, LM.decls(ds, ds))
+def Main.emit.to.sh(js: Bool, +ds: List<&2, Decl>, base: List<&2, Decl>) -> IO(Unit):
+  Main.emit.to.go(js, LM.decls(ds, ds),base)
 
-def Main.emit.to(js: Bool, ds: List<&2, Decl>) -> IO(Unit):
-  Main.emit.to.sh(js, ds)
+def Main.emit.to(js: Bool, ds: List<&2, Decl>, base: List<&2, Decl>) -> IO(Unit):
+  Main.emit.to.sh(js, ds,base)
 
 def Main.compile(js: Bool, base: Result<&2, &2, String, List<&2, Decl>>,
   user: Result<&2, &2, String, List<&2, Decl>>
@@ -27674,8 +27996,8 @@ def Main.compile(js: Bool, base: Result<&2, &2, String, List<&2, Decl>>,
       IO.die(Unit, 1, "bendc: parse error in base: " ++ e)
     case Done{b} Fail{e}:
       IO.die(Unit, 1, "bendc: parse error: " ++ e)
-    case Done{b} Done{u}:
-      Main.emit.to(js, List.append(&2, Decl, b, u))
+    case Done{+b} Done{u}:
+      Main.emit.to(js, List.append(&2, Decl, b, u),b)
 
 def Main.build(js: Bool, +base_path: String, user_path: String) -> IO(Unit):
   do IO<Unit>:
@@ -27741,8 +28063,8 @@ def Main.boot.compile(base: Result<&2, &2, String, List<&2, Decl>>, user: Result
       IO.die(Unit, 1, "bendc: parse error in base: " ++ e)
     case Done{b} Fail{e}:
       IO.die(Unit, 1, "bendc: parse error: " ++ e)
-    case Done{b} Done{u}:
-      Main.emit.c(List.append(&2, Decl, b, u))
+    case Done{+b} Done{u}:
+      Main.emit.c(List.append(&2, Decl, b, u),b)
 
 # The driver of boot.bend: bendc --no-check, without the checker.
 def Main.boot(args: List<&2, String>) -> IO(Unit):
