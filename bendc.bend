@@ -5074,7 +5074,7 @@ def Gen.scalar.ty(+t: String) -> Bool:
 def Gen.scalar.wrap(scalar: Bool, +c: String) -> String:
   Bool.pick(String, scalar, "(" ++ c ++ ")", c)
 
-def Gen.scalar.c(c: String) -> Bool:
+def Gen.scalar.c.base(c: String) -> Bool:
   match c:
     case SCon{Chr{40}, t}:
       True{}
@@ -5085,6 +5085,11 @@ def Gen.scalar.c(c: String) -> Bool:
 
 # What a variable holds, as Gen.scalar.let says: a let's U32 local is
 # "(uN)" (a uint32_t), any other scalar's name is in parentheses.
+
+# A word leaf payload is always a uint32_t, never an owned node.
+def Gen.scalar.c(+c: String) -> Bool:
+  Bool.or(String.starts_with(c, "LI_V("), Gen.scalar.c.base(c))
+
 def Gen.scalar.u32.find(m: Maybe<&2, String>) -> U32:
   match m:
     case Some{+c}:
@@ -15493,14 +15498,86 @@ def K.flat.add.go(d: Doc, st: KSt) -> Unit & KSt:
 def K.flat.add(d: Doc) -> KM(Unit):
   st => K.flat.add.go(d, st)
 
-def KX.sig(ps: List<&2, Core.Param>, mask: List<&2, Bool>, +i: U32) -> Env():
+# Lexical mask metadata follows parameters and exact array-pair aliases.
+# New binders hide outer av metadata; exact array pairs preserve identity.
+def KX.view.key(x: String) -> String:
+  "%array-av " ++ x
+
+def KX.view.find(m: Maybe<&2, String>) -> String:
+  match m:
+    case Some{s}:
+      s
+    case None{}:
+      ""
+
+def KX.view.arg(+env: Env(), args: List<&2, Core.Expr>) -> String:
+  match args:
+    case ty <> Core.EVar{x} <> rest:
+      KX.view.find(Env.find(env, KX.view.key(x)))
+    case other:
+      ""
+
+def KX.view.clear(bs: Env()) -> Env():
+  match bs:
+    case Nil{}:
+      Nil{}
+    case Bind{x, c} <> t:
+      Bind{KX.view.key(x), ""} <> KX.view.clear(t)
+
+def KX.env.add(+bs: Env(), env: Env()) -> Env():
+  List.append(&2, Bind, bs, List.append(&2, Bind, KX.view.clear(bs), env))
+
+def KX.view.pair(ps: List<&2, Core.Pat>, av: String, env: Env()) -> Env():
+  match ps:
+    case Core.PVar{x} <> rest:
+      Bind{KX.view.key(x), av} <> env
+    case other:
+      env
+
+def KX.view.native(e: Core.Expr) -> List<&2, String>:
+  match e:
+    case Core.ECall{Core.EVar{+f}, ty <> Core.EVar{x} <> rest}:
+      Bool.pick(List<&2, String>, Str.has(["Array.get", "Array.get%w", "Array.swap", "Array.swap%w"], f), [x], Nil{})
+    case other:
+      Nil{}
+
+def KX.view.remove(names: List<&2, String>, +bound: List<&2, String>) -> List<&2, String>:
+  match names:
+    case Nil{}:
+      Nil{}
+    case +x <> t:
+      +rest = KX.view.remove(t, bound)
+      Bool.pick(List<&2, String>, Str.has(bound, x), rest, x <> rest)
+
+def KX.view.prefix(body: Core.Expr) -> List<&2, String>:
+  match body:
+    case Core.ELet{p, v, b}:
+      List.append(&2, String, KX.view.native(v), KX.view.remove(KX.view.prefix(b), Pat.vars(p, Nil{})))
+    case other:
+      KX.view.native(other)
+
+
+def KX.info.count(ps: List<&2, Core.Param>, mask: List<&2, Bool>) -> U32:
   match ps mask:
     case Core.Param{x, m, t} <> pt True{} <> mt:
-      Bind{x, "a" ++ U32.show(i)} <> KX.sig(pt, mt, U32.inc(i))
+      U32.add(Bool.pick(U32, Str.eq(t, "Array"), 1, 0), KX.info.count(pt, mt))
     case Core.Param{x, m, t} <> pt False{} <> mt:
-      Bind{x, "0"} <> KX.sig(pt, mt, i)
+      KX.info.count(pt, mt)
+    case pl ml:
+      0
+
+def KX.sig.go(+needed: List<&2, String>, ps: List<&2, Core.Param>, mask: List<&2, Bool>, +i: U32, +carry: Bool) -> Env():
+  match ps mask:
+    case Core.Param{+x, m, t} <> pt True{} <> mt:
+      Bind{x, "a" ++ U32.show(i)} <> Bind{KX.view.key(x), Bool.pick(String, Bool.and(carry, Bool.or(Str.eq(t, "Array"), Str.has(needed, x))), "am" ++ U32.show(i), "")} <>
+        KX.sig.go(needed, pt, mt, U32.inc(i), carry)
+    case Core.Param{x, m, t} <> pt False{} <> mt:
+      Bind{x, "0"} <> KX.sig.go(needed, pt, mt, i, carry)
     case pl ml:
       Nil{}
+
+def KX.sig(+needed: List<&2, String>, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, i: U32) -> Env():
+  KX.sig.go(needed, ps, mask, i, U32.is_gt(KX.info.count(ps, mask), 3))
 
 # A U32, F32 or Bool fits a KU (see rt/gpu.h): so do a flat def's parameters
 # and result of those types, and its Nat parameters, checked (KNAT32).
@@ -15679,11 +15756,12 @@ def KX.let.ko(+g: G, p: Core.Pat, v: Core.Expr) -> Nat:
 # An Array.get (sw False) or Array.swap (sw True) of the words ds (the type,
 # the array, the index and the value), into locals xk_0 (the array) and xk_1
 # (the cell read).
-def KX.arr.call(sw: Bool, +k: U32, ds: List<&2, Doc>) -> Doc:
+def KX.arr.call(+sw: Bool, +av: String, +k: U32, ds: List<&2, Doc>) -> Doc:
   match ds:
     case t <> a <> r:
-      Doc.list([DStr{"KW " ++ KX.v(k) ++ "_0 = "}, a, DStr{"; KW " ++ KX.v(k) ++ "_1 = " ++ Bool.pick(String, sw, "k_aswap", "k_aget") ++
-        "(c, " ++ KX.v(k) ++ "_0"}, Doc.list(K.commas_pre(r)), DStr{");\n"}])
+      Doc.list([DStr{"KW " ++ KX.v(k) ++ "_0 = "}, a, DStr{"; KW " ++ KX.v(k) ++ "_1 = " ++ Bool.pick(String, Str.eq(av, ""),
+        Bool.pick(String, sw, "k_aswap", "k_aget") ++ "(c, " ++ KX.v(k) ++ "_0",
+        Bool.pick(String, sw, "k_aiswap(c, ", "k_aiget(c, ") ++ KX.v(k) ++ "_0, " ++ av)}, Doc.list(K.commas_pre(r)), DStr{");\n"}])
     case other:
       DStr{"k_fail(c, KE_FX);\n"}
 
@@ -15691,20 +15769,120 @@ def KX.arr.call(sw: Bool, +k: U32, ds: List<&2, Doc>) -> Doc:
 # grows past the GPU's instruction cache, raytrace 1.5x slower), and does
 # not start once the arena ran out (k_short in rt/gpu.h). The loops
 # themselves read no error (see KXSTail).
-def KX.head(+lp: Bool, +name: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, r: Core.Expr) -> String:
+# A direct access consumes its descriptor immediately. Carry otherwise-unused
+# Array descriptors only beyond the runtime's three-array cache capacity.
+def KX.info.flags.go(+needed: List<&2, String>, ps: List<&2, Core.Param>, mask: List<&2, Bool>, +carry: Bool) -> List<&2, Bool>:
+  match ps mask:
+    case Core.Param{x, m, t} <> pt True{} <> mt:
+      Bool.and(carry, Bool.or(Str.eq(t, "Array"), Str.has(needed, x))) <> KX.info.flags.go(needed, pt, mt, carry)
+    case Core.Param{x, m, t} <> pt False{} <> mt:
+      KX.info.flags.go(needed, pt, mt, carry)
+    case pl ml:
+      Nil{}
+
+def KX.info.flags(+needed: List<&2, String>, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>) -> List<&2, Bool>:
+  KX.info.flags.go(needed, ps, mask, U32.is_gt(KX.info.count(ps, mask), 3))
+
+def KX.info.for.body(+g: G, +name: String, d: Decl) -> List<&2, Bool>:
+  match d:
+    case DDef{n, ps, body, ret}:
+      KX.info.flags(KX.view.prefix(body), ps, DInfo.mask(G.def(g, name)))
+    case other:
+      Nil{}
+
+def KX.info.for(+g: G, +name: String) -> List<&2, Bool>:
+  KX.info.for.body(g, name, G.body(g, name))
+
+def KX.info.decls(flags: List<&2, Bool>, +i: U32) -> String:
+  match flags:
+    case Nil{}:
+      ""
+    case f <> t:
+      Bool.pick(String, f, ", KW am" ++ U32.show(i), "") ++ KX.info.decls(t, U32.inc(i))
+
+def KX.info.meta(+env: Env(), e: Core.Expr) -> String:
+  match e:
+    case Core.EVar{x}:
+      KX.view.find(Env.find(env, KX.view.key(x)))
+    case other:
+      ""
+
+def KX.info.nflags(flags: List<&2, Bool>) -> U32:
+  match flags:
+    case Nil{}:
+      0
+    case f <> t:
+      U32.add(Bool.pick(U32, f, 1, 0), KX.info.nflags(t))
+
+def KX.info.one(+info: String, +i: U32, +derive: Bool) -> Doc:
+  DStr{Bool.pick(String, Str.eq(info, ""), Bool.pick(String, derive, "k_ainfo(c, ki" ++ U32.show(i) ++ ")", "0"), info)}
+
+def KX.info.args.go(flags: List<&2, Bool>, +env: Env(), args: List<&2, Core.Expr>, +i: U32, +derive: Bool) -> List<&2, Doc>:
+  match flags args:
+    case Nil{} other:
+      Nil{}
+    case f <> t e <> rest:
+      +tail = KX.info.args.go(t, env, rest, U32.inc(i), derive)
+      Bool.pick(List<&2, Doc>, f, KX.info.one(KX.info.meta(env, e), i, derive) <> tail, tail)
+    case f <> t Nil{}:
+      +tail = KX.info.args.go(t, env, Nil{}, U32.inc(i), derive)
+      Bool.pick(List<&2, Doc>, f, KX.info.one("", i, derive) <> tail, tail)
+
+def KX.info.args(+g: G, +name: String, env: Env(), args: List<&2, Core.Expr>) -> List<&2, Doc>:
+  KX.info.args.go(KX.info.for(g, name), env, args, 0, U32.is_gt(KX.info.nflags(KX.info.for(g, name)), 3))
+
+def KX.info.temps(ds: List<&2, Doc>, +i: U32) -> Doc:
+  match ds:
+    case Nil{}:
+      DNil{}
+    case d <> t:
+      Doc.list([DStr{"KAUTO ki" ++ U32.show(i) ++ " = "}, d, DStr{"; "}, KX.info.temps(t, U32.inc(i))])
+
+def KX.info.vars(n: Nat, +i: U32) -> List<&2, Doc>:
+  match n:
+    case 0n:
+      Nil{}
+    case 1n+m:
+      DStr{"ki" ++ U32.show(i)} <> KX.info.vars(m, U32.inc(i))
+
+def KX.info.tail(flags: List<&2, Bool>, +env: Env(), args: List<&2, Core.Expr>, +k: U32, +i: U32) -> String:
+  match flags args:
+    case f <> t e <> rest:
+      +meta = KX.info.meta(env, e)
+      Bool.pick(String, f, "KW mi" ++ U32.show(i) ++ " = " ++ Bool.pick(String, Str.eq(meta, ""),
+        "(" ++ KX.v(k) ++ "_" ++ U32.show(i) ++ " == a" ++ U32.show(i) ++ " ? am" ++ U32.show(i) ++
+        " : k_ainfo(c, " ++ KX.v(k) ++ "_" ++ U32.show(i) ++ "))", meta) ++ "; ", "") ++
+        KX.info.tail(t, env, rest, k, U32.inc(i))
+    case fs es:
+      ""
+
+def KX.info.tail.set(flags: List<&2, Bool>, +i: U32) -> String:
+  match flags:
+    case Nil{}:
+      ""
+    case f <> t:
+      Bool.pick(String, f, "am" ++ U32.show(i) ++ " = mi" ++ U32.show(i) ++ "; ", "") ++ KX.info.tail.set(t, U32.inc(i))
+
+def KX.head(+lp: Bool, +name: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, r: Core.Expr, needed: List<&2, String>) -> String:
   Bool.pick(String, lp, "KNOINLINE ", "KINLINE ") ++ KX.cty(P.head(r)) ++ " KX_" ++ Gen.mangle(name) ++ "(KTHR KCtx *c" ++
-    KX.cparams(ps, mask, 0) ++ ") {\n" ++ KX.nats(ps, mask, 0) ++
+    KX.cparams(ps, mask, 0) ++ KX.info.decls(KX.info.flags(needed, ps, mask), 0) ++ ") {\n" ++ KX.nats(ps, mask, 0) ++
     Bool.pick(String, lp, "if (k_short(c)) return 0;\n", "")
 
 # A call of flat def name from a flat def: one that loops, with a scalar
 # result, gives back the words it allocated (see KSCAL in rt/gpu.h); the
 # check costs more than it saves around a call that does not loop.
-def KX.call(sc: Bool, +name: String, ks: List<&2, Doc>) -> Doc:
-  Doc.list([DStr{Bool.pick(String, sc, "KSCAL(", "(") ++ "KX_" ++ Gen.mangle(name) ++ "(c"}, Doc.list(K.commas_pre(ks)),
-    DStr{"))"}])
+def KX.call(sc: Bool, +name: String, +ks: List<&2, Doc>, infos: List<&2, Doc>) -> Doc:
+  match infos:
+    case Nil{}:
+      Doc.list([DStr{Bool.pick(String, sc, "KSCAL(", "(") ++ "KX_" ++ Gen.mangle(name) ++ "(c"},
+        Doc.list(K.commas_pre(ks)), DStr{"))"}])
+    case +h <> +t:
+      Doc.list([DStr{Bool.pick(String, sc, "KSCAL(", "(") ++ "({ "}, KX.info.temps(ks, 0),
+        DStr{"KX_" ++ Gen.mangle(name) ++ "(c"}, Doc.list(K.commas_pre(KX.info.vars(U32.to_nat(Gen.len(ks)), 0))),
+        Doc.list(K.commas_pre(h <> t)), DStr{"); }))"}])
 
-def KX.call.box(sc: Bool, +n: U32, +name: String, ks: List<&2, Doc>) -> Doc:
-  Doc.list([DStr{KX.box(n)}, KX.call(sc, name, ks), DStr{")"}])
+def KX.call.box(sc: Bool, +n: U32, +name: String, ks: List<&2, Doc>, infos: List<&2, Doc>) -> Doc:
+  Doc.list([DStr{KX.box(n)}, KX.call(sc, name, ks, infos), DStr{")"}])
 
 # The names an expression calls. A node's lists are walked one element at
 # a time, the rest on the same node (smaller); top: the node's own head
@@ -15968,7 +16146,14 @@ def KQ.case.args(+n: Nat, +i: U32) -> String:
     case 1n+m:
       ", c->kqa[" ++ U32.show(i) ++ "]" ++ KQ.case.args(m, U32.inc(i))
 
-def K.kx.id.memo(+name: String, +n: Nat, +ko: U32, m: Maybe<&2, String>) -> KM(U32):
+def KX.info.entry(flags: List<&2, Bool>, +i: U32) -> String:
+  match flags:
+    case Nil{}:
+      ""
+    case f <> t:
+      Bool.pick(String, f, ", k_ainfo(c, c->kqa[" ++ U32.show(i) ++ "])", "") ++ KX.info.entry(t, U32.inc(i))
+
+def K.kx.id.memo(+g: G, +name: String, +n: Nat, +ko: U32, m: Maybe<&2, String>) -> KM(U32):
   match m:
     case Some{v}:
       KM.pure(U32, Maybe.default(&2, U32, U32.read(v), 0))
@@ -15977,14 +16162,14 @@ def K.kx.id.memo(+name: String, +n: Nat, +ko: U32, m: Maybe<&2, String>) -> KM(U
         +id : U32 <- K.fresh()
         K.memo.put("%kxid " ++ name, U32.show(id))
         K.memo.put("%kqcase", "case " ++ U32.show(id) ++ ":\nreturn " ++ KX.box(ko) ++ "KX_" ++ Gen.mangle(name) ++ "(c" ++
-          KQ.case.args(n, 0) ++ "));\n")
+          KQ.case.args(n, 0) ++ KX.info.entry(KX.info.for(g, name), 0) ++ "));\n")
         return id
 
 # The k_kq case of a looping flat def (one per def).
-def K.kx.id(+name: String, +n: Nat, +ko: U32) -> KM(U32):
+def K.kx.id(+g: G, +name: String, +n: Nat, +ko: U32) -> KM(U32):
   do KM<U32>:
     m : Maybe<&2, String> <- K.memo.get("%kxid " ++ name)
-    K.kx.id.memo(name, n, ko, m)
+    K.kx.id.memo(g, name, n, ko, m)
 
 def KQ.req(ds: List<&2, Doc>, +i: U32) -> Doc:
   match ds:
@@ -15997,7 +16182,7 @@ def K.call.flat.k.pick(gather: Bool, +g: G, +name: String, +ks: List<&2, Doc>) -
   match gather:
     case True{}:
       do KM<Doc>:
-        +id : U32 <- K.kx.id(name, U32.to_nat(Gen.len(ks)), KX.ko(g, name))
+        +id : U32 <- K.kx.id(g, name, U32.to_nat(Gen.len(ks)), KX.ko(g, name))
         +ret : U32 <- K.fresh()
         +k : U32 <- K.slot()
         K.put(Doc.list([DStr{"c->kq = " ++ U32.show(id) ++ "; c->kqret = " ++ U32.show(ret) ++ "; c->kqfb = 0;\n"},
@@ -16006,7 +16191,7 @@ def K.call.flat.k.pick(gather: Bool, +g: G, +name: String, +ks: List<&2, Doc>) -
         K.putS(S(k) ++ " = KRV;\n")
         return DStr{S(k)}
     case False{}:
-      KM.pure(Doc, Doc.list([DStr{"KREG("}, KX.call.box(False{}, KX.ko(g, name), name, ks), DStr{")"}]))
+      KM.pure(Doc, Doc.list([DStr{"KREG("}, KX.call.box(False{}, KX.ko(g, name), name, ks, KX.info.args(g, name, Nil{}, Nil{})), DStr{")"}]))
 
 def K.ctor.fields(ds: List<&2, Doc>, +i: U32) -> Doc:
   match ds:
@@ -16456,10 +16641,10 @@ type KXSel is Type:
   KXSDef{g: G, name: String, info: DInfo}
   KXSKFlatNeedMemo{g: G, name: String, m: Maybe<&2, String>}
   KXSKFlatNeed{g: G, name: String}
-  KXSKCallFlat{g: G, name: String, ks: List<&2, Doc>, flat: Bool}
+  KXSKCallFlat{g: G, name: String, ks: List<&2, Doc>, flat: Bool, infos: List<&2, Doc>}
   KXSExprs{g: G, env: Env(), xs: List<&2, Core.Expr>}
   KXSCtor{g: G, env: Env(), name: String, info: Maybe<&2, CInfo>, args: List<&2, Core.Expr>}
-  KXSCallKind{g: G, name: String, kind: Nat, ks: List<&2, Doc>}
+  KXSCallKind{g: G, name: String, kind: Nat, ks: List<&2, Doc>, infos: List<&2, Doc>}
   KXSCallSplit{g: G, env: Env(), name: String, kind: Nat, s: Split}
   KXSCallDef{g: G, env: Env(), name: String, info: DInfo, args: List<&2, Core.Expr>}
   KXSVarGlobal{g: G, name: String, info: DInfo}
@@ -16484,7 +16669,7 @@ type KXSel is Type:
   KXSRetPlain{g: G, env: Env(), e: Core.Expr}
   KXSRetTo{g: G, env: Env(), self: KSelf, tgt: KTgt, e: Core.Expr}
   KXSLetPlain{g: G, env: Env(), self: KSelf, tgt: KTgt, p: Core.Pat, v: Core.Expr, body: Core.Expr}
-  KXSTail{g: G, env: Env(), s: Split}
+  KXSTail{g: G, env: Env(), self: KSelf, s: Split}
   KXSStmtCall{g: G, env: Env(), self: KSelf, tgt: KTgt, name: String, args: List<&2, Core.Expr>, tail: Bool}
   KXSStmt{g: G, env: Env(), self: KSelf, tgt: KTgt, e: Core.Expr}
 
@@ -16498,13 +16683,13 @@ def KXSel.ty(k: KXSel) -> Type:
       KM(Unit)
     case KXSKFlatNeed{g, name}:
       KM(Unit)
-    case KXSKCallFlat{g, name, ks, flat}:
+    case KXSKCallFlat{g, name, ks, flat, infos}:
       KM(Doc)
     case KXSExprs{g, env, xs}:
       KM(List<&2, Doc>)
     case KXSCtor{g, env, name, info, args}:
       KM(Doc)
-    case KXSCallKind{g, name, kind, ks}:
+    case KXSCallKind{g, name, kind, ks, infos}:
       KM(Doc)
     case KXSCallSplit{g, env, name, kind, s}:
       KM(Doc)
@@ -16550,7 +16735,7 @@ def KXSel.ty(k: KXSel) -> Type:
       KM(Doc)
     case KXSLetPlain{g, env, self, tgt, p, v, body}:
       KM(Doc)
-    case KXSTail{g, env, s}:
+    case KXSTail{g, env, self, s}:
       KM(Doc)
     case KXSStmtCall{g, env, self, tgt, name, args, tail}:
       KM(Doc)
@@ -16569,13 +16754,13 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
           K.out(Unit, Unit{})
         case KXSKFlatNeed{g, name}:
           K.out(Unit, Unit{})
-        case KXSKCallFlat{g, name, ks, flat}:
+        case KXSKCallFlat{g, name, ks, flat, infos}:
           K.out(Doc, DNil{})
         case KXSExprs{g, env, xs}:
           K.out(List<&2, Doc>, Nil{})
         case KXSCtor{g, env, name, info, args}:
           K.out(Doc, DNil{})
-        case KXSCallKind{g, name, kind, ks}:
+        case KXSCallKind{g, name, kind, ks, infos}:
           K.out(Doc, DNil{})
         case KXSCallSplit{g, env, name, kind, s}:
           K.out(Doc, DNil{})
@@ -16621,7 +16806,7 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
           K.out(Doc, DNil{})
         case KXSLetPlain{g, env, self, tgt, p, v, body}:
           K.out(Doc, DNil{})
-        case KXSTail{g, env, s}:
+        case KXSTail{g, env, self, s}:
           K.out(Doc, DNil{})
         case KXSStmtCall{g, env, self, tgt, name, args, tail}:
           K.out(Doc, DNil{})
@@ -16631,11 +16816,11 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
       match k:
         case KXSDefGo{+g, +name, +mask, d}:
           match d:
-            case DDef{n, +ps, body, ret}:
+            case DDef{n, +ps, +body, ret}:
               do KM<Unit>:
                 lp : Bool <- K.loops(g, name)
-                b : Doc <- KX.go(fu, KXSStmt{g, KX.sig(ps, mask, 0), KSelf{name, 0, mask}, KRet{}, R.ops(body, "Nat")})
-                K.flat.add(Doc.list([DStr{KX.head(lp, name, ps, mask, ret) ++ "for (;;) {\n"}, b, DStr{"}\n}\n"}]))
+                b : Doc <- KX.go(fu, KXSStmt{g, KX.sig(KX.view.prefix(body), ps, mask, 0), KSelf{name, 0, mask}, KRet{}, R.ops(body, "Nat")})
+                K.flat.add(Doc.list([DStr{KX.head(lp, name, ps, mask, ret, KX.view.prefix(body)) ++ "for (;;) {\n"}, b, DStr{"}\n}\n"}]))
             case other:
               KM.pure(Unit, Unit{})
         case KXSDef{+g, +name, info}:
@@ -16654,13 +16839,13 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
           do KM<Unit>:
             m : Maybe<&2, String> <- K.memo.get("%emit " ++ name)
             KX.go(fu, KXSKFlatNeedMemo{g, name, m})
-        case KXSKCallFlat{+g, +name, ks, flat}:
+        case KXSKCallFlat{+g, +name, ks, flat, infos}:
           match flat:
             case True{}:
               do KM<Doc>:
                 KX.go(fu, KXSKFlatNeed{g, name})
                 lp : Bool <- K.loops(g, name)
-                return KX.call.box(Bool.and(lp, KX.ret.narrow(G.body(g, name))), KX.ko(g, name), name, ks)
+                return KX.call.box(Bool.and(lp, KX.ret.narrow(G.body(g, name))), KX.ko(g, name), name, ks, infos)
             case False{}:
               do KM<Doc>:
                 +e : U32 <- K.fn(name)
@@ -16684,25 +16869,25 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
               do KM<Doc>:
                 ds : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, args})
                 KX.ctor.kind(tag, U32.to_nat(kind), ds)
-        case KXSCallKind{+g, +name, kind, ks}:
+        case KXSCallKind{+g, +name, kind, ks, infos}:
           match kind:
             case 3n:
               KM.pure(Doc, DStr{"0"})
             case 2n:
               KM.pure(Doc, Doc.list([DStr{"K" ++ Gen.f(name) ++ "(c"}, Doc.list(K.commas_pre(ks)), DStr{")"}]))
             case other:
-              KX.go(fu, KXSKCallFlat{g, name, ks, True{}})
+              KX.go(fu, KXSKCallFlat{g, name, ks, True{}, infos})
         case KXSCallSplit{+g, +env, +name, kind, s}:
-          Split{kept, all, extra, full} = s
+          Split{+kept, all, extra, full} = s
           do KM<Doc>:
             ks : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, kept})
-            KX.go(fu, KXSCallKind{g, name, kind, ks})
+            KX.go(fu, KXSCallKind{g, name, kind, ks, KX.info.args(g, name, env, kept)})
         case KXSCallDef{+g, +env, +name, info, args}:
           DInfo{kind, mask} = info
           KX.go(fu, KXSCallSplit{g, env, name, U32.to_nat(kind), Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}})})
         case KXSVarGlobal{+g, +name, info}:
           DInfo{kind, mask} = info
-          KX.go(fu, KXSCallKind{g, name, U32.to_nat(kind), Nil{}})
+          KX.go(fu, KXSCallKind{g, name, U32.to_nat(kind), Nil{}, Nil{}})
         case KXSVarFound{+g, +name, m}:
           match m:
             case Some{c}:
@@ -16762,7 +16947,7 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
             case Core.ECase{ps, body} <> t:
               +pr = K.pats(g, ps, cs, PatR{Nil{}, Nil{}})
               do KM<Doc>:
-                b : Doc <- KX.go(fu, KXSStmt{g, List.append(&2, Bind, PatR.binds(pr), env), self, tgt, body})
+                b : Doc <- KX.go(fu, KXSStmt{g, KX.env.add(PatR.binds(pr), env), self, tgt, body})
                 rest : Doc <- KX.go(fu, KXSCases{g, env, self, tgt, cs, t})
                 return Doc.list([DStr{"if (" ++ Gen.and(List.reverse(&2, String, PatR.conds(pr))) ++ ") {\n"}, b, DStr{"} else "},
                   rest])
@@ -16793,29 +16978,30 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
               KX.go(fu, KXSLetPlain{g, env, self, tgt, p2, v2, body})
         # (a, x) = Array.get(T, arr, i) or Array.swap(T, arr, i, v): the
         # array and the cell, with no pair in between.
-        case KXSLetArr{sw, +g, +env, +self, +tgt, ps, args, body}:
+        case KXSLetArr{sw, +g, +env, +self, +tgt, +ps, +args, body}:
           do KM<Doc>:
             +k : U32 <- K.fresh()
             ds : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, args})
-            b : Doc <- KX.go(fu, KXSStmt{g, List.append(&2, Bind, PatR.binds(K.pats(g, ps, KX.ko.names(k, 2n, 0), PatR{Nil{},
-              Nil{}})), env), self, tgt, body})
-            return Doc.list([KX.arr.call(sw, k, ds), b])
+            +av : String <- KM.pure(String, KX.view.arg(env, args))
+            b : Doc <- KX.go(fu, KXSStmt{g, KX.view.pair(ps, av, KX.env.add(PatR.binds(K.pats(g, ps, KX.ko.names(k, 2n, 0),
+              PatR{Nil{}, Nil{}})), env)), self, tgt, body})
+            return Doc.list([KX.arr.call(sw, av, k, ds), b])
         # A return of an Array.get or Array.swap's pair, by a def whose
         # result goes in c->ko.
-        case KXSRetArr{sw, +g, +env, +n, args}:
+        case KXSRetArr{sw, +g, +env, +n, +args}:
           do KM<Doc>:
             +k : U32 <- K.fresh()
             ds : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, args})
-            return Doc.list([DStr{"{ "}, KX.arr.call(sw, k, ds), DStr{KX.ko.set(k, 2n, 0) ++ "return 0; }\n"}])
-        case KXSLetKo{+g, +env, +self, +tgt, ps, +f, args, body}:
+            return Doc.list([DStr{"{ "}, KX.arr.call(sw, KX.view.arg(env, args), k, ds), DStr{KX.ko.set(k, 2n, 0) ++ "return 0; }\n"}])
+        case KXSLetKo{+g, +env, +self, +tgt, ps, +f, +args, body}:
           +n = U32.to_nat(KX.ko(g, f))
           do KM<Doc>:
             +k : U32 <- K.fresh()
             ks : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, KX.kept(g, f, args)})
             KX.go(fu, KXSKFlatNeed{g, f})
-            b : Doc <- KX.go(fu, KXSStmt{g, List.append(&2, Bind, PatR.binds(K.pats(g, ps, KX.ko.names(k, n, 0), PatR{Nil{},
+            b : Doc <- KX.go(fu, KXSStmt{g, KX.env.add(PatR.binds(K.pats(g, ps, KX.ko.names(k, n, 0), PatR{Nil{},
               Nil{}})), env), self, tgt, body})
-            return Doc.list([KX.call(False{}, f, ks), DStr{";\n" ++ KX.ko.locals(k, KX.ko.tys(g, f), 0) ++ "\n"}, b])
+            return Doc.list([KX.call(False{}, f, ks, KX.info.args(g, f, env, KX.kept(g, f, args))), DStr{";\n" ++ KX.ko.locals(k, KX.ko.tys(g, f), 0) ++ "\n"}, b])
         # A return from a def whose result goes in c->ko (n fields): a
         # constructor's fields go there, a call of such a def leaves them.
         case KXSRet{+g, +env, +n, +e}:
@@ -16847,7 +17033,7 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
               do KM<Doc>:
                 ks : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, KX.kept(g, f, args)})
                 KX.go(fu, KXSKFlatNeed{g, f})
-                return Doc.list([DStr{"return "}, KX.call(False{}, f, ks), DStr{";\n"}])
+                return Doc.list([DStr{"return "}, KX.call(False{}, f, ks, KX.info.args(g, f, env, KX.kept(g, f, args))), DStr{";\n"}])
             case False{}:
               do KM<Doc>:
                 d : Doc <- KX.go(fu, KXSExpr{g, env, Core.ECall{Core.EVar{f}, args}})
@@ -16860,23 +17046,23 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
           do KM<Doc>:
             +k : U32 <- K.fresh()
             d : Doc <- KX.go(fu, KXSExpr{g, env, v})
-            b : Doc <- KX.go(fu, KXSStmt{g, List.append(&2, Bind, PatR.binds(K.pat(g, p, KX.v(k), PatR{Nil{}, Nil{}})), env), self, tgt,
+            b : Doc <- KX.go(fu, KXSStmt{g, KX.env.add(PatR.binds(K.pat(g, p, KX.v(k), PatR{Nil{}, Nil{}})), env), self, tgt,
               body})
             return Doc.list([DStr{"KAUTO " ++ KX.v(k) ++ " = "}, d, DStr{";\n"}, b])
         # A self tail call: the new arguments, then back to the top of the loop.
         # (No error check in the loop: reading c->err there keeps the lane's context
         # in memory, 3x slower. An error still stops the call when it returns.)
-        case KXSTail{+g, +env, s}:
-          Split{kept, all, extra, full} = s
+        case KXSTail{+g, +env, +self, s}:
+          Split{+kept, all, extra, full} = s
           do KM<Doc>:
             +k : U32 <- K.fresh()
             +ds : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, kept})
-            return Doc.list([DStr{"{ "}, KX.temps(ds, k, 0), DStr{KX.tail.set(k, U32.to_nat(Gen.len(ds)), 0) ++
-              "continue; }\n"}])
+            return Doc.list([DStr{"{ "}, KX.temps(ds, k, 0), DStr{KX.info.tail(KX.info.for(g, KSelf.name(self)), env, kept, k, 0) ++
+              KX.tail.set(k, U32.to_nat(Gen.len(ds)), 0) ++ KX.info.tail.set(KX.info.for(g, KSelf.name(self)), 0) ++ "continue; }\n"}])
         case KXSStmtCall{+g, +env, +self, +tgt, +name, args, tail}:
           match tail:
             case True{}:
-              KX.go(fu, KXSTail{g, env, Gen.split(KSelf.mask(self), args, Split{Nil{}, Nil{}, Nil{}, False{}})})
+              KX.go(fu, KXSTail{g, env, self, Gen.split(KSelf.mask(self), args, Split{Nil{}, Nil{}, Nil{}, False{}})})
             case False{}:
               KX.go(fu, KXSRetTo{g, env, self, tgt, Core.ECall{Core.EVar{name}, args}})
         case KXSStmt{+g, +env, +self, +tgt, e}:
@@ -16902,8 +17088,8 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
 def K.flat.need(g: G, name: String) -> KM(Unit):
   KX.go(Fuel.max(), KXSKFlatNeed{g, name})
 
-def K.call.flat(g: G, name: String, ks: List<&2, Doc>, flat: Bool) -> KM(Doc):
-  KX.go(Fuel.max(), KXSKCallFlat{g, name, ks, flat})
+def K.call.flat(+g: G, +name: String, ks: List<&2, Doc>, flat: Bool) -> KM(Doc):
+  KX.go(Fuel.max(), KXSKCallFlat{g, name, ks, flat, KX.info.args(g, name, Nil{}, Nil{})})
 
 def KX.exprs(g: G, env: Env(), xs: List<&2, Core.Expr>) -> KM(List<&2, Doc>):
   KX.go(Fuel.max(), KXSExprs{g, env, xs})

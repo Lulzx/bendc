@@ -694,6 +694,16 @@ KINLINE KW k_aslow(KTHR KCtx *c, KW a, KW i, KW v, bool sw) {
   if (sw) c->H[w + 1 + j] = v;
   return o;
 }
+#define KAI_NARROW ((KW)1 << 32)
+#define KAI_CPU ((KW)1 << 33)
+KINLINE KW k_ainfo(KTHR KCtx *c, KW a) {
+  if (!a) return KAI_NARROW;
+  if(a==c->ca) return KAI_NARROW|c->cm;
+  if(a==c->cb) return KAI_NARROW|c->cn;
+  if(a==c->cc) return KAI_NARROW|c->co;
+  bool arena=k_in(c,a);KW h=k_word(c,a,0);KU m=((KU)1<<(h&31))-1;
+  return (KW)m | ((h&K_ARR_NW)?KAI_NARROW:0) | (arena?0:KAI_CPU);
+}
 KINLINE KW k_aget(KTHR KCtx *c, KW a, KW i) {
   if (a == c->ca) return K_NCELLS(c, KIX(c, a))[(KU)i & c->cm];
   if (a == c->cb) return K_NCELLS(c, KIX(c, a))[(KU)i & c->cn];
@@ -710,6 +720,22 @@ KINLINE KW k_aswap(KTHR KCtx *c, KW a, KW i, KW v) {
     return o;
   }
   return k_aslow(c, a, i, v, true);
+}
+KINLINE KW k_aiget(KTHR KCtx *c,KW a,KW info,KW i) {
+  if(!a) info=KAI_NARROW;
+  if(!info) return k_aget(c,a,i);
+  KW w=!a?c->P->heap0+1:(info&KAI_CPU)?((a-c->gb)>>3):KIX(c,a);
+  KCOH KW *p=(info&KAI_CPU)?(KCOH KW *)(c->G+w):c->H+w;
+  KU j=(KU)i&(KU)info;
+  return (info&KAI_NARROW)?((KCOH KU *)(p+1))[j]:p[1+j];
+}
+KINLINE KW k_aiswap(KTHR KCtx *c,KW a,KW info,KW i,KW v) {
+  if(!a) info=KAI_NARROW;
+  if(!info) return k_aswap(c,a,i,v);
+  if(info&KAI_CPU) {k_fail(c,KE_FX);return 0;}
+  KW w=!a?c->P->heap0+1:KIX(c,a);KU j=(KU)i&(KU)info;
+  if(info&KAI_NARROW) {KCOH KU *p=K_NCELLS(c,w)+j;KW r=*p;*p=(KU)v;return r;}
+  KW r=c->H[w+1+j];c->H[w+1+j]=v;return r;
 }
 KINLINE KW k_apair(KTHR KCtx *c, KW a, KW x) {
   KW p = k_node(c, 0, 2);

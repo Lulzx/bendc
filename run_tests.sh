@@ -40,6 +40,11 @@ if sh tools/pf-codegen-check.sh "$BENDC" "$BASE" tests build/tests/pf_codegen > 
 else
   echo "FAIL pf_codegen"; cat build/tests/pf_codegen.log; fail=$((fail+1))
 fi
+if python3 tools/gpu-array-mask-check.py "$BENDC" "$BASE" tests/gpu_array_masks.bend > build/tests/gpu_array_mask_codegen.log 2>&1; then
+  echo "ok   gpu_array_mask_codegen"; pass=$((pass+1))
+else
+  echo "FAIL gpu_array_mask_codegen"; cat build/tests/gpu_array_mask_codegen.log; fail=$((fail+1))
+fi
 # C checks of the runtime (tests/rt/*.c, built whole with $CC): each
 # prints "ok".
 if sh tools/gpu-host-check.sh "$BENDC" "$BASE" > build/tests/gpu_host_codegen.log 2>&1; then
