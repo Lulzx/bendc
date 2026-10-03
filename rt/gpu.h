@@ -777,6 +777,11 @@ KINLINE KW k_aiswap(KTHR KCtx *c,KW a,KW info,KW i,KW v) {
   if(info&KAI_NARROW) {KCOH KU *p=K_NCELLS(c,w)+j;KW r=*p;*p=(KU)v;return r;}
   KW r=c->H[w+1+j];c->H[w+1+j]=v;return r;
 }
+KINLINE KW k_aiset(KTHR KCtx *c, KW a, KW info, KW i, KW v) {
+  if (!a || !info) { k_aswap(c, a, i, v); return a; }
+  k_aiswap(c, a, info, i, v);
+  return a;
+}
 KINLINE KW k_apair(KTHR KCtx *c, KW a, KW x) {
   KW p = k_node(c, 0, 2);
   c->H[KIX(c, p) + 1] = a;

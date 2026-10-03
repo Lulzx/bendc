@@ -40,10 +40,20 @@ if sh tools/pf-codegen-check.sh "$BENDC" "$BASE" tests build/tests/pf_codegen > 
 else
   echo "FAIL pf_codegen"; cat build/tests/pf_codegen.log; fail=$((fail+1))
 fi
+if sh tools/ch-codegen-check.sh "$BENDC" "$BASE" tests build/tests/ch_codegen > build/tests/ch_codegen.log 2>&1; then
+  echo "ok   ch_codegen"; pass=$((pass+1))
+else
+  echo "FAIL ch_codegen"; cat build/tests/ch_codegen.log; fail=$((fail+1))
+fi
 if python3 tools/gpu-array-mask-check.py "$BENDC" "$BASE" tests/gpu_array_masks.bend > build/tests/gpu_array_mask_codegen.log 2>&1; then
   echo "ok   gpu_array_mask_codegen"; pass=$((pass+1))
 else
   echo "FAIL gpu_array_mask_codegen"; cat build/tests/gpu_array_mask_codegen.log; fail=$((fail+1))
+fi
+if python3 tools/gpu-array-flow-check.py "$BENDC" "$BASE" > build/tests/gpu_array_flow_codegen.log 2>&1; then
+  echo "ok   gpu_array_flow_codegen"; pass=$((pass+1))
+else
+  echo "FAIL gpu_array_flow_codegen"; cat build/tests/gpu_array_flow_codegen.log; fail=$((fail+1))
 fi
 if sh tools/gpu-zipper-check.sh "$BENDC" "$BASE" tests build/tests/gpu_zipper rt > build/tests/gpu_zipper.log 2>&1; then
   echo "ok   gpu_zipper_codegen_runtime"; pass=$((pass+1))
@@ -52,6 +62,11 @@ else
 fi
 # C checks of the runtime (tests/rt/*.c, built whole with $CC): each
 # prints "ok".
+if sh tools/gpu-reduce-tree-check.sh "$BENDC" "$BASE" tests build/tests/gpu_reduce_tree rt > build/tests/gpu_reduce_tree.log 2>&1; then
+  echo "ok   gpu_reduce_tree_codegen_runtime"; pass=$((pass+1))
+else
+  echo "FAIL gpu_reduce_tree_codegen_runtime"; cat build/tests/gpu_reduce_tree.log; fail=$((fail+1))
+fi
 if sh tools/gpu-host-check.sh "$BENDC" "$BASE" > build/tests/gpu_host_codegen.log 2>&1; then
   echo "ok   gpu_host_codegen"; pass=$((pass+1))
 else

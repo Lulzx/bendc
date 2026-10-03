@@ -7724,6 +7724,118 @@ def PF.reserve(bs: Env(), +unused: List<&2, String>) -> Doc:
     case Nil{}:
       DNil{}
 
+# Hoist equal constructor shapes only when every alternative field is an
+# immutable word constructor over a scalar variable/literal. No effectful
+# or unsafe expression is speculated; Bool validity checks remain.
+def CH.atom(e: Core.Expr) -> Bool:
+  match e:
+    case Core.EVar{x}:
+      True{}
+    case Core.ENum{n}:
+      True{}
+    case Core.EFlt{s}:
+      True{}
+    case other:
+      False{}
+
+def CH.word.info(c: Maybe<&2, CInfo>) -> Bool:
+  match c:
+    case Some{CInfo{tag, ar, kind, single}}:
+      Bool.and(U32.is_eq(kind, 7), U32.is_eq(ar, 1))
+    case None{}:
+      False{}
+
+def CH.word(+g: G, e: Core.Expr) -> Bool:
+  match e:
+    case Core.ECtor{name, x <> Nil{}}:
+      Bool.and(CH.word.info(G.ctor(g, name)), CH.atom(x))
+    case other:
+      False{}
+
+def CH.fields(+g: G, as: List<&2, Core.Expr>, bs: List<&2, Core.Expr>) -> Bool:
+  match as bs:
+    case Nil{} Nil{}:
+      True{}
+    case a <> at b <> bt:
+      Bool.and(Bool.and(CH.word(g, a), CH.word(g, b)), CH.fields(g, at, bt))
+    case aa bb:
+      False{}
+
+def CH.node(c: Maybe<&2, CInfo>, n: Nat) -> Bool:
+  match c:
+    case Some{CInfo{tag, +ar, +kind, single}}:
+      Bool.and(Bool.or(U32.is_zero(kind), U32.is_eq(kind, 8)),
+        Bool.and(U32.is_ge(ar, 1), Nat.is_eq(n, U32.to_nat(ar))))
+    case None{}:
+      False{}
+
+def CH.bp(ps: List<&2, Core.Pat>, +name: String) -> Bool:
+  match ps:
+    case Core.PCtor{n, Nil{}} <> Nil{}:
+      Str.eq(n, name)
+    case other:
+      False{}
+
+def CH.scrs(ss: List<&2, Core.Expr>) -> Bool:
+  match ss:
+    case Core.EVar{x} <> Nil{}:
+      True{}
+    case other:
+      False{}
+
+def CH.select(+ss: List<&2, Core.Expr>, +p0: List<&2, Core.Pat>, +p1: List<&2, Core.Pat>,
+  as: List<&2, Core.Expr>, bs: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match as bs:
+    case a <> at b <> bt:
+      Core.EMatch{ss, [Core.ECase{p0, a}, Core.ECase{p1, b}]} <> CH.select(ss, p0, p1, at, bt)
+    case aa bb:
+      Nil{}
+
+def CH.body(+g: G, +ss: List<&2, Core.Expr>, +p0: List<&2, Core.Pat>, +p1: List<&2, Core.Pat>,
+  a: Core.Expr, b: Core.Expr) -> Maybe<&2, Core.Expr>:
+  match a b:
+    case Core.ECtor{+an, +as} Core.ECtor{bn, +bs}:
+      Bool.pick(Maybe<&2, Core.Expr>, Bool.and(Str.eq(an, bn),
+        Bool.and(CH.node(G.ctor(g, an), List.length(&2, Core.Expr, as)), CH.fields(g, as, bs))),
+        Some{Core.ECtor{an, CH.select(ss, p0, p1, as, bs)}}, None{})
+    case aa bb:
+      None{}
+
+def CH.pick(+g: G, +ss: List<&2, Core.Expr>, cs: List<&2, Core.Expr>) -> Maybe<&2, Core.Expr>:
+  match cs:
+    case Core.ECase{+p0, a} <> Core.ECase{+p1, b} <> Nil{}:
+      Bool.pick(Maybe<&2, Core.Expr>, Bool.and(CH.scrs(ss), Bool.and(CH.bp(p0, "False"), CH.bp(p1, "True"))),
+        CH.body(g, ss, p0, p1, a, b), None{})
+    case other:
+      None{}
+
+# Evaluate a computed scrutinee exactly once before field choices.
+def CH.wrap(key: String, v: Core.Expr, c: Maybe<&2, Core.Expr>) -> Maybe<&2, Core.Expr>:
+  match c:
+    case Some{b}:
+      Some{Core.ELet{Core.PVar{key}, v, b}}
+    case None{}:
+      None{}
+
+def CH.eval(+g: G, ss: List<&2, Core.Expr>, cs: List<&2, Core.Expr>, +key: String) -> Maybe<&2, Core.Expr>:
+  match ss:
+    case v <> Nil{}:
+      CH.wrap(key, v, CH.pick(g, [Core.EVar{key}], cs))
+    case other:
+      None{}
+
+type CHWord is Data:
+  CHWord{scr: Core.Expr, a: Core.Expr, b: Core.Expr}
+
+def CH.wpick(+g: G, ss: List<&2, Core.Expr>, cs: List<&2, Core.Expr>) -> Maybe<&2, CHWord>:
+  match ss cs:
+    case +v <> Nil{} Core.ECase{p0, +a} <> Core.ECase{p1, +b} <> Nil{}:
+      Bool.pick(Maybe<&2, CHWord>, Bool.and(CH.scrs([v]),
+        Bool.and(Bool.and(CH.bp(p0, "False"), CH.bp(p1, "True")),
+          Bool.and(CH.word(g, a), CH.word(g, b)))), Some{CHWord{v,a,b}}, None{})
+    case xs cases:
+      None{}
+
 type GSel is Data:
   GSExprs{g: G, env: Env(), xs: List<&2, Core.Expr>}
   GSCallFull{g: G, env: Env(), name: String, mask: List<&2, Bool>, kept: List<&2, Core.Expr>,
@@ -7776,6 +7888,7 @@ type GSel is Data:
   GSStmtCtor{g: G, env: Env(), self: Self, tgt: Tgt, name: String, args: List<&2, Core.Expr>,
     hole: U32}
   GSBlock{g: G, env: Env(), e: Core.Expr}
+  GSWordChoice{g: G, env: Env(), scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>, choice: Maybe<&2, CHWord>}
   GSExpr{g: G, env: Env(), e: Core.Expr}
   GSPFLet{g: G, env: Env(), self: Self, tgt: Tgt, x: String, v: Core.Expr, body: Core.Expr, ar: U32}
   GSLetVar{g: G, env: Env(), self: Self, tgt: Tgt, x: String, v: Core.Expr, body: Core.Expr, hole: Bool}
@@ -7783,6 +7896,7 @@ type GSel is Data:
     rest: List<&2, Core.Expr>, conds: List<&2, String>, b: Doc, mx: List<&2, RcM>}
   GSMatchGo{g: G, env: Env(), self: Self, tgt: Tgt, cases: List<&2, Core.Expr>, r: Scrs}
   GSMatch{g: G, env: Env(), self: Self, tgt: Tgt, scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>}
+  GSChoice{g: G, env: Env(), self: Self, tgt: Tgt, scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>, choice: Maybe<&2, Core.Expr>}
   GSStmt{g: G, env: Env(), self: Self, tgt: Tgt, e: Core.Expr}
   GSCaseBodyMat{g: G, env: Env(), self: Self, tgt: Tgt, body: Core.Expr, pre: Env(), r: Loads}
   GSCaseBodyGo{opens: Bool, g: G, env: Env(), self: Self, tgt: Tgt, binds: Env(), body: Core.Expr}
@@ -7922,6 +8036,8 @@ def GSel.none(k: GSel) -> GSel.ty(k):
       DNil{}
     case GSBlock{g, env, e}:
       DNil{}
+    case GSWordChoice{g, env, scrs, cases, choice}:
+      DNil{}
     case GSExpr{g, env, e}:
       DNil{}
     case GSPFLet{g, env, self, tgt, x, v, body, ar}:
@@ -7933,6 +8049,8 @@ def GSel.none(k: GSel) -> GSel.ty(k):
     case GSMatchGo{g, env, self, tgt, cases, r}:
       DNil{}
     case GSMatch{g, env, self, tgt, scrs, cases}:
+      DNil{}
+    case GSChoice{g, env, self, tgt, scrs, cases, choice}:
       DNil{}
     case GSStmt{g, env, self, tgt, e}:
       DNil{}
@@ -8312,6 +8430,18 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             +r : String <- Gen.pure(String, "r" ++ U32.show(k))
             b : Doc <- Gen.rec(fu, GSStmt{g, env, Self.none(), TSet{r}, e})
             return Doc.list([DStr{"({ " ++ Gen.scalar.cty(Gen.scalar.let(g, env, e)) ++ r ++ ";\n"}, b, DStr{r ++ "; })"}])
+        case GSWordChoice{+g, +env, scrs, cases, choice}:
+          match choice:
+            case Some{CHWord{v,a,b}}:
+              do Gen<Doc>:
+                vd : Doc <- Gen.rec(fu, GSExpr{g,env,v})
+                ad : Doc <- Gen.rec(fu, GSExpr{g,env,a})
+                bd : Doc <- Gen.rec(fu, GSExpr{g,env,b})
+                return Doc.list([DStr{"({ V cw = "}, vd,
+                  DStr{"; if (cw != IMM(0) && cw != IMM(1)) bend_fail(\"runtime fail-stop\"); cw == IMM(1) ? "},
+                  bd, DStr{" : "}, ad, DStr{"; })"}])
+            case None{}:
+              Gen.rec(fu, GSBlock{g,env,Core.EMatch{scrs,cases}})
         case GSExpr{+g, +env, e}:
           match e:
             case Core.EVar{name}:
@@ -8335,8 +8465,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               Gen.rec(fu, GSLam{g, env, p, body})
             case Core.ELet{p, v, body}:
               Gen.rec(fu, GSBlock{g, env, Core.ELet{p, v, body}})
-            case Core.EMatch{scrs, cases}:
-              Gen.rec(fu, GSBlock{g, env, Core.EMatch{scrs, cases}})
+            case Core.EMatch{+scrs, +cases}:
+              Gen.rec(fu, GSWordChoice{g,env,scrs,cases,CH.wpick(g,scrs,cases)})
             case Core.ESucc{k, x}:
               do Gen<Doc>:
                 d : Doc <- Gen.rec(fu, GSExpr{g, env, x})
@@ -8407,12 +8537,20 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
           do Gen<Doc>:
             r : List<&2, String> & Doc <- Gen.rec(fu, GSScrs{g, env, scrs})
             Gen.rec(fu, GSMatchGo{g, env, self, tgt, cases, Scrs.of(r)})
+        case GSChoice{+g, +env, +self, +tgt, scrs, cases, choice}:
+          match choice:
+            case Some{e}:
+              Gen.rec(fu, GSStmt{g, env, self, tgt, e})
+            case None{}:
+              Gen.rec(fu, GSMatch{g, env, self, tgt, scrs, cases})
         case GSStmt{+g, +env, +self, +tgt, e}:
           match e:
             case Core.ELet{p, v, body}:
               Gen.rec(fu, GSLet{g, env, self, tgt, p, v, body})
-            case Core.EMatch{scrs, cases}:
-              Gen.rec(fu, GSMatch{g, env, self, tgt, scrs, cases})
+            case Core.EMatch{+scrs, +cases}:
+              do Gen<Doc>:
+                +k : U32 <- Gen.fresh()
+                Gen.rec(fu, GSChoice{g, env, self, tgt, scrs, cases, CH.eval(g, scrs, cases, "%choice" ++ U32.show(k))})
             case Core.ECall{Core.EVar{+name}, +args}:
               Gen.rec(fu, GSStmtCall{g, env, self, tgt, name, args, Gen.is_tail(env, self, tgt, name, args)})
             case Core.ECtor{+name, +args}:
@@ -15588,18 +15726,18 @@ def KX.info.count(ps: List<&2, Core.Param>, mask: List<&2, Bool>) -> U32:
     case pl ml:
       0
 
-def KX.sig.go(+needed: List<&2, String>, ps: List<&2, Core.Param>, mask: List<&2, Bool>, +i: U32, +carry: Bool) -> Env():
-  match ps mask:
-    case Core.Param{+x, m, t} <> pt True{} <> mt:
-      Bind{x, "a" ++ U32.show(i)} <> Bind{KX.view.key(x), Bool.pick(String, Bool.and(carry, Bool.or(Str.eq(t, "Array"), Str.has(needed, x))), "am" ++ U32.show(i), "")} <>
-        KX.sig.go(needed, pt, mt, U32.inc(i), carry)
-    case Core.Param{x, m, t} <> pt False{} <> mt:
-      Bind{x, "0"} <> KX.sig.go(needed, pt, mt, i, carry)
-    case pl ml:
+def KX.sig.go(fs: List<&2, Bool>, ps: List<&2, Core.Param>, mask: List<&2, Bool>, +i: U32) -> Env():
+  match fs ps mask:
+    case f <> ft Core.Param{+x, m, t} <> pt True{} <> mt:
+      Bind{x, "a" ++ U32.show(i)} <> Bind{KX.view.key(x), Bool.pick(String, f, "am" ++ U32.show(i), "")} <>
+        KX.sig.go(ft, pt, mt, U32.inc(i))
+    case flags Core.Param{x, m, t} <> pt False{} <> mt:
+      Bind{x, "0"} <> KX.sig.go(flags, pt, mt, i)
+    case flags pl ml:
       Nil{}
 
-def KX.sig(+needed: List<&2, String>, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, i: U32) -> Env():
-  KX.sig.go(needed, ps, mask, i, U32.is_gt(KX.info.count(ps, mask), 3))
+def KX.sig(fs: List<&2, Bool>, ps: List<&2, Core.Param>, mask: List<&2, Bool>, i: U32) -> Env():
+  KX.sig.go(fs, ps, mask, i)
 
 # A U32, F32 or Bool fits a KU (see rt/gpu.h): so do a flat def's parameters
 # and result of those types, and its Nat parameters, checked (KNAT32).
@@ -15812,8 +15950,21 @@ def KX.info.for.body(+g: G, +name: String, d: Decl) -> List<&2, Bool>:
     case other:
       Nil{}
 
-def KX.info.for(+g: G, +name: String) -> List<&2, Bool>:
+def KX.flow.key(name: String) -> String:
+  "%array-flow " ++ name
+
+def KX.info.base(+g: G, +name: String) -> List<&2, Bool>:
   KX.info.for.body(g, name, G.body(g, name))
+
+def KX.info.for.flow(+g: G, +name: String, i: DInfo) -> List<&2, Bool>:
+  match i:
+    case DInfo{0, flags}:
+      flags
+    case other:
+      KX.info.base(g, name)
+
+def KX.info.for(+g: G, +name: String) -> List<&2, Bool>:
+  KX.info.for.flow(g, name, G.def(g, KX.flow.key(name)))
 
 def KX.info.decls(flags: List<&2, Bool>, +i: U32) -> String:
   match flags:
@@ -15836,22 +15987,196 @@ def KX.info.nflags(flags: List<&2, Bool>) -> U32:
     case f <> t:
       U32.add(Bool.pick(U32, f, 1, 0), KX.info.nflags(t))
 
+# GPU descriptor flow is a monotone global fixedpoint. Synthetic defs contain
+# GPU-only kept-formal flags; ordinary definition masks and bodies are intact.
+def KX.flow.flags(+g: G, +name: String) -> List<&2, Bool>:
+  DInfo.mask(G.def(g, KX.flow.key(name)))
+
+def KX.flow.union(a: List<&2, Bool>, b: List<&2, Bool>) -> List<&2, Bool>:
+  match a b:
+    case x <> xs y <> ys:
+      Bool.or(x, y) <> KX.flow.union(xs, ys)
+    case xs ys:
+      xs
+
+def KX.flow.args(+env: List<&2, String>, args: List<&2, Core.Expr>) -> List<&2, Bool>:
+  match args:
+    case Nil{}:
+      Nil{}
+    case Core.EVar{x} <> t:
+      Str.has(env, x) <> KX.flow.args(env, t)
+    case h <> t:
+      False{} <> KX.flow.args(env, t)
+
+def KX.flow.params(ps: List<&2, Core.Param>, mask: List<&2, Bool>, fs: List<&2, Bool>) -> List<&2, String>:
+  match ps mask fs:
+    case Core.Param{x, m, ty} <> pt True{} <> mt f <> ft:
+      +rest = KX.flow.params(pt, mt, ft)
+      Bool.pick(List<&2, String>, f, x <> rest, rest)
+    case Core.Param{x, m, ty} <> pt False{} <> mt flags:
+      KX.flow.params(pt, mt, flags)
+    case pl ml flags:
+      Nil{}
+
+def KX.flow.init(+g: G, ds: List<&2, Decl>, m: Map<&2, List<&2, Bool>>) -> Map<&2, List<&2, Bool>>:
+  match ds:
+    case Nil{}:
+      m
+    case DDef{+name, ps, body, ret} <> t:
+      KX.flow.init(g, t, Map.set(&2, List<&2, Bool>, m, name, KX.info.for.body(g, name, DDef{name, ps, body, ret})))
+    case d <> t:
+      KX.flow.init(g, t, m)
+
+def KX.flow.call(+g: G, +env: List<&2, String>, +name: String, args: List<&2, Core.Expr>, +m: Map<&2, List<&2, Bool>>) -> Map<&2, List<&2, Bool>>:
+  +old = G.get(List<&2, Bool>, Nil{}, m, name)
+  Map.set(&2, List<&2, Bool>, m, name, KX.flow.union(old, KX.flow.args(env, KX.kept(g, name, args))))
+
+# The environment mirrors codegen: arbitrary aliases do not carry metadata.
+# Exact Array.get/swap first-field aliases do, and every other binder clears it.
+def KX.flow.bind.known(+env: List<&2, String>, p: Core.Pat, v: Core.Expr) -> List<&2, String>:
+  match p v:
+    case Core.PCtor{n, Core.PVar{y} <> rest} Core.ECall{Core.EVar{+f}, ty <> Core.EVar{x} <> args}:
+      Bool.pick(List<&2, String>, Bool.and(Str.has(env, x), Str.has(["Array.get", "Array.get%w", "Array.swap", "Array.swap%w"], f)), [y], Nil{})
+    case p e:
+      Nil{}
+
+def KX.flow.bind(+env: List<&2, String>, +p: Core.Pat, v: Core.Expr) -> List<&2, String>:
+  List.append(&2, String, KX.flow.bind.known(env, p, v), KX.view.remove(env, Pat.vars(p, Nil{})))
+
+def KX.flow.expr(e: Core.Expr, +g: G, +env: List<&2, String>, +m: Map<&2, List<&2, Bool>>, top: Bool) -> Map<&2, List<&2, Bool>>:
+  match e:
+    case Core.ECall{Core.EVar{+f}, args}:
+      match args:
+        case Nil{}:
+          Bool.pick(Unit -> Map<&2, List<&2, Bool>>, top, u => KX.flow.call(g, env, f, Nil{}, m), u => m)(Unit{})
+        case +a <> +t:
+          KX.flow.expr(Core.ECall{Core.EVar{f}, t}, g, env, KX.flow.expr(a, g, env,
+            Bool.pick(Unit -> Map<&2, List<&2, Bool>>, top, u => KX.flow.call(g, env, f, a <> t, m), u => m)(Unit{}), True{}), False{})
+    case Core.ECall{+f, args}:
+      match args:
+        case Nil{}:
+          Bool.pick(Unit -> Map<&2, List<&2, Bool>>, top, u => KX.flow.expr(f, g, env, m, True{}), u => m)(Unit{})
+        case a <> t:
+          KX.flow.expr(Core.ECall{f, t}, g, env, KX.flow.expr(a, g, env, Bool.pick(Unit -> Map<&2, List<&2, Bool>>, top,
+            u => KX.flow.expr(f, g, env, m, True{}), u => m)(Unit{}), True{}), False{})
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          m
+        case a <> t:
+          KX.flow.expr(Core.ECtor{n, t}, g, env, KX.flow.expr(a, g, env, m, True{}), True{})
+    case Core.ELam{p, b}:
+      KX.flow.expr(b, g, KX.view.remove(env, Pat.vars(p, Nil{})), m, True{})
+    case Core.ELet{+p, +v, b}:
+      KX.flow.expr(b, g, KX.flow.bind(env, p, v), KX.flow.expr(v, g, env, m, True{}), True{})
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          KX.flow.expr(Core.EMatch{t, cases}, g, env, KX.flow.expr(a, g, env, m, True{}), True{})
+        case Nil{}:
+          match cases:
+            case c <> t:
+              KX.flow.expr(Core.EMatch{Nil{}, t}, g, env, KX.flow.expr(c, g, env, m, True{}), True{})
+            case Nil{}:
+              m
+    case Core.ECase{ps, b}:
+      KX.flow.expr(b, g, KX.view.remove(env, Pats.vars(ps, Nil{})), m, True{})
+    case Core.ESucc{k, x}:
+      KX.flow.expr(x, g, env, m, True{})
+    case Core.EOp{op, a, b}:
+      KX.flow.expr(b, g, env, KX.flow.expr(a, g, env, m, True{}), True{})
+    case Core.EAnn{x, t}:
+      KX.flow.expr(x, g, env, m, True{})
+    case other:
+      m
+
+def KX.flow.scan.body.go(+g: G, +fs: List<&2, Bool>, ps: List<&2, Core.Param>, mask: List<&2, Bool>, body: Core.Expr, m: Map<&2, List<&2, Bool>>, n: U32) -> Map<&2, List<&2, Bool>>:
+  match n:
+    case 0:
+      m
+    case n:
+      KX.flow.expr(body, g, KX.flow.params(ps, mask, fs), m, True{})
+
+def KX.flow.scan.body(+g: G, +fs: List<&2, Bool>, ps: List<&2, Core.Param>, mask: List<&2, Bool>, body: Core.Expr, m: Map<&2, List<&2, Bool>>) -> Map<&2, List<&2, Bool>>:
+  KX.flow.scan.body.go(g, fs, ps, mask, body, m, KX.info.nflags(fs))
+
+def KX.flow.scan(+g: G, ds: List<&2, Decl>, +old: Map<&2, List<&2, Bool>>, m: Map<&2, List<&2, Bool>>) -> Map<&2, List<&2, Bool>>:
+  match ds:
+    case Nil{}:
+      m
+    case DDef{+name, ps, body, ret} <> t:
+      +fs = G.get(List<&2, Bool>, Nil{}, old, name)
+      KX.flow.scan(g, t, old, KX.flow.scan.body(g, fs, ps, DInfo.mask(G.def(g, name)), body, m))
+    case d <> t:
+      KX.flow.scan(g, t, old, m)
+
+def KX.flow.count(ds: List<&2, Decl>, +m: Map<&2, List<&2, Bool>>) -> U32:
+  match ds:
+    case Nil{}:
+      0
+    case DDef{name, ps, body, ret} <> t:
+      U32.add(KX.info.nflags(G.get(List<&2, Bool>, Nil{}, m, name)), KX.flow.count(t, m))
+    case d <> t:
+      KX.flow.count(t, m)
+
+def KX.flow.capacity(ds: List<&2, Decl>, +m: Map<&2, List<&2, Bool>>) -> Nat:
+  match ds:
+    case Nil{}:
+      0n
+    case DDef{name, ps, body, ret} <> t:
+      Nat.add(List.length(&2, Bool, G.get(List<&2, Bool>, Nil{}, m, name)), KX.flow.capacity(t, m))
+    case d <> t:
+      KX.flow.capacity(t, m)
+
+# Each changed round adds a flag in a finite, monotone domain. This bound
+# therefore includes a final unchanged round, independent of emission order.
+def KX.flow.round(fuel: Nat, +g: G, +ds: List<&2, Decl>, +m: Map<&2, List<&2, Bool>>) -> Map<&2, List<&2, Bool>>:
+  match fuel:
+    case 0n:
+      m
+    case 1n+n:
+      +next = KX.flow.scan(g, ds, m, m)
+      Bool.pick(Unit -> Map<&2, List<&2, Bool>>, U32.is_eq(KX.flow.count(ds, m), KX.flow.count(ds, next)),
+        u => next, u => KX.flow.round(n, g, ds, next))(Unit{})
+
+def KX.flow.install(ds: List<&2, Decl>, +m: Map<&2, List<&2, Bool>>, defs: Map<&2, DInfo>) -> Map<&2, DInfo>:
+  match ds:
+    case Nil{}:
+      defs
+    case DDef{+name, ps, body, ret} <> t:
+      KX.flow.install(t, m, Map.set(&2, DInfo, defs, KX.flow.key(name), DInfo{0, G.get(List<&2, Bool>, Nil{}, m, name)}))
+    case d <> t:
+      KX.flow.install(t, m, defs)
+
+def KX.flow.build.fin(g: G, ds: List<&2, Decl>, m: Map<&2, List<&2, Bool>>) -> G:
+  G{ctors, defs, bodies, dps} = g
+  G{ctors, KX.flow.install(ds, m, defs), bodies, dps}
+
+def KX.flow.build(+g: G, +ds: List<&2, Decl>) -> G:
+  +initial = KX.flow.init(g, ds, MTip{})
+  KX.flow.build.fin(g, ds, KX.flow.round(Nat.add(1n, KX.flow.capacity(ds, initial)), g, ds, initial))
+
 def KX.info.one(+info: String, +i: U32, +derive: Bool) -> Doc:
   DStr{Bool.pick(String, Str.eq(info, ""), Bool.pick(String, derive, "k_ainfo(c, ki" ++ U32.show(i) ++ ")", "0"), info)}
 
-def KX.info.args.go(flags: List<&2, Bool>, +env: Env(), args: List<&2, Core.Expr>, +i: U32, +derive: Bool) -> List<&2, Doc>:
-  match flags args:
-    case Nil{} other:
+def KX.info.args.go(flags: List<&2, Bool>, base: List<&2, Bool>, +env: Env(), args: List<&2, Core.Expr>, +i: U32) -> List<&2, Doc>:
+  match flags base args:
+    case f <> t b <> bt e <> rest:
+      +tail = KX.info.args.go(t, bt, env, rest, U32.inc(i))
+      Bool.pick(List<&2, Doc>, f, KX.info.one(KX.info.meta(env, e), i, b) <> tail, tail)
+    case f <> t b <> bt Nil{}:
+      +tail = KX.info.args.go(t, bt, env, Nil{}, U32.inc(i))
+      Bool.pick(List<&2, Doc>, f, KX.info.one("", i, b) <> tail, tail)
+    case flags base args:
       Nil{}
-    case f <> t e <> rest:
-      +tail = KX.info.args.go(t, env, rest, U32.inc(i), derive)
-      Bool.pick(List<&2, Doc>, f, KX.info.one(KX.info.meta(env, e), i, derive) <> tail, tail)
-    case f <> t Nil{}:
-      +tail = KX.info.args.go(t, env, Nil{}, U32.inc(i), derive)
-      Bool.pick(List<&2, Doc>, f, KX.info.one("", i, derive) <> tail, tail)
 
 def KX.info.args(+g: G, +name: String, env: Env(), args: List<&2, Core.Expr>) -> List<&2, Doc>:
-  KX.info.args.go(KX.info.for(g, name), env, args, 0, U32.is_gt(KX.info.nflags(KX.info.for(g, name)), 3))
+  KX.info.args.go(KX.info.for(g, name), KX.info.base(g, name), env, args, 0)
+
+def KX.info.call(+g: G, +name: String, +kind: Nat, +env: Env(), kept: List<&2, Core.Expr>, all: List<&2, Core.Expr>) -> List<&2, Doc>:
+  +av = KX.view.arg(env, all)
+  Bool.pick(List<&2, Doc>, Bool.and(Nat.is_eq(kind, 2n), Str.has(["Array.set", "Array.set%w"], name)),
+    Bool.pick(List<&2, Doc>, Str.eq(av, ""), Nil{}, [DStr{av}]), KX.info.args(g, name, env, kept))
 
 def KX.info.temps(ds: List<&2, Doc>, +i: U32) -> Doc:
   match ds:
@@ -15867,15 +16192,24 @@ def KX.info.vars(n: Nat, +i: U32) -> List<&2, Doc>:
     case 1n+m:
       DStr{"ki" ++ U32.show(i)} <> KX.info.vars(m, U32.inc(i))
 
-def KX.info.tail(flags: List<&2, Bool>, +env: Env(), args: List<&2, Core.Expr>, +k: U32, +i: U32) -> String:
-  match flags args:
-    case f <> t e <> rest:
+def KX.native.set(+name: String, +ks: List<&2, Doc>, infos: List<&2, Doc>) -> Doc:
+  match infos:
+    case av <> Nil{}:
+      Bool.pick(Doc, Str.has(["Array.set", "Array.set%w"], name),
+        Doc.list([DStr{"({ "}, KX.info.temps(ks, 0), DStr{"k_aiset(c, ki0, "}, av, DStr{", ki1, ki2); })"}]),
+        Doc.list([DStr{"K" ++ Gen.f(name) ++ "(c"}, Doc.list(K.commas_pre(ks)), DStr{")"}]))
+    case other:
+      Doc.list([DStr{"K" ++ Gen.f(name) ++ "(c"}, Doc.list(K.commas_pre(ks)), DStr{")"}])
+
+def KX.info.tail(flags: List<&2, Bool>, base: List<&2, Bool>, +env: Env(), args: List<&2, Core.Expr>, +k: U32, +i: U32) -> String:
+  match flags base args:
+    case f <> t b <> bt e <> rest:
       +meta = KX.info.meta(env, e)
       Bool.pick(String, f, "KW mi" ++ U32.show(i) ++ " = " ++ Bool.pick(String, Str.eq(meta, ""),
         "(" ++ KX.v(k) ++ "_" ++ U32.show(i) ++ " == a" ++ U32.show(i) ++ " ? am" ++ U32.show(i) ++
-        " : k_ainfo(c, " ++ KX.v(k) ++ "_" ++ U32.show(i) ++ "))", meta) ++ "; ", "") ++
-        KX.info.tail(t, env, rest, k, U32.inc(i))
-    case fs es:
+        " : " ++ Bool.pick(String, b, "k_ainfo(c, " ++ KX.v(k) ++ "_" ++ U32.show(i) ++ ")", "0") ++ ")", meta) ++ "; ", "") ++
+        KX.info.tail(t, bt, env, rest, k, U32.inc(i))
+    case fs bs es:
       ""
 
 def KX.info.tail.set(flags: List<&2, Bool>, +i: U32) -> String:
@@ -15885,9 +16219,9 @@ def KX.info.tail.set(flags: List<&2, Bool>, +i: U32) -> String:
     case f <> t:
       Bool.pick(String, f, "am" ++ U32.show(i) ++ " = mi" ++ U32.show(i) ++ "; ", "") ++ KX.info.tail.set(t, U32.inc(i))
 
-def KX.head(+lp: Bool, +name: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, r: Core.Expr, needed: List<&2, String>) -> String:
+def KX.head(+lp: Bool, +name: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, r: Core.Expr, flags: List<&2, Bool>) -> String:
   Bool.pick(String, lp, "KNOINLINE ", "KINLINE ") ++ KX.cty(P.head(r)) ++ " KX_" ++ Gen.mangle(name) ++ "(KTHR KCtx *c" ++
-    KX.cparams(ps, mask, 0) ++ KX.info.decls(KX.info.flags(needed, ps, mask), 0) ++ ") {\n" ++ KX.nats(ps, mask, 0) ++
+    KX.cparams(ps, mask, 0) ++ KX.info.decls(flags, 0) ++ ") {\n" ++ KX.nats(ps, mask, 0) ++
     Bool.pick(String, lp, "if (k_short(c)) return 0;\n", "")
 
 # A call of flat def name from a flat def: one that loops, with a scalar
@@ -16168,12 +16502,12 @@ def KQ.case.args(+n: Nat, +i: U32) -> String:
     case 1n+m:
       ", c->kqa[" ++ U32.show(i) ++ "]" ++ KQ.case.args(m, U32.inc(i))
 
-def KX.info.entry(flags: List<&2, Bool>, +i: U32) -> String:
-  match flags:
-    case Nil{}:
+def KX.info.entry(flags: List<&2, Bool>, base: List<&2, Bool>, +i: U32) -> String:
+  match flags base:
+    case f <> t b <> bt:
+      Bool.pick(String, f, Bool.pick(String, b, ", k_ainfo(c, c->kqa[" ++ U32.show(i) ++ "])", ", 0"), "") ++ KX.info.entry(t, bt, U32.inc(i))
+    case flags base:
       ""
-    case f <> t:
-      Bool.pick(String, f, ", k_ainfo(c, c->kqa[" ++ U32.show(i) ++ "])", "") ++ KX.info.entry(t, U32.inc(i))
 
 def K.kx.id.memo(+g: G, +name: String, +n: Nat, +ko: U32, m: Maybe<&2, String>) -> KM(U32):
   match m:
@@ -16184,7 +16518,7 @@ def K.kx.id.memo(+g: G, +name: String, +n: Nat, +ko: U32, m: Maybe<&2, String>) 
         +id : U32 <- K.fresh()
         K.memo.put("%kxid " ++ name, U32.show(id))
         K.memo.put("%kqcase", "case " ++ U32.show(id) ++ ":\nreturn " ++ KX.box(ko) ++ "KX_" ++ Gen.mangle(name) ++ "(c" ++
-          KQ.case.args(n, 0) ++ KX.info.entry(KX.info.for(g, name), 0) ++ "));\n")
+          KQ.case.args(n, 0) ++ KX.info.entry(KX.info.for(g, name), KX.info.base(g, name), 0) ++ "));\n")
         return id
 
 # The k_kq case of a looping flat def (one per def).
@@ -16847,8 +17181,8 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
             case DDef{n, +ps, +body, ret}:
               do KM<Unit>:
                 lp : Bool <- K.loops(g, name)
-                b : Doc <- KX.go(fu, KXSStmt{g, KX.sig(KX.view.prefix(body), ps, mask, 0), KSelf{name, 0, mask}, KRet{}, R.ops(body, "Nat")})
-                K.flat.add(Doc.list([DStr{KX.head(lp, name, ps, mask, ret, KX.view.prefix(body)) ++ "for (;;) {\n"}, b, DStr{"}\n}\n"}]))
+                b : Doc <- KX.go(fu, KXSStmt{g, KX.sig(KX.info.for(g, name), ps, mask, 0), KSelf{name, 0, mask}, KRet{}, R.ops(body, "Nat")})
+                K.flat.add(Doc.list([DStr{KX.head(lp, name, ps, mask, ret, KX.info.for(g, name)) ++ "for (;;) {\n"}, b, DStr{"}\n}\n"}]))
             case other:
               KM.pure(Unit, Unit{})
         case KXSDef{+g, +name, info}:
@@ -16902,14 +17236,14 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
             case 3n:
               KM.pure(Doc, DStr{"0"})
             case 2n:
-              KM.pure(Doc, Doc.list([DStr{"K" ++ Gen.f(name) ++ "(c"}, Doc.list(K.commas_pre(ks)), DStr{")"}]))
+              KM.pure(Doc, KX.native.set(name, ks, infos))
             case other:
               KX.go(fu, KXSKCallFlat{g, name, ks, True{}, infos})
-        case KXSCallSplit{+g, +env, +name, kind, s}:
-          Split{+kept, all, extra, full} = s
+        case KXSCallSplit{+g, +env, +name, +kind, s}:
+          Split{+kept, +all, extra, full} = s
           do KM<Doc>:
             ks : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, kept})
-            KX.go(fu, KXSCallKind{g, name, kind, ks, KX.info.args(g, name, env, kept)})
+            KX.go(fu, KXSCallKind{g, name, kind, ks, KX.info.call(g, name, kind, env, kept, all)})
         case KXSCallDef{+g, +env, +name, info, args}:
           DInfo{kind, mask} = info
           KX.go(fu, KXSCallSplit{g, env, name, U32.to_nat(kind), Gen.split(mask, args, Split{Nil{}, Nil{}, Nil{}, False{}})})
@@ -17081,11 +17415,11 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
         # (No error check in the loop: reading c->err there keeps the lane's context
         # in memory, 3x slower. An error still stops the call when it returns.)
         case KXSTail{+g, +env, +self, s}:
-          Split{+kept, all, extra, full} = s
+          Split{+kept, +all, extra, full} = s
           do KM<Doc>:
             +k : U32 <- K.fresh()
             +ds : List<&2, Doc> <- KX.go(fu, KXSExprs{g, env, kept})
-            return Doc.list([DStr{"{ "}, KX.temps(ds, k, 0), DStr{KX.info.tail(KX.info.for(g, KSelf.name(self)), env, kept, k, 0) ++
+            return Doc.list([DStr{"{ "}, KX.temps(ds, k, 0), DStr{KX.info.tail(KX.info.for(g, KSelf.name(self)), KX.info.base(g, KSelf.name(self)), env, kept, k, 0) ++
               KX.tail.set(k, U32.to_nat(Gen.len(ds)), 0) ++ KX.info.tail.set(KX.info.for(g, KSelf.name(self)), 0) ++ "continue; }\n"}])
         case KXSStmtCall{+g, +env, +self, +tgt, +name, args, tail}:
           match tail:
@@ -18290,6 +18624,295 @@ def KZ.group(+g: G, +f: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>
     K.putS(Bool.pick(String, String.is_empty(fast), "", KZ.group.fast("KZ_" ++ Gen.mangle(f) ++ "_",
       KX.v(k) ++ "_0", KX.v(k) ++ "_1", 4n, 3)))
 
+# Pure U32 reductions of closed binary Data trees. The bounded postorder
+# visitor is readonly; unsupported constructors/depth use generic scheduler
+# frames, or the original embedded KQ body when its caller may have effects.
+type KRedCase is Data:
+  KRedCase{pat: Core.Pat, body: Core.Expr, rec: Bool}
+
+def KR.natives() -> List<&2, String>:
+  ["U32.inc", "U32.add", "U32.sub", "U32.mul", "U32.not", "U32.and", "U32.or", "U32.xor", "U32.min", "U32.max", "U32.shl", "U32.shr"]
+
+def KR.params(ps: List<&2, Core.Param>, ms: List<&2, Bool>) -> Bool:
+  match ps ms:
+    case Nil{} Nil{}:
+      True{}
+    case Core.Param{x, m, +t} <> pt True{} <> mt:
+      Bool.and(Str.eq(t, "U32"), KR.params(pt, mt))
+    case pl ml:
+      False{}
+
+def KR.forward(args: List<&2, Core.Expr>, ps: List<&2, String>) -> Bool:
+  match args ps:
+    case Nil{} Nil{}:
+      True{}
+    case Core.EVar{+x} <> at +y <> pt:
+      Bool.and(Str.eq(x, y), KR.forward(at, pt))
+    case al pl:
+      False{}
+
+def KR.sum(+a: U32, +b: U32) -> U32:
+  Bool.pick(U32, Bool.or(Bool.or(U32.is_eq(a, 4294967295), U32.is_eq(b, 4294967295)),
+    Bool.or(U32.is_ge(U32.add(U32.and(a, 255), U32.and(b, 255)), 2), U32.is_ge(U32.add(U32.shrn(a, 8n), U32.shrn(b, 8n)), 2))),
+    4294967295, U32.add(a, b))
+
+def KR.recval(+a: String, +b: String, +carry: List<&2, String>, args: List<&2, Core.Expr>) -> U32:
+  match args:
+    case Core.EVar{+x} <> rest:
+      Bool.pick(U32, KR.forward(rest, carry), Bool.pick(U32, Str.eq(x, a), 1,
+        Bool.pick(U32, Str.eq(x, b), 256, 4294967295)), 4294967295)
+    case other:
+      4294967295
+
+def KR.work(fuel: Nat, +f: String, +a: String, +b: String, +carry: List<&2, String>, +bound: List<&2, String>, todo: List<&2, Core.Expr>, +count: U32) -> U32:
+  match fuel todo:
+    case 0n es:
+      4294967295
+    case 1n+ +j Nil{}:
+      count
+    case 1n+ +j Core.EVar{x} <> rest:
+      Bool.pick(U32, Str.has(bound, x), KR.work(j, f, a, b, carry, bound, rest, count), 4294967295)
+    case 1n+ +j Core.ENum{v} <> rest:
+      KR.work(j, f, a, b, carry, bound, rest, count)
+    case 1n+ +j Core.ECall{Core.EVar{+n}, +args} <> +rest:
+      Bool.pick(U32, Str.eq(n, f),
+        KR.work(j, f, a, b, carry, bound, rest, KR.sum(count, KR.recval(a, b, carry, args))),
+        Bool.pick(U32, Str.has(KR.natives(), n), KR.work(j, f, a, b, carry, bound, List.append(&2, Core.Expr, args, rest), count), 4294967295))
+    case j es:
+      4294967295
+
+def KR.scan(fuel: Nat, +f: String, +a: String, +b: String, +carry: List<&2, String>, +bound: List<&2, String>, e: Core.Expr) -> U32:
+  KR.work(fuel, f, a, b, carry, bound, [e], 0)
+
+type KRRewrite is Type:
+  KRWExpr{f: String, a: String, e: Core.Expr}
+  KRWList{f: String, a: String, es: List<&2, Core.Expr>}
+
+def KRRewrite.ty(s: KRRewrite) -> Type:
+  match s:
+    case KRWExpr{f, a, e}:
+      Core.Expr
+    case KRWList{f, a, es}:
+      List<&2, Core.Expr>
+
+def KRRewrite.go(fuel: Nat, s: KRRewrite) -> KRRewrite.ty(s):
+  match fuel:
+    case 0n:
+      match s:
+        case KRWExpr{f, a, e}:
+          e
+        case KRWList{f, a, es}:
+          es
+    case 1n+ +j:
+      match s:
+        case KRWExpr{+f, +a, e}:
+          match e:
+            case Core.ECall{Core.EVar{+n}, Core.EVar{+x} <> +rest}:
+              Bool.pick(Core.Expr, Str.eq(n, f), Core.EVar{Bool.pick(String, Str.eq(x, a), "%kr-left", "%kr-right")},
+                Core.ECall{Core.EVar{n}, KRRewrite.go(j, KRWList{f, a, Core.EVar{x} <> rest})})
+            case Core.ECall{Core.EVar{n}, args}:
+              Core.ECall{Core.EVar{n}, KRRewrite.go(j, KRWList{f, a, args})}
+            case other:
+              other
+        case KRWList{+f, +a, es}:
+          match es:
+            case Nil{}:
+              Nil{}
+            case e <> rest:
+              KRRewrite.go(j, KRWExpr{f, a, e}) <> KRRewrite.go(j, KRWList{f, a, rest})
+
+def KR.rewrite(f: String, a: String, e: Core.Expr) -> Core.Expr:
+  KRRewrite.go(1024n, KRWExpr{f, a, e})
+
+def KR.leaffields(fs: List<&2, Field>) -> Bool:
+  match fs:
+    case Nil{}:
+      True{}
+    case Field{x, Core.EVar{+t}} <> rest:
+      Bool.and(Str.eq(t, "U32"), KR.leaffields(rest))
+    case other:
+      False{}
+
+def KR.recfields(+ty: String, fs: List<&2, Field>) -> Bool:
+  match fs:
+    case Field{x, Core.EVar{+a}} <> Field{y, Core.EVar{+b}} <> Nil{}:
+      Bool.and(Str.eq(a, ty), Str.eq(b, ty))
+    case other:
+      False{}
+
+def KR.branch(+f: String, +carry: List<&2, String>, +cn: String, +a: String, +b: String, body: Core.Expr) -> Maybe<&2, KRedCase>:
+  match body:
+    case Core.ELet{Core.PCtor{+pk, Core.PVar{+l} <> Core.PVar{+r} <> Nil{}},
+      Core.ECtor{+vk, +va <> +vb <> Nil{}}, +after}:
+      Bool.pick(Maybe<&2, KRedCase>, Bool.and(Str.eq(pk, "%par"), Bool.and(Str.eq(vk, "%par"),
+        Bool.and(U32.is_eq(KR.scan(512n, f, a, b, carry, carry, va), 1),
+        Bool.and(U32.is_eq(KR.scan(512n, f, a, b, carry, carry, vb), 256),
+        U32.is_zero(KR.scan(512n, f, "", "", carry, l <> r <> carry, after)))))),
+        Some{KRedCase{Core.PCtor{cn, [Core.PVar{a}, Core.PVar{b}]},
+          Unb.sub(Unb.sub(after, l, Core.EVar{"%kr-left"}), r, Core.EVar{"%kr-right"}), True{}}}, None{})
+    case +e:
+      Bool.pick(Maybe<&2, KRedCase>, U32.is_eq(KR.scan(512n, f, a, b, carry, carry, e), 257),
+        Some{KRedCase{Core.PCtor{cn, [Core.PVar{a}, Core.PVar{b}]}, KR.rewrite(f, a, e), True{}}}, None{})
+
+def KR.one.go(+g: G, +f: String, +carry: List<&2, String>, +name: String, +fs: List<&2, Field>, +cn: String, ps: List<&2, Core.Pat>, +body: Core.Expr, rec: Bool, valid: Bool) -> Maybe<&2, KRedCase>:
+  match ps rec valid:
+    case Core.PVar{+a} <> Core.PVar{+b} <> Nil{} True{} True{}:
+      Bool.pick(Maybe<&2, KRedCase>, KZ.nodekind(KQ.tree.kind(G.ctor(g, name))),
+        KR.branch(f, carry, cn, a, b, body), None{})
+    case +pats False{} True{}:
+      +kind = KQ.tree.kind(G.ctor(g, name))
+      Bool.pick(Maybe<&2, KRedCase>, Bool.and(KR.leaffields(fs), Bool.and(Nat.is_le(List.length(&2, Field, fs), 8n),
+        Bool.and(Bool.or(U32.is_zero(kind), Bool.or(U32.is_eq(kind, 1), U32.is_eq(kind, 7))),
+        U32.is_zero(KR.scan(512n, f, "", "", carry, List.append(&2, String, carry, Pats.vars([Core.PCtor{cn, pats}], Nil{})), body))))),
+        Some{KRedCase{Core.PCtor{cn, pats}, body, False{}}}, None{})
+    case pats b v:
+      None{}
+
+def KR.one(+g: G, +f: String, +ty: String, +carry: List<&2, String>, +name: String, +fs: List<&2, Field>, e: Core.Expr) -> Maybe<&2, KRedCase>:
+  match e:
+    case Core.ECase{Core.PCtor{+cn, +ps} <> Nil{}, body}:
+      KR.one.go(g, f, carry, name, fs, cn, ps, body, KR.recfields(ty, fs),
+        Bool.and(Str.eq(cn, name), Bool.and(KZ.vars(ps), Nat.is_eq(List.length(&2, Core.Pat, ps), List.length(&2, Field, fs)))))
+    case other:
+      None{}
+
+def KR.cons(one: Maybe<&2, KRedCase>, rest: Maybe<&2, List<&2, KRedCase>>) -> Maybe<&2, List<&2, KRedCase>>:
+  match one rest:
+    case Some{x} Some{xs}:
+      Some{x <> xs}
+    case a b:
+      None{}
+
+def KR.cases(+g: G, +f: String, +ty: String, +carry: List<&2, String>, cs: List<&2, Ctor>, es: List<&2, Core.Expr>) -> Maybe<&2, List<&2, KRedCase>>:
+  match cs es:
+    case Nil{} Nil{}:
+      Some{Nil{}}
+    case Ctor{name, fs} <> ct e <> et:
+      KR.cons(KR.one(g, f, ty, carry, name, fs, e), KR.cases(g, f, ty, carry, ct, et))
+    case cl el:
+      None{}
+
+def KR.type(+g: G, +f: String, +ty: String, +carry: List<&2, String>, d: Decl, es: List<&2, Core.Expr>) -> Maybe<&2, List<&2, KRedCase>>:
+  match d:
+    case DType{n, Nil{}, +cs}:
+      Bool.pick(Maybe<&2, List<&2, KRedCase>>, Bool.and(Nat.is_ge(List.length(&2, Ctor, cs), 2n), Nat.is_le(List.length(&2, Ctor, cs), 16n)),
+        KR.cases(g, f, ty, carry, cs, es), None{})
+    case other:
+      None{}
+
+def KR.pick.go(+g: G, +f: String, ps: List<&2, Core.Param>, mask: List<&2, Bool>, body: Core.Expr, d: Decl) -> Maybe<&2, List<&2, KRedCase>>:
+  match ps mask body d:
+    case Core.Param{+tree, m, +ty} <> +pt True{} <> +mt Core.EMatch{Core.EVar{+scr} <> Nil{}, es} DDef{n, allps, b, Core.EVar{+ret}}:
+      Bool.pick(Maybe<&2, List<&2, KRedCase>>, Bool.and(Str.eq(tree, scr), Bool.and(Str.eq(ret, "U32"), Bool.and(KR.params(pt, mt), Bool.not(Str.has(K.params(pt, mt), f))))),
+        KR.type(g, f, ty, K.params(pt, mt), G.body(g, "%" ++ ty), es), None{})
+    case pl ml e d:
+      None{}
+
+def KR.pick(+g: G, +f: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, +body: Core.Expr) -> Maybe<&2, List<&2, KRedCase>>:
+  KR.pick.go(g, f, ps, mask, body, G.body(g, f))
+
+def KR.extra.names(n: Nat, +i: U32) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+ +j:
+      ",p" ++ U32.show(i) ++ KR.extra.names(j, U32.inc(i))
+
+def KR.env(ps: List<&2, Core.Param>, +i: U32) -> Env():
+  match ps:
+    case Nil{}:
+      Nil{}
+    case Core.Param{x, m, t} <> rest:
+      Bind{x, "p" ++ U32.show(i)} <> KR.env(rest, U32.inc(i))
+
+def KR.emit.case(+g: G, +env: Env(), pat: Core.Pat, +body: Core.Expr, +i: U32, rec: Bool, combine: Bool) -> KM(Doc):
+  match pat rec combine:
+    case Core.PCtor{+name, Core.PVar{+a} <> Core.PVar{+b} <> Nil{}} True{} False{}:
+      +pat : Core.Pat = Core.PCtor{name, [Core.PVar{a}, Core.PVar{b}]}
+      +pr = K.pat(g, pat, "v", PatR{Nil{}, env})
+      +pe = PatR.binds(pr)
+      KM.pure(Doc, DStr{"case " ++ KZ.tag(G.ctor(g, name)) ++ ":if(sp==8)return 0;right[sp]=" ++ Maybe.default(&2, String, Env.find(pe, b), "0") ++ ";left[sp]=0;op[sp]=" ++ U32.show(i) ++ ";sp++;v=" ++ Maybe.default(&2, String, Env.find(pe, a), "0") ++ ";continue;\n"})
+    case +pat False{} False{}:
+      +pr = K.pat(g, pat, "v", PatR{Nil{}, env})
+      do KM<Doc>:
+        value : Doc <- KX.expr(g, PatR.binds(pr), body)
+        return Doc.list([DStr{"if(" ++ Gen.and(PatR.conds(pr)) ++ "){rv=(KU)("}, value, DStr{");}else\n"}])
+    case p True{} True{}:
+      do KM<Doc>:
+        value : Doc <- KX.expr(g, Bind{"%kr-left", "l"} <> Bind{"%kr-right", "rv"} <> env, body)
+        return Doc.list([DStr{"case " ++ U32.show(i) ++ ":rv=(KU)("}, value, DStr{");break;\n"}])
+    case p other flag:
+      KM.pure(Doc, DNil{})
+
+def KR.emit.leaves(+g: G, +env: Env(), cs: List<&2, KRedCase>, +i: U32) -> KM(Doc):
+  match cs:
+    case Nil{}:
+      KM.pure(Doc, DStr{"{switch((KU)KTAG(v)){\n"})
+    case KRedCase{pat, body, True{}} <> rest:
+      KR.emit.leaves(g, env, rest, U32.inc(i))
+    case KRedCase{pat, body, False{}} <> rest:
+      do KM<Doc>:
+        head : Doc <- KR.emit.case(g, env, pat, body, i, False{}, False{})
+        tail : Doc <- KR.emit.leaves(g, env, rest, U32.inc(i))
+        return Doc.list([head, tail])
+
+def KR.emit.cases(+g: G, +env: Env(), cs: List<&2, KRedCase>, +i: U32, +combine: Bool) -> KM(Doc):
+  match cs:
+    case Nil{}:
+      KM.pure(Doc, DNil{})
+    case KRedCase{pat, body, False{}} <> rest:
+      KR.emit.cases(g, env, rest, U32.inc(i), combine)
+    case KRedCase{pat, body, True{}} <> rest:
+      do KM<Doc>:
+        head : Doc <- KR.emit.case(g, env, pat, body, i, True{}, combine)
+        tail : Doc <- KR.emit.cases(g, env, rest, U32.inc(i), combine)
+        return Doc.list([head, tail])
+
+def KR.emit.once(+g: G, +f: String, ps: List<&2, Core.Param>, z: Maybe<&2, List<&2, KRedCase>>) -> KM(String):
+  match ps z:
+    case Core.Param{x, m, t} <> +pt Some{+cs}:
+      +stem = "KR_" ++ Gen.mangle(f) ++ "_"
+      +env = KR.env(pt, 1)
+      do KM<String>:
+        leaves : Doc <- KR.emit.leaves(g, env, cs, 0)
+        descend : Doc <- KR.emit.cases(g, env, cs, 0, False{})
+        combine : Doc <- KR.emit.cases(g, env, cs, 0, True{})
+        K.flat.add(Doc.list([DStr{"KNOINLINE KW " ++ stem ++ "try(KTHR KCtx*c,KW v" ++ KQ.params(List.length(&2, Core.Param, pt), 1) ++ ",KTHR bool*hit){KW right[8];KU left[8],op[8],sp=0,rv=0,steps=0;*hit=false;for(;;){if(c->err||++steps>c->kqlim)return 0;\n"}, leaves, descend,
+          DStr{"default:return 0;}}for(;;){if(sp==0){*hit=true;return rv;}KU i=sp-1;if(!(op[i]&128u)){left[i]=rv;op[i]|=128u;v=right[i];break;}KU l=left[i],tag=op[i]&127u;sp--;switch(tag){\n"}, combine,
+          DStr{"default:return 0;}}}}\n"}]))
+        return "{bool hit;KW r=" ++ stem ++ "try(c,p0" ++ KR.extra.names(List.length(&2, Core.Param, pt), 1) ++ ",&hit);if(hit)return r;}\n"
+    case pl z:
+      KM.pure(String, "")
+
+def KR.emit.cache(+g: G, +f: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, +body: Core.Expr, m: Maybe<&2, String>) -> KM(String):
+  match m:
+    case Some{v}:
+      KM.pure(String, v)
+    case None{}:
+      do KM<String>:
+        +v : String <- KR.emit.once(g, f, ps, KR.pick(g, f, ps, mask, body))
+        K.memo.put("%kred " ++ f, v)
+        return v
+
+def KR.emit(+g: G, +f: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, +body: Core.Expr) -> KM(String):
+  do KM<String>:
+    m : Maybe<&2, String> <- K.memo.get("%kred " ++ f)
+    KR.emit.cache(g, f, ps, mask, body, m)
+
+def KR.group.args(n: Nat, +k: U32, +i: U32) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+ +j:
+      "," ++ KX.v(k) ++ "_" ++ U32.show(i) ++ KR.group.args(j, k, U32.inc(i))
+
+def KR.group(+g: G, +f: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, +body: Core.Expr, +k: U32) -> KM(Bool):
+  do KM<Bool>:
+    +fast : String <- KR.emit(g, f, ps, mask, body)
+    K.putS(Bool.pick(String, String.is_empty(fast), "", "{bool hit;KW r=KR_" ++ Gen.mangle(f) ++ "_try(c," ++ KX.v(k) ++ "_0" ++ KR.group.args(Nat.sub(List.length(&2, Core.Param, ps), 1n), k, 1) ++ ",&hit);if(hit){RV=r;K_TREE_RET;if(sp==0)return RV;sp-=1;pc=KQ_ST(sp);break;}}\n"))
+    root : Maybe<&2, String> <- K.memo.get("%kqroot")
+    return Bool.and(Bool.not(String.is_empty(fast)), KQ.tree.clean(g, Maybe.default(&2, String, root, "")))
+
 type KQSel is Type:
   KQSDef{sq: Bool, g: G, name: String, e: U32, mask: List<&2, Bool>, ps: List<&2, Core.Param>, body: Core.Expr}
   KQSCallGo{reg: Bool, g: G, env: Env(), self: KSelf, x: String, s: Split, e: U32, body: Core.Expr}
@@ -18388,6 +19011,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
               +bound = K.params(ps, mask)
               do KM<Unit>:
                 +zfast : String <- KZ.emit(g, name, KZ.pick(g, name, ps, mask, body))
+                +rfast : String <- KR.emit(g, name, ps, mask, body)
                 K.start(0)
                 saved : Doc <- K.cap.begin()
                 +l : U32 <- K.fresh()
@@ -18401,11 +19025,11 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                 KQ.go(fu, KQSStmt{g, KQ.sig(ps, mask, k, 0), KSelf{name, l, mask}, KQ.anf(g, bound, R.ops(body, "Nat"))})
                 K.start(0)
                 blocks : Doc <- K.cap.take(saved)
-                K.flat.add(Doc.list([DStr{"\nKINLINE KW KQ_" ++ Gen.mangle(name) ++ "(KTHR KCtx *c" ++ KQ.params(n, 0) ++
-                  ", KTHR bool *ok) {\n" ++ zfast ++ "KQ_STACK; K_TREE_STACK;\nKW sp = 0, pc = " ++ U32.show(l) ++ ", RV = 0, st = c->kqlim;\n" ++ KQ.init(n, 0) ++
+                K.flat.add(Bool.pick(Doc, String.is_empty(rfast), Doc.list([DStr{"\nKINLINE KW KQ_" ++ Gen.mangle(name) ++ "(KTHR KCtx *c" ++ KQ.params(n, 0) ++
+                  ", KTHR bool *ok) {\n" ++ zfast ++ rfast ++ "KQ_STACK; K_TREE_STACK;\nKW sp = 0, pc = " ++ U32.show(l) ++ ", RV = 0, st = c->kqlim;\n" ++ KQ.init(n, 0) ++
                   KQ.init.rest(Nat.sub(12n, n), U32.from_nat(n)) ++
                   "for (;;) {\nif (st-- == 0 || c->err != 0) { *ok = false; return 0; }\nswitch (pc) {\n"}, blocks,
-                  DStr{"default:\n*ok = false;\nreturn 0;\n}\n}\n}\n"}]))
+                  DStr{"default:\n*ok = false;\nreturn 0;\n}\n}\n}\n"}]), DStr{"\nKINLINE KW KQ_" ++ Gen.mangle(name) ++ "(KTHR KCtx*c" ++ KQ.params(n,0) ++ ",KTHR bool*ok){\n" ++ rfast ++ "*ok=false;return 0;\n}\n"}))
                 K.memo.put("%kqcase", "case " ++ U32.show(e) ++ ": return KQ_" ++ Gen.mangle(name) ++ "(c" ++ KQ.case.args(n, 0) ++
                   ", ok);\n")
                 KQ.host.add(Bool.and(KQ.host.serial(g, name), Bool.and(KQ.host.ps(ps, mask), KQ.host.ret(G.body(g, name)))), name, e, n)
@@ -18476,7 +19100,9 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                 K.putS(KQ.entry(k, U32.to_nat(K.kept(mask)), 0) ++ "\n")
                 KQ.tree.entry(g, G.body(g, f))
                 KZ.group(g, f, ps, mask, body, k)
-                KQ.go(fu, KQSStmt{g, KQ.sig(ps, mask, k, 0), KSelf{f, l, mask}, KQ.anf(g, K.params(ps, mask), R.ops(body, "Nat"))})
+                direct : Bool <- KR.group(g, f, ps, mask, body, k)
+                KM.if(Unit, direct, K.putS("*ok=false;return 0;\n"),
+                  KQ.go(fu, KQSStmt{g, KQ.sig(ps, mask, k, 0), KSelf{f, l, mask}, KQ.anf(g, K.params(ps, mask), R.ops(body, "Nat"))}))
                 K.restore(saved)
             case other:
               KM.pure(Unit, Unit{})
@@ -23651,7 +24277,7 @@ def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb:
   +ds = RO.program(rc, lowered)
   +g = Unb.sret(unb, ds, Dps.build(G.hless(Bool.and(Opt.on(opt, 104), Bool.not(rc)),
     RP.program(rc, G.li(Opt.on(opt, 119), G.new(ds), ds), ds), ds), ds, free, rc))
-  +hostg = KQ.host.book(g, beforepar)
+  +hostg = KQ.host.book(KX.flow.build(g, ds), beforepar)
   Gen.program.fin(hostg, Gen.cids(hostg, ds, 0),
     Gen.program.m(hostg)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
 
