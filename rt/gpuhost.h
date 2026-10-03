@@ -223,9 +223,12 @@ static GId g_url(const char *path) {
 // Compiles the device code: the library, or NULL.
 static GId g_compile(const GpuProg *prog) {
   size_t nh = strlen(K_GPU_H), np = strlen(prog->src);
-  char *text = malloc(nh + np + 1);
-  memcpy(text, K_GPU_H, nh);
-  memcpy(text + nh, prog->src, np + 1);
+  const char* pre="#define K_GPU_PACKED 1\n";
+  size_t nz=strncmp(prog->src,pre,strlen(pre))==0?strlen(pre):0;
+  char *text = malloc(nz + nh + np + 1);
+  if(nz)memcpy(text,pre,nz);
+  memcpy(text+nz, K_GPU_H, nh);
+  memcpy(text+nz+nh, prog->src, np + 1);
   GId src = g_str(text);
   free(text);
   GId opts = g_new("MTLCompileOptions");
@@ -468,8 +471,11 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
     if (!(h & GPU_SEEN)) {
       // First visit: push the children.
       gpu_H[i - 1] = h | GPU_SEEN;
-      if (!(h & K_BARE) && GPU_NARROW(gpu_H[i])) continue;
-      for (KW k = 0; k < (h & ~K_BARE); k++) {
+      #ifdef K_GPU_PACKED
+      if((h&K_PACK) && !(h&K_PACK_PTR))continue;
+#endif
+      if (!(h & (K_BARE|K_PACK)) && GPU_NARROW(gpu_H[i])) continue;
+      for (KW k = 0; k < k_psize(h); k++) {
         KW w = gpu_H[i + k];
         if (GPU_OBJ(w) && !(gpu_H[KIX_H(P, w) - 1] & (GPU_FWD | GPU_SEEN))) {
           if (sp == cap) { cap *= 2; stk = realloc(stk, cap * sizeof(KW)); }
@@ -480,6 +486,21 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
     }
     // Second visit: the children are copied.
     // (a headerless node, K_BARE: its first word is a field, see k_bnode)
+#ifdef K_GPU_PACKED
+    if(h&K_PACK) {
+      KW ar=K_PACK_AR(h);V*p=halloc(ar+1);p[0]=K_PACK_TAG(h);
+      for(KW k=0;k<ar;k++) {
+        KW w;
+        if(h&K_PACK_PTR) {
+          w=gpu_H[i+k];
+          if(GPU_OBJ(w)) { KW hw=gpu_H[KIX_H(P,w)-1];if(!(hw&GPU_FWD)){ok=0;break;}w=hw&~GPU_FWD; }
+          else if(gc_hot.rc)rc_dup_in(w,1);
+        } else w=((KU*)(gpu_H+i))[k];
+        p[k+1]=w;
+      }
+      gpu_keep((V)p);gpu_H[i-1]=GPU_FWD|(KW)p;sp--;continue;
+    }
+#endif
     int bare = (h & K_BARE) != 0;
     KW n = h & ~(GPU_SEEN | K_BARE);
     if (!bare && GPU_NARROW(gpu_H[i])) {
@@ -794,7 +815,12 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   // call, and the next call may take it back), below half the arena.
   KW end = P.heap0 + (KW)gpu_A[KA_HEAP] * K_CHUNK;
   if (end > P.heap0 + P.heapw) end = P.heap0 + P.heapw;
-  if ((end - P.heap0) * 8 >= gpu_pin_min && end * 8 <= gpu_Hmax / 2 && H[2] - P.ab < end * 8 &&
+  #ifdef K_GPU_PACKED
+  const int can_pin=0; // CPU consumers require ordinary objects.
+#else
+  const int can_pin=1;
+#endif
+  if (can_pin && (end - P.heap0) * 8 >= gpu_pin_min && end * 8 <= gpu_Hmax / 2 && H[2] - P.ab < end * 8 &&
       gpu_pinnable(pin, args, n)) {
     gpu_tout = 0;
     gpu_pin = end;

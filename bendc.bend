@@ -9440,7 +9440,7 @@ def Gen.gpu.emit.errs(+g: G, +ts: List<&2, String>, errs: List<&2, String>, +cod
   String:
   match errs:
     case Nil{}:
-      "\n// The device code of the !-calls: rt/gpu.h, then this program's part\n#include \"gpu.h\"\n\n" ++ code ++
+      Bool.pick(String, String.starts_with(code, "#define K_GPU_PACKED 1\n"), "#define K_GPU_PACKED 1\n", "") ++ "\n// The device code of the !-calls: rt/gpu.h, then this program's part\n#include \"gpu.h\"\n\n" ++ code ++
         "\n#include \"gpuhost.h\"\n\nstatic const char K_SRC[] =\n" ++ K.lit(code) ++
         ";\n\nstatic const GpuFn K_FNS[] = {" ++ Gen.gpu.fns(wraps) ++
         "{0, 0}};\nstatic const GpuFn K_KQH[] = {K_KQH_LIST {0, 0}};\nstatic GpuProg K_PROG = {K_SRC, bend_kernel, bend_kq, K_FNS, K_KQH};\n\n" ++ Gen.gpu.stubs(g, ts, True{})
@@ -18050,6 +18050,214 @@ def KQ.split(+g: G, +f: String, args: List<&2, Core.Expr>) -> Split:
 
 # The sequential compiler (KQ_ functions), one def (fuel: its calls):
 # KQSel picks the step.
+# Closed binary tree zippers: guard the exact uniform topology at runtime,
+# then run bounded scalar leaf bodies without the sequential PC stack.
+# Mixed topologies use the existing function. Input graphs are immutable.
+type KZip is Data:
+  KZip{leaf: String, branch: String, pats: List<&2, Core.Pat>, vals: List<&2, Core.Expr>}
+
+def KZ.scalar(fs: List<&2, Field>) -> Bool:
+  match fs:
+    case Nil{}:
+      True{}
+    case Field{x, Core.EVar{t}} <> rest:
+      Bool.and(KX.narrow(t), KZ.scalar(rest))
+    case other:
+      False{}
+
+def KZ.vars(ps: List<&2, Core.Pat>) -> Bool:
+  match ps:
+    case Nil{}:
+      True{}
+    case Core.PVar{x} <> rest:
+      Bool.and(Bool.not(Str.eq(x, "_")), KZ.vars(rest))
+    case other:
+      False{}
+
+def KZ.clean(fuel: Nat, +bound: List<&2, String>, todo: List<&2, Core.Expr>) -> Bool:
+  match fuel todo:
+    case 0n xs:
+      False{}
+    case j Nil{}:
+      True{}
+    case 1n+j Core.EVar{x} <> rest:
+      Bool.and(Str.has(bound, x), KZ.clean(j, bound, rest))
+    case 1n+j Core.ENum{v} <> rest:
+      KZ.clean(j, bound, rest)
+    case 1n+j Core.EFlt{v} <> rest:
+      KZ.clean(j, bound, rest)
+    case 1n+j Core.ECall{Core.EVar{+f}, args} <> rest:
+      Bool.and(Bool.or(Str.has(Gen.scalar.u32s(), f), Str.has(Gen.scalar.others(), f)),
+        KZ.clean(j, bound, List.append(&2, Core.Expr, args, rest)))
+    case j xs:
+      False{}
+
+def KZ.rec(+f: String, +bk: String, ps: List<&2, Core.Pat>, b: Core.Expr) -> Bool:
+  match ps b:
+    case Core.PCtor{+ak, Core.PVar{+a} <> Core.PVar{+b} <> Nil{}} <> Core.PCtor{+ck, Core.PVar{+c} <> Core.PVar{+d} <> Nil{}} <> Nil{}
+         Core.ELet{Core.PCtor{+pk, Core.PVar{+l} <> Core.PVar{+r} <> Nil{}},
+           Core.ECtor{+vk, Core.ECall{Core.EVar{+fl}, Core.EVar{+al} <> Core.EVar{+cl} <> Nil{}} <> Core.ECall{Core.EVar{+fr}, Core.EVar{+br} <> Core.EVar{+dr} <> Nil{}} <> Nil{}},
+           Core.ECtor{+rk, Core.EVar{+rl} <> Core.EVar{+rr} <> Nil{}}}:
+      Bool.and(Str.eq(ak, bk), Bool.and(Str.eq(ck, bk), Bool.and(Str.eq(pk, "%par"), Bool.and(Str.eq(vk, "%par"),
+        Bool.and(Str.eq(fl, f), Bool.and(Str.eq(fr, f), Bool.and(Str.eq(al, a), Bool.and(Str.eq(cl, c),
+        Bool.and(Str.eq(br, b), Bool.and(Str.eq(dr, d), Bool.and(Str.eq(rk, bk), Bool.and(Str.eq(rl, l), Str.eq(rr, r)))))))))))))
+    case pats body:
+      False{}
+
+def KZ.mixed(+lk: String, +bk: String, ps: List<&2, Core.Pat>, +swap: Bool) -> Bool:
+  match ps:
+    case Core.PCtor{a, ap} <> Core.PCtor{b, bp} <> Nil{}:
+      Bool.and(Str.eq(a, Bool.pick(String, swap, bk, lk)), Str.eq(b, Bool.pick(String, swap, lk, bk)))
+    case other:
+      False{}
+
+def KZ.leaf(+f: String, +lk: String, +bk: String, +ret: String, +vals: List<&2, Core.Expr>,
+  +p2: List<&2, Core.Pat>, +p3: List<&2, Core.Pat>, +pr: List<&2, Core.Pat>, +br: Core.Expr,
+  ps: List<&2, Core.Pat>) -> Maybe<&2, KZip>:
+  match ps:
+    case Core.PCtor{+a, +ap} <> Core.PCtor{+b, +bp} <> Nil{}:
+      +leafpats : List<&2, Core.Pat> = [Core.PCtor{a, ap}, Core.PCtor{b, bp}]
+      Bool.pick(Maybe<&2, KZip>, Bool.and(Str.eq(a, lk), Bool.and(Str.eq(b, lk), Bool.and(Str.eq(ret, lk),
+        Bool.and(KZ.vars(ap), Bool.and(KZ.vars(bp), Bool.and(KZ.clean(512n, Pats.vars(leafpats, Nil{}), vals),
+        Bool.and(KZ.mixed(lk, bk, p2, False{}), Bool.and(KZ.mixed(lk, bk, p3, True{}), KZ.rec(f, bk, pr, br))))))))),
+        Some{KZip{lk, bk, leafpats, vals}}, None{})
+    case other:
+      None{}
+
+def KZ.cases(+f: String, +lk: String, +bk: String, cases: List<&2, Core.Expr>) -> Maybe<&2, KZip>:
+  match cases:
+    case Core.ECase{ps, Core.ECtor{ret, vals}} <> Core.ECase{p2, b2} <> Core.ECase{p3, b3} <> Core.ECase{pr, br} <> Nil{}:
+      KZ.leaf(f, lk, bk, ret, vals, p2, p3, pr, br, ps)
+    case other:
+      None{}
+
+def KZ.type(+g: G, +f: String, +ty: String, d: Decl, cases: List<&2, Core.Expr>) -> Maybe<&2, KZip>:
+  match d:
+    case DType{n, Nil{}, Ctor{+lk, +lf} <> Ctor{+bk, Field{x, +lt} <> Field{y, +rt} <> Nil{}} <> Nil{}}:
+      Bool.pick(Maybe<&2, KZip>, Bool.and(KZ.scalar(lf), Bool.and(Nat.is_ge(List.length(&2, Field, lf), 1n),
+        Bool.and(Nat.is_le(List.length(&2, Field, lf), 8n), Bool.and(U32.is_zero(KQ.tree.kind(G.ctor(g, lk))),
+        Bool.and(U32.is_zero(KQ.tree.kind(G.ctor(g, bk))), Bool.and(Str.eq(P.head(lt), ty), Str.eq(P.head(rt), ty))))))),
+        KZ.cases(f, lk, bk, cases), None{})
+    case other:
+      None{}
+
+def KZ.pick(+g: G, +f: String, ps: List<&2, Core.Param>, mask: List<&2, Bool>, body: Core.Expr) -> Maybe<&2, KZip>:
+  match ps mask body:
+    case Core.Param{+a, am, +at} <> Core.Param{+b, bm, +bt} <> Nil{} True{} <> True{} <> Nil{}
+         Core.EMatch{Core.EVar{+x} <> Core.EVar{+y} <> Nil{}, cases}:
+      Bool.pick(Maybe<&2, KZip>, Bool.and(Str.eq(a, x), Bool.and(Str.eq(b, y), Str.eq(at, bt))),
+        KZ.type(g, f, at, G.body(g, "%" ++ at), cases), None{})
+    case pl ml e:
+      None{}
+
+def KZ.tag(c: Maybe<&2, CInfo>) -> String:
+  match c:
+    case Some{CInfo{tag, ar, kind, single}}:
+      U32.show(tag)
+    case None{}:
+      "4294967295"
+
+def KZ.fields(n: Nat, +k: U32, +i: U32) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+j:
+      "((KDEV KU*)(c->H+KIX(c," ++ KX.v(k) ++ ")))[" ++ U32.show(i) ++ "]=(KU)" ++ KX.v(k) ++ "_" ++ U32.show(i) ++ "; " ++
+        KZ.fields(j, k, U32.inc(i))
+
+def KZ.node(+stem: String, +tag: U32, +ds: List<&2, Doc>) -> KM(Doc):
+  +n = Gen.len(ds)
+  do KM<Doc>:
+    +k : U32 <- K.fresh()
+    return Doc.list([DStr{"({ "}, KX.temps(ds, k, 0), DStr{"KW " ++ KX.v(k) ++ " = " ++ stem ++ "put(c,at," ++
+      U32.show(tag) ++ "," ++ U32.show(n) ++ ",0); " ++ KZ.fields(U32.to_nat(n), k, 0) ++ KX.v(k) ++ "; })"}])
+
+def KZ.words(+leafn: U32, n: Nat) -> U32:
+  match n:
+    case 0n:
+      U32.add(U32.div(U32.add(leafn, 1), 2), 1)
+    case 1n+j:
+      U32.add(U32.mul(2, KZ.words(leafn, j)), 3)
+
+def KZ.wrapper(+stem: String, +n: U32, +i: U32) -> String:
+  +nm = stem ++ U32.show(i)
+  "KINLINE " ++ "KW " ++ nm ++
+    "(KTHR KCtx*c,KW a,KW b) { KW p=k_alloc(c," ++ U32.show(U32.sub(n, 1)) ++
+    ");if(c->err)return 0;KW at=KIX(c,p)-1;return " ++ stem ++ "f" ++ U32.show(i) ++ "(c,a,b,&at); }\n"
+
+def KZ.levels(+stem: String, +tag: String, +leafn: U32, n: Nat, +i: U32) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+j:
+      +d = U32.show(i)
+      +prev = stem ++ U32.show(U32.sub(i, 1))
+      +pf = stem ++ "f" ++ U32.show(U32.sub(i, 1))
+      "KINLINE " ++ "bool " ++ stem ++ d ++
+        "g(KTHR KCtx *c, KW a, KW b) { return KTAG(a)==" ++ tag ++ " && KTAG(b)==" ++ tag ++
+        " && " ++ prev ++ "g(c,KFLD(a,0),KFLD(b,0)) && " ++ prev ++ "g(c,KFLD(a,1),KFLD(b,1)); }\n" ++
+      "KINLINE KW " ++ stem ++ "f" ++ d ++ "(KTHR KCtx *c, KW a, KW b,KTHR KW*at) { KW l=" ++ pf ++
+        "(c,KFLD(a,0),KFLD(b,0),at); KW r=" ++ pf ++ "(c,KFLD(a,1),KFLD(b,1),at); KW o=" ++ stem ++
+        "put(c,at," ++ tag ++ ",2,1); KW ix=KIX(c,o); c->H[ix]=l; c->H[ix+1]=r; return o; }\n" ++
+      KZ.wrapper(stem, KZ.words(leafn, U32.to_nat(i)), i) ++ KZ.levels(stem, tag, leafn, j, U32.inc(i))
+
+def KZ.fast(+stem: String, n: Nat, +i: U32) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+j:
+      +nm = stem ++ U32.show(i)
+      "if (" ++ nm ++ "g(c,p0,p1)) return " ++ nm ++ "(c,p0,p1);\n" ++ KZ.fast(stem, j, U32.sub(i, 1))
+
+def KZ.tagnum(c: Maybe<&2, CInfo>) -> U32:
+  match c:
+    case Some{CInfo{tag, ar, kind, single}}:
+      tag
+    case None{}:
+      4294967295
+
+def KZ.emit.once(+g: G, +f: String, z: Maybe<&2, KZip>) -> KM(String):
+  match z:
+    case None{}:
+      KM.pure(String, "")
+    case Some{KZip{+lk, +bk, ps, +vals}}:
+      +stem = "KZ_" ++ Gen.mangle(f) ++ "_"
+      +env = PatR.binds(K.pats(g, ps, ["a", "b"], PatR{Nil{}, Nil{}}))
+      do KM<String>:
+        K.memo.put("%kzip-on", "1")
+        +ds : List<&2, Doc> <- KX.exprs(g, env, vals)
+        +r : Doc <- KZ.node(stem, KZ.tagnum(G.ctor(g, lk)), ds)
+        K.flat.add(Doc.list([DStr{"KINLINE KW " ++ stem ++ "put(KTHR KCtx*c,KTHR KW*at,KW tag,KW n,KU refs) { KW pn=refs?n:(n+1)/2;KW ix=*at;*at+=pn+1;c->H[ix]=K_PACK|(refs?K_PACK_PTR:0)|(tag<<40)|(n<<48)|pn;if(!refs&&(n&1))c->H[ix+pn]=0;return KPTR(c,ix+1); }\n" ++
+          "KINLINE bool " ++ stem ++ "0g(KTHR KCtx *c, KW a, KW b) { return KTAG(a)==" ++
+          KZ.tag(G.ctor(g, lk)) ++ " && KTAG(b)==" ++ KZ.tag(G.ctor(g, lk)) ++ "; }\nKINLINE KW " ++ stem ++
+          "f0(KTHR KCtx *c, KW a, KW b,KTHR KW*at) { return "}, r,
+          DStr{"; }\n" ++ KZ.wrapper(stem, KZ.words(U32.from_nat(List.length(&2, Core.Expr, vals)), 0n), 0) ++ KZ.levels(stem, KZ.tag(G.ctor(g, bk)), U32.from_nat(List.length(&2, Core.Expr, vals)), 3n, 1) ++ "KNOINLINE KW " ++ stem ++ "try(KTHR KCtx*c,KW p0,KW p1,KTHR bool*hit) { *hit=true;\n" ++ KZ.fast(stem, 4n, 3) ++ "*hit=false;return 0; }\n"}]))
+        return "{ bool hit;KW r=" ++ stem ++ "try(c,p0,p1,&hit);if(hit)return r; }\n"
+
+def KZ.emit.cache(+g: G, +f: String, +z: Maybe<&2, KZip>, m: Maybe<&2, String>) -> KM(String):
+  match m:
+    case Some{v}:
+      KM.pure(String, v)
+    case None{}:
+      do KM<String>:
+        +v : String <- KZ.emit.once(g, f, z)
+        K.memo.put("%kzip " ++ f, v)
+        return v
+
+def KZ.emit(+g: G, +f: String, +z: Maybe<&2, KZip>) -> KM(String):
+  do KM<String>:
+    m : Maybe<&2, String> <- K.memo.get("%kzip " ++ f)
+    KZ.emit.cache(g, f, z, m)
+
+def KZ.group.fast(+stem: String, +a: String, +b: String, n: Nat, +i: U32) -> String:
+  "{ bool hit;KW r=" ++ stem ++ "try(c," ++ a ++ "," ++ b ++ ",&hit);if(hit) { RV=r; K_TREE_RET; if(sp==0)return RV; sp-=1;pc=KQ_ST(sp);break; } }\n"
+
+def KZ.group(+g: G, +f: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, +body: Core.Expr, +k: U32) -> KM(Unit):
+  do KM<Unit>:
+    +fast : String <- KZ.emit(g, f, KZ.pick(g, f, ps, mask, body))
+    K.putS(Bool.pick(String, String.is_empty(fast), "", KZ.group.fast("KZ_" ++ Gen.mangle(f) ++ "_",
+      KX.v(k) ++ "_0", KX.v(k) ++ "_1", 4n, 3)))
+
 type KQSel is Type:
   KQSDef{sq: Bool, g: G, name: String, e: U32, mask: List<&2, Bool>, ps: List<&2, Core.Param>, body: Core.Expr}
   KQSCallGo{reg: Bool, g: G, env: Env(), self: KSelf, x: String, s: Split, e: U32, body: Core.Expr}
@@ -18141,12 +18349,13 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
           K.out(Unit, Unit{})
     case Succ{+fu}:
       match k:
-        case KQSDef{sq, +g, +name, +e, +mask, +ps, body}:
+        case KQSDef{sq, +g, +name, +e, +mask, +ps, +body}:
           match sq:
             case True{}:
               +n = U32.to_nat(K.kept(mask))
               +bound = K.params(ps, mask)
               do KM<Unit>:
+                +zfast : String <- KZ.emit(g, name, KZ.pick(g, name, ps, mask, body))
                 K.start(0)
                 saved : Doc <- K.cap.begin()
                 +l : U32 <- K.fresh()
@@ -18161,7 +18370,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                 K.start(0)
                 blocks : Doc <- K.cap.take(saved)
                 K.flat.add(Doc.list([DStr{"\nKINLINE KW KQ_" ++ Gen.mangle(name) ++ "(KTHR KCtx *c" ++ KQ.params(n, 0) ++
-                  ", KTHR bool *ok) {\nKQ_STACK; K_TREE_STACK;\nKW sp = 0, pc = " ++ U32.show(l) ++ ", RV = 0, st = c->kqlim;\n" ++ KQ.init(n, 0) ++
+                  ", KTHR bool *ok) {\n" ++ zfast ++ "KQ_STACK; K_TREE_STACK;\nKW sp = 0, pc = " ++ U32.show(l) ++ ", RV = 0, st = c->kqlim;\n" ++ KQ.init(n, 0) ++
                   KQ.init.rest(Nat.sub(12n, n), U32.from_nat(n)) ++
                   "for (;;) {\nif (st-- == 0 || c->err != 0) { *ok = false; return 0; }\nswitch (pc) {\n"}, blocks,
                   DStr{"default:\n*ok = false;\nreturn 0;\n}\n}\n}\n"}]))
@@ -18227,13 +18436,14 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
             KQ.go(fu, KQSEntryMemo{g, f, key, m})
         case KQSGroupGo{+g, +f, +l, +mask, d}:
           match d:
-            case DDef{n, +ps, body, ret}:
+            case DDef{n, +ps, +body, ret}:
               do KM<Unit>:
                 saved : U32 & Doc <- K.save()
                 +k : U32 <- K.fresh()
                 K.start(l)
                 K.putS(KQ.entry(k, U32.to_nat(K.kept(mask)), 0) ++ "\n")
                 KQ.tree.entry(g, G.body(g, f))
+                KZ.group(g, f, ps, mask, body, k)
                 KQ.go(fu, KQSStmt{g, KQ.sig(ps, mask, k, 0), KSelf{f, l, mask}, KQ.anf(g, K.params(ps, mask), R.ops(body, "Nat"))})
                 K.restore(saved)
             case other:
@@ -19624,7 +19834,7 @@ def J.printer(j: JG, ty0: Core.Expr) -> Gen(String):
 def K.fin(r: Unit & KSt) -> KOut:
   (u, st) = r
   KSt{+n, sl, +curl, cur, out, +fns, todo, +frames, errs, flat, +memo} = st
-  KOut{Doc.flat(Doc.list([DStr{"#define K_NLABELS " ++ U32.show(n) ++ "\n" ++ K.defines(fns) ++ "KCONST KW K_FRAME[] = {" ++
+  KOut{Doc.flat(Doc.list([DStr{Bool.pick(String, Bool.not(String.is_empty(KQ.tree.memo("%kzip-on", memo))), "#define K_GPU_PACKED 1\n", "") ++ "#define K_NLABELS " ++ U32.show(n) ++ "\n" ++ K.defines(fns) ++ "KCONST KW K_FRAME[] = {" ++
     K.frame_table(frames, 0, n) ++ "0};\n\nKINLINE KW k_frame_size(KW l) {\n  return l < K_NLABELS ? K_FRAME[l] : 0;\n}\n\n"},
     DStr{KQ.tree.defs(memo)}, flat, DStr{"\nKINLINE KW k_kq(KTHR KCtx *c, KTHR bool *ok) {\nswitch (c->kq) {\n" ++ KQ.cases.of(memo) ++
     "default:\n*ok = false;\nreturn 0;\n}\n}\n#ifndef __METAL_VERSION__\n#define K_KQH_LIST " ++ KQ.hosts.of(memo) ++

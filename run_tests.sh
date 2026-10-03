@@ -45,6 +45,11 @@ if python3 tools/gpu-array-mask-check.py "$BENDC" "$BASE" tests/gpu_array_masks.
 else
   echo "FAIL gpu_array_mask_codegen"; cat build/tests/gpu_array_mask_codegen.log; fail=$((fail+1))
 fi
+if sh tools/gpu-zipper-check.sh "$BENDC" "$BASE" tests build/tests/gpu_zipper rt > build/tests/gpu_zipper.log 2>&1; then
+  echo "ok   gpu_zipper_codegen_runtime"; pass=$((pass+1))
+else
+  echo "FAIL gpu_zipper_codegen_runtime"; cat build/tests/gpu_zipper.log; fail=$((fail+1))
+fi
 # C checks of the runtime (tests/rt/*.c, built whole with $CC): each
 # prints "ok".
 if sh tools/gpu-host-check.sh "$BENDC" "$BASE" > build/tests/gpu_host_codegen.log 2>&1; then

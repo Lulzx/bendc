@@ -191,8 +191,30 @@ KINLINE void k_fail(KTHR KCtx *c, KU e) {
 // A Nat is a plain word (at most 2^48 - 1, as on the CPU), so a match on one
 // needs no check, and a loop that counts down stays a counted loop.
 KINLINE bool k_in(KTHR KCtx *c, KW v) { return v - c->ab < c->an; }
-KINLINE KW k_word(KTHR KCtx *c, KW v, KW i) {
-  if (k_in(c, v)) return c->H[((v - c->ab) >> 3) + i];
+// Closed scalar-leaf tree nodes. Normal aligned pointers; only their prefix
+// and payload layout differ. High mark/forward bits remain reserved for host.
+#define K_PACK ((KW)1 << 59)
+#define K_PACK_PTR ((KW)1 << 56)
+#define K_PACK_TAG(h) (((h) >> 40) & 255)
+#define K_PACK_AR(h) (((h) >> 48) & 255)
+#ifdef K_GPU_PACKED
+KNOINLINE
+#else
+KINLINE
+#endif
+KW k_word(KTHR KCtx *c, KW v, KW i) {
+  if (k_in(c, v)) {
+    KW ix=(v-c->ab)>>3;
+#ifdef K_GPU_PACKED
+    KW h=c->H[ix-1];
+    if(h&K_PACK) {
+      if(i==0)return K_PACK_TAG(h);
+      if(h&K_PACK_PTR)return c->H[ix+i-1];
+      return ((KDEV KU*)(c->H+ix))[i-1];
+    }
+#endif
+    return c->H[ix+i];
+  }
   return c->G[((v - c->gb) >> 3) + i];
 }
 KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : (k_word(c, v, 0) & (KW)0xffcfffff); }
@@ -202,6 +224,12 @@ KINLINE KW k_tag(KTHR KCtx *c, KW v) { return (v & 1) ? (v >> 3) : (k_word(c, v,
 // bendrt.h); K_BARE in its size word says so (for k_region and the copy out).
 #define KFLB(v, i) k_word(c, v, (i))
 #define K_BARE ((KW)1 << 61)
+KINLINE KW k_psize(KW h) {
+#ifdef K_GPU_PACKED
+  if(h&K_PACK)return h&0xffffffff;
+#endif
+  return h&~K_BARE;
+}
 
 // n words from the lane's heap chunk; the word before an object holds its
 // size (the host copies results out with it). Chunk 0 is scratch: a lane
@@ -279,8 +307,12 @@ KNOINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
     c->hp = lo;
     return r;
   }
-  KW p = (r - c->ab) >> 3, m = c->H[p - 1] & ~K_BARE;
-  for (KW i = (c->H[p - 1] & K_BARE) ? 0 : 1; i < m; i++) {
+  KW p = (r - c->ab) >> 3, raw=c->H[p-1], m = k_psize(raw);
+  KW first=(raw&K_BARE)?0:1;
+#ifdef K_GPU_PACKED
+  if(raw&K_PACK) first=(raw&K_PACK_PTR)?0:m;
+#endif
+  for (KW i = first; i < m; i++) {
     // An older child can reach this span through a parent-first compacted
     // graph. Looking only for direct edges into the span would discard its
     // live descendants. Keep arena edges; self-contained scalar nodes can
@@ -323,7 +355,7 @@ KINLINE bool k_tree_new(KTHR KCtx *c, KW h0, KW e0, KW b0, KW v) {
   return false;
 }
 KINLINE KW k_tree_copy_node(KTHR KCtx *src,KTHR KCtx *out,KW v) {
-  KW ix=KIX(src,v), raw=src->H[ix-1], n=raw & ~K_BARE;
+  KW ix=KIX(src,v), raw=src->H[ix-1], n=k_psize(raw);
   KW r=k_alloc(out,n);
   if (out->err) return 0;
   out->H[KIX(out,r)-1]=raw;
@@ -336,6 +368,14 @@ KINLINE KW k_tree_copy_node(KTHR KCtx *src,KTHR KCtx *out,KW v) {
 KINLINE bool k_tree_layout(KTHR KCtx *c,KW v,KCP KW *masks,KW nmasks,
                            KTHR KW *mask,KTHR KW *first) {
   KW ix=KIX(c,v), raw=c->H[ix-1];
+#ifdef K_GPU_PACKED
+  if(raw&K_PACK) {
+    KW tag=K_PACK_TAG(raw);if(tag>=nmasks || masks[tag]&K_TREE_BARE_MASK)return false;
+    if(raw&K_PACK_PTR){*mask=masks[tag]>>1;*first=0;return true;}
+    if(masks[tag]!=0)return false;
+    *mask=0;*first=0;return true;
+  }
+#endif
   if(raw & K_BARE) {
     for(KW tag=0;tag<nmasks;tag++) if(masks[tag] & K_TREE_BARE_MASK) {
       *mask=masks[tag] & ~K_TREE_BARE_MASK;*first=0;return true;
@@ -355,7 +395,7 @@ KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
   src[0]=r;dst[0]=root;next[0]=0;
   bool abort=false;
   while(depth && !out.err) {
-    KW d=depth-1,ix=KIX(c,src[d]),n=c->H[ix-1] & ~K_BARE,mask,first;
+    KW d=depth-1,ix=KIX(c,src[d]),n=k_psize(c->H[ix-1]),mask,first;
     if(n>=64 || ++steps>131072 || !k_tree_layout(c,src[d],masks,nmasks,&mask,&first)) {abort=true;break;}
     if(next[d]<first) next[d]=first;
     while(next[d]<n && !(mask&((KW)1<<next[d]))) next[d]++;
@@ -382,7 +422,7 @@ KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
   if(out.blocks!=b0 && out.H[out.blocks]==b0 && out.hp-out.hs<=e0-h0) {
     KW lo=out.hs,words=out.hp-lo,base=KPTR(&out,lo),bytes=words<<3;
     for(KW at=lo;at<out.hp;) {
-      KW raw=out.H[at],n=raw & ~K_BARE,mask=0,first=0;
+      KW raw=out.H[at],n=k_psize(raw),mask=0,first=0;
       (void)k_tree_layout(&out,KPTR(&out,at+1),masks,nmasks,&mask,&first);
       c->H[h0+at-lo]=raw;
       for(KW i=0;i<n;i++) {
