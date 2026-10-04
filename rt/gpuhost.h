@@ -37,6 +37,8 @@ typedef struct {
 static pthread_mutex_t gpu_lock = PTHREAD_MUTEX_INITIALIZER;
 static KW gpu_kq_cpu;    // (see gpu_kq_host)
 static KW gpu_kq_order;  // BEND_GPU_KQSORT: sort the waiting calls (see gpu_kq_sort)
+static double gpu_kq_fuse;  // BEND_GPU_FUSE_US: (see gpu_run)
+static double g_last_dt;    // the device's time in the last command buffer
 static int gpu_mode = -1;
 static int gpu_log;         // BEND_GPU_LOG: 1 for a line a call, 2 for more
 static double gpu_tout;     // the last copy out's time (BEND_GPU_LOG)
@@ -358,31 +360,37 @@ static int g_init(const GpuProg *prog) {
   return 1;
 }
 
-// One dispatch of every lane; 0 when the GPU failed.
-static int g_dispatch(const KParams *P, GId pso) {
+// One dispatch of every lane, or two in a row (pso, then pso2 when not
+// NULL) in one command buffer; 0 when the GPU failed.
+static int g_dispatch(const KParams *P, GId pso, GId pso2) {
   void *pool = g_pool_push();
   double w0 = gpu_log ? gpu_now() : 0;
   GId cb = g_msg(g_queue, "commandBuffer");
-  GId enc = g_msg(cb, "computeCommandEncoder");
-  G_SEND(void (*)(GId, GSel, GId))(enc, g_sel("setComputePipelineState:"), pso);
   void (*set)(GId, GSel, GId, unsigned long, unsigned long) = G_SEND(void (*)(GId, GSel, GId, unsigned long,
     unsigned long));
-  set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufH, 0, 0);
-  set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufA, 0, 1);
-  G_SEND(void (*)(GId, GSel, const void *, unsigned long, unsigned long))(enc, g_sel("setBytes:length:atIndex:"), P,
-    sizeof(KParams), 2);
-  set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufG, 0, 3);
-  GSize grid = {(unsigned long)P->nlanes, 1, 1}, tg = {g_tpg, 1, 1};
-  G_SEND(void (*)(GId, GSel, GSize, GSize))(enc, g_sel("dispatchThreads:threadsPerThreadgroup:"), grid, tg);
-  g_msg(enc, "endEncoding");
+  for (GId p = pso; p; p = p == pso ? pso2 : NULL) {
+    GId enc = g_msg(cb, "computeCommandEncoder");
+    G_SEND(void (*)(GId, GSel, GId))(enc, g_sel("setComputePipelineState:"), p);
+    set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufH, 0, 0);
+    set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufA, 0, 1);
+    G_SEND(void (*)(GId, GSel, const void *, unsigned long, unsigned long))(enc, g_sel("setBytes:length:atIndex:"), P,
+      sizeof(KParams), 2);
+    set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufG, 0, 3);
+    GSize grid = {(unsigned long)P->nlanes, 1, 1}, tg = {g_tpg, 1, 1};
+    G_SEND(void (*)(GId, GSel, GSize, GSize))(enc, g_sel("dispatchThreads:threadsPerThreadgroup:"), grid, tg);
+    g_msg(enc, "endEncoding");
+  }
   g_msg(cb, "commit");
   g_msg(cb, "waitUntilCompleted");
   unsigned long st = G_SEND(unsigned long (*)(GId, GSel))(cb, g_sel("status"));
+  double (*tm)(GId, GSel) = G_SEND(double (*)(GId, GSel));
+  double dt = tm(cb, g_sel("GPUEndTime")) - tm(cb, g_sel("GPUStartTime"));
+  g_last_dt = dt;
   if (gpu_log) {
-    double (*tm)(GId, GSel) = G_SEND(double (*)(GId, GSel));
-    double dt = tm(cb, g_sel("GPUEndTime")) - tm(cb, g_sel("GPUStartTime"));
     gpu_secs[pso != g_pso] += dt;
-    if (gpu_log >= 2) fprintf(stderr, "bend gpu: %s %.4fs (%.4fs)\n", pso != g_pso ? "kq" : "main", dt, gpu_now() - w0);
+    if (gpu_log >= 2)
+      fprintf(stderr, "bend gpu: %s %.4fs (%.4fs)\n", pso2 ? "main+kq" : pso != g_pso ? "kq" : "main", dt,
+        gpu_now() - w0);
   }
   if (st != 4) gpu_note("a dispatch failed: %s", g_err_text(g_msg(cb, "error")));
   g_pool_pop(pool);
@@ -433,6 +441,7 @@ static int gpu_setup(const GpuProg *prog) {
   // (the simulator runs every call on the device: it tests that code)
   gpu_kq_cpu = (KW)gpu_env("BEND_GPU_KQCPU", sim ? 0 : 4);
   gpu_kq_order = (KW)gpu_env("BEND_GPU_KQSORT", 1);
+  gpu_kq_fuse = (double)gpu_env("BEND_GPU_FUSE_US", 1000) * 1e-6;
   gpu_budget = (KW)gpu_env("BEND_GPU_STEPS", sim ? 37 : 16384);
   KW f = 0;
   while (((KW)1 << f) < gpu_lanes) f++;
@@ -778,6 +787,15 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   __atomic_thread_fence(__ATOMIC_SEQ_CST);
   KW rounds = 0;
   size_t grow_tried = 0;
+  // A main dispatch and the bend_kq one after it cost the host a round trip
+  // each, which (2-3 ms on a loaded machine) can be more than the device's
+  // work: kmeans makes 180 pairs, most of them a few small szip calls. So,
+  // while the last bend_kq ran under gpu_kq_fuse seconds, the next one goes
+  // into the main dispatch's command buffer, right after it, and runs every
+  // call waiting then. Those calls are neither sorted nor run on the CPU
+  // (see gpu_kq_sort and gpu_kq_host), which help long calls: a long one
+  // gets the next bend_kq its own dispatch again, as the first one has.
+  int fuse = 0;
   for (;;) {
     // Keep completed frames and tasks instead of replaying a main dispatch
     // that fills the arena. Leave headroom for its next allocation burst.
@@ -802,10 +820,18 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
       for (KW l = 0; l < gpu_lanes; l++) prog->sim(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
     }
 #if BEND_METAL
-    else if (!g_heap() || !g_dispatch(&P, g_pso)) {
-      return 0;
+    else {
+      P.kqmap = 0;
+      gpu_A[KA_GROW] = 0;
+      if (fuse) {
+        gpu_kqep = gpu_kqep % 0xffffff + 1;
+        P.kqep = gpu_kqep;
+      }
+      if (!g_heap() || !g_dispatch(&P, g_pso, fuse ? g_pso_kq : NULL)) return 0;
     }
 #endif
+    int fused = fuse;
+    if (fused) fuse = g_last_dt < gpu_kq_fuse;
     rounds++;
     P.fresh = 0;
     KW tail = gpu_A[KA_QTAIL];
@@ -819,9 +845,11 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
       fprintf(stderr, "bend gpu: round: active %llu -> %llu, idle %llu, waiting %llu, queued %u\n", (unsigned long long)active,
         (unsigned long long)act, (unsigned long long)idle, (unsigned long long)waiting, (unsigned)(gpu_A[KA_QTAIL] - gpu_A[KA_QHEAD]));
     }
-    if (waiting > 0 && gpu_kq_host(prog, H, &P, waiting)) waiting = 0;
+    // (a fused bend_kq ran every call but those that ran out of arena)
+    if (fused && gpu_A[KA_GROW] == 0) fused = 0;
+    if (!fused && waiting > 0 && gpu_kq_host(prog, H, &P, waiting)) waiting = 0;
     P.kqmap = 0;
-    if (waiting > 1 && gpu_kq_order) gpu_kq_sort(H, &P, waiting);
+    if (!fused && waiting > 1 && gpu_kq_order) gpu_kq_sort(H, &P, waiting);
     if (gpu_log == 3 && waiting > 0) {
       // (which calls wait: label, with K_KQLIM or not, and the first lane's depth)
       KW n = gpu_lanes, lab[8] = {0}, cnt[8] = {0}, lim[8] = {0}, dep[8] = {0};
@@ -840,6 +868,10 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     if (waiting > 0) {
       // (again, after the arena grows, while a call runs out of it)
       for (;;) {
+        if (fused) {
+          fused = 0;
+          goto grow;
+        }
         gpu_A[KA_GROW] = 0;
         // (a fresh epoch, 1 to 2^24 - 1, for each dispatch: see k_take)
         gpu_kqep = gpu_kqep % 0xffffff + 1;
@@ -848,11 +880,13 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
           for (KW l = 0; l < gpu_lanes; l++) prog->sim_kq(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
         }
 #if BEND_METAL
-        else if (!g_dispatch(&P, g_pso_kq)) {
+        else if (!g_dispatch(&P, g_pso_kq, NULL)) {
           return 0;
         }
 #endif
+        fuse = gpu_mode == GPU_METAL && g_last_dt < gpu_kq_fuse;
         if (gpu_A[KA_GROW] == 0 || gpu_A[KA_ERR] != 0) break;
+      grow:;
         // Grow for the calls still waiting. Their discarded spans stay in
         // each lane's free list, so the global bump must remain monotonic.
         KW left = 0;

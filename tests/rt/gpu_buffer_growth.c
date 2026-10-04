@@ -46,7 +46,7 @@ int main(void) {
     assert(pipeline && g_heap());
     KParams p = {0};
     p.nlanes = gpu_Hn / sizeof(KW);
-    assert(g_dispatch(&p, pipeline));
+    assert(g_dispatch(&p, pipeline, NULL));
     KW old = p.nlanes;
     check(old);
     for (int step = 0; step < 2; step++) {
@@ -54,7 +54,7 @@ int main(void) {
       check(old);
       p.heap0 = old;
       p.nlanes = gpu_Hn / sizeof(KW) - old;
-      assert(g_dispatch(&p, pipeline));
+      assert(g_dispatch(&p, pipeline, NULL));
       old += p.nlanes;
       check(old);
     }
