@@ -21502,19 +21502,38 @@ def J.printer(j: JG, ty0: Core.Expr) -> Gen(String):
 
 # The program builders and the driver: they call the compilers above.
 
+# Whether device code reads or makes arrays.
+def K.arrays(+code: String) -> Bool:
+  Bool.or(Bool.or(String.contains(code, "k_arr(c"), String.contains(code, "k_anew(c")),
+    Bool.or(String.contains(code, "k_aget(c"), String.contains(code, "k_aiget(c")))
+
+# Whether a frame has 100 words or more.
+def K.frames.wide(frames: List<&2, Bind>) -> Bool:
+  match frames:
+    case Nil{}:
+      False{}
+    case Bind{n, c} <> t:
+      Bool.or(Nat.is_ge(String.length(c), 3n), K.frames.wide(t))
+
 # Device code that frees on match starts with K_FREE (see k_take in
 # rt/gpu.h): not with packed nodes (K_GPU_PACKED keeps tags in the size
-# word), nor under BEND_NO_FREE.
+# word), nor under BEND_NO_FREE, nor with arrays (with K_FREE the arena
+# regions are off, and bfs's dropped arrays filled it), nor with a frame of
+# 100 words or more: such calls run slowly through the device's frames
+# (queens' 300 words: 88s on the device), and without frees the arena runs
+# out early and the CPU runs the call (2s).
 def K.fin(free: Bool, r: Unit & KSt) -> KOut:
   (u, st) = r
   KSt{+n, sl, +curl, cur, out, +fns, todo, +frames, errs, flat, +memo} = st
   +packed = Bool.not(String.is_empty(KQ.tree.memo("%kzip-on", memo)))
-  KOut{Doc.flat(Doc.list([DStr{Bool.pick(String, packed, "#define K_GPU_PACKED 1\n", Bool.pick(String, free, "#define K_FREE 1\n", "")) ++ "#define K_NLABELS " ++ U32.show(n) ++ "\n" ++ K.defines(fns) ++ "KCONST KW K_FRAME[] = {" ++
+  +code = Doc.flat(Doc.list([DStr{"#define K_NLABELS " ++ U32.show(n) ++ "\n" ++ K.defines(fns) ++ "KCONST KW K_FRAME[] = {" ++
     K.frame_table(frames, 0, n) ++ "0};\n\nKINLINE KW k_frame_size(KW l) {\n  return l < K_NLABELS ? K_FRAME[l] : 0;\n}\n\n"},
     DStr{KQ.tree.defs(memo)}, flat, DStr{"\nKINLINE KW k_kq(KTHR KCtx *c, KTHR bool *ok) {\nswitch (c->kq) {\n" ++ KQ.cases.of(memo) ++
     "default:\n*ok = false;\nreturn 0;\n}\n}\n#ifndef __METAL_VERSION__\n#define K_KQH_LIST " ++ KQ.hosts.of(memo) ++
     "\n#endif\n"}, DStr{"\nKINLINE void k_cases(KTHR KCtx *c) {\nswitch (c->pc) {\n"}, out, K.block_doc(curl, cur),
-    DStr{"default: {\nk_fail(c, KE_PC);\nbreak;\n}\n}\n}\n"}])), K.wraps(fns), errs}
+    DStr{"default: {\nk_fail(c, KE_PC);\nbreak;\n}\n}\n}\n"}]))
+  KOut{Bool.pick(String, packed, "#define K_GPU_PACKED 1\n", Bool.pick(String, Bool.and(free, Bool.not(Bool.or(K.arrays(code), K.frames.wide(frames)))), "#define K_FREE 1\n", "")) ++
+    code, K.wraps(fns), errs}
 
 def K.program.m(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> KM(Unit):
   do KM<Unit>:

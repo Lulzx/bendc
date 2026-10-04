@@ -114,6 +114,7 @@ typedef struct {
   KW kqmap;       // optional sorted KQ lane indices: count, then indices
   KW kqep;        // the epoch of this bend_kq dispatch (K_FREE, see k_take)
   KW fresh;       // the call's first dispatch: lanes empty their free lists
+  KW kqflag;      // 256 words: a K_KQLIM call at that label (mod 256) gave up (K_FREE)
 } KParams;
 
 #define PC_IDLE 0
@@ -128,10 +129,13 @@ typedef struct {
 #define K_NFC 64
 #define K_NEXACT 48
 #define K_FL0 (12 + KQ_ARGS)
-#define K_PEND 64
-#define K_PN0 (K_FL0 + K_NFC)
+#define K_PB 32      // words of a block of objects a KQ_ call holds back (see k_take)
+#define K_PBMAX 2    // and the blocks it may hold, unless it may give up (K_KQLIM)
+#ifndef K_PBLIM
+#define K_PBLIM 64   // the blocks one that may give up holds, then it gives up
+#endif
 #ifdef K_FREE
-#define K_LANE (12 + KQ_ARGS + K_NFC + K_PEND)  // words of a lane's saved state
+#define K_LANE (12 + KQ_ARGS + K_NFC)  // words of a lane's saved state
 #else
 #define K_LANE (12 + KQ_ARGS)  // words of a lane's saved state
 #endif
@@ -145,7 +149,9 @@ typedef struct {
 #define KE_QUEUE 6
 #define KE_MATCH 7
 #define KE_PC 8
-#define KE_FREE 9    // a KQ_ call that freed its arguments gave up (K_FREE)
+#define KE_FREE 9    // a KQ_ call that freed objects older than it stopped (K_FREE)
+#define KE_STOP 10   // a KQ_ call that may give up held back K_PBLIM blocks (not an error)
+#define KE_DEEP 11   // a KQ_ call ran out of its stack (K_FREE)
 
 typedef struct {
   KCOH KW *H;
@@ -163,8 +169,9 @@ typedef struct {
   KW kqa[KQ_ARGS];     // and its arguments
   KW kqlim;            // the blocks it may run (K_KQLIM)
   KW kep;              // a KQ_ call's epoch, shifted to its prefix bits (K_FREE), else 0
-  KU kdirty;           // the call freed an object older than it (K_FREE)
-  KU kpn;              // and how many it holds back (K_PEND, see k_take)
+  KW kpb; KU kpn;      // the objects older than it a KQ_ call frees: blocks, the next place (see k_take)
+  KU kpc, kpmax;       // its blocks, and how many it may have
+  KU kdirty;           // it freed one past them
   KCP KParams *P;
 } KCtx;
 
@@ -191,11 +198,7 @@ typedef struct {
 #define KPC c->pc
 #define KFP c->fp
 #define KRV c->rv
-// A parallel let forks below the fork limit while the queue is at most half
-// full; past that its values run one after the other (matmul's 8-way lets
-// filled the queue: KE_QUEUE, the call ran on the CPU).
-#define KFORK (c->dep < c->P->fork_limit && \
-  (KU)(K_LOAD(&c->A[KA_QTAIL]) - K_LOAD(&c->A[KA_QHEAD])) < (KU)(c->P->qcap / 2))
+#define KFORK (c->dep < c->P->fork_limit)
 #define KPUSH(ret, e) k_push(c, ret, K_FRAME[e])
 #define KARG(nf, i) c->H[(nf) + 4 + (i)]
 #define KRET(x) k_ret(c, x)
@@ -275,7 +278,6 @@ KINLINE KW k_flc(KW n) {
 }
 #ifdef K_FREE
 #define K_FLH(c, n) (c)->H[(c)->P->lane0 + (K_FL0 + (n)) * (c)->P->nlanes + (c)->lane]
-#define K_PND(c, i) (c)->H[(c)->P->lane0 + (K_PN0 + (i)) * (c)->P->nlanes + (c)->lane]
 #endif
 KINLINE KW k_alloc(KTHR KCtx *c, KW n) {
 #ifdef K_FREE
@@ -341,10 +343,13 @@ KINLINE KW k_alloc(KTHR KCtx *c, KW n) {
 //
 // A KQ_ call may run again (after the arena grows, or through frames when
 // it gives up), and then reads its arguments again: it must not have freed
-// them. Objects carry the epoch of the bend_kq dispatch that made them: the
-// first K_PEND older ones the call frees wait, untouched, until it returns;
-// past them freeing an older one marks the call dirty, and a dirty call that
-// stops fails the whole device call instead (see bend_kq).
+// them. Objects carry the epoch of the bend_kq dispatch that made them: an
+// older one the call frees waits, untouched, in blocks of K_PB words the call
+// allocates, until it returns (see bend_kq); its own objects it frees at once.
+// A call that may give up (K_KQLIM) holds back K_PBLIM blocks of older
+// objects, then gives up (KE_STOP) rather than free another; another holds
+// only K_PBMAX blocks of them, then frees them at once too (bitonic 4x faster
+// than holding all back), and if it stops anyway the device call fails.
 KINLINE bool k_heap_obj(KTHR KCtx *c, KW v) {
   KW ix = (v - c->ab) >> 3;
   return (v & 7) == 0 && ix - (c->P->heap0 + K_CHUNK) < c->P->heapw - K_CHUNK;
@@ -354,7 +359,8 @@ KINLINE void k_share(KTHR KCtx *c, KW v) {
   if (k_heap_obj(c, v)) c->H[KIX(c, v) - 1] |= K_SHR;
 #endif
 }
-#define KSHARE(v) k_share(c, v)
+// (a 32-bit value, a U32, F32 or Bool local, is no object: no code)
+#define KSHARE(v) do { if (sizeof(v) == sizeof(KW)) k_share(c, (KW)(v)); } while (0)
 KINLINE void k_take(KTHR KCtx *c, KW v, KW mask) {
 #ifdef K_FREE
   if (!k_heap_obj(c, v)) return;
@@ -368,9 +374,21 @@ KINLINE void k_take(KTHR KCtx *c, KW v, KW mask) {
   KW fc = k_flc(n);
   if (fc == 0) return;
   if (c->kep != 0 && (h & ((KW)0xffffff << 32)) != c->kep) {
-    if (c->kpn < K_PEND) {
-      K_PND(c, c->kpn) = ix;
+    if ((c->kpn == 0 || c->kpn == K_PB) && c->kpc < c->kpmax) {
+      KW b = KIX(c, k_alloc(c, K_PB));
+      if (c->err != 0) return;
+      c->H[b] = c->kpb;
+      c->kpb = b;
+      c->kpn = 1;
+      c->kpc++;
+    }
+    if (c->kpn != 0 && c->kpn < K_PB) {
+      c->H[c->kpb + c->kpn] = ix;
       c->kpn++;
+      return;
+    }
+    if (c->kqlim != ~(KW)0) {
+      c->err = KE_STOP;
       return;
     }
     c->kdirty = 1;
@@ -872,6 +890,8 @@ KINLINE KW k_aslow(KTHR KCtx *c, KW a, KW i, KW v, bool sw) {
   }
   KW o = c->H[w + 1 + j];
   if (sw) c->H[w + 1 + j] = v;
+  // (a cell read stays in its array as well: shared, see k_take)
+  else k_share(c, o);
   return o;
 }
 #define KAI_NARROW ((KW)1 << 32)
@@ -907,7 +927,10 @@ KINLINE KW k_aiget(KTHR KCtx *c,KW a,KW info,KW i) {
   KW w=!a?c->P->heap0+1:(info&KAI_CPU)?((a-c->gb)>>3):KIX(c,a);
   KCOH KW *p=(info&KAI_CPU)?(KCOH KW *)(c->G+w):c->H+w;
   KU j=(KU)i&(KU)info;
-  return (info&KAI_NARROW)?((KCOH KU *)(p+1))[j]:p[1+j];
+  if(info&KAI_NARROW) return ((KCOH KU *)(p+1))[j];
+  KW o=p[1+j];
+  if(!(info&KAI_CPU)) k_share(c,o);
+  return o;
 }
 KINLINE KW k_aiswap(KTHR KCtx *c,KW a,KW info,KW i,KW v) {
   if(!a) info=KAI_NARROW;
@@ -952,6 +975,8 @@ KINLINE KW k_anew(KTHR KCtx *c, KW d, KW v, bool nw) {
   } else {
     c->H[w] = K_ARR_HDR(d);
     for (KW i = 0; i < n; i++) c->H[w + 1 + i] = v;
+    // (every cell holds v)
+    if (n > 1) k_share(c, v);
   }
   return p;
 }
@@ -1152,8 +1177,11 @@ KINLINE void k_load(KTHR KCtx *c, KCOH KW *H, KDEV KAU *A, KCP KParams *P, KDEV 
   c->gb = P->gb;
   c->err = 0;
   c->kep = 0;
-  c->kdirty = 0;
+  c->kpb = 0;
   c->kpn = 0;
+  c->kpc = 0;
+  c->kpmax = 0;
+  c->kdirty = 0;
   k_anone(c);
   // Word k of every lane side by side: the host reads the pcs of all lanes
   // after a dispatch, and so touches only their pages.
@@ -1261,13 +1289,13 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
       default: {
         k_cases(c);
 #ifdef K_FREE
-        // A call that may fork deep in its callees (K_KQLIM) runs through
-        // the frames while they still fork, and past that as a KQ_ call
-        // with no limit: one that gave up after freeing its arguments
-        // could not run again (see k_take).
+        // A call that may fork deep in its callees (K_KQLIM) runs as a
+        // KQ_ call with no limit past the fork limit (the frames would not
+        // fork), and through the frames once one at its label gave up
+        // (bitonic's merges: each gave up after K_KQSTEPS blocks).
         if (c->pc == PC_KQ && (c->kqfb & K_KQLIM)) {
-          if (KFORK) c->pc = c->kqfb & ~K_KQLIM;
-          else c->kqfb &= ~K_KQLIM;
+          if (!KFORK) c->kqfb &= ~K_KQLIM;
+          else if (H[P->kqflag + (c->kq & 255)] != 0) c->pc = c->kqfb & ~K_KQLIM;
         }
 #endif
         break;
@@ -1304,17 +1332,33 @@ static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   c->kqlim = (c->kqfb & K_KQLIM) ? K_KQSTEPS : ~(KW)0;
 #ifdef K_FREE
   c->kep = P->kqep << 32;
+  c->kpmax = (c->kqfb & K_KQLIM) ? K_PBLIM : K_PBMAX;
 #endif
   KW r = k_kq(c, &ok);
 #ifdef K_FREE
+  c->kep = 0;
+  if (c->err == KE_STOP) {
+    c->err = 0;
+    ok = false;
+  }
+  if (!ok && c->err == 0 && !(c->kqfb & K_KQLIM)) {
+    // It ran out of its stack: a recursion this deep runs slowly through
+    // the frames too (lexer's 41-deep gen: 15s on the device, the arena full
+    // in the end), so the CPU runs the call.
+    KU z = 0;
+    K_CAS(&A[KA_ERR], z, (KU)KE_DEEP);
+    k_save(c);
+    return;
+  }
   if ((c->err == KE_HEAP || !ok) && c->kdirty) {
     // It freed what it would read again: the device call fails (a full
-    // arena then runs it again from the start, in a bigger one).
+    // arena runs it again from the start, in a bigger one).
     KU z = 0;
     K_CAS(&A[KA_ERR], z, c->err == KE_HEAP ? (KU)KE_HEAP : (KU)KE_FREE);
     k_save(c);
     return;
   }
+  if (!ok && (c->kqfb & K_KQLIM)) H[P->kqflag + (c->kq & 255)] = 1;
   if (c->err == KE_HEAP || !ok) {
     // Only its own objects are on the free lists past their old heads:
     // take them off, the span they are in goes back. The older objects it
@@ -1324,16 +1368,23 @@ static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
       while (f != 0 && K_EPOCH(c->H[f - 1]) == P->kqep) f = c->H[f];
       K_FLH(c, n) = f;
     }
-    c->kep = 0;
   } else {
-    c->kep = 0;
-    for (KU i = 0; i < c->kpn; i++) {
-      KW ix = K_PND(c, i), fc = k_flc(c->H[ix - 1] & 0xffffffff);
-      c->H[ix] = K_FLH(c, fc);
-      K_FLH(c, fc) = ix;
+    // It returned: what it held back goes on the free lists, then the blocks.
+    for (KW b = c->kpb, m = c->kpn; b != 0; m = K_PB) {
+      for (KW i = 1; i < m; i++) {
+        KW ix = c->H[b + i], fc = k_flc(c->H[ix - 1] & 0xffffffff);
+        c->H[ix] = K_FLH(c, fc);
+        K_FLH(c, fc) = ix;
+      }
+      KW nb = c->H[b];
+      c->H[b] = K_FLH(c, K_PB);
+      K_FLH(c, K_PB) = b;
+      b = nb;
     }
   }
+  c->kpb = 0;
   c->kpn = 0;
+  c->kpc = 0;
 #endif
   // A call that ran out of arena waits for the host to grow it, and runs
   // again (what it allocated is garbage: its result reached none of it).

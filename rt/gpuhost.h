@@ -709,8 +709,11 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   P.lane0 = P.qd + 4 * P.qcap;
   P.fn0 = P.lane0 + K_LANE * gpu_lanes;
   P.nfn = nfn;
-  // The sorted-dispatch map is before the root frame and allocation area.
-  KW rf = P.fn0 + 2 * nfn + gpu_lanes + 2;
+  // The sorted-dispatch map and the K_KQLIM flags are before the root frame
+  // and allocation area.
+  P.kqflag = P.fn0 + 2 * nfn + gpu_lanes + 2;
+  memset(H + P.kqflag, 0, 256 * 8);
+  KW rf = P.kqflag + 256;
   if (rf <= gpu_pin) rf = gpu_pin + 1;
   KW fs = k_frame_size(entry);
 #ifdef KQ_SHARED
