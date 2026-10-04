@@ -55,6 +55,14 @@
 #define BEND_UINL static inline
 #endif
 #if defined(__clang__) && defined(__has_attribute)
+#if __has_attribute(preserve_none)
+#define BEND_PN __attribute__((preserve_none))
+#endif
+#endif
+#ifndef BEND_PN
+#define BEND_PN
+#endif
+#if defined(__clang__) && defined(__has_attribute)
 #if __has_attribute(no_stack_protector)
 #define BEND_NSP_BEGIN _Pragma("clang attribute push (__attribute__((no_stack_protector)), apply_to = function)")
 #define BEND_NSP_END _Pragma("clang attribute pop")

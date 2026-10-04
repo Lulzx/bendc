@@ -14,7 +14,7 @@ for name in ("ro_word_fold", "ro_word_nat_fold", "ro_word_callback_fold"):
     assert r.returncode == 0, name + ": " + r.stderr
     programs[name] = r.stdout
 positive = programs["ro_word_fold"]
-body = re.search(r"static __attribute__\(\(noinline\)\) V H_F_fold_x37bseq\([^\n]*\) \{\n(.*?)\n\}\n(?=BEND_UINL|static)", positive, re.S)
+body = re.search(r"static __attribute__\(\(noinline\)\) (?:BEND_PN )?V H_F_fold_x37bseq\([^\n]*\) \{\n(.*?)\n\}\n(?=BEND_UINL|static)", positive, re.S)
 assert body, "fixed-width fold has no borrowed clone"
 assert "FLD(" in body.group(1) and "/*b*/" in body.group(1), "clone does not borrow its fields"
 assert not re.search(r"\brc_(take|take_ru|drop|share|inc|dec)\w*\(", body.group(1)), "clone retains per-node RC work"

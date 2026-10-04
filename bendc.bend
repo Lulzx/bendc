@@ -7276,6 +7276,302 @@ def PatR.conds(r: PatR) -> List<&2, String>:
   PatR{conds, binds} = r
   conds
 
+# Matches as decision trees
+# -------------------------
+# A match tests its cases in order, each on all of its conditions. When
+# every case's first condition tests the same scrutinee, the cases with
+# the same first condition are adjacent, and two different first
+# conditions never hold together, the cases sharing one share its test:
+# if (h) { those cases on their other conditions } else ..., planned the
+# same way inside. A group none of whose cases holds fails the match, as
+# no later case could hold. queens' solve (8 cases on 4 columns) ran 22%
+# fewer instructions: clang had turned the repeated tests of the chain
+# into selects and ands.
+#
+# A case's plan: the first conditions of the groups it opens (outermost
+# first), its own other conditions, how many groups close after it, and
+# whether it is inside a group.
+type CPlan is Data:
+  CPlan{opens: List<&2, String>, rest: List<&2, String>, closes: U32, deep: Bool}
+
+# A condition as a test of a value: kind 0 is ==, 1 is != 0, 2 is
+# nat_ge, 3 is IS_N, 4 anything else; the value tested, in parentheses
+# as Gen.pat.go writes it for == and !=; the other side.
+type CKey is Data:
+  CKey{kind: Nat, lhs: String, rhs: String}
+
+def Str.cut(s: String, +sep: String, acc: String, here: Bool) -> Maybe<&2, String & String>:
+  match s here:
+    case s1 True{}:
+      Some{(String.reverse(acc), String.drop(s1, String.length(sep)))}
+    case SNil{} False{}:
+      None{}
+    case SCon{c, +t} False{}:
+      Str.cut(t, sep, SCon{c, acc}, String.starts_with(t, sep))
+
+# s split at its first sep.
+def Str.split1(+s: String, +sep: String) -> Maybe<&2, String & String>:
+  Str.cut(s, sep, SNil{}, String.starts_with(s, sep))
+
+def Str.digits(s: String) -> Bool:
+  match s:
+    case SNil{}:
+      True{}
+    case SCon{Chr{+c}, t}:
+      Bool.and(Bool.and(U32.is_gt(c, 47), U32.is_lt(c, 58)), Str.digits(t))
+
+def Str.num(+s: String) -> Bool:
+  Bool.and(Bool.not(String.is_empty(s)), Str.digits(s))
+
+# a < b, for two decimal numerals without leading zeros.
+def Str.num.lt(+a: String, +b: String) -> Bool:
+  Bool.or(Nat.is_lt(String.length(a), String.length(b)),
+    Bool.and(Nat.is_eq(String.length(a), String.length(b)), String.is_lt(a, b)))
+
+def CKey.of.cut(k: Nat, +wrap: Bool, m: Maybe<&2, String & String>) -> CKey:
+  match m:
+    case Some{(l, r)}:
+      CKey{k, Bool.pick(String, wrap, "(" ++ l ++ ")", l), r}
+    case None{}:
+      CKey{4n, "", ""}
+
+# "f(P, x)" as P and x (P may hold ", " itself: x is after the last).
+def CKey.of.call(k: Nat, +n: Nat, +c: String) -> CKey:
+  CKey.of.rcut(k, Str.split1(String.reverse(String.take(String.drop(c, n), Nat.sub(String.length(c), Nat.add(n, 1n)))), " ,"))
+
+def CKey.of.rcut(k: Nat, m: Maybe<&2, String & String>) -> CKey:
+  match m:
+    case Some{(rx, rp)}:
+      CKey{k, "(" ++ String.reverse(rp) ++ ")", String.reverse(rx)}
+    case None{}:
+      CKey{4n, "", ""}
+
+def CKey.of.ne(+c: String) -> CKey:
+  CKey.of.cut(1n, False{}, Str.split1(c, " != "))
+
+def CKey.of.eq(+c: String, m: Maybe<&2, String & String>) -> CKey:
+  match m:
+    case Some{(l, r)}:
+      CKey{0n, l, r}
+    case None{}:
+      CKey.of.ne(c)
+
+def CKey.of(+c: String) -> CKey:
+  Bool.pick(Unit -> CKey, String.starts_with(c, "nat_ge("), u => CKey.of.call(2n, 7n, c),
+    u => Bool.pick(Unit -> CKey, String.starts_with(c, "IS_N("), w => CKey.of.call(3n, 5n, c),
+      w => CKey.of.eq(c, Str.split1(c, " == ")))(Unit{}))(Unit{})
+
+def CKey.vf(+r: String) -> Bool:
+  String.starts_with(r, "VF(")
+
+def CKey.imm(+r: String) -> Bool:
+  String.starts_with(r, "IMM(")
+
+def CKey.excl.k(ka: Nat, kb: Nat, +ra: String, +rb: String) -> Bool:
+  match ka kb:
+    case 0n 0n:
+      Bool.and(Bool.not(Str.eq(ra, rb)), Bool.not(Bool.or(CKey.vf(ra), CKey.vf(rb))))
+    case 0n 1n:
+      Str.eq(ra, "0")
+    case 1n 0n:
+      Str.eq(rb, "0")
+    case 0n 2n:
+      Bool.and(Str.num(ra), Bool.and(Str.num(rb), Str.num.lt(ra, rb)))
+    case 2n 0n:
+      Bool.and(Str.num(rb), Bool.and(Str.num(ra), Str.num.lt(rb, ra)))
+    case 3n 3n:
+      Bool.not(Str.eq(ra, rb))
+    case 3n 0n:
+      CKey.imm(rb)
+    case 0n 3n:
+      CKey.imm(ra)
+    case x y:
+      False{}
+
+def CKey.excl(a: CKey, b: CKey) -> Bool:
+  CKey{ka, +la, ra} = a
+  CKey{kb, +lb, rb} = b
+  Bool.and(Bool.and(Bool.not(String.is_empty(la)), Str.eq(la, lb)), CKey.excl.k(ka, kb, ra, rb))
+
+# Whether two first conditions never hold together.
+def Cond.excl(+a: String, +b: String) -> Bool:
+  CKey.excl(CKey.of(a), CKey.of(b))
+
+def Tree.head(c: List<&2, String>) -> String:
+  match c:
+    case Nil{}:
+      ""
+    case h <> t:
+      h
+
+def Tree.tail(c: List<&2, String>) -> List<&2, String>:
+  match c:
+    case Nil{}:
+      Nil{}
+    case h <> t:
+      t
+
+def Tree.allne(xs: List<&2, List<&2, String>>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case Nil{} <> t:
+      False{}
+    case c <> t:
+      Tree.allne(t)
+
+# The first conditions, adjacent repeats once.
+def Tree.runs(xs: List<&2, List<&2, String>>, +prev: String) -> List<&2, String>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case +c <> t:
+      Bool.pick(Unit -> List<&2, String>, Str.eq(Tree.head(c), prev), u => Tree.runs(t, prev),
+        u => Tree.head(c) <> Tree.runs(t, Tree.head(c)))(Unit{})
+
+def Tree.excl.one(+h: String, hs: List<&2, String>) -> Bool:
+  match hs:
+    case Nil{}:
+      True{}
+    case x <> t:
+      Bool.and(Cond.excl(h, x), Tree.excl.one(h, t))
+
+def Tree.excl.all(hs: List<&2, String>) -> Bool:
+  match hs:
+    case Nil{}:
+      True{}
+    case +h <> +t:
+      Bool.and(Tree.excl.one(h, t), Tree.excl.all(t))
+
+def Tree.ok.go(+xs: List<&2, List<&2, String>>, +runs: List<&2, String>) -> Bool:
+  Bool.and(Nat.is_lt(List.length(&2, String, runs), List.length(&2, List<&2, String>, xs)), Tree.excl.all(runs))
+
+def Tree.ok(+xs: List<&2, List<&2, String>>) -> Bool:
+  Bool.and(Tree.allne(xs), Tree.ok.go(xs, Tree.runs(xs, "")))
+
+# The cases from xs on whose first condition is h, and those after them.
+def Tree.run(xs: List<&2, List<&2, String>>, +h: String) -> List<&2, List<&2, String>>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case +c <> t:
+      Bool.pick(Unit -> List<&2, List<&2, String>>, Str.eq(Tree.head(c), h), u => c <> Tree.run(t, h),
+        u => Nil{})(Unit{})
+
+def Tree.after(xs: List<&2, List<&2, String>>, +h: String) -> List<&2, List<&2, String>>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case +c <> +t:
+      Bool.pick(Unit -> List<&2, List<&2, String>>, Str.eq(Tree.head(c), h), u => Tree.after(t, h),
+        u => c <> t)(Unit{})
+
+def Tree.tails(xs: List<&2, List<&2, String>>) -> List<&2, List<&2, String>>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case c <> t:
+      Tree.tail(c) <> Tree.tails(t)
+
+def Tree.flat(xs: List<&2, List<&2, String>>) -> List<&2, CPlan>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case c <> t:
+      CPlan{Nil{}, c, 0, False{}} <> Tree.flat(t)
+
+def Tree.deep(ps: List<&2, CPlan>) -> List<&2, CPlan>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case CPlan{o, r, k, d} <> t:
+      CPlan{o, r, k, True{}} <> Tree.deep(t)
+
+def Tree.open(+h: String, ps: List<&2, CPlan>) -> List<&2, CPlan>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case CPlan{o, r, k, d} <> t:
+      CPlan{h <> o, r, k, d} <> t
+
+def Tree.close(ps: List<&2, CPlan>) -> List<&2, CPlan>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case CPlan{o, r, k, d} <> Nil{}:
+      [CPlan{o, r, U32.inc(k), d}]
+    case p <> t:
+      p <> Tree.close(t)
+
+# A group of the cases in g (two or more, sharing the first condition h)
+# planned inside, then the plan of the cases after it.
+def Tree.group(+h: String, inner: List<&2, CPlan>, single: Bool, +c: List<&2, String>,
+  rest: List<&2, CPlan>) -> List<&2, CPlan>:
+  match single:
+    case True{}:
+      CPlan{Nil{}, c, 0, False{}} <> rest
+    case False{}:
+      List.append(&2, CPlan, Tree.close(Tree.open(h, Tree.deep(inner))), rest)
+
+def Tree.hd(xs: List<&2, List<&2, String>>) -> List<&2, String>:
+  match xs:
+    case Nil{}:
+      Nil{}
+    case c <> t:
+      c
+
+def Tree.plan(fu: Nat, +xs: List<&2, List<&2, String>>) -> List<&2, CPlan>:
+  match fu:
+    case 0n:
+      Tree.flat(xs)
+    case 1n+ +f:
+      Bool.pick(Unit -> List<&2, CPlan>, Tree.ok(xs),
+        u => Tree.group(Tree.head(Tree.hd(xs)), Tree.plan(f, Tree.tails(Tree.run(xs, Tree.head(Tree.hd(xs))))),
+          Nat.is_eq(List.length(&2, List<&2, String>, Tree.run(xs, Tree.head(Tree.hd(xs)))), 1n), Tree.hd(xs),
+          Tree.plan(f, Tree.after(xs, Tree.head(Tree.hd(xs))))),
+        u => Tree.flat(xs))(Unit{})
+
+# Each case's conditions, in the order the chain tests them.
+def Tree.conds(+g: G, +cs: List<&2, String>, cases: List<&2, Core.Expr>) -> List<&2, List<&2, String>>:
+  match cases:
+    case Nil{}:
+      Nil{}
+    case Core.ECase{ps, b} <> t:
+      List.reverse(&2, String, PatR.conds(Gen.pats(g, ps, cs, PatR{Nil{}, Nil{}}))) <> Tree.conds(g, cs, t)
+    case other <> t:
+      Tree.conds(g, cs, t)
+
+def Tree.of(+g: G, +cs: List<&2, String>, cases: List<&2, Core.Expr>) -> List<&2, CPlan>:
+  Tree.plan(Fuel.max(), Tree.conds(g, cs, cases))
+
+def Tree.first(ps: List<&2, CPlan>, conds: List<&2, String>) -> CPlan:
+  match ps:
+    case Nil{}:
+      CPlan{Nil{}, conds, 0, False{}}
+    case p <> t:
+      p
+
+def Tree.next(ps: List<&2, CPlan>) -> List<&2, CPlan>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      t
+
+def Tree.opens(os: List<&2, String>) -> String:
+  match os:
+    case Nil{}:
+      ""
+    case h <> t:
+      "if (" ++ h ++ ") {\n" ++ Tree.opens(t)
+
+def Tree.closes(n: Nat) -> String:
+  match n:
+    case 0n:
+      ""
+    case 1n+k:
+      "{ bend_fail(\"runtime fail-stop\"); }\n} else " ++ Tree.closes(k)
+
 # A match's scrutinees: their C variables and the code binding them.
 # Flat results. U_name stores a flat result's fields through o (see
 # Gen.def.unb); Gen.sret is its arity, 0 for a def that returns a node.
@@ -7438,6 +7734,43 @@ def Expr.mentions(e: Core.Expr, +k: String) -> Bool:
     case other:
       False{}
 
+# Whether e, in a tail position, names k other than as the callee of a
+# tail call (one Gen.stmt turns into a jump when k is the def itself).
+def Expr.mentions.nt(e: Core.Expr, +k: String) -> Bool:
+  match e:
+    case Core.ECall{Core.EVar{f}, args}:
+      Expr.mentions(Core.ECtor{"", args}, k)
+    case Core.ELet{p, +v, +b}:
+      Bool.pick(Unit -> Bool, Expr.mentions(v, k), u => True{}, u => Expr.mentions.nt(b, k))(Unit{})
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.mentions(a, k), u => True{}, u => Expr.mentions.nt(Core.EMatch{t, cases}, k))(Unit{})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case +c <> t:
+              Bool.pick(Unit -> Bool, Expr.mentions.nt(c, k), u => True{},
+                u => Expr.mentions.nt(Core.EMatch{Nil{}, t}, k))(Unit{})
+    case Core.ECase{ps, b}:
+      Expr.mentions.nt(b, k)
+    case Core.EAnn{x, ty}:
+      Expr.mentions.nt(x, k)
+    case other:
+      Expr.mentions(other, k)
+
+# The C return type of a def's functions, with the calling convention of
+# one that calls itself in a non-tail position: BEND_PN (bendrt.h) is
+# clang's preserve_none, which passes up to 24 words in registers and
+# saves no registers at entry, a caller keeping only what is live across
+# the call. queens' solve takes 14 words and recursed through a frame of
+# 12 saved registers and 6 stack arguments (7.5% of its instructions).
+# A def that only loops keeps the C convention: its callers would save
+# their live registers around every call (hashmap ran 4% more).
+def Gen.pn(+name: String, +body: Core.Expr) -> String:
+  Bool.pick(String, Expr.mentions.nt(body, name), "BEND_PN V ", "V ")
+
 def Gen.leaf.kind(c: Maybe<&2, CInfo>) -> Bool:
   match c:
     case Some{CInfo{tag, ar, +kind, single}}:
@@ -7549,12 +7882,18 @@ def Gen.leaf.simple(+g: G, e: Core.Expr) -> Bool:
     case other:
       False{}
 
+# Only a def that calls itself (in a later case) has a recursive frame to
+# skip. One that does not keeps its body whole, for clang to inline or not
+# as a unit: a leaf wrapper there turned a common later case (raytrace's
+# isect.go2, the square root of a hit) into a call that clobbered its
+# caller's FP registers.
 def Gen.leaf.case(+g: G, +name: String, +env: Env(), +params: List<&2, String>, body: Core.Expr) -> Maybe<&2, Core.Expr>:
   match body:
-    case Core.EMatch{+ss, Core.ECase{+ps, +b} <> c <> rest}:
+    case Core.EMatch{+ss, Core.ECase{+ps, +b} <> +c <> rest}:
       +paths = Gen.leaf.paths(ss, env)
       Bool.pick(Maybe<&2, Core.Expr>, Bool.and(Bool.and(Gen.leaf.scrs(ss, env),
-        Gen.leaf.args(params, paths, env)), Bool.and(Gen.leaf.pats(g, ps, paths),
+        Gen.leaf.args(params, paths, env)), Bool.and(Bool.and(Gen.leaf.pats(g, ps, paths),
+        Expr.mentions(Core.EMatch{ss, c <> rest}, name)),
         Bool.and(Gen.leaf.simple(g, b), Bool.not(Expr.mentions(b, name))))),
         Some{Core.EMatch{ss, [Core.ECase{ps, b}]}}, None{})
     case other:
@@ -7893,7 +8232,7 @@ type GSel is Data:
   GSPFLet{g: G, env: Env(), self: Self, tgt: Tgt, x: String, v: Core.Expr, body: Core.Expr, ar: U32}
   GSLetVar{g: G, env: Env(), self: Self, tgt: Tgt, x: String, v: Core.Expr, body: Core.Expr, hole: Bool}
   GSCasesNext{g: G, env: Env(), self: Self, tgt: Tgt, cs: List<&2, String>,
-    rest: List<&2, Core.Expr>, conds: List<&2, String>, b: Doc, mx: List<&2, RcM>}
+    rest: List<&2, Core.Expr>, pl: CPlan, b: Doc, mx: List<&2, RcM>, plan: List<&2, CPlan>}
   GSMatchGo{g: G, env: Env(), self: Self, tgt: Tgt, cases: List<&2, Core.Expr>, r: Scrs}
   GSMatch{g: G, env: Env(), self: Self, tgt: Tgt, scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>}
   GSChoice{g: G, env: Env(), self: Self, tgt: Tgt, scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>, choice: Maybe<&2, Core.Expr>}
@@ -7929,7 +8268,7 @@ type GSel is Data:
   GSRetCall{out: Bool, g: G, env: Env(), tgt: Tgt, name: String, args: List<&2, Core.Expr>}
   GSLet{g: G, env: Env(), self: Self, tgt: Tgt, p: Core.Pat, v: Core.Expr, body: Core.Expr}
   GSCases{g: G, env: Env(), self: Self, tgt: Tgt, cs: List<&2, String>, cases: List<&2, Core.Expr>,
-    mx: List<&2, RcM>}
+    mx: List<&2, RcM>, plan: List<&2, CPlan>}
 
 def GSel.ty(k: GSel) -> Type:
   match k:
@@ -8044,7 +8383,7 @@ def GSel.none(k: GSel) -> GSel.ty(k):
       DNil{}
     case GSLetVar{g, env, self, tgt, x, v, body, hole}:
       DNil{}
-    case GSCasesNext{g, env, self, tgt, cs, rest, conds, b, mx}:
+    case GSCasesNext{g, env, self, tgt, cs, rest, pl, b, mx, plan}:
       DNil{}
     case GSMatchGo{g, env, self, tgt, cases, r}:
       DNil{}
@@ -8102,7 +8441,7 @@ def GSel.none(k: GSel) -> GSel.ty(k):
       DNil{}
     case GSLet{g, env, self, tgt, p, v, body}:
       DNil{}
-    case GSCases{g, env, self, tgt, cs, cases, mx}:
+    case GSCases{g, env, self, tgt, cs, cases, mx, plan}:
       DNil{}
 
 # Out of fuel: an error, and a value of the step's type.
@@ -8513,15 +8852,15 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                   d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
                   b : Doc <- Gen.rec(fu, GSStmt{g, Bind{x, c} <> env, self, tgt, body})
                   return Doc.list([DStr{Gen.scalar.cty(sk) ++ c ++ " = "}, d, DStr{";\n"}, Gen.own(g, Bind{x, c} <> env, [Bind{x, c}], body), b]) )(Unit{})
-        case GSCasesNext{+g, +env, +self, +tgt, +cs, rest, conds, b, mx}:
-          match conds:
-            case Nil{}:
+        case GSCasesNext{+g, +env, +self, +tgt, +cs, rest, pl, b, mx, plan}:
+          match pl:
+            case CPlan{Nil{}, Nil{}, k, False{}}:
               Gen.pure(Doc, Doc.list([DStr{"{\n"}, b, DStr{"}\n"}]))
-            case h <> t:
+            case CPlan{os, conds, k, d}:
               do Gen<Doc>:
-                more : Doc <- Gen.rec(fu, GSCases{g, env, self, tgt, cs, rest, mx})
-                return Doc.list([DStr{"if (" ++ Gen.and(h <> t) ++ ") {\n"}, b,
-                  DStr{"} else "}, more])
+                more : Doc <- Gen.rec(fu, GSCases{g, env, self, tgt, cs, rest, mx, plan})
+                return Doc.list([DStr{Tree.opens(os) ++ "if (" ++ Gen.and(conds) ++ ") {\n"}, b,
+                  DStr{"} else " ++ Tree.closes(U32.to_nat(k))}, more])
         case GSMatchGo{+g, +env, +self, +tgt, +cases, r}:
           match r:
             # (a match whose value goes on, not back, leaves the tokens in
@@ -8530,7 +8869,8 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               do Gen<Doc>:
                 +outer : String <- Gen.ru.get(Gen.free(g))
                 Gen.ru.set(Gen.free(g), Bool.pick(String, Gen.is_ret(tgt), outer, ""))
-                body : Doc <- Gen.rec(fu, GSCases{g, env, self, tgt, cs, cases, RC.mx.if(Gen.rc(g), g, env, cases)})
+                body : Doc <- Gen.rec(fu, GSCases{g, env, self, tgt, cs, cases, RC.mx.if(Gen.rc(g), g, env, cases),
+                  Tree.of(g, cs, cases)})
                 Gen.ru.set(Gen.free(g), Bool.pick(String, Gen.is_ret(tgt), "", outer))
                 return Doc.list([decls, body])
         case GSMatch{+g, +env, +self, +tgt, scrs, cases}:
@@ -8845,7 +9185,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
               Gen.rec(fu, GSLetCtor{g, env, self, tgt, name, ps, v, body, Str.eq(name, "%par")})
             case other:
               Gen.rec(fu, GSLetPat{g, env, self, tgt, other, v, body})
-        case GSCases{+g, +env, +self, +tgt, +cs, cases, +mx}:
+        case GSCases{+g, +env, +self, +tgt, +cs, cases, +mx, +plan}:
           match cases:
             case Nil{}:
               Gen.pure(Doc, DStr{"{ bend_fail(\"runtime fail-stop\"); }\n"})
@@ -8858,10 +9198,10 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                 b : Doc <- Gen.rec(fu, GSCaseBody{g, env, self, tgt, binds, body})
                 +after : String <- Gen.ru.get(Gen.free(g))
                 Gen.ru.set(Gen.free(g), outer)
-                Gen.rec(fu, GSCasesNext{g, env, self, tgt, cs, t, List.reverse(&2, String, conds),
-                  Doc.list([RC.arm.pick(Gen.rc(g), g, Env.names(env), mx, Core.ECase{ps, body}), PF.reserve(binds, RU.list(after)), RU.frees(Bool.pick(String, Gen.rc(g), "RUF", "RUFG"), RU.list(after)), b]), mx})
+                Gen.rec(fu, GSCasesNext{g, env, self, tgt, cs, t, Tree.first(plan, List.reverse(&2, String, conds)),
+                  Doc.list([RC.arm.pick(Gen.rc(g), g, Env.names(env), mx, Core.ECase{ps, body}), PF.reserve(binds, RU.list(after)), RU.frees(Bool.pick(String, Gen.rc(g), "RUF", "RUFG"), RU.list(after)), b]), mx, Tree.next(plan)})
             case other <> t:
-              Gen.rec(fu, GSCases{g, env, self, tgt, cs, t, mx})
+              Gen.rec(fu, GSCases{g, env, self, tgt, cs, t, mx, plan})
 
 def Gen.stmt(+g: G, +env: Env(), +self: Self, +tgt: Tgt, e: Core.Expr) -> Gen(Doc):
   Gen.rec(Fuel.max(), GSStmt{g, env, self, tgt, e})
@@ -8990,7 +9330,7 @@ def Gen.def.dst(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr, +
 ) -> Gen(Unit):
   DGrp{+id, +n} = grp
   +m = Gen.mangle(name)
-  +dhead = "static V D_" ++ m ++ "(" ++ String.join("V *dst" <> Gen.cparams.go(Gen.dst.pad(U32.to_nat(n),
+  +dhead = "static " ++ Gen.pn(name, body) ++ "D_" ++ m ++ "(" ++ String.join("V *dst" <> Gen.cparams.go(Gen.dst.pad(U32.to_nat(n),
     params, True{}, 0)), ", ") ++ ")"
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
   do Gen<Unit>:
@@ -9132,17 +9472,17 @@ def Gen.leaf.name(c: Maybe<&2, Core.Expr>, +name: String) -> String:
     case None{}:
       name
 
-def Gen.leaf.head(c: Maybe<&2, Core.Expr>, +head: String, +slow: String) -> String:
+def Gen.leaf.head(c: Maybe<&2, Core.Expr>, +head: String, +ty: String, +slow: String) -> String:
   match c:
     case Some{e}:
-      "static __attribute__((noinline)) V " ++ slow
+      "static __attribute__((noinline)) " ++ ty ++ slow
     case None{}:
       head
 
-def Gen.leaf.proto(c: Maybe<&2, Core.Expr>, head: String) -> Doc:
+def Gen.leaf.proto(c: Maybe<&2, Core.Expr>, +ty: String, head: String) -> Doc:
   match c:
     case Some{e}:
-      DStr{"static V " ++ head ++ ";\n"}
+      DStr{"static " ++ ty ++ head ++ ";\n"}
     case None{}:
       DNil{}
 
@@ -9226,13 +9566,14 @@ def Gen.def.seq(sq: Bool, +g: G, +name: String, +mask: List<&2, Bool>, +body: Co
   match sq:
     case True{}:
       +us = Gen.u32(g, name, mask)
-      +head = "static V S_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
+      +ty = Gen.pn(name, body)
+      +head = "static " ++ ty ++ "S_" ++ Gen.mangle(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
       +leaf = Gen.leaf.case(g, name, env, params, R.ops(body, "Nat"))
       +slow = Gen.leaf.name(leaf, "S_" ++ Gen.mangle(name))
       +slowhead = slow ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
-      +dhead = Gen.leaf.head(leaf, head, slowhead)
+      +dhead = Gen.leaf.head(leaf, head, ty, slowhead)
       do Gen<Unit>:
-        Gen.proto(Doc.list([DStr{head ++ ";\n"}, Gen.leaf.proto(leaf, slowhead)]))
+        Gen.proto(Doc.list([DStr{head ++ ";\n"}, Gen.leaf.proto(leaf, ty, slowhead)]))
         Gen.memo.add(Bind{"%seqmode", name})
         b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, R.ops(body, "Nat"))
         Gen.leaf.wrapper(g, env, Self{name, mask, params}, params, head, slow, us, leaf)
@@ -9248,14 +9589,15 @@ def Gen.def.boxed(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr,
   +params: List<&2, String>, +env: Env(), +wargs: List<&2, String>
 ) -> Gen(Unit):
   +us = Gen.u32(g, name, mask)
-  +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
+  +ty = Gen.pn(name, body)
+  +head = "static " ++ ty ++ Gen.f(name) ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
   +leaf = Gen.leaf.case(g, name, env, params, R.ops(body, "Nat"))
   +slow = Gen.leaf.name(leaf, Gen.f(name))
   +slowhead = slow ++ "(" ++ Gen.cparams.u(params, us) ++ ")"
   +dhead = Gen.leaf.head(leaf, Bool.pick(String, Gen.def.inl(name, body),
-    "BEND_UINL" ++ String.drop(head, 6n), head), slowhead)
+    "BEND_UINL" ++ String.drop(head, 6n), head), ty, slowhead)
   do Gen<Unit>:
-    Gen.proto(Doc.list([DStr{head ++ ";\n"}, Gen.leaf.proto(leaf, slowhead)]))
+    Gen.proto(Doc.list([DStr{head ++ ";\n"}, Gen.leaf.proto(leaf, ty, slowhead)]))
     +e : Core.Expr = RC.tmp.body(Gen.rc(g), g, Env.names(env), R.ops(body, "Nat"))
     fast : Doc <- Gen.ro.call(Gen.ro.enabled(g, name), g, name, env)
     b : Doc <- Gen.stmt(g, env, Self{name, mask, params}, TRet{}, e)
@@ -9274,7 +9616,7 @@ def Gen.def.unb(+k: U32, +g: G, +name: String, +mask: List<&2, Bool>, +body: Cor
 ) -> Gen(Unit):
   +u = "U_" ++ Gen.mangle(name)
   +us = Gen.u32(g, name, mask)
-  +uhead = "static V " ++ u ++ "(" ++ String.join(List.append(&2, String, Gen.cparams.u.go(params, us), ["V *o"]), ", ") ++ ")"
+  +uhead = "static " ++ Gen.pn(name, body) ++ u ++ "(" ++ String.join(List.append(&2, String, Gen.cparams.u.go(params, us), ["V *o"]), ", ") ++ ")"
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
   do Gen<Unit>:
     Gen.proto(DStr{head ++ ";\n" ++ uhead ++ ";\n"})

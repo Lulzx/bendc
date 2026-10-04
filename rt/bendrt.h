@@ -137,6 +137,19 @@ typedef uint64_t Term;
 #else
 #define BEND_UINL static inline
 #endif
+// The convention of a def's functions when the def calls itself in a
+// non-tail position (bendc's Gen.pn): clang's preserve_none passes up to
+// 24 words in registers and saves none at entry. Generated functions are
+// only called directly, never through a pointer, so the convention is
+// theirs to pick.
+#if defined(__clang__) && defined(__has_attribute)
+#if __has_attribute(preserve_none)
+#define BEND_PN __attribute__((preserve_none))
+#endif
+#endif
+#ifndef BEND_PN
+#define BEND_PN
+#endif
 // A program's own functions go without a stack protector. Their only local
 // arrays hold a flat result's fields or a call's arguments, written at the
 // indices the code generator fixes; with a protector, each call of a
@@ -465,9 +478,13 @@ static TlsSlots *tls_get(void) {
 // thr_self); a pthread key's slot is one load off the thread's TSD base,
 // which is what pthread_getspecific reads.
 // (The key is made before main: a thread not registered reads NULL.)
+// A thread's slot is set once, by thr_register before the thread reads it,
+// so thr_get is const: a function that allocates in a loop or several
+// times reads it once, not at every allocation (the key's load could not
+// be kept across the stores that fill each node).
 static pthread_key_t thr_key;
 __attribute__((constructor)) static void thr_key_init(void) { pthread_key_create(&thr_key, NULL); }
-static inline Thr *thr_get(void) {
+__attribute__((const)) static inline Thr *thr_get(void) {
   uintptr_t tsd;
   __asm__("mrs %0, tpidrro_el0" : "=r"(tsd));
   return ((Thr **)(tsd & ~(uintptr_t)7))[thr_key];
@@ -836,18 +853,22 @@ __attribute__((noinline)) static V *gc_alloc_large(size_t w, int atomic) {
 static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
   if (UNLIKELY(w > GC_SMALL)) return gc_alloc_large(w, atomic);
   unsigned c = w >= 2 && w <= 16 ? (unsigned)w - 2 : gc_cls_of[w];
+  // A class of 2 to 16 words is that many words wide: for a constant w (a
+  // constructor's) the width is a constant too, not a load from gc_cls_w,
+  // which a program's split header only declares.
+  size_t sw = w >= 2 && w <= 16 ? w : gc_cls_w[c];
   GcCache *k = &thr_self->cache[atomic][c];
   V *p;
   // (The slot's allocation bit is set: see GcCache.)
   if (k->bump < k->end) {
     p = k->bump;
-    k->bump += gc_cls_w[c];
+    k->bump += sw;
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
   } else if (k->bits) {
     int t = __builtin_ctzll(k->bits);
     k->bits &= k->bits - 1;
     uint32_t i = k->j * 64 + (uint32_t)t;
-    p = k->objs + (size_t)i * gc_cls_w[c];
+    p = k->objs + (size_t)i * sw;
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
   } else {
     p = gc_refill(k, atomic, c);
@@ -855,8 +876,7 @@ static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
   if (atomic == 2 && (gc_hot.bk[(uintptr_t)p >> GC_BLK_SHIFT] & BK_SH)) *(uint8_t *)(gc_hot.bflags + ((uintptr_t)p >> 4)) = 0;
   if (!hole) p[0] = 0;
   p[1] = 0;
-  if (!(w >= 2 && w <= 16))
-    for (size_t j = w; j < gc_cls_w[c]; j++) p[j] = 0;
+  for (size_t j = w; j < sw; j++) p[j] = 0;
   return p;
 }
 
