@@ -363,6 +363,10 @@ extern double gc_t_end;
 extern double gc_t_run;
 extern double gc_t_stop;
 extern size_t gc_live_bytes;
+extern size_t gc_freed_bytes;
+extern unsigned gc_futile_run;
+extern unsigned gc_grow_futile;
+extern unsigned gc_futile_max;
 extern size_t gc_major_live;
 extern int gc_minor;
 extern int gc_rooting;
@@ -1223,6 +1227,19 @@ static inline void gc_fetch(GcItem it) {
   if (it.n > 8) __builtin_prefetch(it.p + 8);
 }
 #endif
+
+// A dirty small block's item on the mark stack (n 0, p the block) opens,
+// when it is popped, into items for its old objects (marked and allocated),
+// written to out (at most GC_RESCAN_MAX): one per run of them side by side
+// (scanned as one range of words), or one per object in a block of packed
+// nodes (pool 3, scanned past their header word). Pushing the runs of every
+// dirty block before the marking began (most blocks are dirty when reuse
+// tokens are) took a mark stack of 11 MB, resident for the rest of the
+// run, in a 128 MB tree-bitonic heap. An object marked since the block was
+// found dirty is scanned again: marking is idempotent.
+#define GC_RESCAN_MAX 1024
+_Static_assert((GC_BLK - GC_HDR) / 16 <= GC_RESCAN_MAX, "a block opens into at most GC_RESCAN_MAX items");
+size_t gc_rescan_items(GcBlk *b, GcItem *out);
 
 void gc_drain(void);
 

@@ -139,6 +139,10 @@ unsigned gc_grow = 1, gc_grow_max = 32, gc_kept_run;
 int gc_big;  // gc_grow went to gc_grow_max for what lives on
 double gc_t_end, gc_t_run, gc_t_stop;  // seconds (see gc_now)
 size_t gc_live_bytes;
+size_t gc_freed_bytes;  // what the last sweep freed
+unsigned gc_futile_run;
+unsigned gc_grow_futile;  // gc_grow before futile collections raised it (0: they did not)
+unsigned gc_futile_max = 128;
 size_t gc_major_live;
 int gc_minor;       // this collection keeps the marks of old objects
 int gc_rooting;     // marking from roots (not from objects)
@@ -240,6 +244,7 @@ void gc_init(void) {
   // (a heap size set this way stays: BEND_GC_GROW=n lets it grow n times)
   if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20, gc_grow_max = 1;
   if (getenv("BEND_GC_GROW") && atoi(getenv("BEND_GC_GROW")) > 0) gc_grow_max = (unsigned)atoi(getenv("BEND_GC_GROW"));
+  if ((m && atol(m) > 0) || getenv("BEND_GC_GROW")) gc_futile_max = gc_grow_max;
   // Explicit counting can omit tracing; hybrid builds retain full tracing.
   if (bend_rc_req && !bend_rc_trace_req && !getenv("BEND_RC_TRACE")) gc_limit = gc_limit_min = (size_t)-1;
   if (bend_rc_req && (bend_rc_trace_req || getenv("BEND_RC_TRACE"))) gc_all_major = 1;
@@ -741,12 +746,44 @@ void gc_scan(const void *lo, const void *hi) {
 #ifdef __TINYC__
 #else
 #endif
+#define GC_RESCAN_MAX 1024
+size_t gc_rescan_items(GcBlk *b, GcItem *out) {
+  uint64_t *al = GC_ALLOC(b), *mk = GC_MARK(b);
+  uint32_t nw = (b->nobj + 63) >> 6;
+  size_t n = 0;
+  for (uint32_t j = 0; j < nw; j++) {
+    // (helpers may be marking in the block meanwhile)
+    uint64_t m = al[j] & __atomic_load_n(&mk[j], __ATOMIC_RELAXED);
+    if (j == (b->nobj >> 6)) m &= (1ull << (b->nobj & 63)) - 1;
+    if (b->pool == 3) {
+      while (m) {
+        uint32_t ix = j * 64 + (unsigned)__builtin_ctzll(m);
+        m &= m - 1;
+        out[n++] = (GcItem){gc_objs(b) + (size_t)ix * b->words + 1, b->words - 1};
+      }
+      continue;
+    }
+    while (m) {
+      unsigned lo = (unsigned)__builtin_ctzll(m);
+      uint64_t r = m >> lo;
+      unsigned len = ~r ? (unsigned)__builtin_ctzll(~r) : 64 - lo;
+      out[n++] = (GcItem){gc_objs(b) + (size_t)(j * 64 + lo) * b->words, (size_t)len * b->words};
+      m = lo + len >= 64 ? 0 : m & ~(((1ull << len) - 1) << lo);
+    }
+  }
+  return n;
+}
 void gc_drain(void) {
   GcItem q[GC_PF];
   unsigned h = 0, n = 0;
   for (;;) {
     if (gc_sp > 0 && n < GC_PF) {
       GcItem it = gc_stk[--gc_sp];
+      if (it.n == 0) {
+        if (gc_sp + GC_RESCAN_MAX > gc_cap) bend_fail("the collector's mark stack overflowed");
+        gc_sp += gc_rescan_items((GcBlk *)it.p, gc_stk + gc_sp);
+        continue;
+      }
       gc_fetch(it);
       q[(h + n++) % GC_PF] = it;
       continue;
@@ -806,6 +843,11 @@ void gc_help(GcMk *m) {
     while (m->sp > 0 || nq > 0) {
       if (m->sp > 0 && nq < GC_PF) {
         GcItem it = m->stk[--m->sp];
+        if (it.n == 0) {
+          if (m->sp + GC_RESCAN_MAX > GC_MKCAP) gc_share(m);
+          m->sp += gc_rescan_items((GcBlk *)it.p, m->stk + m->sp);
+          continue;
+        }
         // (a long object is marked a piece at a time: the rest can be shared)
         if (it.n > 4 * GC_CHUNK) {
           m->stk[m->sp++] = (GcItem){it.p + 2 * GC_CHUNK, it.n - 2 * GC_CHUNK};
@@ -882,7 +924,7 @@ void gc_dirty_caches(void) {
 }
 void gc_sweep(void) {
   memset(gc_partial, 0, sizeof gc_partial);
-  size_t live = 0;
+  size_t live = 0, freed = 0;
   for (uintptr_t bi = 0; bi < gc_top; bi++) {
     uint8_t kd = gc_kind[bi];
     if (kd == 1) {
@@ -894,10 +936,13 @@ void gc_sweep(void) {
       // What survives stays marked: it is old for the next minor collection.
       size_t used = 0;
       int words = (int)((b->nobj + 63) >> 6);
+      size_t was = 0;
       for (int j = 0; j < words; j++) {
+        was += (size_t)__builtin_popcountll(GC_ALLOC(b)[j]);
         GC_ALLOC(b)[j] &= GC_MARK(b)[j];
         used += (size_t)__builtin_popcountll(GC_ALLOC(b)[j]);
       }
+      freed += (was - used) * b->words * sizeof(V);
       if (used == 0) {
         gc_kind[bi] = 0;
       } else {
@@ -912,6 +957,7 @@ void gc_sweep(void) {
       if (GC_MARK(b)[0] & 1) {
         live += (size_t)b->nblk * GC_BLK;
       } else {
+        freed += (size_t)b->nblk * GC_BLK;
         for (uint32_t j = 0; j < b->nblk; j++) gc_kind[bi + j] = 0;
       }
       bi += b->nblk - 1;
@@ -932,6 +978,7 @@ void gc_sweep(void) {
       madvise(gc_base + (at << GC_BLK_SHIFT), (bi - at) << GC_BLK_SHIFT, MADV_DONTNEED);
   }
   gc_live_bytes = live;
+  gc_freed_bytes = freed;
 }
 int gc_rem_cmp(const void *a, const void *b) {
   V x = *(const V *)a, y = *(const V *)b;
@@ -958,37 +1005,9 @@ void gc_rescan_dirty(void) {
         gc_stk[gc_sp++] = (GcItem){gc_objs(b), b->words};
       }
     } else if (gc_kind[bi] == 1 && !b->atomic) {
-      if (b->pool == 3) {
-        uint32_t nw = (b->nobj + 63) >> 6;
-        for (uint32_t j = 0; j < nw; j++) {
-          uint64_t m = al[j] & mk[j];
-          while (m) {
-            unsigned lo = (unsigned)__builtin_ctzll(m);
-            uint32_t ix = j * 64 + lo;
-            m &= m - 1;
-            if (ix >= b->nobj) continue;
-            if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
-            gc_stk[gc_sp++] = (GcItem){gc_objs(b) + (size_t)ix * b->words + 1, b->words - 1};
-          }
-        }
-        continue;
-      }
-      // One item per run of old objects side by side (scanned as one range
-      // of words): most blocks are dirty when reuse tokens are, and an item
-      // per object would touch a mark stack as big as the old objects.
-      uint32_t nw = (b->nobj + 63) >> 6;
-      for (uint32_t j = 0; j < nw; j++) {
-        uint64_t m = al[j] & mk[j];
-        if (j == (b->nobj >> 6)) m &= (1ull << (b->nobj & 63)) - 1;
-        while (m) {
-          unsigned lo = (unsigned)__builtin_ctzll(m);
-          uint64_t r = m >> lo;
-          unsigned len = ~r ? (unsigned)__builtin_ctzll(~r) : 64 - lo;
-          if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
-          gc_stk[gc_sp++] = (GcItem){gc_objs(b) + (size_t)(j * 64 + lo) * b->words, (size_t)len * b->words};
-          m = lo + len >= 64 ? 0 : m & ~(((1ull << len) - 1) << lo);
-        }
-      }
+      // (an item for the block, opened when it is popped: gc_rescan_items)
+      if (gc_sp == gc_cap) bend_fail("the collector's mark stack overflowed");
+      gc_stk[gc_sp++] = (GcItem){(V *)b, 0};
     }
   }
 }
@@ -1069,6 +1088,26 @@ __attribute__((noinline)) void gc_collect_locked(void) {
       gc_kept_run = kept * 4 > gc_since * 3 ? gc_kept_run + 1 : 0;
       if (gc_kept_run >= 2) gc_grow = gc_grow_max, gc_big = 1;
     }
+    // A collection that freed under a 32nd of what was handed out since
+    // the last one was for nothing: the program's matches free what dies
+    // (a tree built, or rebuilt in place), and what lives only grows. After
+    // two in a row the heap grows gc_futile_max times gc_limit_min between
+    // collections (each would mark all that lives, to free nothing: in
+    // tree-radix the third one marked 440 MB, a third of the run with 8
+    // threads); a collection that frees an 8th of what was handed out since
+    // the one before brings it back.
+    if (gc_freed_bytes * 32 < gc_since) {
+      if (++gc_futile_run >= 2 && gc_grow < gc_futile_max) {
+        if (!gc_grow_futile) gc_grow_futile = gc_grow;
+        gc_grow = gc_futile_max;
+      }
+    } else {
+      gc_futile_run = 0;
+      if (gc_grow_futile && gc_freed_bytes * 8 >= gc_since) {
+        if (!gc_big) gc_grow = gc_grow_futile;
+        gc_grow_futile = 0;
+      }
+    }
     double t1 = gc_now();
     if (gc_t_end > 0) gc_t_run += t0 - gc_t_end;
     gc_t_stop += t1 - t0;
@@ -1083,9 +1122,9 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   gc_since = 0;
   gc_count++;
   if (gc_stats) {
-    fprintf(stderr, "[gc %zu %s] live %zu MB, heap %zu MB, next at +%zu MB, %zu rescans next, %.1f ms"
+    fprintf(stderr, "[gc %zu %s] live %zu MB, freed %zu MB, heap %zu MB, next at +%zu MB, %zu rescans next, %.1f ms"
       " (marking %.1f ms, %d threads)\n",
-      gc_count, gc_minor ? "minor" : "major", gc_live_bytes >> 20, (size_t)(gc_top << GC_BLK_SHIFT) >> 20,
+      gc_count, gc_minor ? "minor" : "major", gc_live_bytes >> 20, gc_freed_bytes >> 20, (size_t)(gc_top << GC_BLK_SHIFT) >> 20,
       gc_limit >> 20, gc_nrem,
       (gc_t_end - t0) * 1e3,
       (ts.tv_sec - tm.tv_sec) * 1e3 + (ts.tv_nsec - tm.tv_nsec) / 1e6, n + 1);
@@ -2335,6 +2374,23 @@ int bend_start(int argc, char **argv, V (*m)(void), int value) {
   pthread_join(th, NULL);
   fflush(stdout);
   if (gc_hot.rc && getenv("BEND_RC_STATS")) fprintf(stderr, "bend rc: %zu objects live at exit\n", rc_live());
+  if (gc_stats) fprintf(stderr, "[gc exit] heap %zu MB, %zu MB handed out since the last collection\n",
+    (size_t)(gc_top << GC_BLK_SHIFT) >> 20, (size_t)gc_since >> 20);
+  // (BEND_GC_STATS=2: the small blocks by pool and class, and their free slots)
+  if (gc_stats && getenv("BEND_GC_STATS")[0] == '2') {
+    static size_t nb[GC_NPOOL][GC_NCLS], nf[GC_NPOOL][GC_NCLS];
+    for (uintptr_t bi = 0; bi < gc_top; bi++) {
+      if (gc_kind[bi] != 1) continue;
+      GcBlk *b = gc_blk(bi);
+      size_t u = 0;
+      for (int j = 0; j < 64; j++) u += (size_t)__builtin_popcountll(gc_abits[bi * 64 + j]);
+      nb[b->pool][b->cls]++;
+      nf[b->pool][b->cls] += b->nobj - u;
+    }
+    for (int a = 0; a < GC_NPOOL; a++)
+      for (int c = 0; c < GC_NCLS; c++)
+        if (nb[a][c]) fprintf(stderr, "  pool %d, %u words: %zu blocks, %zu slots free\n", a, gc_cls_w[c], nb[a][c], nf[a][c]);
+  }
   return bend_exit;
 }
 int bend_run_value(int argc, char **argv, V (*m)(void), void (*p)(V)) {
