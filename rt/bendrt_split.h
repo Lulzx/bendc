@@ -2149,6 +2149,8 @@ extern pthread_cond_t par_cv;
 // Joiners that wait for a stolen task (P_WAIT) sleep on par_jcv.
 extern pthread_cond_t par_jcv;
 extern _Atomic int par_sleepers;
+// Workers running a task they stole.
+extern _Atomic int par_running;
 
 // Task ages. A queued task holds the time it was forked (in res, until it
 // is done), in units of 16 ticks since the pool started; a thief takes it
@@ -2206,11 +2208,13 @@ PDeque *pdq_new(void *mem);
 
 PTask *pdq_pop(PDeque *d);
 
-PTask *pdq_steal(PDeque *d);
+// A steal that finds a task it cannot take yet (too young, or held) sets
+// *pend.
+PTask *pdq_steal(PDeque *d, int *pend);
 
 void par_exec(PTask *t);
 
-PTask *par_steal(void);
+PTask *par_steal(int *pend);
 
 static inline void cpu_relax(void) {
 #if defined(__TINYC__)
@@ -2223,14 +2227,15 @@ static inline void cpu_relax(void) {
 }
 
 // An idle worker searches (PAR_SPIN rounds of steals over every deque), then
-// sleeps. A fork wakes a sleeper only when no worker is searching, and a
-// searcher that finds a task wakes the next one: a program that forks small
-// tasks often, with the other threads mostly idle, no longer has every
-// fork wake a worker that spins and sleeps again, while a burst of forks
-// still brings them all in. A sleeper also wakes every 2 ms (a wake-up can
-// be missed: the fork reads par_sleepers without the lock), looks once and
-// sleeps again. A task nobody steals is not lost: its forker runs it at the
-// join.
+// sleeps (not while a task it saw is too young or held to take yet: it
+// keeps searching until it can). A fork wakes a sleeper only when no worker
+// is searching, and a searcher that finds a task wakes the next one: a
+// program that forks small tasks often, with the other threads mostly
+// idle, no longer has every fork wake a worker that spins and sleeps again,
+// while a burst of forks still brings them all in. A sleeper also wakes
+// every 2 ms (a wake-up can be missed: the fork reads par_sleepers without
+// the lock), looks once and sleeps again. A task nobody steals is not lost:
+// its forker runs it at the join.
 #define PAR_SPIN 128
 extern _Atomic int par_searching;
 

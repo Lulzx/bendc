@@ -3226,6 +3226,8 @@ static pthread_cond_t par_cv = PTHREAD_COND_INITIALIZER;
 // Joiners that wait for a stolen task (P_WAIT) sleep on par_jcv.
 static pthread_cond_t par_jcv = PTHREAD_COND_INITIALIZER;
 static _Atomic int par_sleepers;
+// Workers running a task they stole.
+static _Atomic int par_running;
 
 // Task ages. A queued task holds the time it was forked (in res, until it
 // is done), in units of 16 ticks since the pool started; a thief takes it
@@ -3309,7 +3311,9 @@ static PTask *pdq_pop(PDeque *d) {
   return NULL;
 }
 
-static PTask *pdq_steal(PDeque *d) {
+// A steal that finds a task it cannot take yet (too young, or held) sets
+// *pend.
+static PTask *pdq_steal(PDeque *d, int *pend) {
   long t = atomic_load_explicit(&d->top, memory_order_acquire);
   atomic_thread_fence(memory_order_seq_cst);
   long b = atomic_load_explicit(&d->bot, memory_order_acquire);
@@ -3317,10 +3321,14 @@ static PTask *pdq_steal(PDeque *d) {
     PTask *x = __atomic_load_n(&d->buf[t & d->mask], __ATOMIC_RELAXED);
     // (x may be gone, when the CAS fails; a task is held only before it
     // is let go)
-    if (par_now() - (uint64_t)__atomic_load_n(&x->res, __ATOMIC_RELAXED) < par_age) return NULL;
+    if (par_now() - (uint64_t)__atomic_load_n(&x->res, __ATOMIC_RELAXED) < par_age) {
+      *pend = 1;
+      return NULL;
+    }
     if (__atomic_load_n(&x->state, __ATOMIC_ACQUIRE) == P_HELD) {
       if (!atomic_load_explicit(&d->want, memory_order_relaxed))
         atomic_store_explicit(&d->want, 1, memory_order_relaxed);
+      *pend = 1;
       return NULL;
     }
     if (!atomic_compare_exchange_strong_explicit(&d->top, &t, t + 1, memory_order_seq_cst,
@@ -3347,7 +3355,7 @@ static void par_exec(PTask *t) {
   }
 }
 
-static PTask *par_steal(void) {
+static PTask *par_steal(int *pend) {
   Thr *me = thr_self;
   int n = __atomic_load_n(&gc_nthr, __ATOMIC_ACQUIRE);
   if (n <= 1) return NULL;
@@ -3356,7 +3364,7 @@ static PTask *par_steal(void) {
   for (int i = 0; i < n; i++) {
     Thr *t = gc_thrs[(s + i) % n];
     if (t == me || !t->live || !t->dq) continue;
-    PTask *x = pdq_steal(t->dq);
+    PTask *x = pdq_steal(t->dq, pend);
     if (x) return x;
   }
   return NULL;
@@ -3373,14 +3381,15 @@ static inline void cpu_relax(void) {
 }
 
 // An idle worker searches (PAR_SPIN rounds of steals over every deque), then
-// sleeps. A fork wakes a sleeper only when no worker is searching, and a
-// searcher that finds a task wakes the next one: a program that forks small
-// tasks often, with the other threads mostly idle, no longer has every
-// fork wake a worker that spins and sleeps again, while a burst of forks
-// still brings them all in. A sleeper also wakes every 2 ms (a wake-up can
-// be missed: the fork reads par_sleepers without the lock), looks once and
-// sleeps again. A task nobody steals is not lost: its forker runs it at the
-// join.
+// sleeps (not while a task it saw is too young or held to take yet: it
+// keeps searching until it can). A fork wakes a sleeper only when no worker
+// is searching, and a searcher that finds a task wakes the next one: a
+// program that forks small tasks often, with the other threads mostly
+// idle, no longer has every fork wake a worker that spins and sleeps again,
+// while a burst of forks still brings them all in. A sleeper also wakes
+// every 2 ms (a wake-up can be missed: the fork reads par_sleepers without
+// the lock), looks once and sleeps again. A task nobody steals is not lost:
+// its forker runs it at the join.
 #define PAR_SPIN 128
 static _Atomic int par_searching;
 
@@ -3389,7 +3398,8 @@ static void *par_worker(void *arg) {
   thr_register((uintptr_t)__builtin_frame_address(0) + 16);
   int budget = PAR_SPIN, searching = 0;
   for (int spins = 0;;) {
-    PTask *t = par_steal();
+    int pend = 0;
+    PTask *t = par_steal(&pend);
     if (t) {
       if (searching) {
         searching = 0;
@@ -3397,10 +3407,18 @@ static void *par_worker(void *arg) {
             atomic_load_explicit(&par_sleepers, memory_order_relaxed) > 0)
           pthread_cond_signal(&par_cv);
       }
+      atomic_fetch_add_explicit(&par_running, 1, memory_order_relaxed);
       par_exec(t);
+      atomic_fetch_sub_explicit(&par_running, 1, memory_order_relaxed);
       spins = 0;
       budget = PAR_SPIN;
       continue;
+    }
+    if (pend) {
+      // A task is queued but not yet old enough to take: keep searching
+      // rather than sleep through the moment it is.
+      spins = 0;
+      budget = PAR_SPIN;
     }
     if (++spins < budget) {
       if (!searching) { searching = 1; atomic_fetch_add(&par_searching, 1); }
@@ -3507,6 +3525,14 @@ static V par_fork_at(int *site, V clo) {
   uint64_t now = par_now();
   t->res = (V)now;
   t->state = gc_hot.rc ? P_HELD : P_QUEUED;
+  // The oldest task of a deque, with a worker idle: it is let go now (a
+  // thief would ask for it, and this thread may not fork or join again for
+  // a long while: a sequential clone runs below the frontier).
+  if (t->state == P_HELD && b == tp &&
+      atomic_load_explicit(&par_running, memory_order_relaxed) < par_nthreads - 1) {
+    rc_publish(clo);
+    t->state = P_QUEUED;
+  }
   __atomic_store_n(&d->buf[b & d->mask], t, __ATOMIC_RELAXED);
   atomic_thread_fence(memory_order_release);
   atomic_store_explicit(&d->bot, b + 1, memory_order_relaxed);
@@ -3545,7 +3571,8 @@ static V par_join(V tv) {
   // a thief that wants a held task of its own deque).
   for (int spins = 0; __atomic_load_n(&t->state, __ATOMIC_ACQUIRE) != P_DONE;) {
     par_serve_if(d);
-    PTask *o = par_steal();
+    int pend = 0;
+    PTask *o = par_steal(&pend);
     if (o) { par_exec(o); spins = 0; continue; }
     if (++spins < 256) { cpu_relax(); continue; }
     spins = 0;
