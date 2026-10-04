@@ -1472,7 +1472,9 @@ V F_F32_dread(V s) {
 #define P_DONE 2
 #define P_HELD 3
 #define P_WAIT 4
-#ifndef __TINYC__
+#if defined(__APPLE__) && defined(__aarch64__) && !defined(__TINYC__)
+#define par_depth (thr_get()->pdepth)
+#elif !defined(__TINYC__)
 __thread int par_depth;
 #endif
 int par_front = 0;

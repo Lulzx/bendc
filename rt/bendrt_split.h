@@ -315,6 +315,7 @@ typedef struct Thr {
   V spare[ARR_SPARES];
   uint32_t nspare;
   uint64_t plast; // when a parallel let past its site's cutoff last forked (par_small)
+  int pdepth;     // par_depth, where thr_get reaches it (see par_depth)
 } Thr;
 
 void gc_park(Thr *t);
@@ -2144,7 +2145,12 @@ typedef struct PTask { V clo; V res; V state; V depth; int *site; } PTask;
 // The fork depth of the running code, and the frontier past which a def
 // with a sequential clone (S_name, see bendc) runs its parallel lets in
 // order: below it, forking costs more than it balances.
-#ifndef __TINYC__
+// (On arm64 Macs, a field of the thread's Thr: a Mach-O thread-local is
+// a call to _tlv_get_addr, 2% of tree-matmul's samples, where thr_get is
+// one load off the thread's TSD base, read once per function.)
+#if defined(__APPLE__) && defined(__aarch64__) && !defined(__TINYC__)
+#define par_depth (thr_get()->pdepth)
+#elif !defined(__TINYC__)
 extern __thread int par_depth;
 #endif
 extern int par_front;
