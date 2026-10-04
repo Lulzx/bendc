@@ -2961,9 +2961,61 @@ static V mk_str(const char *s, size_t n) {
 #define STRC(c, lit) (__atomic_load_n(&(c), __ATOMIC_ACQUIRE) ? (c) : str_cache(&(c), lit, sizeof(lit) - 1))
 #define mk_str_heap mk_str
 
+// Constants (string literals and KONST) are built in blocks of their own:
+// every thread reads them, and a node next to one in the block of a
+// thread's cache would be written as that thread allocates and frees there,
+// taking the constant's cache line from the others each time. While a
+// thread builds one, its caches and freed-node lists are swapped with these
+// (kc_lock, held from the outermost konst_in to its konst_out; a nested
+// constant only counts). The blocks stay owned, so no other cache takes
+// one; they are dirty for the next collection when the thread is done,
+// since a stale pointer may have marked a slot before a constant was built
+// in it (see GcCache).
+static GcCache kc_cache[GC_NPOOL][GC_NCLS];
+static V *kc_lifo[GC_RQCLS];
+static pthread_mutex_t kc_lock = PTHREAD_MUTEX_INITIALIZER;
+static Thr *kc_owner;
+static int kc_depth;
+
+static void kc_swap(Thr *t) {
+  for (int a = 0; a < GC_NPOOL; a++)
+    for (int c = 0; c < GC_NCLS; c++) {
+      GcCache k = t->cache[a][c];
+      t->cache[a][c] = kc_cache[a][c];
+      kc_cache[a][c] = k;
+    }
+  for (int c = 0; c < GC_RQCLS; c++) {
+    V *l = t->lifo[c];
+    t->lifo[c] = kc_lifo[c];
+    kc_lifo[c] = l;
+  }
+}
+
+static void konst_in(void) {
+  Thr *t = thr_self;
+  if (__atomic_load_n(&kc_owner, __ATOMIC_RELAXED) == t) { kc_depth++; return; }
+  pthread_mutex_lock(&kc_lock);
+  kc_owner = t;
+  kc_depth = 1;
+  kc_swap(t);
+}
+
+static void konst_out(void) {
+  if (--kc_depth > 0) return;
+  Thr *t = thr_self;
+  kc_swap(t);
+  for (int a = 0; a < GC_NPOOL; a++)
+    for (int c = 0; c < GC_NCLS; c++)
+      if (kc_cache[a][c].blk) __atomic_store_n(&gc_dirty[gc_bi(kc_cache[a][c].blk)], 1, __ATOMIC_RELAXED);
+  __atomic_store_n(&kc_owner, NULL, __ATOMIC_RELAXED);
+  pthread_mutex_unlock(&kc_lock);
+}
+
 // A string literal, built once (slot is its cache, a root).
 __attribute__((noinline)) static V str_cache(V *slot, const char *s, size_t n) {
+  konst_in();
   V v = mk_str(s, n);
+  konst_out();
   if (gc_hot.rc) rc_immortal(v);
   else bend_share(v);  // before another thread can see it
   pthread_mutex_lock(&gc_lock);
@@ -2979,6 +3031,7 @@ __attribute__((noinline)) static V str_cache(V *slot, const char *s, size_t n) {
 // A constant (a constructor of literals, see Gen.konst in bendc.bend),
 // built once as a string literal is (slot is its cache, a root).
 __attribute__((noinline)) static V konst_cache(V *slot, V v) {
+  konst_out();
   if (gc_hot.rc) rc_immortal(v);
   else bend_share(v);
   pthread_mutex_lock(&gc_lock);
@@ -2990,7 +3043,7 @@ __attribute__((noinline)) static V konst_cache(V *slot, V v) {
   pthread_mutex_unlock(&gc_lock);
   return v;
 }
-#define KONST(c, e) (__atomic_load_n(&(c), __ATOMIC_ACQUIRE) ? (c) : konst_cache(&(c), (e)))
+#define KONST(c, e) (__atomic_load_n(&(c), __ATOMIC_ACQUIRE) ? (c) : konst_cache(&(c), (konst_in(), (e))))
 
 // Encodes a String as a malloc'd UTF-8 buffer.
 static char *str_to_c(V s, size_t *len) {

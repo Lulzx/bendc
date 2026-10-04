@@ -1914,13 +1914,35 @@ V mk_str(const char *s, size_t n);
 #define STRC(c, lit) (__atomic_load_n(&(c), __ATOMIC_ACQUIRE) ? (c) : str_cache(&(c), lit, sizeof(lit) - 1))
 #define mk_str_heap mk_str
 
+// Constants (string literals and KONST) are built in blocks of their own:
+// every thread reads them, and a node next to one in the block of a
+// thread's cache would be written as that thread allocates and frees there,
+// taking the constant's cache line from the others each time. While a
+// thread builds one, its caches and freed-node lists are swapped with these
+// (kc_lock, held from the outermost konst_in to its konst_out; a nested
+// constant only counts). The blocks stay owned, so no other cache takes
+// one; they are dirty for the next collection when the thread is done,
+// since a stale pointer may have marked a slot before a constant was built
+// in it (see GcCache).
+extern GcCache kc_cache[GC_NPOOL][GC_NCLS];
+extern V *kc_lifo[GC_RQCLS];
+extern pthread_mutex_t kc_lock;
+extern Thr *kc_owner;
+extern int kc_depth;
+
+void kc_swap(Thr *t);
+
+void konst_in(void);
+
+void konst_out(void);
+
 // A string literal, built once (slot is its cache, a root).
 __attribute__((noinline)) V str_cache(V *slot, const char *s, size_t n);
 
 // A constant (a constructor of literals, see Gen.konst in bendc.bend),
 // built once as a string literal is (slot is its cache, a root).
 __attribute__((noinline)) V konst_cache(V *slot, V v);
-#define KONST(c, e) (__atomic_load_n(&(c), __ATOMIC_ACQUIRE) ? (c) : konst_cache(&(c), (e)))
+#define KONST(c, e) (__atomic_load_n(&(c), __ATOMIC_ACQUIRE) ? (c) : konst_cache(&(c), (konst_in(), (e))))
 
 // Encodes a String as a malloc'd UTF-8 buffer.
 char *str_to_c(V s, size_t *len);
