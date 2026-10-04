@@ -752,8 +752,10 @@ static inline int bend_take_at(V v, unsigned w, unsigned line) {
 }
 
 // Frees the slot of an unshared node v of w (2 to 16) words in the heap, or
-// (w 256 + n) of a bare node of n fields.
-static inline void bend_free_slot(V v, unsigned w, unsigned line) {
+// (w 256 + n) of a bare node of n fields. Always inlined: w is a constant
+// at each call, and an out-of-line copy (clang -O3 made one) divided by
+// the slot's width (udiv) on every free.
+__attribute__((always_inline)) static inline void bend_free_slot(V v, unsigned w, unsigned line) {
   const GcHot *h = &gc_hot;
   // (its slot's words, and its candidate byte: see Thr.candb)
   int packed = bend_rp_size(v,w);
