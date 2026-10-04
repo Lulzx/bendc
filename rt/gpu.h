@@ -361,38 +361,49 @@ KINLINE void k_share(KTHR KCtx *c, KW v) {
 }
 // (a 32-bit value, a U32, F32 or Bool local, is no object: no code)
 #define KSHARE(v) do { if (sizeof(v) == sizeof(KW)) k_share(c, (KW)(v)); } while (0)
+#ifdef K_FREE
+// k_take's rare paths, out of line: the kernel inlines k_take at every match
+// that frees (bitonic's device code 1020KB -> 947KB, nbody's 563KB -> 434KB).
+// (mask: the fields that hold objects)
+KNOINLINE void k_take_shr(KTHR KCtx *c, KW ix, KW n, KW mask) {
+  for (KW i = 0; i < n && i < 64; i++)
+    if ((mask >> i) & 1) k_share(c, c->H[ix + i]);
+}
+// An object older than the KQ_ call: true when it is to be freed now.
+KNOINLINE bool k_take_old(KTHR KCtx *c, KW ix) {
+  if ((c->kpn == 0 || c->kpn == K_PB) && c->kpc < c->kpmax) {
+    KW b = KIX(c, k_alloc(c, K_PB));
+    if (c->err != 0) return false;
+    c->H[b] = c->kpb;
+    c->kpb = b;
+    c->kpn = 1;
+    c->kpc++;
+  }
+  if (c->kpn != 0 && c->kpn < K_PB) {
+    c->H[c->kpb + c->kpn] = ix;
+    c->kpn++;
+    return false;
+  }
+  if (c->kqlim != ~(KW)0) {
+    c->err = KE_STOP;
+    return false;
+  }
+  c->kdirty = 1;
+  return true;
+}
+#endif
 KINLINE void k_take(KTHR KCtx *c, KW v, KW mask) {
 #ifdef K_FREE
   if (!k_heap_obj(c, v)) return;
   KW ix = KIX(c, v), h = c->H[ix - 1], n = h & 0xffffffff;
   if (h & K_SHR) {
-    // (mask: the fields that hold objects)
-    for (KW i = 0; i < n && i < 64; i++)
-      if ((mask >> i) & 1) k_share(c, c->H[ix + i]);
+    k_take_shr(c, ix, n, mask);
     return;
   }
   KW fc = k_flc(n);
   if (fc == 0) return;
-  if (c->kep != 0 && (h & ((KW)0xffffff << 32)) != c->kep) {
-    if ((c->kpn == 0 || c->kpn == K_PB) && c->kpc < c->kpmax) {
-      KW b = KIX(c, k_alloc(c, K_PB));
-      if (c->err != 0) return;
-      c->H[b] = c->kpb;
-      c->kpb = b;
-      c->kpn = 1;
-      c->kpc++;
-    }
-    if (c->kpn != 0 && c->kpn < K_PB) {
-      c->H[c->kpb + c->kpn] = ix;
-      c->kpn++;
-      return;
-    }
-    if (c->kqlim != ~(KW)0) {
-      c->err = KE_STOP;
-      return;
-    }
-    c->kdirty = 1;
-  }
+  if (c->kep != 0 && (h & ((KW)0xffffff << 32)) != c->kep && !k_take_old(c, ix))
+    return;
   c->H[ix] = K_FLH(c, fc);
   K_FLH(c, fc) = ix;
 #endif
