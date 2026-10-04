@@ -456,6 +456,9 @@ typedef struct GcHot {
   uintptr_t dirty;
   uint8_t *bk;  // gc_bk
   uintptr_t bflags;  // gc_bflags less the heap's first two-word index
+  // Some bare node may be shared (a block got BK_SH, or the device's arena
+  // was set): until then a take of a bare node tests no block's byte.
+  int bsh;
 } GcHot;
 static GcHot gc_hot;
 static GcRange *gc_roots;
@@ -977,7 +980,10 @@ __attribute__((noinline)) static void bend_share_slow(V v) {
     uint8_t *f = (uint8_t *)(gc_hot.bflags + (v >> 4));
     if (!(__atomic_load_n(f, __ATOMIC_RELAXED) & 1)) __atomic_fetch_or(f, 1, __ATOMIC_RELAXED);
     uint8_t *k = &gc_bk[v >> GC_BLK_SHIFT];
-    if (!(__atomic_load_n(k, __ATOMIC_RELAXED) & BK_SH)) __atomic_store_n(k, BK_BARE | BK_SH, __ATOMIC_RELAXED);
+    if (!(__atomic_load_n(k, __ATOMIC_RELAXED) & BK_SH)) {
+      if (!gc_hot.bsh) __atomic_store_n(&gc_hot.bsh, 1, __ATOMIC_RELAXED);
+      __atomic_store_n(k, BK_BARE | BK_SH, __ATOMIC_RELAXED);
+    }
     return;
   }
   V *p = (V *)v;
@@ -1020,6 +1026,7 @@ static void bend_arena_set(uintptr_t lo, uintptr_t n) {
   bend_arena_lo = lo;
   bend_arena_n = n;
   memset(gc_bk + (lo >> GC_BLK_SHIFT), BK_SH, ((lo + n - 1) >> GC_BLK_SHIFT) - (lo >> GC_BLK_SHIFT) + 1);
+  __atomic_store_n(&gc_hot.bsh, 1, __ATOMIC_RELAXED);
 }
 static inline void bend_share(V v) {
   // A word first, on its own branch (the heap bounds are then not loaded).
@@ -1202,12 +1209,12 @@ __attribute__((always_inline)) static inline int bend_shared_bare(V v, unsigned 
   return bend_deep_bare(v, n, f);
 }
 static inline int bend_take_bare(V v, unsigned n) {
-  if (UNLIKELY(gc_hot.bk[v >> GC_BLK_SHIFT] & BK_SH) && bend_shared_bare(v, n)) return 1;
+  if (UNLIKELY(gc_hot.bsh) && (gc_hot.bk[v >> GC_BLK_SHIFT] & BK_SH) && bend_shared_bare(v, n)) return 1;
   bend_free_slot(v, 256 + n, 0);
   return 0;
 }
 static inline V bend_take_ru_bare(V v, unsigned n) {
-  if (UNLIKELY(gc_hot.bk[v >> GC_BLK_SHIFT] & BK_SH) && bend_shared_bare(v, n)) return 0;
+  if (UNLIKELY(gc_hot.bsh) && (gc_hot.bk[v >> GC_BLK_SHIFT] & BK_SH) && bend_shared_bare(v, n)) return 0;
   BEND_POISON_AT(v, n < 2 ? 2 : n);
   return v;
 }

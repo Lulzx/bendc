@@ -523,7 +523,10 @@ __attribute__((noinline)) void bend_share_slow(V v) {
     uint8_t *f = (uint8_t *)(gc_hot.bflags + (v >> 4));
     if (!(__atomic_load_n(f, __ATOMIC_RELAXED) & 1)) __atomic_fetch_or(f, 1, __ATOMIC_RELAXED);
     uint8_t *k = &gc_bk[v >> GC_BLK_SHIFT];
-    if (!(__atomic_load_n(k, __ATOMIC_RELAXED) & BK_SH)) __atomic_store_n(k, BK_BARE | BK_SH, __ATOMIC_RELAXED);
+    if (!(__atomic_load_n(k, __ATOMIC_RELAXED) & BK_SH)) {
+      if (!gc_hot.bsh) __atomic_store_n(&gc_hot.bsh, 1, __ATOMIC_RELAXED);
+      __atomic_store_n(k, BK_BARE | BK_SH, __ATOMIC_RELAXED);
+    }
     return;
   }
   V *p = (V *)v;
@@ -553,6 +556,7 @@ void bend_arena_set(uintptr_t lo, uintptr_t n) {
   bend_arena_lo = lo;
   bend_arena_n = n;
   memset(gc_bk + (lo >> GC_BLK_SHIFT), BK_SH, ((lo + n - 1) >> GC_BLK_SHIFT) - (lo >> GC_BLK_SHIFT) + 1);
+  __atomic_store_n(&gc_hot.bsh, 1, __ATOMIC_RELAXED);
 }
 __attribute__((noinline)) void bend_deep(V v, unsigned w) {
   V *p = (V *)v;
