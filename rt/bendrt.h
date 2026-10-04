@@ -329,6 +329,10 @@ typedef struct Thr {
   uint32_t nspare;
   uint64_t plast; // when a parallel let past its site's cutoff last forked (par_small)
   int pdepth;     // par_depth, where thr_get reaches it (see par_depth)
+  // Counted, the nodes of up to 16 words it freed in the block its cache
+  // of their class allocates from (pool 0): a list through their second
+  // words, which allocation takes first (see rc_free_at).
+  V *lifo[GC_RQCLS];
 } Thr;
 
 static void gc_park(Thr *t);
@@ -691,6 +695,23 @@ static inline void gc_handed(GcCache *k, int atomic, unsigned c, size_t n) {
   }
 }
 
+// The thread's list of freed nodes of class c (Thr.lifo) goes back to the
+// block's bitmap, free, when its cache lets go of the block.
+static inline void rc_free_slot(uintptr_t bi, uint32_t i, unsigned c);
+static void gc_lifo_flush(int atomic, unsigned c) {
+  if (atomic != 0 || c >= GC_RQCLS) return;
+  Thr *t = thr_self;
+  V *p = t->lifo[c];
+  t->lifo[c] = NULL;
+  while (p) {
+    V *n = (V *)p[1];
+    uintptr_t off = (uintptr_t)p - gc_hot.base, bi = off >> GC_BLK_SHIFT;
+    uint64_t o = (off & (GC_BLK - 1)) - GC_HDR;
+    rc_free_slot(bi, (uint32_t)(o / (gc_cls_w[c] * sizeof(V))), c);
+    p = n;
+  }
+}
+
 // Slow path: the next word of a block being bumped through, the rest of the
 // block's free words, or another block.
 __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c) {
@@ -725,7 +746,11 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
       return gc_refill(k, atomic, c);
     }
   }
-  if (k->blk) { __atomic_store_n(&k->blk->owned, 0, __ATOMIC_RELEASE); k->blk = NULL; }
+  if (k->blk) {
+    gc_lifo_flush(atomic, c);
+    __atomic_store_n(&k->blk->owned, 0, __ATOMIC_RELEASE);
+    k->blk = NULL;
+  }
   // First the next block, in address order, where matches freed slots and a
   // 5th is free: lists built from its free slots stay in order in memory.
   // Candidate bits may be stale; the block is checked here. A block is
@@ -800,6 +825,10 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
     pthread_mutex_unlock(&gc_lock);
   }
   k->blk = b;
+  // Counted, a node class's block is dirty for the next collection: the
+  // thread's list (Thr.lifo) hands out slots of objects freed in it, whose
+  // marks stay (see rc_lifo_push).
+  if (gc_hot.rc && atomic == 0 && c < GC_RQCLS) __atomic_store_n(&gc_dirty[gc_bi(b)], 1, __ATOMIC_RELAXED);
   k->abits = GC_ALLOC(b);
   // (A slot's allocation bit is set when the slot goes to the cache: see
   // GcCache for a stale pointer that marks it before it is handed out.)
@@ -863,17 +892,23 @@ static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
   // constructor's) the width is a constant too, not a load from gc_cls_w,
   // which a program's split header only declares.
   size_t sw = w >= 2 && w <= 16 ? w : gc_cls_w[c];
-  GcCache *k = &thr_self->cache[atomic][c];
+  Thr *t = thr_self;
+  GcCache *k = &t->cache[atomic][c];
   V *p;
-  // (The slot's allocation bit is set: see GcCache.)
-  if (k->bump < k->end) {
+  // (The slot's allocation bit is set: see GcCache, and Thr.lifo, whose
+  // slots are in the cache's block.)
+  if (atomic == 0 && c < GC_RQCLS && t->lifo[c]) {
+    p = t->lifo[c];
+    t->lifo[c] = (V *)p[1];
+    if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
+  } else if (k->bump < k->end) {
     p = k->bump;
     k->bump += sw;
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
   } else if (k->bits) {
-    int t = __builtin_ctzll(k->bits);
+    int z = __builtin_ctzll(k->bits);
     k->bits &= k->bits - 1;
-    uint32_t i = k->j * 64 + (uint32_t)t;
+    uint32_t i = k->j * 64 + (uint32_t)z;
     p = k->objs + (size_t)i * sw;
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
   } else {
@@ -1371,6 +1406,17 @@ static void rc_poison(V v, unsigned w) {
 }
 #endif
 
+// v goes on the thread's list of class c (Thr.lifo). Its slot keeps its
+// mark: an object that survived a collection and is freed leaves the slot
+// marked, so the one built there is taken for old. Its block is dirty for
+// the next collection, which rescans its old objects: it was the cache's
+// when that one is taken (gc_refill), or at the last collection's end
+// (gc_dirty_caches).
+static inline void rc_lifo_push(Thr *t, V v, unsigned c) {
+  ((V *)v)[1] = (V)t->lifo[c];
+  t->lifo[c] = (V *)v;
+}
+
 // Frees object v (valid, of w words when w is not 0), whose fields were
 // moved out.
 static inline void rc_free_at(V v, unsigned w) {
@@ -1381,7 +1427,28 @@ static inline void rc_free_at(V v, unsigned w) {
   rc_poison(v, w ? w : gc_kind[bi] == 1 ? gc_meta[bi].words : 1);
   return;
 #endif
+  // A node in the block the thread allocates its class from goes on the
+  // thread's list (Thr.lifo), for the next allocation of the class: its
+  // allocation bit stays set, and the block, owned, is not swept, so a
+  // collection meanwhile leaves the slot alone. (gc_refill frees the list
+  // when the cache lets go of the block.) Blocks are aligned: the block
+  // of a small object is its address rounded down.
+  if (w >= 2 && w <= 16) {
+    Thr *t = thr_self;
+    if (LIKELY(t != NULL) && (uintptr_t)t->cache[0][w - 2].blk == ((uintptr_t)v & ~(GC_BLK - 1))) {
+      rc_lifo_push(t, v, w - 2);
+      return;
+    }
+  }
   if (UNLIKELY(gc_kind[bi] != 1)) { rc_free_large(bi); return; }
+  if (w == 0 && gc_meta[bi].cls < GC_RQCLS) {
+    unsigned c = gc_meta[bi].cls;
+    Thr *t = thr_self;
+    if (LIKELY(t != NULL) && t->cache[0][c].blk == gc_blk(bi)) {
+      rc_lifo_push(t, v, c);
+      return;
+    }
+  }
   uint64_t o = (off & (GC_BLK - 1)) - GC_HDR;
   if (w >= 2 && w <= 16) rc_free_slot(bi, (uint32_t)(o / (w * sizeof(V))), w - 2);
   else rc_free_slot(bi, (uint32_t)((o * gc_meta[bi].recip) >> 32), gc_meta[bi].cls);
@@ -1637,6 +1704,10 @@ static size_t rc_live(void) {
         if (k->bump < k->end) n -= (size_t)(k->end - k->bump) / gc_cls_w[c];
         n -= (size_t)__builtin_popcountll(k->bits);
       }
+  // (and the freed nodes on the threads' lists, Thr.lifo)
+  for (int i = 0; i < gc_nthr; i++)
+    for (int c = 0; c < GC_RQCLS; c++)
+      for (V *p = gc_thrs[i]->lifo[c]; p; p = (V *)p[1]) n--;
   return n;
 }
 
@@ -2264,6 +2335,9 @@ static void fault_init(void) {
 #define THR_SZ ((sizeof(Thr) + 127) & ~(size_t)127)
 #define THR_DQ 1024
 #define THR_CAND (THR_AT + THR_SZ + THR_DQ)
+// (the first 16 KB page holds the Thr, the deque, and the candidate bytes
+// of the first blocks: 2 KB of them at least)
+_Static_assert(THR_CAND + 2048 <= 16384, "a thread's first page holds its Thr, deque and first candidate bytes");
 #ifdef __APPLE__
 static int thr_own_stack;
 #else

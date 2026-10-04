@@ -4312,6 +4312,11 @@ def Pat.wordk(p: Core.Pat) -> Nat:
     case other:
       2n
 
+# What Chr{c} binds c to: the character's code, a number, parenthesized
+# so it reads as a scalar (Gen.scalar.c) and gets no reference counting.
+def Gen.pat.chr(+name: String, +path: String) -> String:
+  Bool.pick(String, Str.eq(name, "Chr"), "(" ++ path ++ ")", path)
+
 # A pattern at a stage st, each one's steps after the stage above it (a
 # pattern that stays passes a lower stage):
 #   4: under U32{..} or F32{..}, by k (Pat.wordk: WCon, WNil or other);
@@ -4393,7 +4398,7 @@ def Gen.pat.go(
                     case 1n:
                       Gen.pat.tag(single, "(" ++ path ++ ") == IMM(" ++ U32.show(tag) ++ ")", r)
                     case 2n:
-                      Gen.pat.go(Core.PCtor{name, [a]}, 0n, g, path, 99, None{}, 0n, r)
+                      Gen.pat.go(Core.PCtor{name, [a]}, 0n, g, Gen.pat.chr(name, path), 99, None{}, 0n, r)
                     case 3n:
                       Gen.pat.cond("(" ++ path ++ ") == 0", r)
                     case 4n:
@@ -6374,6 +6379,11 @@ def Gen.vars(binds: Env()) -> Env():
     case Bind{+x, c} <> t:
       Gen.vars.if(Gen.is_take(x), Bind{x, c}, Gen.vars(t))
 
+# The local a field is read into, parenthesized when the field is a number
+# (a character's code, Gen.pat.chr), which then gets no reference counting.
+def Gen.mat.scalar(+path: String, +m: String) -> String:
+  Bool.pick(String, String.starts_with(path, "("), "(" ++ m ++ ")", m)
+
 def Gen.mat.put.go(bor: Bool, x: String, +m: String, +path: String, r: Env() & Doc) -> Env() & Doc:
   match bor:
     case True{}:
@@ -6381,7 +6391,7 @@ def Gen.mat.put.go(bor: Bool, x: String, +m: String, +path: String, r: Env() & D
       (Bind{x, path} <> bs, d)
     case False{}:
       (bs, d) = r
-      (Bind{x, m} <> bs, Doc.list([DStr{"V " ++ m ++ " = " ++ path ++ ";\n"}, d]))
+      (Bind{x, Gen.mat.scalar(path, m)} <> bs, Doc.list([DStr{"V " ++ m ++ " = " ++ path ++ ";\n"}, d]))
 
 # (a borrowed node's field is read where it is used: the node outlives the
 # case)
@@ -9328,13 +9338,15 @@ def Gen.dst.pad(n: Nat, xs: List<&2, String>, +names: Bool, +i: U32) -> List<&2,
       x <> Gen.dst.pad(m, t, names, U32.inc(i))
 
 # A def of a destination-passing group: D_name stores its result through
-# dst (see Dps), and F_name calls it with dst pointing at a local.
+# dst (see Dps), and F_name calls it with dst pointing at a local. Every
+# D_ function is BEND_PN (see Gen.pn): the jumps between a group's must
+# keep one calling convention.
 def Gen.def.dst(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr, +params: List<&2, String>,
   +env: Env(), +wargs: List<&2, String>, grp: DGrp
 ) -> Gen(Unit):
   DGrp{+id, +n} = grp
   +m = Gen.mangle(name)
-  +dhead = "static " ++ Gen.pn(name, body) ++ "D_" ++ m ++ "(" ++ String.join("V *dst" <> Gen.cparams.go(Gen.dst.pad(U32.to_nat(n),
+  +dhead = "static BEND_PN V D_" ++ m ++ "(" ++ String.join("V *dst" <> Gen.cparams.go(Gen.dst.pad(U32.to_nat(n),
     params, True{}, 0)), ", ") ++ ")"
   +head = "static V " ++ Gen.f(name) ++ "(" ++ Gen.cparams(params) ++ ")"
   do Gen<Unit>:
@@ -9344,7 +9356,7 @@ def Gen.def.dst(+g: G, +name: String, +mask: List<&2, Bool>, +body: Core.Expr, +
       DStr{"}\n"}]))
     Gen.code(DStr{head ++ " { V r; D_" ++ m ++ "(" ++ String.join("&r" <> Gen.dst.pad(U32.to_nat(n), params,
       False{}, 0), ", ") ++ "); return r; }\n"})
-    Gen.wrapper(name, wargs)
+    Gen.wrapper.b(name, wargs, Bor.kept(mask, Bor.list(Bor.flags(g, name))))
 
 # Whether e names k anywhere (under lambdas too). A list field is its
 # head, then the node rebuilt with the rest.
@@ -13451,7 +13463,42 @@ def Bor.args(+g: G, +rc: Bool, mask: List<&2, Bool>, args: List<&2, Core.Expr>, 
     case False{} <> mt a <> at:
       Bor.args(g, rc, mt, at, Bor.tail(fl), Bor.tail(sc), tags, st, U32.inc(j), r)
 
-def Bor.call.name(local: Bool, +cx: BorC, +tags: Env(), +h: String, tail: Bool, +args: List<&2, Core.Expr>,
+# A tail call to another def of the def's destination-passing group, with
+# every argument: a jump (see Gen.def.dst), after which nothing drops a
+# value: as a tail call to the def itself, it lends on what it was lent
+# (t), and an owned value it passes where the callee borrows (x) makes the
+# callee own that parameter instead (y<j>:<callee>, see Bor.ys.apply).
+def Bor.grp.call(+g: G, +self: String, +h: String, +tail: Bool, +args: List<&2, Core.Expr>) -> Bool:
+  +id = DGrp.id(G.dps(g, self))
+  Bool.and(Bool.and(tail, Bool.not(Str.eq(self, h))), Bool.and(Bool.and(Bool.not(String.is_empty(id)),
+    Str.eq(id, DGrp.id(G.dps(g, h)))), Nat.is_eq(List.length(&2, Bool, DInfo.mask(G.def(g, h))), List.length(&2, Core.Expr, args))))
+
+def Bor.y.of(+h: String, e: String) -> String:
+  match e:
+    case SCon{Chr{+c}, +t}:
+      Bool.pick(String, U32.is_eq(c, 120), "y" ++ t ++ ":" ++ h, SCon{Chr{c}, t})
+    case SNil{}:
+      ""
+
+def Bor.ys.of(+h: String, evs: List<&2, String>, acc: List<&2, String>) -> List<&2, String>:
+  match evs:
+    case Nil{}:
+      acc
+    case e <> t:
+      Bor.ys.of(h, t, Bor.y.of(h, e) <> acc)
+
+# A call's events onto acc (grp: a jump within the group, whose x events
+# are the callee's: y).
+def Bor.ys(grp: Bool, +h: String, acc: List<&2, String>, r: BorA) -> BorA:
+  match grp:
+    case True{}:
+      BorA{ev, xs} = r
+      BorA{Bor.ys.of(h, ev, acc), xs}
+    case False{}:
+      BorA{ev, xs} = r
+      BorA{List.append(&2, String, ev, acc), xs}
+
+def Bor.call.name(local: Bool, +cx: BorC, +tags: Env(), +h: String, +tail: Bool, +args: List<&2, Core.Expr>,
   acc: List<&2, String>) -> BorA:
   match local:
     case True{}:
@@ -13459,9 +13506,11 @@ def Bor.call.name(local: Bool, +cx: BorC, +tags: Env(), +h: String, tail: Bool, 
     case False{}:
       BorC{+g, +bm, +self, +n, +tmp} = cx
       +full : Bool = Bool.and(tmp, Nat.is_eq(List.length(&2, Bool, DInfo.mask(G.def(g, h))), List.length(&2, Core.Expr, args)))
-      Bor.args(g, full, DInfo.mask(G.def(g, h)), args, Bor.list(Bor.get(bm, h)),
+      +grp = Bor.grp.call(g, self, h, tail, args)
+      Bor.ys(grp, h, acc, Bor.args(g, full, DInfo.mask(G.def(g, h)), args, Bor.list(Bor.get(bm, h)),
         Bor.list(DGrp.id(G.get(DGrp, DGrp{"", 0}, bm, "%s" ++ h))), tags,
-        Bool.and(tail, Bool.and(Str.eq(self, h), Nat.is_eq(n, List.length(&2, Core.Expr, args)))), 0, BorA{acc, Nil{}})
+        Bool.or(grp, Bool.and(tail, Bool.and(Str.eq(self, h), Nat.is_eq(n, List.length(&2, Core.Expr, args))))), 0,
+        BorA{Nil{}, Nil{}}))
 
 def Bor.call(+cx: BorC, +tags: Env(), +loc: List<&2, String>, tail: Bool, f: Core.Expr, +args: List<&2, Core.Expr>,
   acc: List<&2, String>) -> BorA:
@@ -13605,6 +13654,185 @@ def Bor.gpus(ds: List<&2, Decl>, acc: List<&2, String>) -> List<&2, String>:
     case d <> t:
       Bor.gpus(t, acc)
 
+# Fresh arguments: a def that every other def calls with a call's result
+# in some parameter (lex(gen(..), ..)) owns it, borrowed or not: the
+# caller would drop that value right after the call, a second walk over
+# it, where the def frees it as it reads it. The flags are kept under
+# "%f" and the callee's name, "1" for a parameter every such call fills
+# with a call ("" once the def is used as a value), or with a variable a
+# let binds to a call and uses only there (fr: those variables).
+def Bor.fresh.arg(+fr: List<&2, String>, a: Core.Expr) -> String:
+  match a:
+    case Core.ECall{f, xs}:
+      "1"
+    case Core.EVar{+x}:
+      Bool.pick(String, Str.has(fr, x), "1", "0")
+    case other:
+      "0"
+
+def Bor.fresh.args(+fr: List<&2, String>, xs: List<&2, Core.Expr>) -> String:
+  match xs:
+    case Nil{}:
+      ""
+    case a <> t:
+      Bor.fresh.arg(fr, a) ++ Bor.fresh.args(fr, t)
+
+# The times x occurs in e (a shadowing binder's uses count too: then the
+# let's variable is just not taken as fresh).
+def Expr.occ(n: Nat, +x: String, e: Core.Expr) -> U32:
+  match n:
+    case 0n:
+      2
+    case 1n+ +k:
+      match e:
+        case Core.EVar{+h}:
+          Bool.pick(U32, Str.eq(h, x), 1, 0)
+        case Core.ECall{f, args}:
+          (Expr.occ(k, x, f) + Expr.occ(k, x, Core.ECtor{"", args}) : U32)
+        case Core.ECtor{c, args}:
+          match args:
+            case Nil{}:
+              0
+            case a <> t:
+              (Expr.occ(k, x, a) + Expr.occ(k, x, Core.ECtor{c, t}) : U32)
+        case Core.ELam{p, b}:
+          Expr.occ(k, x, b)
+        case Core.ELet{p, v, b}:
+          (Expr.occ(k, x, v) + Expr.occ(k, x, b) : U32)
+        case Core.EMatch{scrs, cases}:
+          Expr.occ(k, x, Core.ECtor{"", List.append(&2, Core.Expr, scrs, cases)})
+        case Core.ECase{ps, b}:
+          Expr.occ(k, x, b)
+        case Core.ESucc{j, y}:
+          Expr.occ(k, x, y)
+        case Core.EOp{op, a, b}:
+          (Expr.occ(k, x, a) + Expr.occ(k, x, b) : U32)
+        case Core.EAnn{y, t}:
+          Expr.occ(k, x, y)
+        case other:
+          0
+
+def Bor.fresh.let.go(v: Core.Expr, +x: String, +b: Core.Expr, +fr: List<&2, String>) -> List<&2, String>:
+  match v:
+    case Core.ECall{f, xs}:
+      Bool.pick(List<&2, String>, U32.is_eq(Expr.occ(Fuel.max(), x, b), 1), x <> fr, fr)
+    case other:
+      fr
+
+# The fresh variables in a let's body.
+def Bor.fresh.let(p: Core.Pat, +v: Core.Expr, +b: Core.Expr, +fr: List<&2, String>) -> List<&2, String>:
+  match p:
+    case Core.PVar{+x}:
+      Bor.fresh.let.go(v, x, b, fr)
+    case other:
+      fr
+
+# Both flags (the shorter's length: a partial call fills fewer).
+def Bor.fresh.and(a: String, b: String) -> String:
+  match a b:
+    case SCon{Chr{+x}, at} SCon{Chr{+y}, bt}:
+      Bool.pick(String, Bool.and(U32.is_eq(x, 49), U32.is_eq(y, 49)), "1", "0") ++ Bor.fresh.and(at, bt)
+    case al bl:
+      ""
+
+def Bor.fresh.merge(+old: String, +nw: String) -> String:
+  Bool.pick(String, Str.eq(old, "?"), nw, Bor.fresh.and(old, nw))
+
+def Bor.fresh.put(+h: String, +fl: String, +m: Map<&2, DGrp>) -> Map<&2, DGrp>:
+  +k = "%f" ++ h
+  +old = DGrp.id(G.get(DGrp, DGrp{"?", 0}, m, k))
+  Map.set(&2, DGrp, m, k, DGrp{Bor.fresh.merge(old, fl), 0})
+
+def Bor.fresh.call(+self: String, +fr: List<&2, String>, +h: String, +args: List<&2, Core.Expr>, +m: Map<&2, DGrp>) ->
+  Map<&2, DGrp>:
+  Bool.pick(Map<&2, DGrp>, Str.eq(self, h), m, Bor.fresh.put(h, Bor.fresh.args(fr, args), m))
+
+def Bor.fresh.head(+self: String, +fr: List<&2, String>, f: Core.Expr, +args: List<&2, Core.Expr>, m: Map<&2, DGrp>) ->
+  Map<&2, DGrp>:
+  match f:
+    case Core.EVar{+h}:
+      Bor.fresh.call(self, fr, h, args, m)
+    case other:
+      m
+
+# What a call's walk goes on into: its arguments, and its head but a name.
+def Bor.fresh.rest(f: Core.Expr, args: List<&2, Core.Expr>) -> List<&2, Core.Expr>:
+  match f:
+    case Core.EVar{h}:
+      args
+    case other:
+      other <> args
+
+def Expr.fresh(n: Nat, +self: String, +fr: List<&2, String>, e: Core.Expr, m: Map<&2, DGrp>) -> Map<&2, DGrp>:
+  match n:
+    case 0n:
+      m
+    case 1n+ +k:
+      match e:
+        case Core.EVar{+h}:
+          Bor.fresh.put(h, "", m)
+        case Core.ECall{+f, +args}:
+          Expr.fresh(k, self, fr, Core.ECtor{"", Bor.fresh.rest(f, args)}, Bor.fresh.head(self, fr, f, args, m))
+        case Core.ECtor{c, args}:
+          match args:
+            case Nil{}:
+              m
+            case a <> t:
+              Expr.fresh(k, self, fr, Core.ECtor{c, t}, Expr.fresh(k, self, fr, a, m))
+        case Core.ELam{p, b}:
+          Expr.fresh(k, self, fr, b, m)
+        case Core.ELet{p, +v, +b}:
+          Expr.fresh(k, self, Bor.fresh.let(p, v, b, fr), b, Expr.fresh(k, self, fr, v, m))
+        case Core.EMatch{scrs, cases}:
+          Expr.fresh(k, self, fr, Core.ECtor{"", List.append(&2, Core.Expr, scrs, cases)}, m)
+        case Core.ECase{ps, b}:
+          Expr.fresh(k, self, fr, b, m)
+        case Core.ESucc{j, x}:
+          Expr.fresh(k, self, fr, x, m)
+        case Core.EOp{op, a, b}:
+          Expr.fresh(k, self, fr, b, Expr.fresh(k, self, fr, a, m))
+        case Core.EAnn{x, t}:
+          Expr.fresh(k, self, fr, x, m)
+        case other:
+          m
+
+# A def no other def names (live: the first pass's map, which has an entry
+# for each def named) makes no calls: the wrapper an unboxed def leaves
+# (Unb) passes its parameter on, and would keep the clone borrowing.
+def Bor.fresh.live(+live: Map<&2, DGrp>, +name: String) -> Bool:
+  Bool.or(Str.eq(name, "main"), Bool.not(Str.eq(DGrp.id(G.get(DGrp, DGrp{"?", 0}, live, "%f" ++ name)), "?")))
+
+def Bor.fresh.def(on: Bool, +name: String, body: Core.Expr, m: Map<&2, DGrp>) -> Map<&2, DGrp>:
+  match on:
+    case True{}:
+      Expr.fresh(Fuel.max(), name, Nil{}, body, m)
+    case False{}:
+      m
+
+def Bor.fresh.go(ds: List<&2, Decl>, +live: Map<&2, DGrp>, +all: Bool, m: Map<&2, DGrp>) -> Map<&2, DGrp>:
+  match ds:
+    case Nil{}:
+      m
+    case DDef{+name, ps, body, ret} <> t:
+      Bor.fresh.go(t, live, all, Bor.fresh.def(Bool.or(all, Bor.fresh.live(live, name)), name, body, m))
+    case d <> t:
+      Bor.fresh.go(t, live, all, m)
+
+def Bor.fresh(+ds: List<&2, Decl>, m: Map<&2, DGrp>) -> Map<&2, DGrp>:
+  Bor.fresh.go(ds, Bor.fresh.go(ds, MTip{}, True{}, MTip{}), False{}, m)
+
+# A candidate's flags less the parameters every call fills fresh.
+def Bor.fresh.off(cand: String, fr: String) -> String:
+  match cand fr:
+    case SCon{c, ct} SCon{Chr{+y}, ft}:
+      Bool.pick(String, U32.is_eq(y, 49), "0", SCon{c, ""}) ++ Bor.fresh.off(ct, ft)
+    case cl fl:
+      cl
+
+def Bor.fresh.of(+fm: Map<&2, DGrp>, +name: String, +cand: String) -> String:
+  +fr = DGrp.id(G.get(DGrp, DGrp{"?", 0}, fm, "%f" ++ name))
+  Bool.pick(String, Str.eq(fr, "?"), cand, Bor.fresh.off(cand, fr))
+
 # The flags a def starts from: its kept parameters that hold no scalar.
 def Bor.cand(ps: List<&2, Core.Param>, mask: List<&2, Bool>) -> String:
   match ps mask:
@@ -13625,7 +13853,7 @@ def Bor.scal(ps: List<&2, Core.Param>) -> String:
       Bool.pick(String, Gen.scalar.ty(t), "1", "0") ++ Bor.scal(pt)
 
 def Bor.ok(+g: G, +name: String, +gpus: List<&2, String>, +body: Core.Expr) -> Bool:
-  Bool.and(Bool.and(U32.is_eq(DInfo.kind(G.def(g, name)), 0), String.is_empty(DGrp.id(G.dps(g, name)))),
+  Bool.and(U32.is_eq(DInfo.kind(G.def(g, name)), 0),
     Bool.and(Bool.not(Str.eq(name, "main")), Bool.and(Bool.not(Str.has(gpus, name)), Bool.not(Expr.has_par(body)))))
 
 # Read-only clones may lend explicitly shared parameters. Fixed-width scalar
@@ -13640,23 +13868,24 @@ def Bor.ro.cand(ps: List<&2, Core.Param>, mask: List<&2, Bool>, +scalar: Bool) -
     case pl ml:
       ""
 
-def Bor.init.one(ok: Bool, +name: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, scalar: Bool, m: Map<&2, DGrp>) ->
-  Map<&2, DGrp>:
+def Bor.init.one(ok: Bool, +fm: Map<&2, DGrp>, +name: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, scalar: Bool,
+  m: Map<&2, DGrp>) -> Map<&2, DGrp>:
   match ok:
     case True{}:
-      Map.set(&2, DGrp, m, Bor.key(name), DGrp{Bool.pick(String, String.ends_with(name, "%bseq"), Bor.ro.cand(ps, mask, scalar), Bor.cand(ps, mask)), 0})
+      Map.set(&2, DGrp, m, Bor.key(name), DGrp{Bool.pick(String, String.ends_with(name, "%bseq"), Bor.ro.cand(ps, mask, scalar),
+        Bor.fresh.of(fm, name, Bor.cand(ps, mask))), 0})
     case False{}:
       m
 
-def Bor.init(ds: List<&2, Decl>, +g: G, +gpus: List<&2, String>, m: Map<&2, DGrp>) -> Map<&2, DGrp>:
+def Bor.init(ds: List<&2, Decl>, +g: G, +gpus: List<&2, String>, +fm: Map<&2, DGrp>, m: Map<&2, DGrp>) -> Map<&2, DGrp>:
   match ds:
     case Nil{}:
       m
     case DDef{+name, +ps, +body, ret} <> t:
-      Bor.init(t, g, gpus, Bor.init.one(Bor.ok(g, name, gpus, body), name, ps, DInfo.mask(G.def(g, name)), Bor.word.expr(ret),
+      Bor.init(t, g, gpus, fm, Bor.init.one(Bor.ok(g, name, gpus, body), fm, name, ps, DInfo.mask(G.def(g, name)), Bor.word.expr(ret),
         Map.set(&2, DGrp, m, "%s" ++ name, DGrp{Bor.scal(ps), 0})))
     case d <> t:
-      Bor.init(t, g, gpus, m)
+      Bor.init(t, g, gpus, fm, m)
 
 def Bor.tags(ps: List<&2, Core.Param>, +fl: List<&2, Bool>, +i: U32, acc: Env()) -> Env():
   match ps:
@@ -13712,20 +13941,75 @@ def Bor.step(same: Bool, +name: String, +nw: String, m: Map<&2, DGrp>, ch: Bool)
     case False{}:
       BorP{Map.set(&2, DGrp, m, Bor.key(name), DGrp{nw, 0}), True{}}
 
+# The flags with the j-th one 0.
+def Bor.flag.off(s: String, j: Nat) -> String:
+  match s j:
+    case SCon{c, t} 0n:
+      "0" ++ t
+    case SCon{c, t} 1n+k:
+      SCon{c, Bor.flag.off(t, k)}
+    case SNil{} k:
+      ""
+
+# A y<j>:<h> event: its position and callee.
+def Bor.y.pos(s: String, +n: U32) -> U32:
+  match s:
+    case SCon{Chr{+c}, t}:
+      Bool.pick(U32, U32.is_eq(c, 58), n, Bor.y.pos(t, U32.add(U32.mul(n, 10), U32.sub(c, 48))))
+    case SNil{}:
+      n
+
+def Bor.y.name(s: String) -> String:
+  match s:
+    case SCon{Chr{+c}, +t}:
+      Bool.pick(String, U32.is_eq(c, 58), t, Bor.y.name(t))
+    case SNil{}:
+      ""
+
+def Bor.y.apply(+s: String, r: BorP) -> BorP:
+  BorP{+m, ch} = r
+  +h = Bor.y.name(s)
+  +old = Bor.get(m, h)
+  +nw = Bor.flag.off(old, U32.to_nat(Bor.y.pos(s, 0)))
+  Bor.step(Str.eq(old, nw), h, nw, m, ch)
+
+def Bor.y.if(hit: Bool, +t: String, r: BorP) -> BorP:
+  match hit:
+    case True{}:
+      Bor.y.apply(t, r)
+    case False{}:
+      r
+
+def Bor.ys.apply(evs: List<&2, String>, r: BorP) -> BorP:
+  match evs:
+    case Nil{}:
+      r
+    case SCon{Chr{+c}, +t} <> rest:
+      Bor.ys.apply(rest, Bor.y.if(U32.is_eq(c, 121), t, r))
+    case SNil{} <> rest:
+      Bor.ys.apply(rest, r)
+
+# A def's events, given everyone's flags (bm) and its own (fl).
+def Bor.def.ev(+g: G, +bm: Map<&2, DGrp>, +name: String, +ps: List<&2, Core.Param>, +body: Core.Expr, +fl: List<&2, Bool>) ->
+  List<&2, String>:
+  Bor.ev(Fuel.max(), BorC{g, bm, name, List.length(&2, Bool, DInfo.mask(G.def(g, name))), True{}},
+    Bor.tags(ps, fl, 0, Nil{}), Bor.names(ps), Nil{}, True{}, R.ops(body, "Nat"), Nil{})
+
 def Bor.redo(any: Bool, +g: G, +name: String, +ps: List<&2, Core.Param>, +body: Core.Expr, +old: String, +m: Map<&2, DGrp>,
   ch: Bool) -> BorP:
   match any:
     case False{}:
       BorP{m, ch}
     case True{}:
-      +nw = Bor.def(g, m, name, ps, body, Bor.list(old))
-      Bor.step(Str.eq(old, nw), name, nw, m, ch)
+      +ev = Bor.def.ev(g, m, name, ps, body, Bor.list(old))
+      +nw = Bor.next(Bor.list(old), ev, 0)
+      Bor.ys.apply(ev, Bor.step(Str.eq(old, nw), name, nw, m, ch))
 
 def Bor.redo.m(+g: G, +name: String, +ps: List<&2, Core.Param>, +body: Core.Expr, r: BorP) -> BorP:
   BorP{+m, ch} = r
   +old = Bor.get(m, name)
-  Bor.redo(Bool.and(Bor.any(Bor.list(old)), U32.is_eq(DInfo.kind(G.def(g, name)), 0)), g, name, ps, body, old,
-    m, ch)
+  Bor.redo(Bool.and(Bool.or(Bor.any(Bor.list(old)), Bool.not(String.is_empty(DGrp.id(G.dps(g, name))))),
+    U32.is_eq(DInfo.kind(G.def(g, name)), 0)), g, name, ps, body, old, m, ch)
 
 def Bor.pass(ds: List<&2, Decl>, +g: G, r: BorP) -> BorP:
   match ds:
@@ -13747,7 +14031,7 @@ def Bor.fix(n: Nat, +ds: List<&2, Decl>, +g: G, m: Map<&2, DGrp>, +orig: Map<&2,
       Bool.pick(Unit -> Map<&2, DGrp>, BorP.ch(r), u => Bor.fix(k, ds, g, BorP.m(r), orig), u => BorP.m(r))(Unit{})
 
 def Bor.build.go(+g: G, +ds: List<&2, Decl>, +m: Map<&2, DGrp>) -> Map<&2, DGrp>:
-  Bor.fix(64n, ds, g, Bor.init(ds, g, Bor.gpus(ds, Nil{}), m), m)
+  Bor.fix(64n, ds, g, Bor.init(ds, g, Bor.gpus(ds, Nil{}), Bor.fresh(ds, MTip{}), m), m)
 
 # (the runtime's String.eq borrows both strings)
 def Bor.build(rc: Bool, +g: G, +ds: List<&2, Decl>, +m: Map<&2, DGrp>) -> Map<&2, DGrp>:
@@ -23959,6 +24243,285 @@ def Opt.dead(k: Nat, +ds: List<&2, OD>) -> List<&2, OD>:
 def Opt.fuse(+flags: String, +ds: List<&2, OD>) -> List<&2, OD>:
   Bool.pick(Unit -> List<&2, OD>, Opt.on(flags, 102), u => Opt.dead(3n, Opt.fu.rounds(4n, ds)), u => ds)(Unit{})
 
+# Tail pushing
+# ------------
+#
+# A def p whose result is a call g(.., p(bs), ..), g another def that
+# puts its parameter j once on each path where p's result ends (returned,
+# a field of a returned constructor, or passed on in a tail call), builds
+# that result around a C stack frame per call of p: gen(t) = expand(..,
+# gen(u)) expands each item of t in front of the rest, which gen makes
+# first. Such a call calls a copy of g instead (t in BEND_OPT), with p's
+# arguments for that parameter: the copy's body has p(..) where g had the
+# parameter, so p's call is a tail call or a constructor's field, and p
+# and the copies are one destination-passing group (see Dps): a loop that
+# builds each node with a hole for the rest. In a copy, the calls that so
+# pass p's call on are sent to copies too (expand's ident(.., rest) to
+# ident's), each round making the copies the round before asked for.
+# Evaluation order changes (p's call runs after g's other work): the
+# program is pure. Copies are named by g, the position and p.
+def Opt.tp.name(+g: String, +j: Nat, +p: String) -> String:
+  g ++ "%t" ++ Opt.hash(p ++ "#" ++ U32.show(U32.from_nat(j)), 2166136261, 7)
+
+def Opt.tp.budget() -> U32:
+  300
+
+def Opt.tp.var(+x: String, +tail: Bool, +y: String) -> U32:
+  Bool.pick(U32, String.eq(x, y), Bool.pick(U32, tail, 1, 2), 0)
+
+# The most uses of x on a path of t that ends a result (tail: t does), a
+# use where the result does not end counted twice.
+def Opt.tp.max(t: Core.Tm, +x: String, +tail: Bool) -> U32:
+  match t:
+    case Core.CVar{+y}:
+      Opt.tp.var(x, tail, y)
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          0
+        case Core.Arg{r, e} <> t2:
+          U32.add(Opt.tp.max(e, x, tail), Opt.tp.max(Core.CCall{f, t2}, x, tail))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          0
+        case a <> t2:
+          U32.add(Opt.tp.max(a, x, tail), Opt.tp.max(Core.CCtr{k, t2}, x, tail))
+    case Core.CLet{p, v, b}:
+      U32.add(Opt.tp.max(v, x, False{}), Opt.tp.max(b, x, tail))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          U32.add(Opt.tp.max(a, x, False{}), Opt.tp.max(Core.CMat{t2, cases}, x, tail))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              0
+            case c <> t2:
+              U32.max(Opt.tp.max(c, x, tail), Opt.tp.max(Core.CMat{Nil{}, t2}, x, tail))
+    case Core.CCse{ps, b}:
+      Opt.tp.max(b, x, tail)
+    case Core.CAnn{e, ty}:
+      Opt.tp.max(e, x, tail)
+    case +other:
+      U32.mul(2, Inl.uses(other, 0, x))
+
+# The fewest uses of x on a path of t.
+def Opt.tp.min(t: Core.Tm, +x: String) -> U32:
+  match t:
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          0
+        case Core.Arg{r, e} <> t2:
+          U32.add(Opt.tp.min(e, x), Opt.tp.min(Core.CCall{f, t2}, x))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          0
+        case a <> t2:
+          U32.add(Opt.tp.min(a, x), Opt.tp.min(Core.CCtr{k, t2}, x))
+    case Core.CLet{p, v, b}:
+      U32.add(Opt.tp.min(v, x), Opt.tp.min(b, x))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          U32.add(Opt.tp.min(a, x), Opt.tp.min(Core.CMat{t2, cases}, x))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              0
+            case c <> t2:
+              match t2:
+                case Nil{}:
+                  Opt.tp.min(c, x)
+                case t3:
+                  U32.min(Opt.tp.min(c, x), Opt.tp.min(Core.CMat{Nil{}, t3}, x))
+    case Core.CCse{ps, b}:
+      Opt.tp.min(b, x)
+    case Core.CAnn{e, ty}:
+      Opt.tp.min(e, x)
+    case +other:
+      Inl.uses(other, 0, x)
+
+# Whether g (with n arguments) takes p's call at position j: a def of its
+# own within the budget, that puts the parameter once on each path, where
+# its result ends.
+def Opt.tp.g.ok(d: Core.Def, +j: Nat, +n: Nat) -> Bool:
+  match d:
+    case Core.Def{name, +ps, +b, ret}:
+      +x = Opt.nth.par(j, ps)
+      Bool.pick(Unit -> Bool, Bool.and(Nat.is_eq(Inl.pars.len(ps), n), Opt.size.le(b, Opt.tp.budget())),
+        u => Bool.and(U32.is_eq(Opt.tp.max(b, x, True{}), 1), U32.is_eq(Opt.tp.min(b, x), 1)),
+        u => False{})(Unit{})
+
+def Opt.tp.def.ok(+c: Map<&2, Core.Def>, +f: String) -> Bool:
+  Bool.and(Opt.has(c, f), Opt.fu.ok(f))
+
+def Opt.tp.pars(d: Core.Def) -> List<&2, Core.Par>:
+  match d:
+    case Core.Def{name, ps, b, ret}:
+      ps
+
+# Whether an argument is a full call of a producer (one of prods).
+def Opt.tp.prod(+c: Map<&2, Core.Def>, +prods: List<&2, String>, a: Core.Tm) -> String:
+  match a:
+    case Core.CCall{+p, pas}:
+      Bool.pick(String, Bool.and(Bool.and(Str.has(prods, p), Opt.tp.def.ok(c, p)),
+        Nat.is_eq(Inl.pars.len(Opt.tp.pars(Opt.get(c, p))), Inl.args.len(pas))), p, "")
+    case other:
+      ""
+
+def Opt.tp.pick.at(+c: Map<&2, Core.Def>, +g: String, +j: Nat, +n: Nat, +p: String) -> OPk:
+  Bool.pick(Unit -> OPk, Bool.or(String.eq(p, ""), String.eq(p, g)), u => PkNo{},
+    u => Bool.pick(OPk, Opt.tp.g.ok(Opt.get(c, g), j, n), PkFuse{Opt.tp.name(g, j, p), j, g, p}, PkNo{}))(Unit{})
+
+# The first position of a call of g that takes a producer's call (k: the
+# position before's).
+def Opt.tp.pick(as: List<&2, Core.Arg>, k: OPk, +c: Map<&2, Core.Def>, +prods: List<&2, String>, +g: String, +n: Nat,
+  +j: Nat) -> OPk:
+  match as k:
+    case Core.Arg{r, e} <> t PkNo{}:
+      Opt.tp.pick(t, Opt.tp.pick.at(c, g, j, n, Opt.tp.prod(c, prods, e)), c, prods, g, n, 1n+j)
+    case l other:
+      other
+
+def Opt.tp.at(+c: Map<&2, Core.Def>, +prods: List<&2, String>, +g: String, +as: List<&2, Core.Arg>) -> OPk:
+  Bool.pick(Unit -> OPk, Opt.tp.def.ok(c, g), u => Opt.tp.pick(as, PkNo{}, c, prods, g, Inl.args.len(as), 0n), u => PkNo{})(Unit{})
+
+# The calls where t's result ends (onto acc): a call itself, those of a
+# constructor's fields, of a match's cases, of a let's body.
+def Opt.tp.tails(t: Core.Tm, acc: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match t:
+    case Core.CCall{f, as}:
+      Core.CCall{f, as} <> acc
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          acc
+        case a <> t2:
+          Opt.tp.tails(Core.CCtr{k, t2}, Opt.tp.tails(a, acc))
+    case Core.CLet{p, v, b}:
+      Opt.tp.tails(b, acc)
+    case Core.CMat{scrs, cases}:
+      match cases:
+        case Nil{}:
+          acc
+        case cs <> t2:
+          Opt.tp.tails(Core.CMat{scrs, t2}, Opt.tp.tails(cs, acc))
+    case Core.CCse{ps, b}:
+      Opt.tp.tails(b, acc)
+    case Core.CAnn{e, ty}:
+      Opt.tp.tails(e, acc)
+    case other:
+      acc
+
+# t with those calls sent to their copies.
+def Opt.tp.rw(+c: Map<&2, Core.Def>, +prods: List<&2, String>, t: Core.Tm) -> Core.Tm:
+  match t:
+    case Core.CCall{+f, +as}:
+      Opt.sp.redirect(Opt.tp.at(c, prods, f, as), Core.CCall{f, as})
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          Core.CCtr{k, Nil{}}
+        case a <> t2:
+          Core.Tm.push(Opt.tp.rw(c, prods, a), Opt.tp.rw(c, prods, Core.CCtr{k, t2}))
+    case Core.CLet{p, v, b}:
+      Core.CLet{p, v, Opt.tp.rw(c, prods, b)}
+    case Core.CMat{scrs, cases}:
+      match cases:
+        case Nil{}:
+          Core.CMat{scrs, Nil{}}
+        case cs <> t2:
+          Core.Tm.push.case(Opt.tp.rw(c, prods, cs), Opt.tp.rw(c, prods, Core.CMat{scrs, t2}))
+    case Core.CCse{ps, b}:
+      Core.CCse{ps, Opt.tp.rw(c, prods, b)}
+    case Core.CAnn{e, ty}:
+      Core.CAnn{Opt.tp.rw(c, prods, e), ty}
+    case other:
+      other
+
+def Opt.tp.picks(+c: Map<&2, Core.Def>, +prods: List<&2, String>, ts: List<&2, Core.Tm>, acc: List<&2, OSp>) -> List<&2, OSp>:
+  match ts:
+    case Nil{}:
+      acc
+    case t <> r:
+      match t:
+        case Core.CCall{+f, +as}:
+          Opt.tp.picks(c, prods, r, Opt.sp.pk(f, Opt.tp.at(c, prods, f, as), acc))
+        case other:
+          Opt.tp.picks(c, prods, r, acc)
+
+# A def's producers: itself, and for a copy, the def it was made for
+# (pm: "%t" and the copy's name).
+def Opt.tp.prods(+pm: Map<&2, DGrp>, +name: String) -> List<&2, String>:
+  [name, DGrp.id(G.get(DGrp, DGrp{"", 0}, pm, "%t" ++ name))]
+
+def Opt.tp.reqs(+c: Map<&2, Core.Def>, +pm: Map<&2, DGrp>, ds: List<&2, OD>, acc: List<&2, OSp>) -> List<&2, OSp>:
+  match ds:
+    case Nil{}:
+      acc
+    case d <> t:
+      match d:
+        case OCore{Core.Def{+n, ps, b, ret}}:
+          Opt.tp.reqs(c, pm, t, Opt.tp.picks(c, Opt.tp.prods(pm, n), Opt.tp.tails(b, Nil{}), acc))
+        case OKeep{k}:
+          Opt.tp.reqs(c, pm, t, acc)
+
+def Opt.tp.rws(+c: Map<&2, Core.Def>, +pm: Map<&2, DGrp>, ds: List<&2, OD>) -> List<&2, OD>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> t:
+      match d:
+        case OCore{Core.Def{+n, ps, b, ret}}:
+          OCore{Core.Def{n, ps, Opt.tp.rw(c, Opt.tp.prods(pm, n), b), ret}} <> Opt.tp.rws(c, pm, t)
+        case OKeep{k}:
+          OKeep{k} <> Opt.tp.rws(c, pm, t)
+
+# The copy of g for p's call at position j: p's parameters, renamed, in
+# the parameter's place (at the end), and p's call with them for it.
+def Opt.tp.make.def(+name: String, +j: Nat, +p: String, dg: Core.Def, +dp: Core.Def) -> OD:
+  match dg:
+    case Core.Def{g, +ps, b, ret}:
+      +s = "%t" ++ Opt.hash(name, 2166136261, 7)
+      +pps = Opt.tp.pars(dp)
+      OCore{Core.Def{name, Opt.sp.pars(List.append(&2, Core.Par, Opt.drop.par(j, ps), Opt.fu.opars(pps, s))),
+        Opt.go(Fuel.max(), OAll{}, Opt.go(Fuel.max(), OSub{Opt.nth.par(j, ps), Core.CCall{p, Opt.fu.oargs(pps, s)}, True{}}, b)),
+        ret}}
+
+def Opt.tp.makes(+c: Map<&2, Core.Def>, ss: List<&2, OSp>) -> List<&2, OD>:
+  match ss:
+    case Nil{}:
+      Nil{}
+    case OSp{+name, +g, +j, a} <> r:
+      +p = Opt.fu.refname(a)
+      Opt.tp.make.def(name, j, p, Opt.get(c, g), Opt.get(c, p)) <> Opt.tp.makes(c, r)
+
+def Opt.tp.pm(ss: List<&2, OSp>, m: Map<&2, DGrp>) -> Map<&2, DGrp>:
+  match ss:
+    case Nil{}:
+      m
+    case OSp{+name, g, j, a} <> r:
+      Opt.tp.pm(r, Map.set(&2, DGrp, m, "%t" ++ name, DGrp{Opt.fu.refname(a), 0}))
+
+# Rounds (see Opt.sp.rounds): old are the defs done, new those whose calls
+# this round sends to copies.
+def Opt.tp.rounds(k: Nat, +old: List<&2, OD>, +new: List<&2, OD>, +pm: Map<&2, DGrp>) -> List<&2, OD>:
+  match k:
+    case 0n:
+      List.append(&2, OD, old, new)
+    case 1n+j:
+      +c = Opt.defs(new, Opt.defs(old, Map.new(&2, Core.Def)))
+      +ss = Opt.sp.reqs(Opt.tp.reqs(c, pm, new, Nil{}), Opt.names(new, Opt.names(old, Set.new())), Nil{})
+      +made = Opt.tp.makes(c, ss)
+      +done = List.append(&2, OD, old, Opt.tp.rws(c, pm, new))
+      Bool.pick(Unit -> List<&2, OD>, List.is_empty(&2, OD, made), u => done, u => Opt.tp.rounds(j, done, made, Opt.tp.pm(ss, pm)))(Unit{})
+
+def Opt.tpush(+flags: String, +ds: List<&2, OD>) -> List<&2, OD>:
+  Bool.pick(Unit -> List<&2, OD>, Opt.on(flags, 116), u => Opt.tp.rounds(4n, Nil{}, ds, Map.new(&2, DGrp)), u => ds)(Unit{})
+
 # The last step: applications of names made calls.
 def Opt.fix(+c: Map<&2, Core.Def>, d: OD) -> OD:
   match d:
@@ -23984,7 +24547,7 @@ def Lo.program(+flags: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
   +g = G.new(ds)
   +ods = Opt.lowers(g, Lo.masks(g, ds, Map.new(&2, List<&2, Bool>)), ds)
   +rank = Opt.rank(ods, 0, Map.new(&2, U32))
-  Opt.raises(Opt.finish(Opt.resub(flags, Opt.fuse(flags, Opt.unroll(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, False{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), Opt.mon(Opt.ctx(flags, True{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods)))))))))
+  Opt.raises(Opt.finish(Opt.resub(flags, Opt.tpush(flags, Opt.fuse(flags, Opt.unroll(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, False{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), Opt.mon(Opt.ctx(flags, True{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods))))))))))
 
 # Flat results (see Gen.def.unb): "%r:name" in the dps table holds a def's
 # result arity. A def's result is flat when its type has one constructor
@@ -28752,7 +29315,7 @@ def Main.opt(r: Result<&1, &1, U32 & String, String>) -> String:
     case Done{v}:
       v
     case Fail{e}:
-      "i..spufwh"
+      "i..spufwht"
 
 # C for a program: matches free what they open unless BEND_NO_FREE is set
 # (bendc builds itself so: a compiler's heap is mostly shared, short-lived

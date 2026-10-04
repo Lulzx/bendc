@@ -320,6 +320,19 @@ V *gc_bump_word(GcCache *k, uint32_t jw, size_t sw) {
   return p;
 }
 #define GC_SINCE_BATCH ((size_t)64 << 10)
+void gc_lifo_flush(int atomic, unsigned c) {
+  if (atomic != 0 || c >= GC_RQCLS) return;
+  Thr *t = thr_self;
+  V *p = t->lifo[c];
+  t->lifo[c] = NULL;
+  while (p) {
+    V *n = (V *)p[1];
+    uintptr_t off = (uintptr_t)p - gc_hot.base, bi = off >> GC_BLK_SHIFT;
+    uint64_t o = (off & (GC_BLK - 1)) - GC_HDR;
+    rc_free_slot(bi, (uint32_t)(o / (gc_cls_w[c] * sizeof(V))), c);
+    p = n;
+  }
+}
 __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   size_t sw = gc_cls_w[c];
   if (k->blk && k->idx) return gc_bump_word(k, k->idx, sw);
@@ -352,7 +365,11 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
       return gc_refill(k, atomic, c);
     }
   }
-  if (k->blk) { __atomic_store_n(&k->blk->owned, 0, __ATOMIC_RELEASE); k->blk = NULL; }
+  if (k->blk) {
+    gc_lifo_flush(atomic, c);
+    __atomic_store_n(&k->blk->owned, 0, __ATOMIC_RELEASE);
+    k->blk = NULL;
+  }
   // First the next block, in address order, where matches freed slots and a
   // 5th is free: lists built from its free slots stay in order in memory.
   // Candidate bits may be stale; the block is checked here. A block is
@@ -427,6 +444,10 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
     pthread_mutex_unlock(&gc_lock);
   }
   k->blk = b;
+  // Counted, a node class's block is dirty for the next collection: the
+  // thread's list (Thr.lifo) hands out slots of objects freed in it, whose
+  // marks stay (see rc_lifo_push).
+  if (gc_hot.rc && atomic == 0 && c < GC_RQCLS) __atomic_store_n(&gc_dirty[gc_bi(b)], 1, __ATOMIC_RELAXED);
   k->abits = GC_ALLOC(b);
   // (A slot's allocation bit is set when the slot goes to the cache: see
   // GcCache for a stale pointer that marks it before it is handed out.)
@@ -716,6 +737,10 @@ size_t rc_live(void) {
         if (k->bump < k->end) n -= (size_t)(k->end - k->bump) / gc_cls_w[c];
         n -= (size_t)__builtin_popcountll(k->bits);
       }
+  // (and the freed nodes on the threads' lists, Thr.lifo)
+  for (int i = 0; i < gc_nthr; i++)
+    for (int c = 0; c < GC_RQCLS; c++)
+      for (V *p = gc_thrs[i]->lifo[c]; p; p = (V *)p[1]) n--;
   return n;
 }
 void gc_root_add_locked(V *p, size_t n) {
