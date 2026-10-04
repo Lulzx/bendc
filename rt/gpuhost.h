@@ -651,27 +651,46 @@ static int gpu_kq_host(const GpuProg *prog, KW *H, const KParams *P, KW waiting)
 // states in place cost kmeans, which sorts 8192 calls 400 times, 0.3 s of
 // the host's; and each key read is 64 KB of the arena the host touches,
 // resident memory a run pays for.)
+//
+// An argument that is an object (an address in the arena or the CPU's heap,
+// in any of the first 8 calls) orders nothing that matters, and reading it
+// for every call is 64 KB more the host touches: such a column is left out,
+// and with nothing to order by there is no map (tree-radix: 0.7 MB less).
 #define GPU_KS_MAX 3
+static int gpu_kq_obj(const KParams *P, KW v) {
+  KW g = (KW)(uintptr_t)gc_base, gn = (KW)gc_top << GC_BLK_SHIFT;
+  return (v & 7) == 0 && ((v >= P->ab && v - P->ab < P->an) || (v >= g && v - g < gn));
+}
 static void gpu_kq_sort(KW *H, KParams *P, KW waiting) {
   KW n = P->nlanes, k = 0;
-  KW *ix = malloc(2 * waiting * sizeof(KW));
-  if (!ix) return;
-  KW *t = ix + waiting, *base = ix;
   KW *L = H + P->lane0;
-  for (KW l = 0; l < n && k < waiting; l++) {
-    if (L[l] == PC_KQ) ix[k++] = l;
-  }
   const KW *col[GPU_KS_MAX];
   KW diff[GPU_KS_MAX];
   int nv = 0;
+  KW l0 = 0;
+  while (l0 < n && L[l0] != PC_KQ) l0++;
   for (int j = 0; j < GPU_KS_MAX; j++) {
     const KW *c = L + (j == 0 ? 7 : 9 + j) * n;
-    KW d = 0, v0 = c[ix[0]];
-    for (KW i = 1; i < k; i++) d |= c[ix[i]] ^ v0;
+    KW d = 0, v0 = c[l0];
+    if (j > 0) {
+      int obj = 0;
+      for (KW l = l0, s = 0; l < n && s < 8; l++)
+        if (L[l] == PC_KQ) { obj |= gpu_kq_obj(P, c[l]); s++; }
+      if (obj) continue;
+    }
+    for (KW l = l0 + 1; l < n; l++)
+      if (L[l] == PC_KQ) d |= c[l] ^ v0;
     if (d) {
       col[nv] = c;
       diff[nv++] = d;
     }
+  }
+  if (nv == 0) return;
+  KW *ix = malloc(2 * waiting * sizeof(KW));
+  if (!ix) return;
+  KW *t = ix + waiting, *base = ix;
+  for (KW l = 0; l < n && k < waiting; l++) {
+    if (L[l] == PC_KQ) ix[k++] = l;
   }
   static KW cnt[2049];
   for (int q = nv - 1; q >= 0; q--) {
@@ -735,12 +754,12 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   gpu_qused = 0;
   gpu_A[KA_HEAP] = 1;
   memset(H, 0, P.qd * 8);
-  // A lane's other words are set before they are read.
-  // (the first call's are fresh pages, which the host need not touch)
-  if (gpu_used) {
-    memset(H + P.lane0, 0, 10 * gpu_lanes * 8);
-    memset(H + P.lane0 + (10 + KQ_ARGS) * gpu_lanes, 0, 2 * gpu_lanes * 8);
-  }
+  // A lane's other words are set before they are read, or cleared by the
+  // device in the call's first dispatch (P.fresh); the host clears only the
+  // pcs, which it reads (the first call's are fresh pages, which the host
+  // need not touch). (Clearing 12 words a lane here cost tree-radix, which
+  // makes three calls, 0.7 MB of resident memory.)
+  if (gpu_used) memset(H + P.lane0, 0, gpu_lanes * 8);
   P.fresh = 1;
   gpu_used = 1;
   for (KW i = 0; i < nfn; i++) {

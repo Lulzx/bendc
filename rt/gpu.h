@@ -1239,9 +1239,24 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   KCtx cx;
   KTHR KCtx *c = &cx;
   k_load(c, H, A, P, G, lane);
+  // The call's first dispatch: a lane's state but its pc (and lane 0's
+  // frame, the root) is left from an earlier call. (Cleared here, not on the
+  // host: pages only the device touches cost the process no memory.)
+  if (P->fresh) {
+    if (lane != 0) c->fp = 0;
+    c->rv = 0;
+    c->dep = 0;
+    c->hp = 0;
+    c->he = 0;
+    c->blocks = 0;
+    c->spare = 0;
+    c->hs = 0;
+    c->ax = 0;
+    c->kq = 0;
+    c->kqret = 0;
+    c->kqfb = 0;
+  }
 #ifdef K_FREE
-  // (here, not on the host: pages only the device touches cost the
-  // process no memory)
   if (P->fresh)
     for (KW n = 0; n < K_NFC; n++) K_FLH(c, n) = 0;
 #endif
