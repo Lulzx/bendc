@@ -25043,6 +25043,472 @@ def Opt.tp.rounds(k: Nat, +old: List<&2, OD>, +new: List<&2, OD>, +pm: Map<&2, D
 def Opt.tpush(+flags: String, +ds: List<&2, OD>) -> List<&2, OD>:
   Bool.pick(Unit -> List<&2, OD>, Opt.on(flags, 116), u => Opt.tp.rounds(4n, Nil{}, ds, Map.new(&2, DGrp)), u => ds)(Unit{})
 
+# Min/max reassociation
+# ---------------------
+#
+# A min of three U32s, min(min(p, q), r), is a chain of two compares and
+# selects: from q to the result it is two steps, from r one. When q comes
+# from the iteration before (the loop's recurrence), both steps are on the
+# loop's critical path. A min (or max) of U32s is associative and
+# commutative exactly, so (m in BEND_OPT) the operand from the iteration
+# before goes outermost: min(min(p, r), q). F32's is not (NaN): only U32
+# compares count.
+#
+# A min is a match on U32.is_lt(a, b) (or is_le, is_gt, is_ge) of two
+# variables whose cases give them back, as an inlined U32.min or a
+# `match U32.is_lt(x, y)` is; the inner one is a let that only the outer
+# one reads. An operand comes from the iteration before when it reads
+# (through lets) the word of a pair (arr, w) whose array the body writes
+# (Array.set): w was read from the array the iteration before wrote, as
+# editdist's left neighbour cur[j] is. So does a parameter that a
+# self-call passes a min or max: a carried minimum.
+
+# A let bound to a min or max: its variable, kind (2 min, 3 max; 0
+# neither) and operands.
+type OMm is Data:
+  OMm{x: String, k: U32, a: String, b: String}
+
+def Opt.mr.k(n: OMm) -> U32:
+  match n:
+    case OMm{x, k, a, b}:
+      k
+
+# 1 for U32.is_lt and is_le, 2 for U32.is_gt and is_ge, 0 for others.
+def Opt.mr.cmp(+f: String) -> U32:
+  Bool.pick(U32, Bool.or(Str.eq(f, "U32.is_lt"), Str.eq(f, "U32.is_le")), 1,
+    Bool.pick(U32, Bool.or(Str.eq(f, "U32.is_gt"), Str.eq(f, "U32.is_ge")), 2, 0))
+
+# 1 when the True case gives a and the False case b, 2 when they give b
+# and a, 0 otherwise.
+def Opt.mr.arm(+tv: String, +fv: String, +a: String, +b: String) -> U32:
+  Bool.pick(U32, Str.eq(a, b), 0,
+    Bool.pick(U32, Bool.and(Str.eq(tv, a), Str.eq(fv, b)), 1,
+      Bool.pick(U32, Bool.and(Str.eq(tv, b), Str.eq(fv, a)), 2, 0)))
+
+# The kind of a compare c whose True case gives operand o.
+def Opt.mr.kind(+c: U32, +o: U32) -> U32:
+  Bool.pick(U32, Bool.or(U32.is_zero(c), U32.is_zero(o)), 0,
+    Bool.pick(U32, U32.is_eq(c, o), 2, 3))
+
+def Opt.mr.cases(+c: U32, +a: String, +b: String, cs: List<&2, Core.Tm>) -> U32:
+  match cs:
+    case Core.CCse{Core.PtCtr{+k1, Nil{}} <> Nil{}, Core.CVar{+v1}} <> Core.CCse{Core.PtCtr{+k2, Nil{}} <> Nil{}, Core.CVar{+v2}} <> Nil{}:
+      Opt.mr.kind(c, Bool.pick(U32, Bool.and(Str.eq(k1, "True"), Str.eq(k2, "False")), Opt.mr.arm(v1, v2, a, b),
+        Bool.pick(U32, Bool.and(Str.eq(k1, "False"), Str.eq(k2, "True")), Opt.mr.arm(v2, v1, a, b), 0)))
+    case other:
+      0
+
+# t as a min or max (kind 0 when it is neither).
+def Opt.mr.node(t: Core.Tm) -> OMm:
+  match t:
+    case Core.CMat{Core.CCall{+f, Core.Arg{r1, Core.CVar{+a}} <> Core.Arg{r2, Core.CVar{+b}} <> Nil{}} <> Nil{}, cs}:
+      OMm{"", Opt.mr.cases(Opt.mr.cmp(f), a, b, cs), a, b}
+    case other:
+      OMm{"", 0, "", ""}
+
+# The min (k 2) or max (3) of the variables a and b.
+def Opt.mr.mk(+k: U32, +a: String, +b: String) -> Core.Tm:
+  +mx = U32.is_eq(k, 3)
+  Core.CMat{[Core.CCall{"U32.is_lt", [Core.Arg{Core.Run{}, Core.CVar{a}}, Core.Arg{Core.Run{}, Core.CVar{b}}]}],
+    [Core.CCse{[Core.PtCtr{"True", Nil{}}], Core.CVar{Bool.pick(String, mx, b, a)}},
+     Core.CCse{[Core.PtCtr{"False", Nil{}}], Core.CVar{Bool.pick(String, mx, a, b)}}]}
+
+# env without the lets that name one of xs (rebound below).
+def Opt.mr.drop(+xs: List<&2, String>, env: List<&2, OMm>) -> List<&2, OMm>:
+  match env:
+    case Nil{}:
+      Nil{}
+    case OMm{+x, +k, +a, +b} <> +t:
+      Bool.pick(Unit -> List<&2, OMm>, Bool.or(Str.has(xs, x), Bool.or(Str.has(xs, a), Str.has(xs, b))),
+        u => Opt.mr.drop(xs, t), u => OMm{x, k, a, b} <> Opt.mr.drop(xs, t))(Unit{})
+
+# cs without xs.
+def Opt.mr.minus(+xs: List<&2, String>, cs: List<&2, String>) -> List<&2, String>:
+  match cs:
+    case Nil{}:
+      Nil{}
+    case +c <> +t:
+      Bool.pick(Unit -> List<&2, String>, Str.has(xs, c), u => Opt.mr.minus(xs, t), u => c <> Opt.mr.minus(xs, t))(Unit{})
+
+# Whether one of xs is in cs.
+def Opt.mr.hit(xs: List<&2, String>, +cs: List<&2, String>) -> Bool:
+  match xs:
+    case Nil{}:
+      False{}
+    case +y <> t:
+      Bool.pick(Unit -> Bool, Str.has(cs, y), u => True{}, u => Opt.mr.hit(t, cs))(Unit{})
+
+# The let of env with variable x and kind k (kind 0 when there is none).
+def Opt.mr.find(env: List<&2, OMm>, +k: U32, +x: String) -> OMm:
+  match env:
+    case Nil{}:
+      OMm{"", 0, "", ""}
+    case OMm{+y, +k2, +a, +b} <> +t:
+      Bool.pick(Unit -> OMm, Bool.and(Str.eq(x, y), U32.is_eq(k, k2)), u => OMm{y, k2, a, b}, u => Opt.mr.find(t, k, x))(Unit{})
+
+# Whether t writes the array x: a call of Array.set on it.
+def Opt.mr.sets(t: Core.Tm, +x: String) -> Bool:
+  match t:
+    case Core.CCall{+f, as}:
+      match as:
+        case Nil{}:
+          False{}
+        case Core.Arg{r, +e} <> t2:
+          Bool.or(Bool.and(Str.has(["Array.set", "Array.set%w"], f), Opt.is.var(x, e)),
+            Bool.or(Opt.mr.sets(e, x), Opt.mr.sets(Core.CCall{f, t2}, x)))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Opt.mr.sets(f, x)
+        case a <> t2:
+          Bool.or(Opt.mr.sets(a, x), Opt.mr.sets(Core.CApp{f, t2}, x))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          False{}
+        case a <> t2:
+          Bool.or(Opt.mr.sets(a, x), Opt.mr.sets(Core.CCtr{k, t2}, x))
+    case Core.CLam{p, b}:
+      Opt.mr.sets(b, x)
+    case Core.CLet{p, v, b}:
+      Bool.or(Opt.mr.sets(v, x), Opt.mr.sets(b, x))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          Bool.or(Opt.mr.sets(a, x), Opt.mr.sets(Core.CMat{t2, cases}, x))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case c <> t2:
+              Bool.or(Opt.mr.sets(c, x), Opt.mr.sets(Core.CMat{Nil{}, t2}, x))
+    case Core.CCse{ps, b}:
+      Opt.mr.sets(b, x)
+    case Core.CSuc{k, e}:
+      Opt.mr.sets(e, x)
+    case Core.COp{op, a, b}:
+      Bool.or(Opt.mr.sets(a, x), Opt.mr.sets(b, x))
+    case Core.CAnn{e, ty}:
+      Opt.mr.sets(e, x)
+    case other:
+      False{}
+
+# The word of a pair pattern (arr, w) whose array b writes.
+def Opt.mr.seed(p: Core.Pt, +b: Core.Tm) -> List<&2, String>:
+  match p:
+    case Core.PtCtr{+k, Core.PtVar{+arr} <> Core.PtVar{+w} <> Nil{}}:
+      Bool.pick(List<&2, String>, Bool.pick(Unit -> Bool, Str.eq(k, "Tuple"), u => Opt.mr.sets(b, arr), u => False{})(Unit{}), [w], Nil{})
+    case other:
+      Nil{}
+
+def Opt.mr.seeds(ps: List<&2, Core.Pt>, +b: Core.Tm) -> List<&2, String>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      List.append(&2, String, Opt.mr.seed(p, b), Opt.mr.seeds(t, b))
+
+# The carried variables once xs are bound: those of cs not rebound, xs
+# when their value v reads one of cs, and the seeds sd.
+def Opt.mr.carry(+xs: List<&2, String>, +cs: List<&2, String>, +v: Core.Tm, sd: List<&2, String>) -> List<&2, String>:
+  List.append(&2, String, Bool.pick(Unit -> List<&2, String>, List.is_empty(&2, String, cs), u => Nil{},
+    u => Bool.pick(List<&2, String>, Opt.mr.hit(Opt.fv(v, Nil{}, Nil{}), cs), xs, Nil{}))(Unit{}),
+    List.append(&2, String, sd, Opt.mr.minus(xs, cs)))
+
+# env with the let of p to n, when p is a variable, n a min or max, and b
+# reads the variable only twice (the outer node's two places).
+def Opt.mr.add(p: Core.Pt, n: OMm, +b: Core.Tm, +env: List<&2, OMm>) -> List<&2, OMm>:
+  match p:
+    case Core.PtVar{+x}:
+      match n:
+        case OMm{y, +k, +a, +bb}:
+          Bool.pick(Unit -> List<&2, OMm>, Bool.pick(Unit -> Bool, U32.is_ne(k, 0),
+            u => U32.is_eq(Inl.uses(b, 0, x), 2), u => False{})(Unit{}),
+            u => OMm{x, k, a, bb} <> env, u => env)(Unit{})
+    case other:
+      env
+
+# The outer min or max of kind k, of the inner let n and the variable r:
+# the one operand of the three that is carried goes outermost, when
+# exactly one is. t is the node as it was.
+def Opt.mr.one(+cs: List<&2, String>, +k: U32, n: OMm, +r: String, +t: Core.Tm) -> Core.Tm:
+  match n:
+    case OMm{+x, +ki, +p, +q}:
+      +cp = Str.has(cs, p)
+      +cq = Str.has(cs, q)
+      Bool.pick(Unit -> Core.Tm,
+        Bool.and(Bool.and(U32.is_ne(ki, 0), Bool.not(Str.has(cs, r))), Bool.xor(cp, cq)),
+        u => Core.CLet{Core.PtVar{x ++ "@m"}, Opt.mr.mk(k, Bool.pick(String, cp, q, p), r),
+          Opt.mr.mk(k, x ++ "@m", Bool.pick(String, cp, p, q))},
+        u => t)(Unit{})
+
+def Opt.mr.re(+env: List<&2, OMm>, +cs: List<&2, String>, n: OMm, +t: Core.Tm) -> Core.Tm:
+  match n:
+    case OMm{x, +k, +a, +b}:
+      +ia = Opt.mr.find(env, k, a)
+      Bool.pick(Unit -> Core.Tm, U32.is_ne(Opt.mr.k(ia), 0), u => Opt.mr.one(cs, k, ia, b, t),
+        u => Opt.mr.one(cs, k, Opt.mr.find(env, k, b), a, t))(Unit{})
+
+def Opt.mr.let1(p: Core.Pt, +k: U32, +acc: List<&2, String>) -> List<&2, String>:
+  match p:
+    case Core.PtVar{x}:
+      Bool.pick(List<&2, String>, U32.is_ne(k, 0), x <> acc, acc)
+    case other:
+      acc
+
+# The variables lets bind to a min or max (onto acc).
+def Opt.mr.lets(t: Core.Tm, +acc: List<&2, String>) -> List<&2, String>:
+  match t:
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          acc
+        case Core.Arg{r, e} <> t2:
+          Opt.mr.lets(Core.CCall{f, t2}, Opt.mr.lets(e, acc))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Opt.mr.lets(f, acc)
+        case a <> t2:
+          Opt.mr.lets(Core.CApp{f, t2}, Opt.mr.lets(a, acc))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          acc
+        case a <> t2:
+          Opt.mr.lets(Core.CCtr{k, t2}, Opt.mr.lets(a, acc))
+    case Core.CLam{p, b}:
+      Opt.mr.lets(b, acc)
+    case Core.CLet{p, +v, b}:
+      Opt.mr.lets(b, Opt.mr.lets(v, Opt.mr.let1(p, Opt.mr.k(Opt.mr.node(v)), acc)))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          Opt.mr.lets(Core.CMat{t2, cases}, Opt.mr.lets(a, acc))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              acc
+            case c <> t2:
+              Opt.mr.lets(Core.CMat{Nil{}, t2}, Opt.mr.lets(c, acc))
+    case Core.CCse{ps, b}:
+      Opt.mr.lets(b, acc)
+    case Core.CSuc{k, e}:
+      Opt.mr.lets(e, acc)
+    case Core.COp{op, a, b}:
+      Opt.mr.lets(b, Opt.mr.lets(a, acc))
+    case Core.CAnn{e, ty}:
+      Opt.mr.lets(e, acc)
+    case other:
+      acc
+
+# The kind of the min or max a chain of lets ends in.
+def Opt.mr.tailk(t: Core.Tm) -> U32:
+  match t:
+    case Core.CLet{p, v, b}:
+      Opt.mr.tailk(b)
+    case other:
+      Opt.mr.k(Opt.mr.node(other))
+
+# Whether an argument is a min or max (after lets), or a variable a let
+# binds to one (mv).
+def Opt.mr.marg(+mv: List<&2, String>, e: Core.Tm) -> Bool:
+  match e:
+    case Core.CVar{x}:
+      Str.has(mv, x)
+    case other:
+      U32.is_ne(Opt.mr.tailk(other), 0)
+
+def Opt.mr.zip(ps: List<&2, Core.Par>, as: List<&2, Core.Arg>, +mv: List<&2, String>, +acc: List<&2, String>) -> List<&2, String>:
+  match ps as:
+    case Core.Par{x, rel, m, ty} <> pt Core.Arg{r, e} <> at:
+      Opt.mr.zip(pt, at, mv, Bool.pick(List<&2, String>, Opt.mr.marg(mv, e), x <> acc, acc))
+    case pp aa:
+      acc
+
+# The parameters a self-call of the def g passes a min or max (onto
+# acc). A call's head is checked at its first argument; the rest of the
+# arguments go on under another name.
+def Opt.mr.selfs(+g: String, +ps: List<&2, Core.Par>, +mv: List<&2, String>, t: Core.Tm, top: Bool, +acc: List<&2, String>) -> List<&2, String>:
+  match t:
+    case Core.CCall{+f, as}:
+      match as:
+        case Nil{}:
+          acc
+        case Core.Arg{+r, +e} <> +t2:
+          Opt.mr.selfs(g, ps, mv, Core.CCall{f, t2}, False{}, Opt.mr.selfs(g, ps, mv, e, True{},
+            Bool.pick(Unit -> List<&2, String>, Bool.and(top, Str.eq(f, g)), u => Opt.mr.zip(ps, Core.Arg{r, e} <> t2, mv, acc), u => acc)(Unit{})))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Opt.mr.selfs(g, ps, mv, f, True{}, acc)
+        case a <> t2:
+          Opt.mr.selfs(g, ps, mv, Core.CApp{f, t2}, False{}, Opt.mr.selfs(g, ps, mv, a, True{}, acc))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          acc
+        case a <> t2:
+          Opt.mr.selfs(g, ps, mv, Core.CCtr{k, t2}, False{}, Opt.mr.selfs(g, ps, mv, a, True{}, acc))
+    case Core.CLam{p, b}:
+      Opt.mr.selfs(g, ps, mv, b, True{}, acc)
+    case Core.CLet{p, v, b}:
+      Opt.mr.selfs(g, ps, mv, b, True{}, Opt.mr.selfs(g, ps, mv, v, True{}, acc))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          Opt.mr.selfs(g, ps, mv, Core.CMat{t2, cases}, False{}, Opt.mr.selfs(g, ps, mv, a, True{}, acc))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              acc
+            case c <> t2:
+              Opt.mr.selfs(g, ps, mv, Core.CMat{Nil{}, t2}, False{}, Opt.mr.selfs(g, ps, mv, c, True{}, acc))
+    case Core.CCse{qs, b}:
+      Opt.mr.selfs(g, ps, mv, b, True{}, acc)
+    case Core.CSuc{k, e}:
+      Opt.mr.selfs(g, ps, mv, e, True{}, acc)
+    case Core.COp{op, a, b}:
+      Opt.mr.selfs(g, ps, mv, b, True{}, Opt.mr.selfs(g, ps, mv, a, True{}, acc))
+    case Core.CAnn{e, ty}:
+      Opt.mr.selfs(g, ps, mv, e, True{}, acc)
+    case other:
+      acc
+
+# let p = v; b, with the lets of v floated out when v is a chain of lets
+# ending in a min or max (as an inlined min's operands are) and b reads
+# none of the names they bind: the inner min's operands are then in
+# scope at the outer one.
+def Opt.mr.lift(+p: Core.Pt, v: Core.Tm, +b: Core.Tm) -> Core.Tm:
+  match v:
+    case Core.CLet{+p2, +v3, +b3}:
+      Bool.pick(Unit -> Core.Tm, Bool.pick(Unit -> Bool, U32.is_ne(Opt.mr.tailk(b3), 0),
+          u => Bool.not(Opt.mr.hit(Inl.pvars(p2, Nil{}), Opt.fv(b, Nil{}, Nil{}))), u => False{})(Unit{}),
+        u => Core.CLet{p2, v3, Opt.mr.lift(p, b3, b)}, u => Core.CLet{p, Core.CLet{p2, v3, b3}, b})(Unit{})
+    case other:
+      Core.CLet{p, other, b}
+
+# t with the lets of min and max operands floated out (see Opt.mr.lift).
+def Opt.mr.flat(t: Core.Tm) -> Core.Tm:
+  match t:
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          Core.CCall{f, Nil{}}
+        case Core.Arg{r, e} <> t2:
+          Core.Tm.push.call(Core.Arg{r, Opt.mr.flat(e)}, Opt.mr.flat(Core.CCall{f, t2}))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Core.CApp{Opt.mr.flat(f), Nil{}}
+        case a <> t2:
+          Core.Tm.push(Opt.mr.flat(a), Opt.mr.flat(Core.CApp{f, t2}))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          Core.CCtr{k, Nil{}}
+        case a <> t2:
+          Core.Tm.push(Opt.mr.flat(a), Opt.mr.flat(Core.CCtr{k, t2}))
+    case Core.CLam{pt, b}:
+      Core.CLam{pt, Opt.mr.flat(b)}
+    case Core.CLet{pt, v, b}:
+      Opt.mr.lift(pt, Opt.mr.flat(v), Opt.mr.flat(b))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          Core.Tm.push(Opt.mr.flat(a), Opt.mr.flat(Core.CMat{t2, cases}))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.CMat{Nil{}, Nil{}}
+            case c <> t2:
+              Core.Tm.push.case(Opt.mr.flat(c), Opt.mr.flat(Core.CMat{Nil{}, t2}))
+    case Core.CCse{ps, b}:
+      Core.CCse{ps, Opt.mr.flat(b)}
+    case Core.CSuc{k, e}:
+      Core.CSuc{k, Opt.mr.flat(e)}
+    case Core.COp{op, a, b}:
+      Core.COp{op, Opt.mr.flat(a), Opt.mr.flat(b)}
+    case Core.CAnn{e, ty}:
+      Core.CAnn{Opt.mr.flat(e), ty}
+    case other:
+      other
+
+# t, a match the walk rebuilt, with a min or max of a min or max in it
+# reassociated (top: t is the node itself, not one rebuilt with the rest
+# of a list field).
+def Opt.mr.at(+env: List<&2, OMm>, +cs: List<&2, String>, top: Bool, +t: Core.Tm) -> Core.Tm:
+  +n = Opt.mr.node(t)
+  Bool.pick(Unit -> Core.Tm, Bool.and(top, U32.is_ne(Opt.mr.k(n), 0)), u => Opt.mr.re(env, cs, n, t), u => t)(Unit{})
+
+# The walk: env holds the lets in scope bound to a min or max, cs the
+# carried variables.
+def Opt.mr.go(t: Core.Tm, top: Bool, +env: List<&2, OMm>, +cs: List<&2, String>) -> Core.Tm:
+  match t:
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          Core.CCall{f, Nil{}}
+        case Core.Arg{r, e} <> t2:
+          Core.Tm.push.call(Core.Arg{r, Opt.mr.go(e, True{}, env, cs)}, Opt.mr.go(Core.CCall{f, t2}, False{}, env, cs))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Core.CApp{Opt.mr.go(f, True{}, env, cs), Nil{}}
+        case a <> t2:
+          Core.Tm.push(Opt.mr.go(a, True{}, env, cs), Opt.mr.go(Core.CApp{f, t2}, False{}, env, cs))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          Core.CCtr{k, Nil{}}
+        case a <> t2:
+          Core.Tm.push(Opt.mr.go(a, True{}, env, cs), Opt.mr.go(Core.CCtr{k, t2}, False{}, env, cs))
+    case Core.CLam{+pt, b}:
+      +xs = Inl.pvars(pt, Nil{})
+      Core.CLam{pt, Opt.mr.go(b, True{}, Opt.mr.drop(xs, env), Opt.mr.minus(xs, cs))}
+    case Core.CLet{+pt, v, +b}:
+      +v2 = Opt.mr.go(v, True{}, env, cs)
+      +xs = Inl.pvars(pt, Nil{})
+      Core.CLet{pt, v2, Opt.mr.go(b, True{}, Opt.mr.add(pt, Opt.mr.node(v2), b, Opt.mr.drop(xs, env)), Opt.mr.carry(xs, cs, v2, Opt.mr.seed(pt, b)))}
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          Opt.mr.at(env, cs, top, Core.Tm.push(Opt.mr.go(a, True{}, env, cs), Opt.mr.go(Core.CMat{t2, cases}, False{}, env, cs)))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              Core.CMat{Nil{}, Nil{}}
+            case c <> t2:
+              Core.Tm.push.case(Opt.mr.go(c, True{}, env, cs), Opt.mr.go(Core.CMat{Nil{}, t2}, False{}, env, cs))
+    case Core.CCse{+ps, +b}:
+      +xs = Inl.ppvars(ps, Nil{})
+      Core.CCse{ps, Opt.mr.go(b, True{}, Opt.mr.drop(xs, env), List.append(&2, String, Opt.mr.seeds(ps, b), Opt.mr.minus(xs, cs)))}
+    case Core.CSuc{k, e}:
+      Core.CSuc{k, Opt.mr.go(e, True{}, env, cs)}
+    case Core.COp{op, a, b}:
+      Core.COp{op, Opt.mr.go(a, True{}, env, cs), Opt.mr.go(b, True{}, env, cs)}
+    case Core.CAnn{e, ty}:
+      Core.CAnn{Opt.mr.go(e, True{}, env, cs), ty}
+    case other:
+      other
+
+def Opt.mr.def(d: Core.Def) -> Core.Def:
+  match d:
+    case Core.Def{+name, +ps, body, ret}:
+      +fb = Opt.mr.flat(body)
+      Core.Def{name, ps, Opt.mr.go(fb, True{}, Nil{}, Opt.mr.selfs(name, ps, Opt.mr.lets(fb, Nil{}), fb, True{}, Nil{})), ret}
+
+def Opt.mrs(+flags: String, ds: List<&2, OD>) -> List<&2, OD>:
+  match ds:
+    case Nil{}:
+      Nil{}
+    case d <> r:
+      match d:
+        case OCore{+cd}:
+          OCore{Bool.pick(Unit -> Core.Def, Opt.on(flags, 109), u => Opt.mr.def(cd), u => cd)(Unit{})} <> Opt.mrs(flags, r)
+        case OKeep{k}:
+          OKeep{k} <> Opt.mrs(flags, r)
+
 # The last step: applications of names made calls.
 def Opt.fix(+c: Map<&2, Core.Def>, d: OD) -> OD:
   match d:
@@ -25068,7 +25534,7 @@ def Lo.program(+flags: String, +ds: List<&2, Decl>) -> List<&2, Decl>:
   +g = G.new(ds)
   +ods = Opt.lowers(g, Lo.masks(g, ds, Map.new(&2, List<&2, Bool>)), ds)
   +rank = Opt.rank(ods, 0, Map.new(&2, U32))
-  Opt.raises(Opt.finish(Opt.resub(flags, Opt.tpush(flags, Opt.fuse(flags, Opt.unroll(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, False{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), Opt.mon(Opt.ctx(flags, True{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods))))))))))
+  Opt.raises(Opt.finish(Opt.resub(flags, Opt.mrs(flags, Opt.tpush(flags, Opt.fuse(flags, Opt.unroll(flags, Opt.spec(flags, Opt.simps(flags, Opt.inls(Opt.ctx(flags, False{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), Opt.mon(Opt.ctx(flags, True{}, Inl.names.defs(ds, Set.new()), rank, ods, Map.new(&2, Core.Def)), ods)))))))))))
 
 # Flat results (see Gen.def.unb): "%r:name" in the dps table holds a def's
 # result arity. A def's result is flat when its type has one constructor
@@ -29856,7 +30322,7 @@ def Main.opt(r: Result<&1, &1, U32 & String, String>) -> String:
     case Done{v}:
       v
     case Fail{e}:
-      "i..spufwht"
+      "i..spufwhtm"
 
 # C for a program: matches free what they open unless BEND_NO_FREE is set
 # (bendc builds itself so: a compiler's heap is mostly shared, short-lived

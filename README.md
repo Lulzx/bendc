@@ -364,7 +364,7 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
    always run first, on every def; the passes below come after, and their own case of a known
    constructor or literal resolves what the proven ones leave (literal patterns, nested patterns,
    matches that inlining exposes).
-   `BEND_OPT` names its passes by letter: the default is `i..spufwh`, and `BEND_OPT=` turns it off.
+   `BEND_OPT` names its passes by letter: the default is `i..spufwhtm`, and `BEND_OPT=` turns it off.
    - `i` inlines small defs: a body of size at most 4 plus 2 per `.` (8 for `i..`) that calls only
      defs declared before it (so inlining ends), and is neither native nor `IO`. Most of the gain
      comes from `Bool.pick`, `Bool.and`, `Bool.or` and `Bool.not`, whose arguments move into the
@@ -406,6 +406,14 @@ source ─► lexer ─► layout ─► parser ─► operator  ─► tables �
      `g(.., p(..), ..)` left over made a call of the fused def. The structure `p` built is never
      built. `sum(filter(xs))`, `foldr(map(map(xs)))` and `length(map(xs))` become single loops.
      Fused defs that nothing calls are dropped.
+   - `m` reassociates a min or max of three `U32`s so the operand from the loop's previous
+     iteration is outermost. In `min(min(p, q), r)` the path from `q` to the result is two
+     compare-and-selects, and from `r` one. A min or max of `U32`s is exactly associative and
+     commutative, so the result is the same; `F32` is left alone because of NaN. An operand is
+     treated as carried from the previous iteration if it reads, through lets, the word of a
+     pair `(arr, w)` whose array the body writes with `Array.set`, or if it is a parameter that
+     a self-call passes a min or max. editdist's cell reads its left neighbour from the row it
+     writes; with that neighbour moved outermost, editdist's cycles drop by about a quarter.
 
    [`OPT.bend`](OPT.bend) states these rewrites as laws on the instances the optimizer meets
    (map/map, foldr/map, foldl/map, length/map, a fused consumer, a specialized copy, case of case,
