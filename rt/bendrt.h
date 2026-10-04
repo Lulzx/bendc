@@ -2135,7 +2135,7 @@ static void gc_collect(void) {
   pthread_mutex_unlock(&gc_lock);
 }
 
-static struct PDeque *pdq_new(void);
+static struct PDeque *pdq_new(void *mem);
 
 // Registers the calling thread; top is an address near the base of its stack.
 // A fault (a deep recursion past the machine stack, most likely) reports
@@ -2167,42 +2167,63 @@ static void fault_init(void) {
   sigaction(SIGBUS, &sa, NULL);
 }
 
-// A thread that runs Bend code has a stack the runtime maps itself, at a
+// A thread that runs native code has a stack the runtime maps itself, at a
 // multiple of BEND_STK: the first word of that region holds the thread's Thr,
-// so native code finds its allocation caches from sp alone (see rt/native.c).
-// A guard page lies between that word and the stack.
+// so native code finds its allocation caches from sp alone (see rt/native.c,
+// which sets thr_own_stack). The Thr itself follows that word, then the
+// thread's deque (THR_DQ bytes) and its candidate bytes (Thr.candb,
+// GC_MAXBLK of them), then a guard page, then the stack. A thread that
+// allocates in few blocks and forks a little so writes one page for all of
+// them, where a page each (and the Thr's own, from malloc) took 7 workers
+// 0.5 MB more than the official runtime's. Without native code, on macOS,
+// pthreads maps a thread's stack (as large), and the Thr's region is only
+// the first part: a stack of its own costs a page more there, which holds
+// the thread's pthread_t (else at the stack's top, beside its first frames).
 #define BEND_STK ((uintptr_t)1 << 32)
+#define THR_AT 128
+#define THR_SZ ((sizeof(Thr) + 127) & ~(size_t)127)
+#define THR_DQ 1024
+#define THR_CAND (THR_AT + THR_SZ + THR_DQ)
+#ifdef __APPLE__
+static int thr_own_stack;
+#else
+static int thr_own_stack = 1;
+#endif
 
 static void thr_stack(pthread_attr_t *attr) {
+  if (!thr_own_stack) {
+    if (pthread_attr_setstacksize(attr, BEND_STK - ((uintptr_t)1 << 20)) != 0) bend_fail("could not size a thread's stack");
+    return;
+  }
   uintptr_t pg = (uintptr_t)sysconf(_SC_PAGESIZE);
   char *m = mmap(NULL, 2 * BEND_STK, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
   if (m == MAP_FAILED) bend_fail("could not map a thread's stack");
   char *a = (char *)(((uintptr_t)m + BEND_STK - 1) & ~(BEND_STK - 1));
   if (a > m) munmap(m, (size_t)(a - m));
   munmap(a + BEND_STK, (size_t)(m + BEND_STK - a));
-  mprotect(a + pg, pg, PROT_NONE);
-  pthread_attr_setstack(attr, a + 2 * pg, BEND_STK - 2 * pg);
+  char *g = (char *)(((uintptr_t)a + THR_CAND + GC_MAXBLK + pg - 1) & ~(pg - 1));
+  mprotect(g, pg, PROT_NONE);
+  pthread_attr_setstack(attr, g + pg, (size_t)(a + BEND_STK - (g + pg)));
 }
 
 static void thr_register(uintptr_t top) {
   fault_stack();
   // Whole cache lines of its own (Apple's are 128 bytes): the caches at its
-  // start are written at every allocation.
-  Thr *t = NULL;
-  size_t tsz = (sizeof(Thr) + 127) & ~(size_t)127;
-  if (posix_memalign((void **)&t, 128, tsz)) bend_fail("out of memory");
-  memset(t, 0, tsz);
-  *(Thr **)(top & ~(BEND_STK - 1)) = t;
+  // start are written at every allocation. (The region is fresh: zeros.)
+  uintptr_t a = thr_own_stack ? top & ~(BEND_STK - 1) : (uintptr_t)gc_reserve(THR_CAND + GC_MAXBLK, NULL);
+  Thr *t = (Thr *)(a + THR_AT);
+  *(Thr **)a = t;
   t->top = top;
   t->id = pthread_self();
   t->live = 1;
-  t->rng = (uint32_t)(uintptr_t)t ^ 0x9e3779b9u;
-  t->dq = pdq_new();
+  // (every Thr has the same low 32 bits)
+  t->rng = (uint32_t)(((uintptr_t)t >> 32) * 0x9e3779b97f4a7c15ull >> 32) ^ 0x9e3779b9u;
+  t->dq = pdq_new((void *)(a + THR_AT + THR_SZ));
   thr_set(t);
   pthread_mutex_lock(&gc_lock);
   if (gc_nthr == GC_MAXTHR) bend_fail("too many threads");
   gc_thrs[gc_nthr] = t;
-  t->candb = (uintptr_t)gc_reserve(GC_MAXBLK, NULL) - ((uintptr_t)gc_base >> GC_BLK_SHIFT);
+  t->candb = a + THR_CAND - ((uintptr_t)gc_base >> GC_BLK_SHIFT);
   if (gc_nthr == 0) gc_hot.candb = t->candb;
   int n1 = gc_nthr + 1;  // tcc's __atomic_store_n evaluates its value twice
   __atomic_store_n(&gc_nthr, n1, __ATOMIC_RELEASE);
@@ -3237,10 +3258,15 @@ static inline void par_site_big(int *site, int d) {
   if (c != 0 && c <= d) __atomic_store_n(site, d + 1, __ATOMIC_RELAXED);
 }
 
-static PDeque *pdq_new(void) {
-  PDeque *d = calloc(1, sizeof(PDeque));
-  d->mask = (1 << 16) - 1;
-  d->buf = calloc((size_t)d->mask + 1, sizeof(PTask *));
+// A deque holds at most 4 tasks (par_fork_at), and one more each side for a
+// pop or a steal under way: 64 slots, after the PDeque in mem (THR_DQ bytes,
+// zeros, in its thread's first page: see thr_stack).
+#define PDQ_N 64
+_Static_assert(sizeof(PDeque) <= 128 && 128 + PDQ_N * sizeof(PTask *) <= THR_DQ, "a deque fits THR_DQ");
+static PDeque *pdq_new(void *mem) {
+  PDeque *d = (PDeque *)mem;
+  d->mask = PDQ_N - 1;
+  d->buf = (PTask **)((char *)mem + 128);
   return d;
 }
 

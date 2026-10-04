@@ -1,3 +1,5 @@
+#include <stddef.h>
+#include <signal.h>
 #include <pthread.h>
 #include <stdatomic.h>
 static int retirement_kill(pthread_t,int);

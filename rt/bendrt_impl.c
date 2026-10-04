@@ -1112,35 +1112,48 @@ void fault_init(void) {
   sigaction(SIGBUS, &sa, NULL);
 }
 #define BEND_STK ((uintptr_t)1 << 32)
+#define THR_AT 128
+#define THR_SZ ((sizeof(Thr) + 127) & ~(size_t)127)
+#define THR_DQ 1024
+#define THR_CAND (THR_AT + THR_SZ + THR_DQ)
+#ifdef __APPLE__
+int thr_own_stack;
+#else
+int thr_own_stack = 1;
+#endif
 void thr_stack(pthread_attr_t *attr) {
+  if (!thr_own_stack) {
+    if (pthread_attr_setstacksize(attr, BEND_STK - ((uintptr_t)1 << 20)) != 0) bend_fail("could not size a thread's stack");
+    return;
+  }
   uintptr_t pg = (uintptr_t)sysconf(_SC_PAGESIZE);
   char *m = mmap(NULL, 2 * BEND_STK, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
   if (m == MAP_FAILED) bend_fail("could not map a thread's stack");
   char *a = (char *)(((uintptr_t)m + BEND_STK - 1) & ~(BEND_STK - 1));
   if (a > m) munmap(m, (size_t)(a - m));
   munmap(a + BEND_STK, (size_t)(m + BEND_STK - a));
-  mprotect(a + pg, pg, PROT_NONE);
-  pthread_attr_setstack(attr, a + 2 * pg, BEND_STK - 2 * pg);
+  char *g = (char *)(((uintptr_t)a + THR_CAND + GC_MAXBLK + pg - 1) & ~(pg - 1));
+  mprotect(g, pg, PROT_NONE);
+  pthread_attr_setstack(attr, g + pg, (size_t)(a + BEND_STK - (g + pg)));
 }
 void thr_register(uintptr_t top) {
   fault_stack();
   // Whole cache lines of its own (Apple's are 128 bytes): the caches at its
-  // start are written at every allocation.
-  Thr *t = NULL;
-  size_t tsz = (sizeof(Thr) + 127) & ~(size_t)127;
-  if (posix_memalign((void **)&t, 128, tsz)) bend_fail("out of memory");
-  memset(t, 0, tsz);
-  *(Thr **)(top & ~(BEND_STK - 1)) = t;
+  // start are written at every allocation. (The region is fresh: zeros.)
+  uintptr_t a = thr_own_stack ? top & ~(BEND_STK - 1) : (uintptr_t)gc_reserve(THR_CAND + GC_MAXBLK, NULL);
+  Thr *t = (Thr *)(a + THR_AT);
+  *(Thr **)a = t;
   t->top = top;
   t->id = pthread_self();
   t->live = 1;
-  t->rng = (uint32_t)(uintptr_t)t ^ 0x9e3779b9u;
-  t->dq = pdq_new();
+  // (every Thr has the same low 32 bits)
+  t->rng = (uint32_t)(((uintptr_t)t >> 32) * 0x9e3779b97f4a7c15ull >> 32) ^ 0x9e3779b9u;
+  t->dq = pdq_new((void *)(a + THR_AT + THR_SZ));
   thr_set(t);
   pthread_mutex_lock(&gc_lock);
   if (gc_nthr == GC_MAXTHR) bend_fail("too many threads");
   gc_thrs[gc_nthr] = t;
-  t->candb = (uintptr_t)gc_reserve(GC_MAXBLK, NULL) - ((uintptr_t)gc_base >> GC_BLK_SHIFT);
+  t->candb = a + THR_CAND - ((uintptr_t)gc_base >> GC_BLK_SHIFT);
   if (gc_nthr == 0) gc_hot.candb = t->candb;
   int n1 = gc_nthr + 1;  // tcc's __atomic_store_n evaluates its value twice
   __atomic_store_n(&gc_nthr, n1, __ATOMIC_RELEASE);
@@ -1425,10 +1438,11 @@ uint64_t par_tick_hz(void) { return 1000000000u; }
 #endif
 uint64_t par_t0;
 uint64_t par_age = 0;
-PDeque *pdq_new(void) {
-  PDeque *d = calloc(1, sizeof(PDeque));
-  d->mask = (1 << 16) - 1;
-  d->buf = calloc((size_t)d->mask + 1, sizeof(PTask *));
+#define PDQ_N 64
+PDeque *pdq_new(void *mem) {
+  PDeque *d = (PDeque *)mem;
+  d->mask = PDQ_N - 1;
+  d->buf = (PTask **)((char *)mem + 128);
   return d;
 }
 PTask *pdq_pop(PDeque *d) {

@@ -1318,7 +1318,7 @@ __attribute__((noinline)) void gc_collect_locked(void);
 // Collects now (from a thread that runs Bend code).
 void gc_collect(void);
 
-struct PDeque *pdq_new(void);
+struct PDeque *pdq_new(void *mem);
 
 // Registers the calling thread; top is an address near the base of its stack.
 // A fault (a deep recursion past the machine stack, most likely) reports
@@ -1330,11 +1330,28 @@ void fault_stack(void);
 
 void fault_init(void);
 
-// A thread that runs Bend code has a stack the runtime maps itself, at a
+// A thread that runs native code has a stack the runtime maps itself, at a
 // multiple of BEND_STK: the first word of that region holds the thread's Thr,
-// so native code finds its allocation caches from sp alone (see rt/native.c).
-// A guard page lies between that word and the stack.
+// so native code finds its allocation caches from sp alone (see rt/native.c,
+// which sets thr_own_stack). The Thr itself follows that word, then the
+// thread's deque (THR_DQ bytes) and its candidate bytes (Thr.candb,
+// GC_MAXBLK of them), then a guard page, then the stack. A thread that
+// allocates in few blocks and forks a little so writes one page for all of
+// them, where a page each (and the Thr's own, from malloc) took 7 workers
+// 0.5 MB more than the official runtime's. Without native code, on macOS,
+// pthreads maps a thread's stack (as large), and the Thr's region is only
+// the first part: a stack of its own costs a page more there, which holds
+// the thread's pthread_t (else at the stack's top, beside its first frames).
 #define BEND_STK ((uintptr_t)1 << 32)
+#define THR_AT 128
+#define THR_SZ ((sizeof(Thr) + 127) & ~(size_t)127)
+#define THR_DQ 1024
+#define THR_CAND (THR_AT + THR_SZ + THR_DQ)
+#ifdef __APPLE__
+extern int thr_own_stack;
+#else
+extern int thr_own_stack;
+#endif
 
 void thr_stack(pthread_attr_t *attr);
 
@@ -2160,7 +2177,12 @@ static inline void par_site_big(int *site, int d) {
   if (c != 0 && c <= d) __atomic_store_n(site, d + 1, __ATOMIC_RELAXED);
 }
 
-PDeque *pdq_new(void);
+// A deque holds at most 4 tasks (par_fork_at), and one more each side for a
+// pop or a steal under way: 64 slots, after the PDeque in mem (THR_DQ bytes,
+// zeros, in its thread's first page: see thr_stack).
+#define PDQ_N 64
+_Static_assert(sizeof(PDeque) <= 128 && 128 + PDQ_N * sizeof(PTask *) <= THR_DQ, "a deque fits THR_DQ");
+PDeque *pdq_new(void *mem);
 
 PTask *pdq_pop(PDeque *d);
 

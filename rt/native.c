@@ -17,6 +17,10 @@
 #include <stddef.h>
 #include "bendrt_split.h"
 
+// Native code finds its thread's Thr from sp: its threads run on stacks the
+// runtime maps (see thr_stack).
+__attribute__((constructor)) static void bn_own_stack(void) { thr_own_stack = 1; }
+
 V *bn_alloc(V words) { return halloc((size_t)words); }
 V *bn_alloc_hole(V words) { return halloc_hole((size_t)words); }
 
