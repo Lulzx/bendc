@@ -7,6 +7,8 @@
 #include <assert.h>
 #include <string.h>
 #include <math.h>
+// (every frame compacts: these check the copying itself, see K_TREE_LAZY)
+#define K_TREE_LAZY 0
 #include "gpu.h"
 KINLINE KW k_frame_size(KW l) { (void)l; return 0; }
 KINLINE void k_cases(KCtx *c) { k_fail(c, KE_PC); }

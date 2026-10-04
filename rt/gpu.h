@@ -533,9 +533,19 @@ KINLINE bool k_tree_layout(KTHR KCtx *c,KW v,KCP KW *masks,KW nmasks,
   if(tag>=nmasks || (masks[tag] & K_TREE_BARE_MASK)) return false;
   *mask=masks[tag];*first=1;return true;
 }
+// A frame's result is compacted only once what the frame allocated passes
+// K_TREE_LAZY words or its heap chunk: below that, the garbage is left to
+// the frame that called it, whose compaction copies the live tree once
+// instead of every level copying its subtree again (kmeans's pfold and szip
+// frames, 15-node trees: its KQ passes 0.39 s -> 0.31 s of device time;
+// tree-radix 3.6 s -> 2.0 s, merkle 60 ms -> 53 ms).
+#ifndef K_TREE_LAZY
+#define K_TREE_LAZY 1024
+#endif
 KNOINLINE KW k_tree_compact(KTHR KCtx *c,KW h0,KW e0,KW b0,KW r,
                        KCP KW *masks,KW nmasks) {
   if(c->err || !k_tree_new(c,h0,e0,b0,r)) return r;
+  if(c->blocks==b0 && c->he==e0 && c->hp-h0<K_TREE_LAZY) return r;
   KCtx out=*c;out.hp=out.he=out.hs=0;out.blocks=b0;
   KW root=k_tree_copy_node(c,&out,r);
   KW src[64],dst[64],next[64],depth=1,steps=0;
