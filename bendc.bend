@@ -21546,12 +21546,14 @@ def K.program.m(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> KM(Unit)
 def K.program(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> KOut:
   K.fin(Gen.free(g), K.program.m(g, ts, clos)(KSt{8, 0, 0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}, DNil{}, Nil{}}))
 
-def Gen.gpu.tail(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> String:
+# (The device code comes from gg's defs, see Gen.gpu.opt; the CPU's stubs
+# from g's.)
+def Gen.gpu.tail(+g: G, gg: Unit -> G, ts: List<&2, String>, clos: List<&2, String>) -> String:
   match ts:
     case Nil{}:
       ""
     case +t <> +rest:
-      Gen.gpu.emit(g, t <> rest, K.program(g, t <> rest, clos))
+      Gen.gpu.emit(g, t <> rest, K.program(gg(Unit{}), t <> rest, clos))
 
 # Core IR
 # =======
@@ -23816,6 +23818,7 @@ type ODec is Data:
   DFuCtx{c: Map<&2, Core.Def>}
   DFuSelf{g: String, j: Nat, p: String, n: Nat, name: String}
   DLit{c: Map<&2, Core.Def>}
+  DLitLeaf{c: Map<&2, Core.Def>}
 
 def Opt.sp.budget() -> U32:
   400
@@ -24129,6 +24132,98 @@ def Opt.ul.at(+b: Core.Tm, +i: Nat, +f: String, +as: List<&2, Core.Arg>) -> OPk:
   Bool.pick(Unit -> OPk, Nat.is_eq(i, Inl.args.len(as)), u => PkNo{},
     u => Bool.pick(Unit -> OPk, Opt.size.le(b, Opt.ul.cap(Opt.nth.arg(i, as))), u2 => Opt.sp.at.pos(i, f, as), u2 => PkNo{})(Unit{}))(Unit{})
 
+def Opt.lf.par(par: Bool, acc: List<&2, String>) -> List<&2, String>:
+  match par:
+    case True{}:
+      "%par" <> acc
+    case False{}:
+      acc
+
+# The defs t calls, onto acc, and whether it forks (a parallel let): for
+# the device's unrolling (v in BEND_OPT, see Opt.unroll).
+def Opt.lf.calls(t: Core.Tm, acc: List<&2, String>) -> List<&2, String>:
+  match t:
+    case Core.CCall{f, as}:
+      match as:
+        case Nil{}:
+          f <> acc
+        case Core.Arg{r, e} <> t2:
+          Opt.lf.calls(e, Opt.lf.calls(Core.CCall{f, t2}, acc))
+    case Core.CRef{f}:
+      f <> acc
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Opt.lf.calls(f, acc)
+        case y <> t2:
+          Opt.lf.calls(y, Opt.lf.calls(Core.CApp{f, t2}, acc))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          Opt.lf.par(Str.eq(k, "%par"), acc)
+        case y <> t2:
+          Opt.lf.calls(y, Opt.lf.calls(Core.CCtr{k, t2}, acc))
+    case Core.CLam{p, b}:
+      Opt.lf.calls(b, acc)
+    case Core.CLet{p, v, b}:
+      Opt.lf.calls(v, Opt.lf.calls(b, acc))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case y <> t2:
+          Opt.lf.calls(y, Opt.lf.calls(Core.CMat{t2, cases}, acc))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              acc
+            case c <> t2:
+              Opt.lf.calls(c, Opt.lf.calls(Core.CMat{Nil{}, t2}, acc))
+    case Core.CCse{ps, b}:
+      Opt.lf.calls(b, acc)
+    case Core.CSuc{k, e}:
+      Opt.lf.calls(e, acc)
+    case Core.COp{op, y, b}:
+      Opt.lf.calls(y, Opt.lf.calls(b, acc))
+    case Core.CAnn{e, ty}:
+      Opt.lf.calls(e, acc)
+    case other:
+      acc
+
+def Opt.lf.body(d: Core.Def) -> Core.Tm:
+  match d:
+    case Core.Def{name, ps, b, ret}:
+      b
+
+# Whether a def reaches a parallel let through its calls (within fuel defs:
+# past it, as if it did).
+def Opt.lf.forks(fuel: Nat, +c: Map<&2, Core.Def>, todo: List<&2, String>, +seen: List<&2, String>) -> Bool:
+  match fuel:
+    case 0n:
+      True{}
+    case 1n+(+fu):
+      match todo:
+        case Nil{}:
+          False{}
+        case +f <> +rest:
+          Bool.pick(Unit -> Bool, Str.eq(f, "%par"), u => True{},
+            u => Bool.pick(Unit -> Bool, Bool.or(Str.has(seen, f), Bool.not(Opt.has(c, f))), u2 => Opt.lf.forks(fu, c, rest, seen),
+              u2 => Opt.lf.forks(fu, c, Opt.lf.calls(Opt.lf.body(Opt.get(c, f)), rest), f <> seen))(Unit{}))(Unit{})
+
+# Whether f forks only through the defs it calls: a copy of f then repeats
+# their state machines (kmeans's loop, each round a parallel fold). A def
+# that forks itself, a tree fold, is copied: its copies near the leaves
+# become straight code (raytrace's columns run 2.5x faster so), and the
+# device gathers its calls differently (see KQ).
+def Opt.lf.reach.go(own: Bool, +c: Map<&2, Core.Def>, +f: String, cs: List<&2, String>) -> Bool:
+  match own:
+    case True{}:
+      False{}
+    case False{}:
+      Opt.lf.forks(4096n, c, cs, [f])
+
+def Opt.lf.reach(+c: Map<&2, Core.Def>, +f: String) -> Bool:
+  +cs = Opt.lf.calls(Opt.lf.body(Opt.get(c, f)), Nil{})
+  Opt.lf.reach.go(Str.has(cs, "%par"), c, f, cs)
+
 def Opt.ul.def(+f: String, +as: List<&2, Core.Arg>, d: Core.Def) -> OPk:
   match d:
     case Core.Def{name, +ps, +b, ret}:
@@ -24150,6 +24245,9 @@ def Opt.sp.at(dec: ODec, +f: String, +as: List<&2, Core.Arg>) -> OPk:
         u => PkNo{})(Unit{})
     case DLit{+c}:
       Bool.pick(Unit -> OPk, Opt.has(c, f), u => Opt.ul.def(f, as, Opt.get(c, f)), u => PkNo{})(Unit{})
+    case DLitLeaf{+c}:
+      Bool.pick(Unit -> OPk, Bool.and(Opt.has(c, f), Bool.not(Opt.lf.reach(c, f))),
+        u => Opt.ul.def(f, as, Opt.get(c, f)), u => PkNo{})(Unit{})
 
 def Opt.sp.redirect(k: OPk, t: Core.Tm) -> Core.Tm:
   match k:
@@ -24461,20 +24559,30 @@ def Opt.ul.keep(+dec: ODec, +want: Bool, ds: List<&2, OD>) -> List<&2, OD>:
 # call to a copy can pass another literal (spk(22n, 0n, ..) goes to spk's
 # copy for 22n, then to that one's copy for 0n); the rounds are enough for
 # two literals at the limit to reach 0n.
-def Opt.ul.rounds(k: Nat, +old: List<&2, OD>, +new: List<&2, OD>) -> List<&2, OD>:
+def Opt.ul.dec(leaf: Bool, c: Map<&2, Core.Def>) -> ODec:
+  match leaf:
+    case True{}:
+      DLitLeaf{c}
+    case False{}:
+      DLit{c}
+
+def Opt.ul.rounds(k: Nat, +leaf: Bool, +old: List<&2, OD>, +new: List<&2, OD>) -> List<&2, OD>:
   match k:
     case 0n:
       List.append(&2, OD, old, new)
     case 1n+j:
       +c = Opt.defs(new, Opt.defs(old, Map.new(&2, Core.Def)))
-      +live = Opt.ul.keep(DLit{c}, True{}, new)
-      +idle = Opt.ul.keep(DLit{c}, False{}, new)
-      +made = Opt.ul.makes(c, Opt.sp.reqs(Opt.sp.picks(DLit{c}, Opt.bodies.calls(live, Nil{})), Opt.names(new, Opt.names(old, Set.new())), Nil{}))
+      +live = Opt.ul.keep(Opt.ul.dec(leaf, c), True{}, new)
+      +idle = Opt.ul.keep(Opt.ul.dec(leaf, c), False{}, new)
+      +made = Opt.ul.makes(c, Opt.sp.reqs(Opt.sp.picks(Opt.ul.dec(leaf, c), Opt.bodies.calls(live, Nil{})), Opt.names(new, Opt.names(old, Set.new())), Nil{}))
       Bool.pick(Unit -> List<&2, OD>, List.is_empty(&2, OD, live), u => List.append(&2, OD, old, idle),
-        u => Opt.ul.rounds(j, List.append(&2, OD, old, idle), List.append(&2, OD, Opt.sp.rws(DLit{c}, live), made)))(Unit{})
+        u => Opt.ul.rounds(j, leaf, List.append(&2, OD, old, idle), List.append(&2, OD, Opt.sp.rws(Opt.ul.dec(leaf, c), live), made)))(Unit{})
 
+# (v, for the device's code: no copies of a callee that forks only through
+# what it calls, see Opt.lf.reach and Gen.gpu.opt.)
 def Opt.unroll(+flags: String, +ds: List<&2, OD>) -> List<&2, OD>:
-  Bool.pick(Unit -> List<&2, OD>, Opt.on(flags, 117), u => Opt.ul.rounds(130n, Nil{}, ds), u => ds)(Unit{})
+  Bool.pick(Unit -> List<&2, OD>, Opt.on(flags, 118), u => Opt.ul.rounds(130n, True{}, Nil{}, ds),
+    u => Bool.pick(Unit -> List<&2, OD>, Opt.on(flags, 117), u2 => Opt.ul.rounds(130n, False{}, Nil{}, ds), u2 => ds)(Unit{}))(Unit{})
 
 # Fusion
 # ------
@@ -25122,12 +25230,12 @@ def Arrn.end(on: Bool) -> String:
   Bool.pick(String, on,
     "#undef arr_rdw\n#undef F_Array_dget_x37w\n#undef F_Array_dset_x37w\n#undef F_Array_dswap_x37w\n", "")
 
-def Gen.program.fin(+g: G, cids: String, r: String & St) -> COut:
+def Gen.program.fin(+g: G, gg: Unit -> G, cids: String, r: String & St) -> COut:
   (entry, st) = r
   St{n, protos, code, refs, errs, memo, +effs} = st
   +narrow = Arrn.program(g)
   COut{cids ++ "#define BEND_NATIVE_MAP_BIT 1\n#define BEND_NATIVE_STR 1\n#define BEND_NATIVE_MAP 1\n#define BEND_PF_RAW(p, k) ((p)[(k)+1])\n#define BEND_PF_FLD(p, k, i) ((p)[i])\n#define BEND_PF_TOK(p, k) ((p)[k])\n#ifdef BEND_RT_SPLIT\n#include \"bendrt_split.h\"\n#else\n#include \"bendrt.h\"\n#endif\n\n", Gen.dedup(List.reverse(&2, String, Gen.effs.files(effs)), Nil{}),
-    Doc.flat(Doc.list([DStr{"BEND_NSP_BEGIN\n" ++ Arrn.begin(narrow)}, protos, DStr{"\n"}, code, DStr{Arrn.end(narrow) ++ "BEND_NSP_END\n" ++ Gen.gpu.tail(g, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
+    Doc.flat(Doc.list([DStr{"BEND_NSP_BEGIN\n" ++ Arrn.begin(narrow)}, protos, DStr{"\n"}, code, DStr{Arrn.end(narrow) ++ "BEND_NSP_END\n" ++ Gen.gpu.tail(g, gg, Gen.dedup(Gen.effs.tagged(effs, "%gpu\t"), Nil{}),
     Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
     DStr{"\n" ++ entry}])), errs}
 
@@ -25595,14 +25703,34 @@ def RP.program(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
           ["String", "Image", "Event", "IO.OP", "App", "Word", "U32", "F32", "Char", "Nat", "Array", "Bool", "Unit", "Cmp", "Empty"])), Nil{}), ds)
       G{RP.decls(ds, ctors, blocked, Bool.not(Str.has(roots, "%unknown"))), defs, bodies, dps}
 
-def Gen.program(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
+# The program's defs, as the code generators see them.
+def Gen.program.g(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> G:
+  +beforepar = Lo.program(opt, Arrw.decls(Pick.decls(ds0)))
+  +lowered = Unb.program(unb, Unb.program(unb, Nest.program(unb, Unb.sum.program(unb, Par.auto(par, beforepar)))))
+  +ds = RO.program(rc, lowered)
+  +g = Unb.sret(unb, ds, Dps.build(G.hless(Bool.and(Opt.on(opt, 104), Bool.not(rc)),
+    RP.program(rc, G.li(Opt.on(opt, 119), G.new(ds), ds), ds), ds), ds, free, rc))
+  KQ.host.book(KX.flow.build(g, ds), beforepar)
+
+# The optimizer's passes for the device code: those of opt (its dots too:
+# they size inlining, see Opt.budget), with the unrolling of literal
+# arguments (u) but into callees that fork only through what they call (v,
+# see Opt.unroll and Opt.lf.reach). A copy of one repeats, in the device's
+# code, the state machines of all it reaches, which the GPU's binary, its
+# resident pages and the binary archive's pay for: kmeans's 20 copies of
+# loop made a 5 MB archive and 22 MB of peak memory (16 MB without). The
+# CPU's code is as before.
+def Gen.gpu.opt(+opt: String) -> String:
+  Bool.pick(String, Opt.on(opt, 117), opt ++ "v", opt)
+
+def Gen.program(+ds0: List<&2, Decl>, +free: Bool, +par: Bool, +opt: String, +unb: Bool, +rc: Bool) -> COut:
   +beforepar = Lo.program(opt, Arrw.decls(Pick.decls(ds0)))
   +lowered = Unb.program(unb, Unb.program(unb, Nest.program(unb, Unb.sum.program(unb, Par.auto(par, beforepar)))))
   +ds = RO.program(rc, lowered)
   +g = Unb.sret(unb, ds, Dps.build(G.hless(Bool.and(Opt.on(opt, 104), Bool.not(rc)),
     RP.program(rc, G.li(Opt.on(opt, 119), G.new(ds), ds), ds), ds), ds, free, rc))
   +hostg = KQ.host.book(KX.flow.build(g, ds), beforepar)
-  Gen.program.fin(hostg, Gen.cids(hostg, ds, 0),
+  Gen.program.fin(hostg, u => Gen.program.g(ds0, free, par, Gen.gpu.opt(opt), unb, rc), Gen.cids(hostg, ds, 0),
     Gen.program.m(hostg)(St{0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}}))
 
 # Native code generation
