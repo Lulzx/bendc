@@ -49,7 +49,7 @@ static KW gpu_pin_min;      // the arena bytes a result's call used, for it to s
 static KAU *gpu_A;         // the control words
 static size_t gpu_An;
 static KW gpu_qcap = (KW)1 << 16;
-static KW gpu_lanes, gpu_budget, gpu_fork;
+static KW gpu_lanes, gpu_budget, gpu_fork, gpu_kqep;
 static KW gpu_qused;       // queue slots the last call used
 static int gpu_used;       // the arena holds a call's lane states
 static V *gpu_out;         // objects copied out so far (roots)
@@ -227,10 +227,17 @@ static GId g_url(const char *path) {
 // Compiles the device code: the library, or NULL.
 static GId g_compile(const GpuProg *prog) {
   size_t nh = strlen(K_GPU_H), np = strlen(prog->src);
-  const char* pre="#define K_GPU_PACKED 1\n";
-  size_t nz=strncmp(prog->src,pre,strlen(pre))==0?strlen(pre):0;
+  // (the program's leading flags, K_GPU_PACKED and K_FREE, go before gpu.h)
+  size_t nz=0;
+  for(;;) {
+    const char* fl[]={"#define K_GPU_PACKED 1\n","#define K_FREE 1\n"};
+    size_t k=0;
+    for(int i=0;i<2;i++) if(strncmp(prog->src+nz,fl[i],strlen(fl[i]))==0) k=strlen(fl[i]);
+    if(!k) break;
+    nz+=k;
+  }
   char *text = malloc(nz + nh + np + 1);
-  if(nz)memcpy(text,pre,nz);
+  if(nz)memcpy(text,prog->src,nz);
   memcpy(text+nz, K_GPU_H, nh);
   memcpy(text+nz+nh, prog->src, np + 1);
   GId src = g_str(text);
@@ -375,7 +382,7 @@ static int g_dispatch(const KParams *P, GId pso) {
     double (*tm)(GId, GSel) = G_SEND(double (*)(GId, GSel));
     double dt = tm(cb, g_sel("GPUEndTime")) - tm(cb, g_sel("GPUStartTime"));
     gpu_secs[pso != g_pso] += dt;
-    if (gpu_log == 2) fprintf(stderr, "bend gpu: %s %.4fs (%.4fs)\n", pso != g_pso ? "kq" : "main", dt, gpu_now() - w0);
+    if (gpu_log >= 2) fprintf(stderr, "bend gpu: %s %.4fs (%.4fs)\n", pso != g_pso ? "kq" : "main", dt, gpu_now() - w0);
   }
   if (st != 4) gpu_note("a dispatch failed: %s", g_err_text(g_msg(cb, "error")));
   g_pool_pop(pool);
@@ -400,7 +407,7 @@ static int g_heap(void) {
 static int gpu_setup(const GpuProg *prog) {
   const char *m = getenv("BEND_GPU");
   const char *lv = getenv("BEND_GPU_LOG");
-  gpu_log = lv == NULL ? 0 : lv[0] == '2' ? 2 : 1;
+  gpu_log = lv == NULL ? 0 : lv[0] == '2' ? 2 : lv[0] == '3' ? 3 : 1;
   if (!bend_gpu || (m && strcmp(m, "off") == 0)) return GPU_OFF;
   int sim = m && strcmp(m, "sim") == 0;
 #if !BEND_METAL
@@ -506,7 +513,7 @@ static int gpu_copy_out(const GpuProg *prog, const KParams *P, KW v, V *out) {
     }
 #endif
     int bare = (h & K_BARE) != 0;
-    KW n = h & ~(GPU_SEEN | K_BARE);
+    KW n = k_psize(h & ~GPU_SEEN);
     if (!bare && GPU_NARROW(gpu_H[i])) {
       unsigned d = (unsigned)(gpu_H[i] & 31);
       V *p = halloc(1 + ((size_t)1 << d));
@@ -731,6 +738,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     memset(H + P.lane0, 0, 10 * gpu_lanes * 8);
     memset(H + P.lane0 + (10 + KQ_ARGS) * gpu_lanes, 0, 2 * gpu_lanes * 8);
   }
+  P.fresh = 1;
   gpu_used = 1;
   for (KW i = 0; i < nfn; i++) {
     H[P.fn0 + 2 * i] = (KW)(uintptr_t)prog->fns[i].f;
@@ -777,18 +785,43 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     }
 #endif
     rounds++;
+    P.fresh = 0;
     KW tail = gpu_A[KA_QTAIL];
     if (tail > gpu_qused) gpu_qused = tail < P.qcap ? tail : P.qcap;
     if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) break;
     if (__atomic_load_n(&gpu_A[KA_DONE], __ATOMIC_SEQ_CST) != 0) break;
     for (KW l = 0; l < gpu_lanes; l++) waiting += H[P.lane0 + l] == PC_KQ;
+    if (gpu_log == 3) {
+      KW act = 0, idle = 0;
+      for (KW l = 0; l < gpu_lanes; l++) { KW pc = H[P.lane0 + l]; act += pc != PC_IDLE && pc != PC_KQ; idle += pc == PC_IDLE; }
+      fprintf(stderr, "bend gpu: round: active %llu -> %llu, idle %llu, waiting %llu, queued %u\n", (unsigned long long)active,
+        (unsigned long long)act, (unsigned long long)idle, (unsigned long long)waiting, (unsigned)(gpu_A[KA_QTAIL] - gpu_A[KA_QHEAD]));
+    }
     if (waiting > 0 && gpu_kq_host(prog, H, &P, waiting)) waiting = 0;
     P.kqmap = 0;
     if (waiting > 1 && gpu_kq_order) gpu_kq_sort(H, &P, waiting);
+    if (gpu_log == 3 && waiting > 0) {
+      // (which calls wait: label, with K_KQLIM or not, and the first lane's depth)
+      KW n = gpu_lanes, lab[8] = {0}, cnt[8] = {0}, lim[8] = {0}, dep[8] = {0};
+      for (KW l = 0; l < n; l++) {
+        if (H[P.lane0 + l] != PC_KQ) continue;
+        KW kq = H[P.lane0 + 7 * n + l], j = 0;
+        while (j < 8 && cnt[j] && lab[j] != kq) j++;
+        if (j == 8) continue;
+        if (!cnt[j]) dep[j] = H[P.lane0 + 3 * n + l] & 0xffffffff;
+        lab[j] = kq; cnt[j]++; lim[j] += (H[P.lane0 + 9 * n + l] & K_KQLIM) != 0;
+      }
+      for (int j = 0; j < 8 && cnt[j]; j++)
+        fprintf(stderr, "bend gpu: waiting kq %llu x%llu (lim %llu, dep %llu)\n", (unsigned long long)lab[j],
+          (unsigned long long)cnt[j], (unsigned long long)lim[j], (unsigned long long)dep[j]);
+    }
     if (waiting > 0) {
       // (again, after the arena grows, while a call runs out of it)
       for (;;) {
         gpu_A[KA_GROW] = 0;
+        // (a fresh epoch, 1 to 2^24 - 1, for each dispatch: see k_take)
+        gpu_kqep = gpu_kqep % 0xffffff + 1;
+        P.kqep = gpu_kqep;
         if (gpu_mode == GPU_SIM) {
           for (KW l = 0; l < gpu_lanes; l++) prog->sim_kq(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
         }

@@ -10110,7 +10110,8 @@ def Gen.gpu.emit.errs(+g: G, +ts: List<&2, String>, errs: List<&2, String>, +cod
   String:
   match errs:
     case Nil{}:
-      Bool.pick(String, String.starts_with(code, "#define K_GPU_PACKED 1\n"), "#define K_GPU_PACKED 1\n", "") ++ "\n// The device code of the !-calls: rt/gpu.h, then this program's part\n#include \"gpu.h\"\n\n" ++ code ++
+      Bool.pick(String, String.starts_with(code, "#define K_GPU_PACKED 1\n"), "#define K_GPU_PACKED 1\n",
+        Bool.pick(String, String.starts_with(code, "#define K_FREE 1\n"), "#define K_FREE 1\n", "")) ++ "\n// The device code of the !-calls: rt/gpu.h, then this program's part\n#include \"gpu.h\"\n\n" ++ code ++
         "\n#include \"gpuhost.h\"\n\nstatic const char K_SRC[] =\n" ++ K.lit(code) ++
         ";\n\nstatic const GpuFn K_FNS[] = {" ++ Gen.gpu.fns(wraps) ++
         "{0, 0}};\nstatic const GpuFn K_KQH[] = {K_KQH_LIST {0, 0}};\nstatic GpuProg K_PROG = {K_SRC, bend_kernel, bend_kq, K_FNS, K_KQH};\n\n" ++ Gen.gpu.stubs(g, ts, True{})
@@ -17539,6 +17540,183 @@ def K.pats(+g: G, ps: List<&2, Core.Pat>, paths: List<&2, String>, r: PatR) -> P
     case pl cl:
       r
 
+# Freeing on match (K_FREE, see k_take in rt/gpu.h)
+# --------------------------------------------------
+# A case or destructuring let whose pattern opens nodes (a constructor of
+# kind 0, 8 or 9) reads the variables it binds into locals first, then hands
+# each node to KTAKE, a node's fields before it (their paths are longer),
+# with the words that may hold objects (for a shared node, whose fields
+# become shared). A variable bound there, or a + parameter, that the body
+# uses twice is marked shared (KSHARE), as bend_share does on the CPU.
+
+# A pattern still to look at and the path of its value; a variable "%kt<m>"
+# stands for the node at path, m its object words.
+type KOW is Data:
+  KOW{p: Core.Pat, path: String}
+
+def K.opens.fields(args: List<&2, Core.Pat>, +path: String, +bare: Bool, +i: U32) -> List<&2, KOW>:
+  match args:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      KOW{p, Bool.pick(String, bare, "KFLB(", "KFLD(") ++ path ++ ", " ++ U32.show(i) ++ ")"} <>
+        K.opens.fields(t, path, bare, U32.inc(i))
+
+def K.opens.same(args: List<&2, Core.Pat>, +path: String) -> List<&2, KOW>:
+  match args:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      KOW{p, path} <> K.opens.same(t, path)
+
+def K.opens.node(+path: String, +args: List<&2, Core.Pat>, +bare: Bool) -> List<&2, KOW>:
+  +m = U32.sub(U32.shln(1, List.length(&2, Core.Pat, args)), 1)
+  KOW{Core.PVar{"%kt" ++ U32.show(Bool.pick(U32, bare, m, U32.shln(m, 1n)))}, path} <> K.opens.fields(args, path, bare, 0)
+
+def K.opens.kind(kind: Nat, +path: String, +args: List<&2, Core.Pat>) -> List<&2, KOW>:
+  match kind:
+    case 0n:
+      K.opens.node(path, args, False{})
+    case 1n:
+      Nil{}
+    case 2n:
+      K.opens.same(args, path)
+    case 3n:
+      Nil{}
+    case 4n:
+      Nil{}
+    case 5n:
+      Nil{}
+    case 6n:
+      Nil{}
+    case 7n:
+      Nil{}
+    case 9n:
+      K.opens.node(path, args, False{})
+    case 8n+p:
+      K.opens.node(path, args, True{})
+
+def K.opens.ctor(m: Maybe<&2, CInfo>, +path: String, +args: List<&2, Core.Pat>) -> List<&2, KOW>:
+  match m:
+    case None{}:
+      Nil{}
+    case Some{CInfo{tag, ar, +kind, single}}:
+      K.opens.kind(U32.to_nat(kind), path, args)
+
+def K.opens.var(+x: String, +path: String, +rest: Env()) -> Env():
+  Bool.pick(Env(), String.starts_with(x, "%kt"), Bind{x, path} <> rest, rest)
+
+def K.opens.go(n: Nat, +g: G, ws: List<&2, KOW>) -> Env():
+  match n:
+    case 0n:
+      Nil{}
+    case 1n+m:
+      match ws:
+        case Nil{}:
+          Nil{}
+        case KOW{p, +path} <> t:
+          match p:
+            case Core.PCtor{+name, +args}:
+              K.opens.go(m, g, List.append(&2, KOW, K.opens.ctor(G.ctor(g, name), path, args), t))
+            case Core.PVar{+x}:
+              K.opens.var(x, path, K.opens.go(m, g, t))
+            case other:
+              K.opens.go(m, g, t)
+
+def K.opens.ws(ps: List<&2, Core.Pat>, paths: List<&2, String>) -> List<&2, KOW>:
+  match ps paths:
+    case p <> pt c <> ct:
+      KOW{p, c} <> K.opens.ws(pt, ct)
+    case pl cl:
+      Nil{}
+
+# The nodes patterns ps open on the values at paths, each after the nodes
+# among its fields.
+def K.opens(+g: G, ps: List<&2, Core.Pat>, paths: List<&2, String>) -> Env():
+  List.reverse(&2, Bind, K.opens.go(Fuel.max(), g, K.opens.ws(ps, paths)))
+
+def KF.takes(op: Env()) -> String:
+  match op:
+    case Nil{}:
+      ""
+    case Bind{+x, +c} <> t:
+      "KTAKE(" ++ c ++ ", " ++ String.drop(x, 3n) ++ ");\n" ++ KF.takes(t)
+
+def KF.share(+x: String, +c: String, +body: Core.Expr) -> String:
+  Bool.pick(String, Bool.and(Bool.not(Bool.or(Str.eq(x, "_"), Str.eq(c, "0"))), U32.is_le(2, Use.n(x, body))),
+    "KSHARE(" ++ c ++ ");\n", "")
+
+def KF.shares(binds: Env(), +body: Core.Expr) -> String:
+  match binds:
+    case Nil{}:
+      ""
+    case Bind{+x, +c} <> t:
+      KF.share(x, c, body) ++ KF.shares(t, body)
+
+# The + parameters (of a type not a scalar) the body uses twice, at their
+# places in env.
+def KF.pshares(ps: List<&2, Core.Param>, +env: Env(), +body: Core.Expr) -> String:
+  match ps:
+    case Nil{}:
+      ""
+    case Core.Param{+x, +m, +t} <> rest:
+      Bool.pick(String, Bool.and(U32.is_eq(m, 2), Bool.not(Gen.scalar.ty(t))),
+        KF.share(x, Maybe.default(&2, String, Env.find(env, x), "0"), body), "") ++ KF.pshares(rest, env, body)
+
+# Each bound variable read into a local kf<k>_<i> (when nodes are opened).
+def KF.mat.code(binds: Env(), +k: U32, +i: U32) -> String:
+  match binds:
+    case Nil{}:
+      ""
+    case Bind{x, +c} <> t:
+      "KAUTO kf" ++ U32.show(k) ++ "_" ++ U32.show(i) ++ " = " ++ c ++ "; " ++ KF.mat.code(t, k, U32.inc(i))
+
+def KF.mat.env(binds: Env(), +k: U32, +i: U32) -> Env():
+  match binds:
+    case Nil{}:
+      Nil{}
+    case Bind{+x, c} <> t:
+      Bind{x, "kf" ++ U32.show(k) ++ "_" ++ U32.show(i)} <> KF.mat.env(t, k, U32.inc(i))
+
+# A case's bindings, and the code at its start (C locals: flat code).
+def KF.env(op: Env(), +binds: Env(), +k: U32) -> Env():
+  match op:
+    case Nil{}:
+      binds
+    case o <> ot:
+      KF.mat.env(binds, k, 0)
+
+def KF.prelude(op: Env(), +binds: Env(), +k: U32, +body: Core.Expr) -> String:
+  match op:
+    case Nil{}:
+      KF.shares(binds, body)
+    case +o <> +ot:
+      KF.mat.code(binds, k, 0) ++ "\n" ++ KF.takes(o <> ot) ++ KF.shares(KF.mat.env(binds, k, 0), body)
+
+# The same in the kernel's blocks: the locals are frame slots.
+def K.free.mat(binds: Env()) -> KM(Env()):
+  match binds:
+    case Nil{}:
+      KM.pure(Env(), Nil{})
+    case Bind{+x, +c} <> t:
+      do KM<Env()>:
+        +k : U32 <- K.slot()
+        K.putS(S(k) ++ " = " ++ c ++ ";\n")
+        rest : Env() <- K.free.mat(t)
+        return Bind{x, S(k)} <> rest
+
+def K.free.case(op: Env(), +binds: Env(), +env: Env(), +body: Core.Expr) -> KM(Env()):
+  match op:
+    case Nil{}:
+      do KM<Env()>:
+        K.putS(KF.shares(binds, body))
+        return List.append(&2, Bind, binds, env)
+    case +o <> +ot:
+      do KM<Env()>:
+        +nb : Env() <- K.free.mat(binds)
+        K.putS(KF.takes(o <> ot) ++ KF.shares(nb, body))
+        return List.append(&2, Bind, nb, env)
+
 def K.ret(t: KTgt, d: Doc) -> KM(Unit):
   match t:
     case KRet{}:
@@ -17589,6 +17767,13 @@ def K.par.collect(rs: List<&2, U32>, +j: U32, +i: U32) -> Doc:
     case r <> t:
       Doc.list([DStr{S(r) ++ " = c->H[" ++ S(j) ++ " + " ++ U32.show((i + 4 : U32)) ++ "];\n"}, K.par.collect(t, j, U32.inc(i))])
 
+def K.par.paths(rs: List<&2, U32>) -> List<&2, String>:
+  match rs:
+    case Nil{}:
+      Nil{}
+    case +r <> t:
+      S(r) <> K.par.paths(t)
+
 def K.par.env(+g: G, ps: List<&2, Core.Pat>, rs: List<&2, U32>, +env: Env()) -> Env():
   match ps rs:
     case p <> pt +r <> rt:
@@ -17616,18 +17801,18 @@ def List.last_u32(xs: List<&2, U32>) -> U32:
       List.last_u32(t)
 
 type KCase is Data:
-  KCase{label: U32, conds: List<&2, String>, env: Env(), body: Core.Expr}
+  KCase{label: U32, conds: List<&2, String>, env: Env(), body: Core.Expr, opens: Env(), binds: Env()}
 
 def K.cases(+g: G, +env: Env(), +cs: List<&2, String>, cases: List<&2, Core.Expr>) -> KM(List<&2, KCase>):
   match cases:
     case Nil{}:
       KM.pure(List<&2, KCase>, Nil{})
-    case Core.ECase{ps, body} <> t:
+    case Core.ECase{+ps, body} <> t:
       +pr = K.pats(g, ps, cs, PatR{Nil{}, Nil{}})
       do KM<List<&2, KCase>>:
         +l : U32 <- K.fresh()
         rest : List<&2, KCase> <- K.cases(g, env, cs, t)
-        return KCase{l, List.reverse(&2, String, PatR.conds(pr)), List.append(&2, Bind, PatR.binds(pr), env), body} <> rest
+        return KCase{l, List.reverse(&2, String, PatR.conds(pr)), env, body, K.opens(g, ps, cs), PatR.binds(pr)} <> rest
     case other <> t:
       K.cases(g, env, cs, t)
 
@@ -17635,7 +17820,7 @@ def K.dispatch(cases: List<&2, KCase>) -> Doc:
   match cases:
     case Nil{}:
       DStr{"{ k_fail(c, KE_MATCH); }\n"}
-    case KCase{l, conds, env, b} <> t:
+    case KCase{l, conds, env, b, op, bs} <> t:
       Doc.list([DStr{"if (" ++ Gen.and(conds) ++ ") { KPC = " ++ U32.show(l) ++ "; } else "}, K.dispatch(t)])
 
 def K.doc_strs(ds: List<&2, Doc>) -> List<&2, String>:
@@ -17991,7 +18176,8 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
               do KM<Unit>:
                 lp : Bool <- K.loops(g, name)
                 b : Doc <- KX.go(fu, KXSStmt{g, KX.sig(KX.info.for(g, name), ps, mask, 0), KSelf{name, 0, mask}, KRet{}, R.ops(body, "Nat")})
-                K.flat.add(Doc.list([DStr{KX.head(lp, name, ps, mask, ret, KX.info.for(g, name)) ++ "for (;;) {\n"}, b, DStr{"}\n}\n"}]))
+                K.flat.add(Doc.list([DStr{KX.head(lp, name, ps, mask, ret, KX.info.for(g, name)) ++ "for (;;) {\n" ++
+                  KF.pshares(ps, KX.sig(KX.info.for(g, name), ps, mask, 0), body)}, b, DStr{"}\n}\n"}]))
             case other:
               KM.pure(Unit, Unit{})
         case KXSDef{+g, +name, info}:
@@ -18115,13 +18301,15 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
           match cases:
             case Nil{}:
               KM.pure(Doc, DStr{"{ k_fail(c, KE_MATCH); return 0; }\n"})
-            case Core.ECase{ps, body} <> t:
+            case Core.ECase{+ps, +body} <> t:
               +pr = K.pats(g, ps, cs, PatR{Nil{}, Nil{}})
+              +op = K.opens(g, ps, cs)
               do KM<Doc>:
-                b : Doc <- KX.go(fu, KXSStmt{g, KX.env.add(PatR.binds(pr), env), self, tgt, body})
+                +k : U32 <- K.fresh()
+                b : Doc <- KX.go(fu, KXSStmt{g, KX.env.add(KF.env(op, PatR.binds(pr), k), env), self, tgt, body})
                 rest : Doc <- KX.go(fu, KXSCases{g, env, self, tgt, cs, t})
-                return Doc.list([DStr{"if (" ++ Gen.and(List.reverse(&2, String, PatR.conds(pr))) ++ ") {\n"}, b, DStr{"} else "},
-                  rest])
+                return Doc.list([DStr{"if (" ++ Gen.and(List.reverse(&2, String, PatR.conds(pr))) ++ ") {\n" ++
+                  KF.prelude(op, PatR.binds(pr), k, body)}, b, DStr{"} else "}, rest])
             case other <> t:
               KX.go(fu, KXSCases{g, env, self, tgt, cs, t})
         case KXSMatchGo{+g, +env, +self, +tgt, r, cases}:
@@ -18213,13 +18401,16 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
           do KM<Doc>:
             d : Doc <- KX.go(fu, KXSExpr{g, env, e})
             return KX.ret(KRet{}, d)
-        case KXSLetPlain{+g, +env, +self, +tgt, p, v, body}:
+        case KXSLetPlain{+g, +env, +self, +tgt, +p, v, +body}:
           do KM<Doc>:
             +k : U32 <- K.fresh()
+            +j : U32 <- K.fresh()
+            +op : Env() = K.opens(g, [p], [KX.v(k)])
+            +bs : Env() = PatR.binds(K.pat(g, p, KX.v(k), PatR{Nil{}, Nil{}}))
             d : Doc <- KX.go(fu, KXSExpr{g, env, v})
-            b : Doc <- KX.go(fu, KXSStmt{g, KX.env.add(PatR.binds(K.pat(g, p, KX.v(k), PatR{Nil{}, Nil{}})), env), self, tgt,
+            b : Doc <- KX.go(fu, KXSStmt{g, KX.env.add(KF.env(op, bs, j), env), self, tgt,
               body})
-            return Doc.list([DStr{"KAUTO " ++ KX.v(k) ++ " = "}, d, DStr{";\n"}, b])
+            return Doc.list([DStr{"KAUTO " ++ KX.v(k) ++ " = "}, d, DStr{";\n" ++ KF.prelude(op, bs, j, body)}, b])
         # A self tail call: the new arguments, then back to the top of the loop.
         # (No error check in the loop: reading c->err there keeps the lane's context
         # in memory, 3x slower. An error still stops the call when it returns.)
@@ -18673,7 +18864,9 @@ def K.go(n: Nat, k: KSel) -> KSel.ty(k):
             +arg : U32 <- K.slots(U32.inc(n))
             +binds : Env() <- KM.pure(Env(), PatR.binds(K.pat(g, p, S(n), PatR{Nil{}, Nil{}})))
             K.start(l)
-            K.go(fu, KSStmt{g, List.append(&2, Bind, binds, K.caps.inner(caps, 0)), KSelf.none(), KRet{}, body})
+            K.putS(KF.shares(K.caps.inner(caps, 0), body))
+            env2 : Env() <- K.free.case(K.opens(g, [p], [S(n)]), binds, K.caps.inner(caps, 0), body)
+            K.go(fu, KSStmt{g, env2, KSelf.none(), KRet{}, body})
             +size : U32 <- K.leave(old)
             K.frame(l, size)
             K.restore(saved)
@@ -18695,19 +18888,20 @@ def K.go(n: Nat, k: KSel) -> KSel.ty(k):
               do KM<Unit>:
                 d : Doc <- K.go(fu, KSCall{g, env, Core.EVar{name}, args})
                 K.ret(tgt, d)
-        case KSLetVar{+g, +env, +self, +tgt, +x, v, body}:
+        case KSLetVar{+g, +env, +self, +tgt, +x, v, +body}:
           do KM<Unit>:
             d : Doc <- K.go(fu, KSExpr{g, env, v})
             +k : U32 <- K.slot()
-            K.put(Doc.list([DStr{S(k) ++ " = "}, d, DStr{";\n"}]))
+            K.put(Doc.list([DStr{S(k) ++ " = "}, d, DStr{";\n" ++ KF.share(x, S(k), body)}]))
             K.go(fu, KSStmt{g, Bool.pick(Env(), Str.eq(x, "_"), env, Bind{x, S(k)} <> env), self, tgt, body})
-        case KSLetPat{+g, +env, +self, +tgt, +p, v, body}:
+        case KSLetPat{+g, +env, +self, +tgt, +p, v, +body}:
           do KM<Unit>:
             d : Doc <- K.go(fu, KSExpr{g, env, v})
             +k : U32 <- K.slot()
             K.put(Doc.list([DStr{S(k) ++ " = "}, d, DStr{";\n"}]))
             +binds : Env() <- KM.pure(Env(), PatR.binds(K.pat(g, p, S(k), PatR{Nil{}, Nil{}})))
-            K.go(fu, KSStmt{g, List.append(&2, Bind, binds, env), self, tgt, body})
+            env2 : Env() <- K.free.case(K.opens(g, [p], [S(k)]), binds, env, body)
+            K.go(fu, KSStmt{g, env2, self, tgt, body})
         # Each value becomes a thunk (a closure). Below the fork limit the thunks
         # but the last go to the queue, the last runs here, and a join record
         # collects the values; the lane that brings the last value continues. Past
@@ -18778,7 +18972,7 @@ def K.go(n: Nat, k: KSel) -> KSel.ty(k):
                 K.go(fu, KSParSeq{g, env, vt, rt})
             case a b:
               KM.pure(Unit, Unit{})
-        case KSPar{+g, +env, +self, +tgt, +ps, +vs, body}:
+        case KSPar{+g, +env, +self, +tgt, +ps, +vs, +body}:
           +n = List.length(&2, Core.Expr, vs)
           do KM<Unit>:
             +rs : List<&2, U32> <- K.newslots(n)
@@ -18801,9 +18995,11 @@ def K.go(n: Nat, k: KSel) -> KSel.ty(k):
               DStr{");\n"}]))
             K.start(lcont)
             K.put(K.par.collect(rs, j, 0))
+            K.putS("KTAKE(" ++ S(j) ++ ", 0);\n")
             K.putS("KPC = " ++ U32.show(lbody) ++ ";\n")
             K.start(lbody)
-            K.go(fu, KSStmt{g, K.par.env(g, ps, rs, env), self, tgt, body})
+            env2 : Env() <- K.free.case(K.opens(g, ps, K.par.paths(rs)), K.par.env(g, ps, rs, Nil{}), env, body)
+            K.go(fu, KSStmt{g, env2, self, tgt, body})
         case KSLetPar{+g, +env, +self, +tgt, ps, v, body}:
           match v:
             case Core.ECtor{n, vs}:
@@ -18828,10 +19024,11 @@ def K.go(n: Nat, k: KSel) -> KSel.ty(k):
           match cases:
             case Nil{}:
               KM.pure(Unit, Unit{})
-            case KCase{+l, conds, +env, body} <> t:
+            case KCase{+l, conds, +env, +body, op, +bs} <> t:
               do KM<Unit>:
                 K.start(l)
-                K.go(fu, KSStmt{g, env, self, tgt, body})
+                env2 : Env() <- K.free.case(op, bs, env, body)
+                K.go(fu, KSStmt{g, env2, self, tgt, body})
                 K.go(fu, KSBodies{g, self, tgt, t})
         case KSMatch{+g, +env, +self, +tgt, scrs, cases}:
           do KM<Unit>:
@@ -19829,7 +20026,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                 K.memo.put("%kqroot", name)
                 K.memo.put("%kqe " ++ name ++ " " ++ name, U32.show(l))
                 K.start(l)
-                K.putS(KQ.entry(k, n, 0) ++ "\n")
+                K.putS(KQ.entry(k, n, 0) ++ "\n" ++ KF.pshares(ps, KQ.sig(ps, mask, k, 0), body))
                 KQ.tree.entry(g, G.body(g, name))
                 KQ.go(fu, KQSStmt{g, KQ.sig(ps, mask, k, 0), KSelf{name, l, mask}, KQ.anf(g, bound, R.ops(body, "Nat"))})
                 K.start(0)
@@ -19870,7 +20067,8 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
             K.start(r)
             +j : U32 <- K.fresh()
             K.putS("sp -= " ++ U32.show(w) ++ "; " ++ KQ.load(live, j, 0) ++ "KW " ++ KX.v(j) ++ " = " ++ Bool.pick(String, reg,
-              "k_region(c, KQ_ST(sp + " ++ U32.show(m) ++ "), KQ_ST(sp + " ++ U32.show(U32.inc(m)) ++ "), RV)", "RV") ++ ";\n")
+              "k_region(c, KQ_ST(sp + " ++ U32.show(m) ++ "), KQ_ST(sp + " ++ U32.show(U32.inc(m)) ++ "), RV)", "RV") ++ ";\n" ++
+              KF.share(x, KX.v(j), body))
             KQ.go(fu, KQSStmt{g, Bool.pick(Env(), Str.eq(x, "_"), KQ.reenv(live, j, 0), Bind{x, KX.v(j)} <> KQ.reenv(live, j, 0)), self,
               body})
             K.restore(saved)
@@ -19906,7 +20104,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                 saved : U32 & Doc <- K.save()
                 +k : U32 <- K.fresh()
                 K.start(l)
-                K.putS(KQ.entry(k, U32.to_nat(K.kept(mask)), 0) ++ "\n")
+                K.putS(KQ.entry(k, U32.to_nat(K.kept(mask)), 0) ++ "\n" ++ KF.pshares(ps, KQ.sig(ps, mask, k, 0), body))
                 KQ.tree.entry(g, G.body(g, f))
                 KZ.group(g, f, ps, mask, body, k)
                 direct : Bool <- KR.group(g, f, ps, mask, body, k)
@@ -19932,11 +20130,13 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
           match cases:
             case Nil{}:
               K.putS("{ k_fail(c, KE_MATCH); *ok = false; return 0; }\n")
-            case Core.ECase{ps, body} <> t:
+            case Core.ECase{+ps, +body} <> t:
               +pr = K.pats(g, ps, cs, PatR{Nil{}, Nil{}})
+              +op = K.opens(g, ps, cs)
               do KM<Unit>:
-                K.putS("if (" ++ Gen.and(List.reverse(&2, String, PatR.conds(pr))) ++ ") {\n")
-                KQ.go(fu, KQSStmt{g, List.append(&2, Bind, PatR.binds(pr), env), self, body})
+                +k : U32 <- K.fresh()
+                K.putS("if (" ++ Gen.and(List.reverse(&2, String, PatR.conds(pr))) ++ ") {\n" ++ KF.prelude(op, PatR.binds(pr), k, body))
+                KQ.go(fu, KQSStmt{g, List.append(&2, Bind, KF.env(op, PatR.binds(pr), k), env), self, body})
                 K.putS("} else ")
                 KQ.go(fu, KQSCases{g, env, self, cs, t})
             case other <> t:
@@ -19950,7 +20150,7 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
           do KM<Unit>:
             r : List<&2, String> & Doc <- KX.scrs(g, env, scrs)
             KQ.go(fu, KQSMatchGo{g, env, self, r, cases})
-        case KQSLetVar{+g, +env, +self, +x, +v, body, direct}:
+        case KQSLetVar{+g, +env, +self, +x, +v, +body, direct}:
           match direct:
             case True{}:
               KQ.go(fu, KQSCall{g, env, self, x, KQ.callee(v), KQ.call.args(v), body})
@@ -19958,11 +20158,11 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
               do KM<Unit>:
                 +k : U32 <- K.fresh()
                 d : Doc <- KX.expr(g, env, v)
-                K.put(Doc.list([DStr{"KW " ++ KX.v(k) ++ " = "}, d, DStr{";\n"}]))
+                K.put(Doc.list([DStr{"KW " ++ KX.v(k) ++ " = "}, d, DStr{";\n" ++ KF.share(x, KX.v(k), body)}]))
                 KQ.go(fu, KQSStmt{g, Bool.pick(Env(), Str.eq(x, "_"), env, Bind{x, KX.v(k)} <> env), self, body})
         # A pattern let whose value is a call of the def: the value to a variable
         # first.
-        case KQSLetPat{+g, +env, +self, +p, v, body, direct}:
+        case KQSLetPat{+g, +env, +self, +p, v, +body, direct}:
           match direct:
             case True{}:
               do KM<Unit>:
@@ -19971,9 +20171,12 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
             case False{}:
               do KM<Unit>:
                 +k : U32 <- K.fresh()
+                +j : U32 <- K.fresh()
+                +op : Env() = K.opens(g, [p], [KX.v(k)])
+                +bs : Env() = PatR.binds(K.pat(g, p, KX.v(k), PatR{Nil{}, Nil{}}))
                 d : Doc <- KX.expr(g, env, v)
-                K.put(Doc.list([DStr{"KW " ++ KX.v(k) ++ " = "}, d, DStr{";\n"}]))
-                KQ.go(fu, KQSStmt{g, List.append(&2, Bind, PatR.binds(K.pat(g, p, KX.v(k), PatR{Nil{}, Nil{}})), env), self, body})
+                K.put(Doc.list([DStr{"KW " ++ KX.v(k) ++ " = "}, d, DStr{";\n" ++ KF.prelude(op, bs, j, body)}]))
+                KQ.go(fu, KQSStmt{g, List.append(&2, Bind, KF.env(op, bs, j), env), self, body})
         case KQSLet{+g, +env, +self, p, +v, +body}:
           match p:
             case Core.PVar{+x}:
@@ -20011,6 +20214,7 @@ def K.def.body(+g: G, +name: String, +l: U32, +mask: List<&2, Bool>, +ps: List<&
     +old : U32 <- K.enter(l)
     +np : U32 <- K.slots(K.kept(mask))
     K.start(l)
+    K.putS(KF.pshares(ps, K.sig.env(ps, mask, 0), body))
     K.stmt(g, K.sig.env(ps, mask, 0), KSelf{name, l, mask}, KRet{}, R.ops(body, "Nat"))
     +size : U32 <- K.leave(old)
     K.frame(l, size)
@@ -21298,10 +21502,14 @@ def J.printer(j: JG, ty0: Core.Expr) -> Gen(String):
 
 # The program builders and the driver: they call the compilers above.
 
-def K.fin(r: Unit & KSt) -> KOut:
+# Device code that frees on match starts with K_FREE (see k_take in
+# rt/gpu.h): not with packed nodes (K_GPU_PACKED keeps tags in the size
+# word), nor under BEND_NO_FREE.
+def K.fin(free: Bool, r: Unit & KSt) -> KOut:
   (u, st) = r
   KSt{+n, sl, +curl, cur, out, +fns, todo, +frames, errs, flat, +memo} = st
-  KOut{Doc.flat(Doc.list([DStr{Bool.pick(String, Bool.not(String.is_empty(KQ.tree.memo("%kzip-on", memo))), "#define K_GPU_PACKED 1\n", "") ++ "#define K_NLABELS " ++ U32.show(n) ++ "\n" ++ K.defines(fns) ++ "KCONST KW K_FRAME[] = {" ++
+  +packed = Bool.not(String.is_empty(KQ.tree.memo("%kzip-on", memo)))
+  KOut{Doc.flat(Doc.list([DStr{Bool.pick(String, packed, "#define K_GPU_PACKED 1\n", Bool.pick(String, free, "#define K_FREE 1\n", "")) ++ "#define K_NLABELS " ++ U32.show(n) ++ "\n" ++ K.defines(fns) ++ "KCONST KW K_FRAME[] = {" ++
     K.frame_table(frames, 0, n) ++ "0};\n\nKINLINE KW k_frame_size(KW l) {\n  return l < K_NLABELS ? K_FRAME[l] : 0;\n}\n\n"},
     DStr{KQ.tree.defs(memo)}, flat, DStr{"\nKINLINE KW k_kq(KTHR KCtx *c, KTHR bool *ok) {\nswitch (c->kq) {\n" ++ KQ.cases.of(memo) ++
     "default:\n*ok = false;\nreturn 0;\n}\n}\n#ifndef __METAL_VERSION__\n#define K_KQH_LIST " ++ KQ.hosts.of(memo) ++
@@ -21317,7 +21525,7 @@ def K.program.m(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> KM(Unit)
 # The device code for the !-call targets ts, with wrappers for the defs the
 # CPU makes closures of (clos), which the targets may be handed.
 def K.program(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> KOut:
-  K.fin(K.program.m(g, ts, clos)(KSt{8, 0, 0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}, DNil{}, Nil{}}))
+  K.fin(Gen.free(g), K.program.m(g, ts, clos)(KSt{8, 0, 0, DNil{}, DNil{}, Nil{}, Nil{}, Nil{}, Nil{}, DNil{}, Nil{}}))
 
 def Gen.gpu.tail(+g: G, ts: List<&2, String>, clos: List<&2, String>) -> String:
   match ts:

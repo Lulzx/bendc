@@ -248,11 +248,11 @@ def src.p3() -> String:
   "const F_F32_dsqrt = (a) => fr(Math.sqrt(a));\n" ++
   "const F_F32_dexp = (a) => fr(Math.exp(a));\n" ++
   "const F_F32_dlog = (a) => fr(Math.log(a));\n" ++
-  "const F_F32_dlog2 = (a) => fr(Math.log2(a));\n" ++
-  "const F_F32_dlog10 = (a) => fr(Math.log10(a));\n" ++
-  "const F_F32_dsin = (a) => fr(Math.sin(a));\n"
+  "const F_F32_dlog2 = (a) => fr(Math.log2(a));\n"
 
 def src.p4() -> String:
+  "const F_F32_dlog10 = (a) => fr(Math.log10(a));\n" ++
+  "const F_F32_dsin = (a) => fr(Math.sin(a));\n" ++
   "const F_F32_dcos = (a) => fr(Math.cos(a));\n" ++
   "const F_F32_dtan = (a) => fr(Math.tan(a));\n" ++
   "const F_F32_dasin = (a) => fr(Math.asin(a));\n" ++
@@ -310,11 +310,11 @@ def src.p4() -> String:
   "\n" ++
   "function show_chr(c, q) {\n" ++
   "  const k = { 10: \"n\", 9: \"t\", 13: \"r\", 0: \"0\", 92: \"\\\\\" }[c] ?? (c === q.codePointAt(0) ? q : null);\n" ++
-  "  return k !== null ? \"\\\\\" + k\n" ++
-  "    : c < 32 || c === 127 || (c >= 0xD800 && c <= 0xDFFF) ? \"\\\\u{\" + c.toString(16) + \"}\"\n" ++
-  "    : String.fromCodePoint(c);\n"
+  "  return k !== null ? \"\\\\\" + k\n"
 
 def src.p5() -> String:
+  "    : c < 32 || c === 127 || (c >= 0xD800 && c <= 0xDFFF) ? \"\\\\u{\" + c.toString(16) + \"}\"\n" ++
+  "    : String.fromCodePoint(c);\n" ++
   "}\n" ++
   "const pr_u32 = (v) => String(v);\n" ++
   "const pr_nat = (v) => v + \"n\";\n" ++
@@ -372,11 +372,11 @@ def src.p5() -> String:
   "    text = String(io_sys().strerror(code));\n" ++
   "  } catch (e) {\n" ++
   "  }\n" ++
-  "  return { $: \"Fail\", error: io_tup(code >>> 0, text) };\n" ++
-  "}\n" ++
-  "\n"
+  "  return { $: \"Fail\", error: io_tup(code >>> 0, text) };\n"
 
 def src.p6() -> String:
+  "}\n" ++
+  "\n" ++
   "function io_done(value) {\n" ++
   "  return { $: \"Done\", value };\n" ++
   "}\n" ++
@@ -434,11 +434,11 @@ def src.p6() -> String:
   "  } else {\n" ++
   "    const top = fds.reduce((m, w) => Math.max(m, w.fd), 0);\n" ++
   "    const len = (top >> 6 << 3) + 8;\n" ++
-  "    const set = new Uint8Array(2 * len);\n" ++
-  "    const at = (w) => (w.out ? len : 0) + (w.fd >> 3);\n" ++
-  "    for (const w of fds) set[at(w)] |= 1 << (w.fd & 7);\n"
+  "    const set = new Uint8Array(2 * len);\n"
 
 def src.p7() -> String:
+  "    const at = (w) => (w.out ? len : 0) + (w.fd >> 3);\n" ++
+  "    for (const w of fds) set[at(w)] |= 1 << (w.fd & 7);\n" ++
   "    const tv = new BigInt64Array([BigInt(ms / 1000 | 0), BigInt(ms % 1000 * 1000)]);\n" ++
   "    const sys = io_sys();\n" ++
   "    sys.select(top + 1, sys.ptr(set), sys.ptr(set, len), null, ms < 0 ? null : sys.ptr(tv));\n" ++
@@ -496,11 +496,11 @@ def src.p7() -> String:
   "      if (need.time || need.read) {\n" ++
   "        const o = op;\n" ++
   "        const more = () => o.run(...o.args, o.kont);\n" ++
-  "        io_park_on(need.read ? op.args[0] : undefined, false, op.kont, more,\n" ++
-  "          need.read ? undefined : performance.now() + Number(op.args[0]));\n" ++
-  "        break;\n"
+  "        io_park_on(need.read ? op.args[0] : undefined, false, op.kont, more,\n"
 
 def src.p8() -> String:
+  "          need.read ? undefined : performance.now() + Number(op.args[0]));\n" ++
+  "        break;\n" ++
   "      }\n" ++
   "      const x = op.run(...op.args, op.kont);\n" ++
   "      if (x === undefined) break;\n" ++
@@ -558,11 +558,11 @@ def src.p8() -> String:
   "// IO.args starts with the program as invoked (the JS file).\n" ++
   "function cli(argv) {\n" ++
   "  cli_args.push(argv[0]);\n" ++
-  "  for (let i = 1; i < argv.length; i += 1) {\n" ++
-  "    if (argv[i] === \"--\") {\n" ++
-  "      cli_args.push(...argv.slice(i + 1));\n"
+  "  for (let i = 1; i < argv.length; i += 1) {\n"
 
 def src.p9() -> String:
+  "    if (argv[i] === \"--\") {\n" ++
+  "      cli_args.push(...argv.slice(i + 1));\n" ++
   "      break;\n" ++
   "    } else if (argv[i] === \"--bend-help\") {\n" ++
   "      io_out(1, io_bytes(\"usage: \" + process.argv[1] + \" [arguments]\\n\"));\n" ++
