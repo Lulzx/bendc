@@ -7282,6 +7282,13 @@ def Gen.memo.find.go(st: St, +k: String) -> Maybe<&2, String> & St:
 def Gen.memo.find(+k: String) -> Gen(Maybe<&2, String>):
   st => Gen.memo.find.go(st, k)
 
+def Gen.memo.add.go(st: St, b: Bind) -> Unit & St:
+  St{n, protos, code, refs, errs, memo, effs} = st
+  (Unit{}, St{n, protos, code, refs, errs, b <> memo, effs})
+
+def Gen.memo.add(b: Bind) -> Gen(Unit):
+  st => Gen.memo.add.go(st, b)
+
 def PatR.conds(r: PatR) -> List<&2, String>:
   PatR{conds, binds} = r
   conds
@@ -7774,6 +7781,64 @@ def Expr.mentions.nt(e: Core.Expr, +k: String) -> Bool:
     case other:
       Expr.mentions(other, k)
 
+# Whether two cases answer the U32s 0 and 1 (see GSB2u).
+def Expr.b01.arms(a: Core.Expr, b: Core.Expr) -> Bool:
+  match a b:
+    case Core.ENum{+x} Core.ENum{+y}:
+      Bool.or(Bool.and(U32.is_zero(x), U32.is_eq(y, 1)), Bool.and(U32.is_eq(x, 1), U32.is_zero(y)))
+    case aa bb:
+      False{}
+
+def Expr.b01(cs: List<&2, Core.Expr>) -> Bool:
+  match cs:
+    case Core.ECase{p0, a} <> Core.ECase{p1, b} <> Nil{}:
+      Expr.b01.arms(a, b)
+    case other:
+      False{}
+
+# Whether a match in e, other than a 0/1 one (a compare, see GSB2u),
+# scrutinizes something that names k.
+def Expr.scr(e: Core.Expr, +k: String) -> Bool:
+  match e:
+    case Core.ECall{f, args}:
+      match args:
+        case Nil{}:
+          Expr.scr(f, k)
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.scr(a, k), u => True{}, u => Expr.scr(Core.ECall{f, t}, k))(Unit{})
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          False{}
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Expr.scr(a, k), u => True{}, u => Expr.scr(Core.ECtor{n, t}, k))(Unit{})
+    case Core.ELam{p, b}:
+      Expr.scr(b, k)
+    case Core.ELet{p, +v, +b}:
+      Bool.pick(Unit -> Bool, Expr.scr(v, k), u => True{}, u => Expr.scr(b, k))(Unit{})
+    case Core.EMatch{scrs, +cases}:
+      match scrs:
+        case +a <> t:
+          Bool.pick(Unit -> Bool, Bool.and(Expr.mentions(a, k), Bool.not(Expr.b01(cases))), u => True{},
+            u => Expr.scr(Core.EMatch{t, cases}, k))(Unit{})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              False{}
+            case +c <> t:
+              Bool.pick(Unit -> Bool, Expr.scr(c, k), u => True{},
+                u => Expr.scr(Core.EMatch{Nil{}, t}, k))(Unit{})
+    case Core.ECase{ps, b}:
+      Expr.scr(b, k)
+    case Core.ESucc{n, x}:
+      Expr.scr(x, k)
+    case Core.EOp{op, +a, +b}:
+      Bool.pick(Unit -> Bool, Expr.scr(a, k), u => True{}, u => Expr.scr(b, k))(Unit{})
+    case Core.EAnn{x, ty}:
+      Expr.scr(x, k)
+    case other:
+      False{}
+
 # The C return type of a def's functions, with the calling convention of
 # one that calls itself in a non-tail position: BEND_PN (bendrt.h) is
 # clang's preserve_none, which passes up to 24 words in registers and
@@ -8189,6 +8254,42 @@ def CH.wpick(+g: G, ss: List<&2, Core.Expr>, cs: List<&2, Core.Expr>) -> Maybe<&
     case xs cases:
       None{}
 
+# A Bool match whose arms are the U32s 0 and 1 (1: False 0, True 1; 2:
+# False 1, True 0; 0: any other match).
+def CH.b2u.arms(a: Core.Expr, b: Core.Expr) -> U32:
+  match a b:
+    case Core.ENum{+x} Core.ENum{+y}:
+      Bool.pick(U32, Bool.and(U32.is_zero(x), U32.is_eq(y, 1)), 1,
+        Bool.pick(U32, Bool.and(U32.is_eq(x, 1), U32.is_zero(y)), 2, 0))
+    case aa bb:
+      0
+
+def Gen.b2u.old(m: Maybe<&2, String>) -> String:
+  match m:
+    case Some{s}:
+      s
+    case None{}:
+      ""
+
+def Gen.b2u.names(+x: String, ss: List<&2, Core.Expr>) -> Bool:
+  match ss:
+    case v <> Nil{}:
+      Bool.and(Bool.not(String.is_empty(x)), Expr.mentions(v, x))
+    case other:
+      False{}
+
+# Whether a 0/1 match on ss keeps its branch: in a let value marked by
+# br, or on a let variable named by bx (see GSLetB2u).
+def Gen.b2u.keep(br: Maybe<&2, String>, bx: Maybe<&2, String>, ss: List<&2, Core.Expr>) -> Bool:
+  Bool.or(Str.eq(Gen.b2u.old(br), "1"), Gen.b2u.names(Gen.b2u.old(bx), ss))
+
+def CH.b2u(ss: List<&2, Core.Expr>, cs: List<&2, Core.Expr>) -> U32:
+  match ss cs:
+    case v <> Nil{} Core.ECase{+p0, a} <> Core.ECase{+p1, b} <> Nil{}:
+      Bool.pick(U32, Bool.and(CH.bp(p0, "False"), CH.bp(p1, "True")), CH.b2u.arms(a, b), 0)
+    case xs cases:
+      0
+
 type GSel is Data:
   GSExprs{g: G, env: Env(), xs: List<&2, Core.Expr>}
   GSCallFull{g: G, env: Env(), name: String, mask: List<&2, Bool>, kept: List<&2, Core.Expr>,
@@ -8242,6 +8343,10 @@ type GSel is Data:
     hole: U32}
   GSBlock{g: G, env: Env(), e: Core.Expr}
   GSWordChoice{g: G, env: Env(), scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>, choice: Maybe<&2, CHWord>}
+  GSB2u{g: G, env: Env(), scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>, k: U32, keep: Bool}
+  GSB2uMemo{g: G, env: Env(), scrs: List<&2, Core.Expr>, cases: List<&2, Core.Expr>}
+  GSLetB2u{br: Bool, g: G, env: Env(), v: Core.Expr}
+  GSLetB2uBody{br: Bool, x: String, g: G, env: Env(), self: Self, tgt: Tgt, body: Core.Expr}
   GSExpr{g: G, env: Env(), e: Core.Expr}
   GSPFLet{g: G, env: Env(), self: Self, tgt: Tgt, x: String, v: Core.Expr, body: Core.Expr, ar: U32}
   GSLetVar{g: G, env: Env(), self: Self, tgt: Tgt, x: String, v: Core.Expr, body: Core.Expr, hole: Bool}
@@ -8390,6 +8495,14 @@ def GSel.none(k: GSel) -> GSel.ty(k):
     case GSBlock{g, env, e}:
       DNil{}
     case GSWordChoice{g, env, scrs, cases, choice}:
+      DNil{}
+    case GSB2u{g, env, scrs, cases, k, keep}:
+      DNil{}
+    case GSB2uMemo{g, env, scrs, cases}:
+      DNil{}
+    case GSLetB2u{br, g, env, v}:
+      DNil{}
+    case GSLetB2uBody{br, x, g, env, self, tgt, body}:
       DNil{}
     case GSExpr{g, env, e}:
       DNil{}
@@ -8795,6 +8908,53 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                   bd, DStr{" : "}, ad, DStr{"; })"}])
             case None{}:
               Gen.rec(fu, GSBlock{g,env,Core.EMatch{scrs,cases}})
+        # A Bool match to the U32s 0 and 1 is a compare (clang's cset), not
+        # a branch to a phi: terrain's erode indexes its grid with i - (x > 0)
+        # and the like, and -O3's call-site splitting turned each phi into a
+        # duplicated call and a branch (+0.35G instructions, 2-3% cycles).
+        # The branch stays in the value of a scalar let the body matches on,
+        # and in the body for a match on that let (see GSLetB2u): there the
+        # split call lets clang thread the later matches, mandelbrot's escape
+        # test (3x fewer cycles).
+        case GSB2uMemo{+g, +env, +scrs, +cases}:
+          do Gen<Doc>:
+            br : Maybe<&2, String> <- Gen.memo.find("%b2ubr")
+            bx : Maybe<&2, String> <- Gen.memo.find("%b2ux")
+            d : Doc <- Gen.rec(fu, GSB2u{g, env, scrs, cases, CH.b2u(scrs, cases), Gen.b2u.keep(br, bx, scrs)})
+            return d
+        case GSB2u{+g, +env, scrs, +cases, +k, keep}:
+          match scrs:
+            case +v <> Nil{}:
+              Bool.pick(Unit -> Gen(Doc), Bool.or(keep, U32.is_zero(k)),
+                u => Gen.rec(fu, GSWordChoice{g,env,[v],cases,CH.wpick(g,[v],cases)}),
+                u => do Gen<Doc>:
+                  d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
+                  return Doc.list([DStr{"((uint32_t)(("}, d,
+                    DStr{") == IMM(" ++ Bool.pick(String, U32.is_eq(k, 1), "1", "0") ++ ")))"}]))(Unit{})
+            case +xs:
+              Gen.rec(fu, GSWordChoice{g,env,xs,cases,CH.wpick(g,xs,cases)})
+        case GSLetB2u{br, +g, +env, +v}:
+          match br:
+            case True{}:
+              do Gen<Doc>:
+                old : Maybe<&2, String> <- Gen.memo.find("%b2ubr")
+                Gen.memo.add(Bind{"%b2ubr", "1"})
+                d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
+                Gen.memo.add(Bind{"%b2ubr", Gen.b2u.old(old)})
+                return d
+            case False{}:
+              Gen.rec(fu, GSExpr{g, env, v})
+        case GSLetB2uBody{br, +x, +g, +env, +self, +tgt, +body}:
+          match br:
+            case True{}:
+              do Gen<Doc>:
+                old : Maybe<&2, String> <- Gen.memo.find("%b2ux")
+                Gen.memo.add(Bind{"%b2ux", x})
+                b : Doc <- Gen.rec(fu, GSStmt{g, env, self, tgt, body})
+                Gen.memo.add(Bind{"%b2ux", Gen.b2u.old(old)})
+                return b
+            case False{}:
+              Gen.rec(fu, GSStmt{g, env, self, tgt, body})
         case GSExpr{+g, +env, e}:
           match e:
             case Core.EVar{name}:
@@ -8819,7 +8979,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
             case Core.ELet{p, v, body}:
               Gen.rec(fu, GSBlock{g, env, Core.ELet{p, v, body}})
             case Core.EMatch{+scrs, +cases}:
-              Gen.rec(fu, GSWordChoice{g,env,scrs,cases,CH.wpick(g,scrs,cases)})
+              Gen.rec(fu, GSB2uMemo{g,env,scrs,cases})
             case Core.ESucc{k, x}:
               do Gen<Doc>:
                 d : Doc <- Gen.rec(fu, GSExpr{g, env, x})
@@ -8863,8 +9023,9 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
                   +sk : U32 <- Gen.pure(U32, Gen.scalar.let(g, env, v))
                   +c : String <- Gen.pure(String, Gen.scalar.wrap(U32.is_ne(sk, 0),
                     Bool.pick(String, U32.is_eq(sk, 2), "u", "v") ++ U32.show(k)))
-                  d : Doc <- Gen.rec(fu, GSExpr{g, env, v})
-                  b : Doc <- Gen.rec(fu, GSStmt{g, Bind{x, c} <> env, self, tgt, body})
+                  +br : Bool = Bool.and(U32.is_ne(sk, 0), Expr.scr(body, x))
+                  d : Doc <- Gen.rec(fu, GSLetB2u{br, g, env, v})
+                  b : Doc <- Gen.rec(fu, GSLetB2uBody{br, x, g, Bind{x, c} <> env, self, tgt, body})
                   return Doc.list([DStr{Gen.scalar.cty(sk) ++ c ++ " = "}, d, DStr{";\n"}, Gen.own(g, Bind{x, c} <> env, [Bind{x, c}], body), b]) )(Unit{})
         case GSCasesNext{+g, +env, +self, +tgt, +cs, rest, pl, b, mx, plan}:
           match pl:
@@ -9268,13 +9429,6 @@ def Gen.wrapper.pick(any: Bool, +name: String, +wargs: List<&2, String>, +fl: Li
 # fl: the flags of the kept parameters.
 def Gen.wrapper.b(+name: String, +wargs: List<&2, String>, +fl: List<&2, Bool>) -> Gen(Unit):
   Gen.wrapper.pick(Bor.any(fl), name, wargs, fl)
-
-def Gen.memo.add.go(st: St, b: Bind) -> Unit & St:
-  St{n, protos, code, refs, errs, memo, effs} = st
-  (Unit{}, St{n, protos, code, refs, errs, b <> memo, effs})
-
-def Gen.memo.add(b: Bind) -> Gen(Unit):
-  st => Gen.memo.add.go(st, b)
 
 # A def's U32 parameters live in uint32_t locals: the C parameter is aK_
 # and the local aK, so clang sees 32-bit values (a loop over them, a self
