@@ -24132,6 +24132,59 @@ def Opt.ul.at(+b: Core.Tm, +i: Nat, +f: String, +as: List<&2, Core.Arg>) -> OPk:
   Bool.pick(Unit -> OPk, Nat.is_eq(i, Inl.args.len(as)), u => PkNo{},
     u => Bool.pick(Unit -> OPk, Opt.size.le(b, Opt.ul.cap(Opt.nth.arg(i, as))), u2 => Opt.sp.at.pos(i, f, as), u2 => PkNo{})(Unit{}))(Unit{})
 
+def Opt.calls.add(top: Bool, t: Core.Tm, acc: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match top:
+    case True{}:
+      t <> acc
+    case False{}:
+      acc
+
+# The calls in t (each call node, onto acc).
+def Opt.calls(t: Core.Tm, top: Bool, acc: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
+  match t:
+    case Core.CCall{+f, as}:
+      match as:
+        case Nil{}:
+          Opt.calls.add(top, Core.CCall{f, Nil{}}, acc)
+        case Core.Arg{+r, +e} <> +t2:
+          Opt.calls(Core.CCall{f, t2}, False{}, Opt.calls(e, True{}, Opt.calls.add(top, Core.CCall{f, Core.Arg{r, e} <> t2}, acc)))
+    case Core.CApp{f, as}:
+      match as:
+        case Nil{}:
+          Opt.calls(f, True{}, acc)
+        case a <> t2:
+          Opt.calls(Core.CApp{f, t2}, False{}, Opt.calls(a, True{}, acc))
+    case Core.CCtr{k, as}:
+      match as:
+        case Nil{}:
+          acc
+        case a <> t2:
+          Opt.calls(Core.CCtr{k, t2}, False{}, Opt.calls(a, True{}, acc))
+    case Core.CLam{pt, b}:
+      Opt.calls(b, True{}, acc)
+    case Core.CLet{pt, v, b}:
+      Opt.calls(b, True{}, Opt.calls(v, True{}, acc))
+    case Core.CMat{scrs, cases}:
+      match scrs:
+        case a <> t2:
+          Opt.calls(Core.CMat{t2, cases}, False{}, Opt.calls(a, True{}, acc))
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              acc
+            case cs <> t2:
+              Opt.calls(Core.CMat{Nil{}, t2}, False{}, Opt.calls(cs, True{}, acc))
+    case Core.CCse{ps, b}:
+      Opt.calls(b, True{}, acc)
+    case Core.CSuc{k, e}:
+      Opt.calls(e, True{}, acc)
+    case Core.COp{op, a, b}:
+      Opt.calls(b, True{}, Opt.calls(a, True{}, acc))
+    case Core.CAnn{e, ty}:
+      Opt.calls(e, True{}, acc)
+    case other:
+      acc
+
 def Opt.lf.par(par: Bool, acc: List<&2, String>) -> List<&2, String>:
   match par:
     case True{}:
@@ -24232,6 +24285,38 @@ def Opt.ul.def(+f: String, +as: List<&2, Core.Arg>, d: Core.Def) -> OPk:
         u => Opt.ul.at(b, Opt.ul.pos(ps, as, 0n, b, Inl.pars.len(ps)), f, as),
         u => PkNo{})(Unit{})
 
+def Opt.lf.pk(k: OPk) -> Bool:
+  match k:
+    case PkNo{}:
+      False{}
+    case PkYes{name, i, a}:
+      True{}
+    case PkFuse{name, j, g, p}:
+      True{}
+
+def Opt.lf.call(+c: Map<&2, Core.Def>, +f: String, +as: List<&2, Core.Arg>) -> Bool:
+  Bool.pick(Unit -> Bool, Opt.has(c, f), u => Opt.lf.pk(Opt.ul.def(f, as, Opt.get(c, f))), u => False{})(Unit{})
+
+def Opt.lf.any(+c: Map<&2, Core.Def>, ts: List<&2, Core.Tm>) -> Bool:
+  match ts:
+    case Nil{}:
+      False{}
+    case t <> r:
+      match t:
+        case Core.CCall{+f, +as}:
+          Bool.or(Opt.lf.call(c, f, as), Opt.lf.any(c, r))
+        case other:
+          Opt.lf.any(c, r)
+
+# Whether f passes a literal to a def that is copied for it (merkle's blk
+# calls spk(22n, 0n, ..) each block): copies of f would each repeat the
+# callee's chain of copies, which the device's compiler inlines into one
+# straight body of every round of every block (30 x 22 there). Such code
+# outgrows the GPU's instruction cache: merkle's KQ calls ran 35% faster with
+# blk a loop over its blocks and spk still unrolled.
+def Opt.lf.nest(+c: Map<&2, Core.Def>, +f: String) -> Bool:
+  Opt.lf.any(c, Opt.calls(Opt.lf.body(Opt.get(c, f)), True{}, Nil{}))
+
 def Opt.sp.at(dec: ODec, +f: String, +as: List<&2, Core.Arg>) -> OPk:
   match dec:
     case DCtx{+c}:
@@ -24246,7 +24331,7 @@ def Opt.sp.at(dec: ODec, +f: String, +as: List<&2, Core.Arg>) -> OPk:
     case DLit{+c}:
       Bool.pick(Unit -> OPk, Opt.has(c, f), u => Opt.ul.def(f, as, Opt.get(c, f)), u => PkNo{})(Unit{})
     case DLitLeaf{+c}:
-      Bool.pick(Unit -> OPk, Bool.and(Opt.has(c, f), Bool.not(Opt.lf.reach(c, f))),
+      Bool.pick(Unit -> OPk, Bool.and(Opt.has(c, f), Bool.not(Bool.or(Opt.lf.reach(c, f), Opt.lf.nest(c, f)))),
         u => Opt.ul.def(f, as, Opt.get(c, f)), u => PkNo{})(Unit{})
 
 def Opt.sp.redirect(k: OPk, t: Core.Tm) -> Core.Tm:
@@ -24324,59 +24409,6 @@ def Opt.sp.rw(fu: Nat, +dec: ODec, top: Bool, t: Core.Tm) -> Core.Tm:
               Core.CAnn{Opt.sp.rw(p, dec, True{}, e), ty}
             case other:
               other
-
-def Opt.calls.add(top: Bool, t: Core.Tm, acc: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
-  match top:
-    case True{}:
-      t <> acc
-    case False{}:
-      acc
-
-# The calls in t (each call node, onto acc).
-def Opt.calls(t: Core.Tm, top: Bool, acc: List<&2, Core.Tm>) -> List<&2, Core.Tm>:
-  match t:
-    case Core.CCall{+f, as}:
-      match as:
-        case Nil{}:
-          Opt.calls.add(top, Core.CCall{f, Nil{}}, acc)
-        case Core.Arg{+r, +e} <> +t2:
-          Opt.calls(Core.CCall{f, t2}, False{}, Opt.calls(e, True{}, Opt.calls.add(top, Core.CCall{f, Core.Arg{r, e} <> t2}, acc)))
-    case Core.CApp{f, as}:
-      match as:
-        case Nil{}:
-          Opt.calls(f, True{}, acc)
-        case a <> t2:
-          Opt.calls(Core.CApp{f, t2}, False{}, Opt.calls(a, True{}, acc))
-    case Core.CCtr{k, as}:
-      match as:
-        case Nil{}:
-          acc
-        case a <> t2:
-          Opt.calls(Core.CCtr{k, t2}, False{}, Opt.calls(a, True{}, acc))
-    case Core.CLam{pt, b}:
-      Opt.calls(b, True{}, acc)
-    case Core.CLet{pt, v, b}:
-      Opt.calls(b, True{}, Opt.calls(v, True{}, acc))
-    case Core.CMat{scrs, cases}:
-      match scrs:
-        case a <> t2:
-          Opt.calls(Core.CMat{t2, cases}, False{}, Opt.calls(a, True{}, acc))
-        case Nil{}:
-          match cases:
-            case Nil{}:
-              acc
-            case cs <> t2:
-              Opt.calls(Core.CMat{Nil{}, t2}, False{}, Opt.calls(cs, True{}, acc))
-    case Core.CCse{ps, b}:
-      Opt.calls(b, True{}, acc)
-    case Core.CSuc{k, e}:
-      Opt.calls(e, True{}, acc)
-    case Core.COp{op, a, b}:
-      Opt.calls(b, True{}, Opt.calls(a, True{}, acc))
-    case Core.CAnn{e, ty}:
-      Opt.calls(e, True{}, acc)
-    case other:
-      acc
 
 # The copies the calls ask for, but those named in seen.
 def Opt.sp.pk(+f: String, k: OPk, acc: List<&2, OSp>) -> List<&2, OSp>:
