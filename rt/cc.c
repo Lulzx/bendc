@@ -87,7 +87,10 @@ static Term cc_fail(Env e, const char *msg) {
 // mandelbrot's escape loop clang -O3 kept the escape test a branch, where
 // -O2 folded it into the selects of every step, and the loop ran 2.7 times
 // fewer cycles (7.3G against 19.7G); the other benchmarks moved by 0 to 3%
-// fewer instructions.
+// fewer instructions. Loops start on 16-byte boundaries (-falign-loops=16;
+// clang on Apple arm64 does not align them): editdist's 22-instruction DP
+// loop otherwise moved with unrelated code, and at 4 bytes short of a
+// 64-byte line it ran 25% more cycles (10.7G against 8.5G).
 Term cc_end_run(Env e, Term *f, IoWork *w) {
   (void)w;
   u64 n;
@@ -118,7 +121,7 @@ Term cc_end_run(Env e, Term *f, IoWork *w) {
 #else
   const char *libs = "-lm -lpthread -ldl";
 #endif
-  snprintf(cmd, cl, "%s -O3 -fno-tree-slp-vectorize -w -DBEND_RT_SPLIT -I '%s' '%s' '%s' -o '%s' %s", cc, rt, cc_tmp, obj, out, libs);
+  snprintf(cmd, cl, "%s -O3 -fno-tree-slp-vectorize -falign-loops=16 -w -DBEND_RT_SPLIT -I '%s' '%s' '%s' -o '%s' %s", cc, rt, cc_tmp, obj, out, libs);
   int rc = system(cmd);
   free(cmd);
   free(out);
