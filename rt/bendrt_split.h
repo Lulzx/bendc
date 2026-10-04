@@ -239,7 +239,7 @@ typedef struct GcBlk {
   uint32_t nblk;     // blocks spanned
   uint8_t atomic;    // holds no pointers: never scanned
   uint8_t large;
-  uint8_t owned;     // in a thread's cache (or being made): not swept, not claimed
+  uint8_t owned;     // the caches holding it (or 1 being made, or gc_shr's 1): not swept, not claimed
   uint8_t cls;
   uint8_t pool;      // its caches' (Thr.cache): 0 nodes and closures, 1 atomic, 2 bare nodes
   struct GcBlk *next;
@@ -537,8 +537,11 @@ static inline uint64_t gc_next_bits(GcCache *k) {
     uint64_t f = ~__atomic_load_n(&GC_ALLOC(b)[k->j], __ATOMIC_ACQUIRE);
     if (k->j == (b->nobj >> 6)) f &= (1ull << (b->nobj & 63)) - 1;
     if (f) {
+      // (When other threads run, gc_window clears the marks of the slots
+      // this thread wins: in a shared block, another may take one of these
+      // first and a collection mark its object old before this clears it.)
       uint64_t *m = &GC_MARK(b)[k->j];
-      if (__atomic_load_n(m, __ATOMIC_RELAXED) & f) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
+      if (!gc_hot.mt && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
       return f;
     }
   }
@@ -547,12 +550,19 @@ static inline uint64_t gc_next_bits(GcCache *k) {
 
 // The slots of word jw of the cache's block, bits f, go to the cache: their
 // allocation bits are set now (see GcCache). When other threads run, they
-// may clear other bits of the word (frees): the bits are set in one
-// instruction then.
-static inline void gc_window(GcCache *k, uint32_t jw, uint64_t f) {
-  if (UNLIKELY(gc_hot.mt)) __atomic_fetch_or(&k->abits[jw], f, __ATOMIC_RELAXED);
-  else k->abits[jw] |= f;
+// may clear other bits of the word (frees), or take some of the same slots
+// when the block is shared (gc_shr): the bits are set in one instruction
+// then, and the slots are those whose bits this thread set; their marks are
+// cleared after (a collection that stops the thread in between finds the
+// block in its cache, dirty: gc_dirty_caches).
+static inline uint64_t gc_window(GcCache *k, uint32_t jw, uint64_t f) {
+  if (UNLIKELY(gc_hot.mt)) {
+    f &= ~__atomic_fetch_or(&k->abits[jw], f, __ATOMIC_RELAXED);
+    uint64_t *m = &GC_MARK(k->blk)[jw];
+    if (__atomic_load_n(m, __ATOMIC_RELAXED) & f) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
+  } else k->abits[jw] |= f;
   BEND_BARRIER();
+  return f;
 }
 
 // Bumping through a fresh block: the slots of its word jw go to the cache,
@@ -577,6 +587,19 @@ static inline void gc_handed(GcCache *k, int atomic, unsigned c, size_t n) {
 // block's bitmap, free, when its cache lets go of the block.
 static inline void rc_free_slot(uintptr_t bi, uint32_t i, unsigned c);
 void gc_lifo_flush(int atomic, unsigned c);
+
+// While threads run, a new block of a class is shared (gc_shr, under
+// gc_lock): each cache that takes it claims the free words of its bitmap
+// (gc_window), 64 slots at a time, as from a block to reuse. A worker that
+// keeps few objects of a class then does not hold a page of its own for
+// them. The block keeps a count of its holders (GcBlk.owned) and gc_shr
+// holds it too until less than a 5th of it is free. Only while the heap is
+// small: a program that allocates more fast is slower sharing blocks (more
+// refills, and a thread's lists no longer laid out in order), and a page a
+// thread is little next to its heap.
+#define GC_SHR_TOP 128
+extern GcBlk *gc_shr[GC_NPOOL][GC_NCLS];
+GcBlk *gc_shr_take(int atomic, unsigned c);
 
 // Slow path: the next word of a block being bumped through, the rest of the
 // block's free words, or another block.

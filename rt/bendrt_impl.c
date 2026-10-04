@@ -333,11 +333,28 @@ void gc_lifo_flush(int atomic, unsigned c) {
     p = n;
   }
 }
+#define GC_SHR_TOP 128
+GcBlk *gc_shr[GC_NPOOL][GC_NCLS];
+GcBlk *gc_shr_take(int atomic, unsigned c) {
+  GcBlk *b = gc_shr[atomic][c];
+  if (b) {
+    uint32_t used = 0;
+    for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(__atomic_load_n(&GC_ALLOC(b)[j], __ATOMIC_RELAXED));
+    if (b->nobj - used < (b->nobj / 5 ? b->nobj / 5 : 1)) {
+      __atomic_fetch_sub(&b->owned, 1, __ATOMIC_RELEASE);
+      b = NULL;
+    }
+  }
+  if (!b) b = gc_shr[atomic][c] = gc_new_small(atomic, c);
+  __atomic_fetch_add(&b->owned, 1, __ATOMIC_ACQ_REL);
+  return b;
+}
 __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   size_t sw = gc_cls_w[c];
   if (k->blk && k->idx) return gc_bump_word(k, k->idx, sw);
-  if (k->blk && (k->bits = gc_next_bits(k))) {
-    gc_window(k, k->j, k->bits);
+  uint64_t f;
+  while (k->blk && (f = gc_next_bits(k))) {
+    if (!(k->bits = gc_window(k, k->j, f))) continue;
     int t = __builtin_ctzll(k->bits);
     k->bits &= k->bits - 1;
     uint32_t i = k->j * 64 + (uint32_t)t;
@@ -350,7 +367,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   }
   // Counted, the thread's own frees go back to the block it allocates from:
   // while a 5th of it is free again, it goes on handing out those slots (no
-  // lock, and the memory stays warm). Only its owner sets its bits.
+  // lock, and the memory stays warm). Only its holders set its bits.
   if (gc_hot.rc && k->blk) {
     GcBlk *q = k->blk;
     uint32_t used = 0;
@@ -367,7 +384,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   }
   if (k->blk) {
     gc_lifo_flush(atomic, c);
-    __atomic_store_n(&k->blk->owned, 0, __ATOMIC_RELEASE);
+    __atomic_fetch_sub(&k->blk->owned, 1, __ATOMIC_RELEASE);
     k->blk = NULL;
   }
   // First the next block, in address order, where matches freed slots and a
@@ -416,7 +433,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
         if (!__atomic_compare_exchange_n(&q->owned, &z, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) continue;
         uint32_t used = 0;
         for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(GC_ALLOC(q)[j]);
-        if (q->nobj - used < (q->nobj / 5 ? q->nobj / 5 : 1)) { __atomic_store_n(&q->owned, 0, __ATOMIC_RELEASE); continue; }
+        if (q->nobj - used < (q->nobj / 5 ? q->nobj / 5 : 1)) { __atomic_fetch_sub(&q->owned, 1, __ATOMIC_RELEASE); continue; }
         b = q;
         k->reuse = 1;
         t->rcur[c] = (uint32_t)bi + 1;
@@ -438,9 +455,9 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
       b = b->next;
       z = 0;
     }
-    fresh = b == NULL;
     if (b) gc_partial[atomic][c] = b->next;
-    else b = gc_new_small(atomic, c);
+    else if (gc_hot.mt && gc_top < GC_SHR_TOP) b = gc_shr_take(atomic, c);
+    else { b = gc_new_small(atomic, c); fresh = 1; }
     pthread_mutex_unlock(&gc_lock);
   }
   k->blk = b;
