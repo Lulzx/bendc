@@ -13127,6 +13127,29 @@ def Bor.call(+cx: BorC, +tags: Env(), +loc: List<&2, String>, tail: Bool, f: Cor
 
 # acc and e's events (st: the tags of the scrutinees of the match whose
 # cases e holds; tail: e is in tail position).
+# Fixed-width scalar returns cannot retain a pointer field. Nat is excluded:
+# its arbitrary precision representation is not a fixed-width ownership fact.
+def Bor.word.expr(e: Core.Expr) -> Bool:
+  Str.has(["U32", "F32", "Bool", "Char"], P.head(e))
+
+def Bor.word.ret(d: Decl) -> Bool:
+  match d:
+    case DDef{n, ps, body, ret}:
+      Bor.word.expr(ret)
+    case other:
+      False{}
+
+def Bor.word.context(c: BorC) -> Bool:
+  BorC{g, bm, self, n, tmp} = c
+  Bor.word.ret(G.body(g, self))
+
+def Bor.word.event(scalar: Bool, tags: Env(), x: String, acc: List<&2, String>) -> List<&2, String>:
+  match scalar:
+    case True{}:
+      acc
+    case False{}:
+      Bor.use(tags, x, acc)
+
 def Bor.ev(n: Nat, +cx: BorC, +tags: Env(), +loc: List<&2, String>, +st: List<&2, String>, +tail: Bool,
   e: Core.Expr, acc: List<&2, String>) -> List<&2, String>:
   match n:
@@ -13135,7 +13158,8 @@ def Bor.ev(n: Nat, +cx: BorC, +tags: Env(), +loc: List<&2, String>, +st: List<&2
     case 1n+ +m:
       match e:
         case Core.EVar{+x}:
-          Bor.use(tags, x, acc)
+          Bor.word.event(Bool.and(tail, Bool.and(Bor.word.context(cx),
+            Bor.scalar(True{}, tags, Core.EVar{x}))), tags, x, acc)
         case Core.ECall{f, +args}:
           +r = Bor.call(cx, tags, loc, tail, f, args, acc)
           Bor.ev(m, cx, tags, loc, st, False{}, Core.ECtor{"", BorA.xs(r)}, BorA.ev(r))
@@ -13258,22 +13282,23 @@ def Bor.ok(+g: G, +name: String, +gpus: List<&2, String>, +body: Core.Expr) -> B
   Bool.and(Bool.and(U32.is_eq(DInfo.kind(G.def(g, name)), 0), String.is_empty(DGrp.id(G.dps(g, name)))),
     Bool.and(Bool.not(Str.eq(name, "main")), Bool.and(Bool.not(Str.has(gpus, name)), Bool.not(Expr.has_par(body)))))
 
-# Read-only clones start only from explicitly shared, non-scalar parameters.
-# Ordinary linear parameters retain their owned, reusable nodes.
-def Bor.ro.cand(ps: List<&2, Core.Param>, mask: List<&2, Bool>) -> String:
+# Read-only clones may lend explicitly shared parameters. Fixed-width scalar
+# clones also seed linear inputs; Bor.fix must prove their uses do not escape.
+# Ordinary linear definitions retain owned, reusable nodes.
+def Bor.ro.cand(ps: List<&2, Core.Param>, mask: List<&2, Bool>, +scalar: Bool) -> String:
   match ps mask:
     case Core.Param{x, +m, t} <> pt True{} <> mt:
-      Bool.pick(String, Bool.and(U32.is_eq(m, 2), Bool.not(Gen.scalar.ty(t))), "1", "0") ++ Bor.ro.cand(pt, mt)
+      Bool.pick(String, Bool.and(Bool.or(U32.is_eq(m, 2), scalar), Bool.not(Gen.scalar.ty(t))), "1", "0") ++ Bor.ro.cand(pt, mt, scalar)
     case p <> pt False{} <> mt:
-      "0" ++ Bor.ro.cand(pt, mt)
+      "0" ++ Bor.ro.cand(pt, mt, scalar)
     case pl ml:
       ""
 
-def Bor.init.one(ok: Bool, +name: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, m: Map<&2, DGrp>) ->
+def Bor.init.one(ok: Bool, +name: String, +ps: List<&2, Core.Param>, +mask: List<&2, Bool>, scalar: Bool, m: Map<&2, DGrp>) ->
   Map<&2, DGrp>:
   match ok:
     case True{}:
-      Map.set(&2, DGrp, m, Bor.key(name), DGrp{Bool.pick(String, String.ends_with(name, "%bseq"), Bor.ro.cand(ps, mask), Bor.cand(ps, mask)), 0})
+      Map.set(&2, DGrp, m, Bor.key(name), DGrp{Bool.pick(String, String.ends_with(name, "%bseq"), Bor.ro.cand(ps, mask, scalar), Bor.cand(ps, mask)), 0})
     case False{}:
       m
 
@@ -13282,7 +13307,7 @@ def Bor.init(ds: List<&2, Decl>, +g: G, +gpus: List<&2, String>, m: Map<&2, DGrp
     case Nil{}:
       m
     case DDef{+name, +ps, +body, ret} <> t:
-      Bor.init(t, g, gpus, Bor.init.one(Bor.ok(g, name, gpus, body), name, ps, DInfo.mask(G.def(g, name)),
+      Bor.init(t, g, gpus, Bor.init.one(Bor.ok(g, name, gpus, body), name, ps, DInfo.mask(G.def(g, name)), Bor.word.expr(ret),
         Map.set(&2, DGrp, m, "%s" ++ name, DGrp{Bor.scal(ps), 0})))
     case d <> t:
       Bor.init(t, g, gpus, m)
@@ -23962,6 +23987,15 @@ def RO.cand(ps: List<&2, Core.Param>) -> Bool:
     case Core.Param{x, +m, +t} <> rest:
       Bool.or(Bool.and(U32.is_eq(m, 2), Bool.not(Gen.scalar.ty(t))), RO.cand(rest))
 
+# Scalar folds may lend linear inputs only after Bor.fix proves the clone.
+# The ordinary parallel/owned definition retains its existing representation.
+def RO.fold.cand(ps: List<&2, Core.Param>) -> Bool:
+  match ps:
+    case Nil{}:
+      False{}
+    case Core.Param{x, m, t} <> rest:
+      Bool.or(Bool.not(Gen.scalar.ty(t)), RO.fold.cand(rest))
+
 def RO.ordinary(info: DInfo) -> Bool:
   DInfo{+kind, mask} = info
   U32.is_zero(kind)
@@ -23969,7 +24003,7 @@ def RO.ordinary(info: DInfo) -> Bool:
 def RO.one(+g: G, d: Decl) -> List<&2, Decl>:
   match d:
     case DDef{+name, +ps, +body, +ret}:
-      Bool.pick(List<&2, Decl>, Bool.and(RO.ordinary(G.def(g, name)), Bool.and(RO.cand(ps), Expr.has_par(body))),
+      Bool.pick(List<&2, Decl>, Bool.and(RO.ordinary(G.def(g, name)), Bool.and(Bool.or(RO.cand(ps), Bool.and(Bor.word.expr(ret), RO.fold.cand(ps))), Expr.has_par(body))),
         [DDef{name, ps, body, ret}, DDef{Gen.ro.name(name), ps,
           RO.expr(name, List.length(&2, Core.Param, ps), body, Bor.names(ps)), ret}],
         [DDef{name, ps, body, ret}])

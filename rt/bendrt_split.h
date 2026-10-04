@@ -291,7 +291,7 @@ typedef struct Thr {
   uintptr_t top;
   volatile uintptr_t sp;
   pthread_t id;
-  volatile int live;
+  _Atomic int live, parked;
   struct PDeque *dq;
   uint32_t rng;
   // Claiming a reuse block (gc_refill): a stop signal that comes meanwhile

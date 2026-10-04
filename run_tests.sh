@@ -45,6 +45,11 @@ if sh tools/ch-codegen-check.sh "$BENDC" "$BASE" tests build/tests/ch_codegen > 
 else
   echo "FAIL ch_codegen"; cat build/tests/ch_codegen.log; fail=$((fail+1))
 fi
+if python3 tools/ro-word-fold-check.py "$BENDC" "$BASE" tests build/tests/ro_word_fold_codegen > build/tests/ro_word_fold.log 2>&1; then
+  echo "ok   ro_word_fold_codegen"; pass=$((pass+1))
+else
+  echo "FAIL ro_word_fold_codegen"; cat build/tests/ro_word_fold.log; fail=$((fail+1))
+fi
 if python3 tools/gpu-array-mask-check.py "$BENDC" "$BASE" tests/gpu_array_masks.bend > build/tests/gpu_array_mask_codegen.log 2>&1; then
   echo "ok   gpu_array_mask_codegen"; pass=$((pass+1))
 else

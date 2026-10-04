@@ -304,7 +304,7 @@ typedef struct Thr {
   uintptr_t top;
   volatile uintptr_t sp;
   pthread_t id;
-  volatile int live;
+  _Atomic int live, parked;
   struct PDeque *dq;
   uint32_t rng;
   // Claiming a reuse block (gc_refill): a stop signal that comes meanwhile
@@ -1867,6 +1867,7 @@ __attribute__((noinline)) static void gc_park(Thr *t) {
   atomic_fetch_add(&gc_inside, 1);
   t->sp = (uintptr_t)&jb;
   unsigned seen = atomic_load(&gc_mark_gen);
+  atomic_store_explicit(&t->parked, 1, memory_order_release);
   atomic_fetch_add(&gc_acks, 1);
   while (atomic_load(&gc_stopping)) {
     if (atomic_load(&gc_mark_gen) != seen) {
@@ -1875,6 +1876,7 @@ __attribute__((noinline)) static void gc_park(Thr *t) {
     }
     sched_yield();
   }
+  atomic_store_explicit(&t->parked, 0, memory_order_release);
   atomic_fetch_sub(&gc_inside, 1);
 }
 
@@ -1882,7 +1884,7 @@ static void gc_handler(int sig) {
   (void)sig;
   int saved = errno;
   Thr *t = thr_self;
-  if (t != NULL && atomic_load(&gc_stopping)) {
+  if (t != NULL && atomic_load_explicit(&t->live, memory_order_acquire) && atomic_load(&gc_stopping)) {
     if (t->claiming) t->deferred = 1;
     else gc_park(t);
   }
@@ -2037,14 +2039,22 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
   size_t live0 = gc_live_bytes;
   atomic_store(&gc_acks, 0);
   atomic_store(&gc_stopping, 1);
-  int n = 0;
+  int sent = 0, n = 0;
+  Thr *targets[GC_MAXTHR];
   for (int i = 0; i < gc_nthr; i++) {
     Thr *t = gc_thrs[i];
-    if (t != me && t->live) {
-      if (pthread_kill(t->id, GC_SIG) == 0) n++;
+    if (t != me && atomic_load_explicit(&t->live, memory_order_acquire)) {
+      if (pthread_kill(t->id, GC_SIG) == 0) targets[sent++] = t;
     }
   }
-  while (atomic_load(&gc_acks) < n) sched_yield();
+  // A successful kill can race a joinable thread's exit. Wait for each
+  // target's published stack or retirement, not a fixed aggregate ack count.
+  for (int i = 0; i < sent; i++) {
+    Thr *t = targets[i];
+    while (atomic_load_explicit(&t->live, memory_order_acquire) &&
+           !atomic_load_explicit(&t->parked, memory_order_acquire)) sched_yield();
+    n += atomic_load_explicit(&t->parked, memory_order_acquire) != 0;
+  }
   jmp_buf jb;
   setjmp(jb);
   me->sp = (uintptr_t)&jb;

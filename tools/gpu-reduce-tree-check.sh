@@ -8,13 +8,13 @@ rtdir=${5:-./rt}
 mkdir -p "$outdir"
 "$compiler" "$base" "$srcdir/gpu_reduce_tree_small.bend" > "$outdir/reduce-positive.c"
 "$compiler" "$base" "$srcdir/gpu_reduce_tree_exclusions.bend" > "$outdir/reduce-exclusions.c"
-rg -q 'KR_fold_try' "$outdir/reduce-positive.c"
-rg -q 'KR_count_try' "$outdir/reduce-positive.c"
-if rg -q 'KR_(alter|duplicate)_try' "$outdir/reduce-positive.c"; then
+grep -Fq 'KR_fold_try' "$outdir/reduce-positive.c"
+grep -Fq 'KR_count_try' "$outdir/reduce-positive.c"
+if grep -Eq 'KR_(alter|duplicate)_try' "$outdir/reduce-positive.c"; then
   echo 'Changing scalar arguments or duplicate child recursion incorrectly selected' >&2
   exit 1
 fi
-if rg -q 'KR_(wsum|foldfp)_try' "$outdir/reduce-exclusions.c"; then
+if grep -Eq 'KR_(wsum|foldfp)_try' "$outdir/reduce-exclusions.c"; then
   echo 'Nat fields or F32 forwarding incorrectly selected' >&2
   exit 1
 fi
