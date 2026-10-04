@@ -7300,17 +7300,21 @@ type CPlan is Data:
 type CKey is Data:
   CKey{kind: Nat, lhs: String, rhs: String}
 
-def Str.cut(s: String, +sep: String, acc: String, here: Bool) -> Maybe<&2, String & String>:
+# s cut at a separator: what comes before it, and after.
+type SCut is Data:
+  SCut{l: String, r: String}
+
+def Str.cut(s: String, +sep: String, acc: String, here: Bool) -> Maybe<&2, SCut>:
   match s here:
     case s1 True{}:
-      Some{(String.reverse(acc), String.drop(s1, String.length(sep)))}
+      Some{SCut{String.reverse(acc), String.drop(s1, String.length(sep))}}
     case SNil{} False{}:
       None{}
     case SCon{c, +t} False{}:
       Str.cut(t, sep, SCon{c, acc}, String.starts_with(t, sep))
 
 # s split at its first sep.
-def Str.split1(+s: String, +sep: String) -> Maybe<&2, String & String>:
+def Str.split1(+s: String, +sep: String) -> Maybe<&2, SCut>:
   Str.cut(s, sep, SNil{}, String.starts_with(s, sep))
 
 def Str.digits(s: String) -> Bool:
@@ -7328,10 +7332,17 @@ def Str.num.lt(+a: String, +b: String) -> Bool:
   Bool.or(Nat.is_lt(String.length(a), String.length(b)),
     Bool.and(Nat.is_eq(String.length(a), String.length(b)), String.is_lt(a, b)))
 
-def CKey.of.cut(k: Nat, +wrap: Bool, m: Maybe<&2, String & String>) -> CKey:
+def CKey.of.cut(k: Nat, +wrap: Bool, m: Maybe<&2, SCut>) -> CKey:
   match m:
-    case Some{(l, r)}:
+    case Some{SCut{+l, r}}:
       CKey{k, Bool.pick(String, wrap, "(" ++ l ++ ")", l), r}
+    case None{}:
+      CKey{4n, "", ""}
+
+def CKey.of.rcut(k: Nat, m: Maybe<&2, SCut>) -> CKey:
+  match m:
+    case Some{SCut{rx, rp}}:
+      CKey{k, "(" ++ String.reverse(rp) ++ ")", String.reverse(rx)}
     case None{}:
       CKey{4n, "", ""}
 
@@ -7339,19 +7350,12 @@ def CKey.of.cut(k: Nat, +wrap: Bool, m: Maybe<&2, String & String>) -> CKey:
 def CKey.of.call(k: Nat, +n: Nat, +c: String) -> CKey:
   CKey.of.rcut(k, Str.split1(String.reverse(String.take(String.drop(c, n), Nat.sub(String.length(c), Nat.add(n, 1n)))), " ,"))
 
-def CKey.of.rcut(k: Nat, m: Maybe<&2, String & String>) -> CKey:
-  match m:
-    case Some{(rx, rp)}:
-      CKey{k, "(" ++ String.reverse(rp) ++ ")", String.reverse(rx)}
-    case None{}:
-      CKey{4n, "", ""}
-
 def CKey.of.ne(+c: String) -> CKey:
   CKey.of.cut(1n, False{}, Str.split1(c, " != "))
 
-def CKey.of.eq(+c: String, m: Maybe<&2, String & String>) -> CKey:
+def CKey.of.eq(+c: String, m: Maybe<&2, SCut>) -> CKey:
   match m:
-    case Some{(l, r)}:
+    case Some{SCut{l, r}}:
       CKey{0n, l, r}
     case None{}:
       CKey.of.ne(c)
@@ -7425,7 +7429,7 @@ def Tree.runs(xs: List<&2, List<&2, String>>, +prev: String) -> List<&2, String>
   match xs:
     case Nil{}:
       Nil{}
-    case +c <> t:
+    case +c <> +t:
       Bool.pick(Unit -> List<&2, String>, Str.eq(Tree.head(c), prev), u => Tree.runs(t, prev),
         u => Tree.head(c) <> Tree.runs(t, Tree.head(c)))(Unit{})
 
@@ -7454,7 +7458,7 @@ def Tree.run(xs: List<&2, List<&2, String>>, +h: String) -> List<&2, List<&2, St
   match xs:
     case Nil{}:
       Nil{}
-    case +c <> t:
+    case +c <> +t:
       Bool.pick(Unit -> List<&2, List<&2, String>>, Str.eq(Tree.head(c), h), u => c <> Tree.run(t, h),
         u => Nil{})(Unit{})
 
@@ -8865,7 +8869,7 @@ def Gen.rec(n: Nat, k: GSel) -> Gen(GSel.ty(k)):
           match r:
             # (a match whose value goes on, not back, leaves the tokens in
             # reach to what follows it: its cases neither take nor free them)
-            case Scrs{cs, decls}:
+            case Scrs{+cs, decls}:
               do Gen<Doc>:
                 +outer : String <- Gen.ru.get(Gen.free(g))
                 Gen.ru.set(Gen.free(g), Bool.pick(String, Gen.is_ret(tgt), outer, ""))

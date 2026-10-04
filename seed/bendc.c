@@ -2158,6 +2158,9 @@
 #ifndef CID_CKEY
 #define CID_CKEY 0u
 #endif
+#ifndef CID_SCUT
+#define CID_SCUT 0u
+#endif
 #ifndef CID_SCRS
 #define CID_SCRS 0u
 #endif
