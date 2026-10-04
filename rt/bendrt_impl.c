@@ -937,8 +937,17 @@ void gc_sweep(void) {
       size_t used = 0;
       int words = (int)((b->nobj + 63) >> 6);
       size_t was = 0;
+      // A bare node's shared flags (gc_bflags) are clear in a free slot:
+      // a match frees only nodes not shared, and a new block's are cleared
+      // (gc_new_small); a shared one the sweep frees has its flags cleared
+      // here, so an allocation need not test them.
+      int bsh = b->pool == 2 && (gc_bk[(uintptr_t)b >> GC_BLK_SHIFT] & BK_SH);
       for (int j = 0; j < words; j++) {
         was += (size_t)__builtin_popcountll(GC_ALLOC(b)[j]);
+        for (uint64_t d = bsh ? GC_ALLOC(b)[j] & ~GC_MARK(b)[j] : 0; d; d &= d - 1) {
+          uintptr_t o = (uintptr_t)(gc_objs(b) + (size_t)(j * 64 + (unsigned)__builtin_ctzll(d)) * b->words);
+          *(uint8_t *)(gc_hot.bflags + (o >> 4)) = 0;
+        }
         GC_ALLOC(b)[j] &= GC_MARK(b)[j];
         used += (size_t)__builtin_popcountll(GC_ALLOC(b)[j]);
       }

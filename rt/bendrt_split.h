@@ -598,7 +598,7 @@ static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
   } else {
     p = gc_refill(k, atomic, c);
   }
-  if (atomic == 2 && (gc_hot.bk[(uintptr_t)p >> GC_BLK_SHIFT] & BK_SH)) *(uint8_t *)(gc_hot.bflags + ((uintptr_t)p >> 4)) = 0;
+  // (A bare slot's shared flags are clear: see gc_sweep.)
   if (!hole) p[0] = 0;
   p[1] = 0;
   for (size_t j = w; j < sw; j++) p[j] = 0;
