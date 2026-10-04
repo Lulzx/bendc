@@ -187,7 +187,7 @@ static int g_hint_path(char *out, size_t n, unsigned long long h, int dir) {
     snprintf(out, n, "%s.arena", base) < (int)n;
 }
 static void g_hint_load(unsigned long long h) {
-  if (getenv("BEND_GPU_MB0") || bend_gpu_mb != 0) return;
+  if (getenv("BEND_GPU_MB0")) return;
   char path[PATH_MAX + 8];
   if (!g_hint_path(path, sizeof path, h, 0)) return;
   FILE *f = fopen(path, "r");
@@ -196,15 +196,19 @@ static void g_hint_load(unsigned long long h) {
   int ok = fscanf(f, "bend-arena-1 %llu%c", &mb, &end) == 2 && end == '\n' && fgetc(f) == EOF;
   fclose(f);
   if (!ok || mb < 64 || mb > (gpu_Hmax >> 20)) return;
-  size_t n = (size_t)mb << 20;
-  if (n > gpu_Hn) gpu_Hn = n;
+  // (it wins over --gpu SIZE too, which only says how far the arena may
+  // grow: a dispatch's first use of the arena's buffer costs with its size,
+  // about 9 ms for 512 MB against 64 MB)
+  gpu_Hn = (size_t)mb << 20;
   if (gpu_log == 2) fprintf(stderr, "bend gpu: arena hint %llu MB\n", mb);
 }
 static void g_hint_save(size_t need) {
   if (need <= g_hint_peak) return;
   g_hint_peak = need;
-  size_t n = (size_t)64 << 20;
-  while (n < need && n < gpu_Hmax) n = n > gpu_Hmax / 2 ? gpu_Hmax : n * 2;
+  // With room for the quarter gpu_run keeps free before it grows, in steps
+  // of 64 MB (merkle's 276 MB took 512 MB in powers of 2, 448 MB this way).
+  size_t step = (size_t)64 << 20;
+  size_t n = (need + need / 3 + step - 1) / step * step;
   if (n > gpu_Hmax) n = gpu_Hmax;
   char path[PATH_MAX + 8], tmp[PATH_MAX + 40];
   if (!g_hint_path(path, sizeof path, g_hint_hash, 1)) return;
@@ -633,31 +637,55 @@ static int gpu_kq_host(const GpuProg *prog, KW *H, const KParams *P, KW waiting)
 // column quarters: pixels past the width, or not, alike across the group).
 // Only the dispatch order changes. Each thread loads and saves the original
 // lane's context, so the host need not read or move its heap/frame state.
-static KW *gpu_ks_H, gpu_ks_n;
-static int gpu_ks_cmp(const void *x, const void *y) {
-  KW a = *(const KW *)x, b = *(const KW *)y;
-  for (int j = 7; j < 10 + KQ_ARGS; j++) {
-    if (j == 8 || j == 9) continue;
-    KW u = gpu_ks_H[j * gpu_ks_n + a], v = gpu_ks_H[j * gpu_ks_n + b];
-    if (u != v) return u < v ? -1 : 1;
-  }
-  return a < b ? -1 : a > b;
-}
+//
+// The def and the first two arguments order the calls, ties in lane order:
+// a stable radix sort by each that differs somewhere, the last first, in
+// 11-bit digits over the bits that differ. (A qsort comparing the lane
+// states in place cost kmeans, which sorts 8192 calls 400 times, 0.3 s of
+// the host's; and each key read is 64 KB of the arena the host touches,
+// resident memory a run pays for.)
+#define GPU_KS_MAX 3
 static void gpu_kq_sort(KW *H, KParams *P, KW waiting) {
   KW n = P->nlanes, k = 0;
-  KW *ix = malloc(waiting * sizeof(KW));
+  KW *ix = malloc(2 * waiting * sizeof(KW));
   if (!ix) return;
+  KW *t = ix + waiting, *base = ix;
   KW *L = H + P->lane0;
   for (KW l = 0; l < n && k < waiting; l++) {
     if (L[l] == PC_KQ) ix[k++] = l;
   }
-  gpu_ks_H = L;
-  gpu_ks_n = n;
-  qsort(ix, k, sizeof(KW), gpu_ks_cmp);
+  const KW *col[GPU_KS_MAX];
+  KW diff[GPU_KS_MAX];
+  int nv = 0;
+  for (int j = 0; j < GPU_KS_MAX; j++) {
+    const KW *c = L + (j == 0 ? 7 : 9 + j) * n;
+    KW d = 0, v0 = c[ix[0]];
+    for (KW i = 1; i < k; i++) d |= c[ix[i]] ^ v0;
+    if (d) {
+      col[nv] = c;
+      diff[nv++] = d;
+    }
+  }
+  static KW cnt[2049];
+  for (int q = nv - 1; q >= 0; q--) {
+    const KW *c = col[q];
+    int lo = 0, hi = 64;
+    while (!((diff[q] >> lo) & 1)) lo++;
+    while (!((diff[q] >> (hi - 1)) & 1)) hi--;
+    for (int sh = lo; sh < hi; sh += 11) {
+      memset(cnt, 0, sizeof cnt);
+      for (KW i = 0; i < k; i++) cnt[((c[ix[i]] >> sh) & 2047) + 1]++;
+      for (int d = 1; d <= 2048; d++) cnt[d] += cnt[d - 1];
+      for (KW i = 0; i < k; i++) t[cnt[(c[ix[i]] >> sh) & 2047]++] = ix[i];
+      KW *s = ix;
+      ix = t;
+      t = s;
+    }
+  }
   P->kqmap = P->fn0 + 2 * P->nfn;
   H[P->kqmap] = k;
   for (KW i = 0; i < k; i++) H[P->kqmap + 1 + i] = ix[i];
-  free(ix);
+  free(base);
 }
 
 static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
@@ -698,8 +726,11 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   gpu_A[KA_HEAP] = 1;
   memset(H, 0, P.qd * 8);
   // A lane's other words are set before they are read.
-  if (gpu_used) memset(H + P.lane0, 0, 10 * gpu_lanes * 8);
-  memset(H + P.lane0 + (10 + KQ_ARGS) * gpu_lanes, 0, 2 * gpu_lanes * 8);
+  // (the first call's are fresh pages, which the host need not touch)
+  if (gpu_used) {
+    memset(H + P.lane0, 0, 10 * gpu_lanes * 8);
+    memset(H + P.lane0 + (10 + KQ_ARGS) * gpu_lanes, 0, 2 * gpu_lanes * 8);
+  }
   gpu_used = 1;
   for (KW i = 0; i < nfn; i++) {
     H[P.fn0 + 2 * i] = (KW)(uintptr_t)prog->fns[i].f;

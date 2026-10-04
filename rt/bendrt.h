@@ -4268,7 +4268,8 @@ static void *bend_thread(void *arg) {
 
 static int bend_gpu = 1;
 // --gpu SIZE: the device arena's first size in MB (0: the default), so a
-// call that needs it does not first fill a smaller one.
+// call that needs it does not first fill a smaller one; a size learnt from
+// an earlier run (see g_hint_load) wins over it.
 static long bend_gpu_mb = 0;
 
 static const char *CLI_HELP =
