@@ -361,49 +361,38 @@ KINLINE void k_share(KTHR KCtx *c, KW v) {
 }
 // (a 32-bit value, a U32, F32 or Bool local, is no object: no code)
 #define KSHARE(v) do { if (sizeof(v) == sizeof(KW)) k_share(c, (KW)(v)); } while (0)
-#ifdef K_FREE
-// k_take's rare paths, out of line: the kernel inlines k_take at every match
-// that frees (bitonic's device code 1020KB -> 947KB, nbody's 563KB -> 434KB).
-// (mask: the fields that hold objects)
-KNOINLINE void k_take_shr(KTHR KCtx *c, KW ix, KW n, KW mask) {
-  for (KW i = 0; i < n && i < 64; i++)
-    if ((mask >> i) & 1) k_share(c, c->H[ix + i]);
-}
-// An object older than the KQ_ call: true when it is to be freed now.
-KNOINLINE bool k_take_old(KTHR KCtx *c, KW ix) {
-  if ((c->kpn == 0 || c->kpn == K_PB) && c->kpc < c->kpmax) {
-    KW b = KIX(c, k_alloc(c, K_PB));
-    if (c->err != 0) return false;
-    c->H[b] = c->kpb;
-    c->kpb = b;
-    c->kpn = 1;
-    c->kpc++;
-  }
-  if (c->kpn != 0 && c->kpn < K_PB) {
-    c->H[c->kpb + c->kpn] = ix;
-    c->kpn++;
-    return false;
-  }
-  if (c->kqlim != ~(KW)0) {
-    c->err = KE_STOP;
-    return false;
-  }
-  c->kdirty = 1;
-  return true;
-}
-#endif
 KINLINE void k_take(KTHR KCtx *c, KW v, KW mask) {
 #ifdef K_FREE
   if (!k_heap_obj(c, v)) return;
   KW ix = KIX(c, v), h = c->H[ix - 1], n = h & 0xffffffff;
   if (h & K_SHR) {
-    k_take_shr(c, ix, n, mask);
+    // (mask: the fields that hold objects)
+    for (KW i = 0; i < n && i < 64; i++)
+      if ((mask >> i) & 1) k_share(c, c->H[ix + i]);
     return;
   }
   KW fc = k_flc(n);
   if (fc == 0) return;
-  if (c->kep != 0 && (h & ((KW)0xffffff << 32)) != c->kep && !k_take_old(c, ix))
-    return;
+  if (c->kep != 0 && (h & ((KW)0xffffff << 32)) != c->kep) {
+    if ((c->kpn == 0 || c->kpn == K_PB) && c->kpc < c->kpmax) {
+      KW b = KIX(c, k_alloc(c, K_PB));
+      if (c->err != 0) return;
+      c->H[b] = c->kpb;
+      c->kpb = b;
+      c->kpn = 1;
+      c->kpc++;
+    }
+    if (c->kpn != 0 && c->kpn < K_PB) {
+      c->H[c->kpb + c->kpn] = ix;
+      c->kpn++;
+      return;
+    }
+    if (c->kqlim != ~(KW)0) {
+      c->err = KE_STOP;
+      return;
+    }
+    c->kdirty = 1;
+  }
   c->H[ix] = K_FLH(c, fc);
   K_FLH(c, fc) = ix;
 #endif
@@ -433,11 +422,13 @@ KINLINE void k_anone(KTHR KCtx *c) {
 // moved down, when the result is the only new object it reaches. h0 and e0
 // are the lane's hp and he before the call; when the call took a new chunk,
 // only that chunk's words are taken back.
-KNOINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
 #ifdef K_FREE
-  // (freed objects of the span may be on the free lists: keep it)
-  return r;
-#endif
+// (freed objects of the span may be on the free lists: keep it). A macro, as
+// k_take is inline: a call that takes c keeps the lane's KCtx in memory, not
+// registers (bitonic's KQ_ calls 1.76s -> 1.43s on the device).
+#define k_region(c, h0, e0, r) (r)
+#else
+KNOINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
   if (c->hp == h0) return r;
   KW lo = c->he == e0 ? h0 : c->hs;
   KW b = c->ab + (lo << 3), n = (c->hp - lo) << 3;
@@ -465,6 +456,7 @@ KNOINLINE KW k_region(KTHR KCtx *c, KW h0, KW e0, KW r) {
   k_anone(c);  // (an array there may be one now: see k_aget)
   return KPTR(c, lo + 1);
 }
+#endif
 #define KREG(e) ({ KW kh0_ = c->hp, ke0_ = c->he; KW kr_ = (e); k_region(c, kh0_, ke0_, kr_); })
 // The same for a call whose result is a scalar (a U32, F32 or Bool): it reaches
 // nothing the call allocated.
