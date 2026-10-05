@@ -1427,7 +1427,7 @@ static inline int rc_bare(V v) {
   return gc_hot.rcb && (gc_hot.bk[(uintptr_t)v >> GC_BLK_SHIFT] & BK_BARE);
 }
 // n more references to bare node v (rc_dup_obj's count, one byte).
-static inline void rc_dup_bare(V v, V n) {
+static inline __attribute__((always_inline)) void rc_dup_bare(V v, V n) {
   uint8_t *f = rc_bare_flags(v);
   uint8_t fl = __atomic_load_n(f, __ATOMIC_RELAXED);
   if (fl & BARE_SAT) return;
@@ -1439,7 +1439,7 @@ static inline void rc_dup_bare(V v, V n) {
   else *f = (uint8_t)(fl + (uint8_t)(n << 2));
 }
 // Gives up a reference to bare node v: 1 when it was the last.
-static inline int rc_release_bare(V v) {
+static inline __attribute__((always_inline)) int rc_release_bare(V v) {
   uint8_t *f = rc_bare_flags(v);
   uint8_t fl = __atomic_load_n(f, __ATOMIC_RELAXED);
   if ((fl & BARE_CNT) == 0) {
@@ -1476,7 +1476,10 @@ static inline int rc_obj(V v) {
   return rc_valid(off);
 }
 
-static inline void rc_dup_obj(V v, V n) {
+// (always_inline, as for the rest of the rc_ section: the bare-node guards
+// made clang outline these and their callers in counted programs, and a
+// lexer run paid 72% more instructions for the call it did not have before.)
+static inline __attribute__((always_inline)) void rc_dup_obj(V v, V n) {
   if (UNLIKELY(gc_hot.rcb) && rc_bare(v)) {
     rc_dup_bare(v, n);
     return;
@@ -1496,7 +1499,7 @@ static void rc_publish(V v);
 // A reference more to x, read out of an object that is marked when ts is
 // not 0 (see RC_TS): x is marked first, with its reach. (A marked object's
 // reach is marked already; the mark here is for a holder that is not one.)
-static inline void rc_dup_in(V x, V ts) {
+static inline __attribute__((always_inline)) void rc_dup_in(V x, V ts) {
   if (!rc_obj(x)) return;
   if (UNLIKELY(gc_hot.rcb) && rc_bare(x)) {
     if (ts && !(__atomic_load_n(rc_bare_flags(x), __ATOMIC_RELAXED) & (BARE_TS | BARE_SAT))) rc_publish(x);
@@ -1525,7 +1528,7 @@ static inline V rc_dupv(V v) { rc_dup(v); return v; }
 
 // Gives up a reference to object v: 1 when it was the last (v must then be
 // freed).
-static inline int rc_release(V v) {
+static inline __attribute__((always_inline)) int rc_release(V v) {
   if (UNLIKELY(gc_hot.rcb) && rc_bare(v)) return rc_release_bare(v);
   V *p = (V *)v;
   V w0 = __atomic_load_n(p, __ATOMIC_RELAXED);
@@ -1631,7 +1634,7 @@ static inline void rc_free_at(V v, unsigned w) {
 // Frees the slot of a counted bare node of n fields, as rc_free_at for a
 // node with a tag word, its gc_bflags byte cleared: the next node built in
 // the slot, whose count then starts at zero, is one reference.
-static inline void rc_free_bare(V v, unsigned n) {
+static inline __attribute__((always_inline)) void rc_free_bare(V v, unsigned n) {
   unsigned sw = n < 2 ? 2 : n;
   uint8_t *f = rc_bare_flags(v);
 #ifdef BEND_DEBUG_FREE
@@ -1683,7 +1686,7 @@ static void rc_push(Thr *t, V v) {
 // clear. The parent stays allocated/rooted until all its fields are dropped.
 // Frees a node v, w its block's words, whose fields were all released: a
 // bare node has no tag word to step over and its count byte is cleared.
-static inline void rc_free_node(V v, int bare, size_t w) {
+static inline __attribute__((always_inline)) void rc_free_node(V v, int bare, size_t w) {
   if (bare) rc_free_bare(v, (unsigned)w);
   else rc_free_at(v, 0);
 }
@@ -1735,12 +1738,12 @@ pop:;
 }
 
 // Drops a reference to v.
-static inline void rc_drop(V v) {
+static inline __attribute__((always_inline)) void rc_drop(V v) {
   if (rc_obj(v) && rc_release(v)) rc_free_obj(v);
 }
 
 // Drops n references to v (a case that uses v fewer times than another).
-static inline void rc_dropn(V v, V n) {
+static inline __attribute__((always_inline)) void rc_dropn(V v, V n) {
   if (!rc_obj(v)) return;
   if (UNLIKELY(gc_hot.rcb) && rc_bare(v)) {
     uint8_t *f = rc_bare_flags(v);
@@ -1787,7 +1790,7 @@ __attribute__((noinline)) static void rc_take_shared_bare(V v, unsigned n) {
   if (rc_release_bare(v)) rc_free_obj(v);
 }
 
-static inline int rc_unique(V v) {
+static inline __attribute__((always_inline)) int rc_unique(V v) {
   if (UNLIKELY(gc_hot.rcb) && rc_bare(v)) {
     uint8_t fl = __atomic_load_n(rc_bare_flags(v), __ATOMIC_RELAXED);
     if ((fl & BARE_CNT) || (fl & BARE_SAT)) return 0;
@@ -1801,7 +1804,7 @@ static inline int rc_unique(V v) {
 }
 
 // A match opened bare node v of n fields (a take's w is 256 + n).
-static inline void rc_take_bare(V v, unsigned n) {
+static inline __attribute__((always_inline)) void rc_take_bare(V v, unsigned n) {
   if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) return;
   if (LIKELY(rc_unique(v))) rc_free_bare(v, n);
   else rc_take_shared_bare(v, n);
@@ -1809,7 +1812,7 @@ static inline void rc_take_bare(V v, unsigned n) {
 
 // A match opened node v, of w words, after reading its fields: its fields
 // are the pattern's now.
-static inline void rc_take(V v, unsigned w) {
+static inline __attribute__((always_inline)) void rc_take(V v, unsigned w) {
   if (bend_rp_size(v,w)) w -= RP_SIZE;
   // (w >= 256 is a bare node's size, but a node with more than 255 fields
   // has a size that large too: the block's pool tells them apart)
@@ -1820,7 +1823,7 @@ static inline void rc_take(V v, unsigned w) {
 }
 
 // A match opened bare node v of n fields (a reuse take's w is 256 + n).
-static inline V rc_take_ru_bare(V v, unsigned n) {
+static inline __attribute__((always_inline)) V rc_take_ru_bare(V v, unsigned n) {
   if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) return 0;
   if (LIKELY(rc_unique(v))) {
 #ifdef BEND_DEBUG_FREE
@@ -1836,7 +1839,7 @@ static inline V rc_take_ru_bare(V v, unsigned n) {
 // As rc_take, but a node with one reference is not freed: its slot is
 // answered, for the case's constructor of the same size to be built in
 // (reuse, see RU); 0 when the node was shared.
-static inline V rc_take_ru(V v, unsigned w) {
+static inline __attribute__((always_inline)) V rc_take_ru(V v, unsigned w) {
   if (bend_rp_size(v,w)) w -= RP_SIZE;
   if (w >= 256 && rc_bare(v)) return rc_take_ru_bare(v, w - 256);
   if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) return 0;
