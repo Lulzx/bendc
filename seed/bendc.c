@@ -14511,9 +14511,8 @@ static V S40425(void);
 static V S40426(void);
 static V S40427(void);
 static V W_Gen_drc_dmain_x37u(V *a);
-static V F_G_dhless_dany(V a0, V a1);
-static V K40433(void);
-static V W_G_dhless_dany(V *a);
+static V F_G_dhless_dany_x37u(V a0, V a1, V a2, V a3, V a4);
+static V W_G_dhless_dany_x37u(V *a);
 static BEND_PN V F_Gen_dprinter_drec_x37u(V a0, V a1, V a2, V a3, V a4, V a5);
 static V S40448(void);
 static V L40450(V *a);
@@ -89305,7 +89304,7 @@ if ((s40411) == IMM(0)) {
 return S40418();
 } else if ((s40411) == IMM(1)) {
 return F_String_dappend(S40419(), F_String_dappend(({ V r40420;
-V s40422 = F_G_dhless_dany(F_Map_dkeys_dgo(0, a0, IMM(0)), a0);
+V s40422 = F_G_dhless_dany_x37u(F_Map_dkeys_dgo(0, a0, IMM(0)), a0, a1, a2, a3);
 if ((s40422) == IMM(0)) {
 r40420 = S40425();
 } else if ((s40422) == IMM(1)) {
@@ -89315,24 +89314,28 @@ r40420; }), S40427()));
 } else { bend_fail("runtime fail-stop"); }
 }
 static V W_Gen_drc_dmain_x37u(V *a) { (void)a; return F_Gen_drc_dmain_x37u(a[0], a[1], a[2], a[3]); }
-static V K40433(void) { static V c; return KONST(c, C4(0, 0u, 0u, 4u, IMM(0))); }
-static V F_G_dhless_dany(V a0, V a1) {
+static V F_G_dhless_dany_x37u(V a0, V a1, V a2, V a3, V a4) {
 top:;
 V s40431 = a0;
 if ((s40431) == IMM(0)) {
 return IMM(0);
 } else if (IS_N(s40431, 1)) {
-V v40432 = F_Map_dget(K40433(), a1, FLD(s40431, 0));
-V v40435 = FLD(v40432, 1);
-V s40437 = F_U32_dis__eq(FLD(v40435, 2), 8u);
-if ((s40437) == IMM(0)) {
-{ V t0 = FLD(s40431, 1); V t1 = a1; a0 = t0; a1 = t1; goto top; }
-} else if ((s40437) == IMM(1)) {
+V s40433 = ({ V r40434;
+V s40436 = F_G_dctor_x37u(a1, a2, a3, a4, FLD(s40431, 0));
+if ((s40436) == IMM(0)) {
+r40434 = IMM(0);
+} else if (IS_N(s40436, 1)) {
+r40434 = F_U32_dis__eq(FLD(FLD(s40436, 0), 2), 8u);
+} else { bend_fail("runtime fail-stop"); }
+r40434; });
+if ((s40433) == IMM(0)) {
+{ V t0 = FLD(s40431, 1); V t1 = a1; V t2 = a2; V t3 = a3; V t4 = a4; a0 = t0; a1 = t1; a2 = t2; a3 = t3; a4 = t4; goto top; }
+} else if ((s40433) == IMM(1)) {
 return IMM(1);
 } else { bend_fail("runtime fail-stop"); }
 } else { bend_fail("runtime fail-stop"); }
 }
-static V W_G_dhless_dany(V *a) { (void)a; return F_G_dhless_dany(a[0], a[1]); }
+static V W_G_dhless_dany_x37u(V *a) { (void)a; return F_G_dhless_dany_x37u(a[0], a[1], a[2], a[3], a[4]); }
 static V S40448(void) { static V c; return STRC(c, ""); }
 static V L40450(V *a) {
 V v40451 = a[7];
