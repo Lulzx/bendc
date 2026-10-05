@@ -19130,14 +19130,20 @@ def K.one.wrap(+g: G, +name: String, +l: U32) -> KM(Unit):
 def KQ.arg(+i: U32) -> String:
   "A" ++ U32.show(i)
 
-# The bindings to save at a call: the first of each name, not erased.
+# Whether a variable is an invariant parameter's KIV<i> (see KQ.inv).
+def KQ.isinv(+c: String) -> Bool:
+  String.starts_with(c, "KIV")
+
+# The bindings to save at a call: the first of each name, not erased, not
+# an invariant parameter (it keeps its value through the call).
 def KQ.live(env: Env(), +seen: List<&2, String>) -> Env():
   match env:
     case Nil{}:
       Nil{}
     case Bind{+x, +c} <> +t:
       Bool.pick(Unit -> Env(), Bool.or(Str.has(seen, x), Str.eq(c, "0")), u => KQ.live(t, seen),
-        u => Bind{x, c} <> KQ.live(t, x <> seen))(Unit{})
+        u => Bool.pick(Unit -> Env(), KQ.isinv(c), v => KQ.live(t, x <> seen),
+          v => Bind{x, c} <> KQ.live(t, x <> seen))(Unit{}))(Unit{})
 
 def KQ.used.if(keep: Bool, x: String, c: String, rest: Env()) -> Env():
   match keep:
@@ -19174,6 +19180,168 @@ def KQ.reenv(live: Env(), +k: U32, +i: U32) -> Env():
       Nil{}
     case Bind{x, c} <> t:
       Bind{x, KX.v(k) ++ "_" ++ U32.show(i)} <> KQ.reenv(t, k, U32.inc(i))
+
+# The invariant parameters' bindings in env: kept as they are past a call.
+def KQ.kiv(env: Env()) -> Env():
+  match env:
+    case Nil{}:
+      Nil{}
+    case Bind{x, +c} <> t:
+      KQ.used.if(KQ.isinv(c), x, c, KQ.kiv(t))
+
+# Invariant parameters. A parameter that each of the def's own calls passes
+# unchanged (terrain's batch passes e on) has one value for the whole run
+# of KQ_name: it lives in a local KIV<i> set once from p<i>, and a call
+# neither saves nor reloads it. Only when no def the code reaches can call
+# the def back (it would enter with other arguments) and the def's name is
+# not used as a value; a binder of the parameter's name drops it.
+def KQ.inv.refs(d: Decl) -> List<&2, String>:
+  match d:
+    case DDef{n, ps, body, ret}:
+      FV.expr(body, Nil{}, Nil{})
+    case other:
+      Nil{}
+
+def KQ.inv.reach(n: Nat, +g: G, todo: List<&2, String>, +seen: Set()) -> Set():
+  match n:
+    case 0n:
+      Set.add(seen, "%out of fuel")
+    case 1n+ +p:
+      match todo:
+        case Nil{}:
+          seen
+        case +h <> +t:
+          Bool.pick(Unit -> Set(), Dps.has(seen, h), u => KQ.inv.reach(p, g, t, seen),
+            u => KQ.inv.reach(p, g, List.append(&2, String, KQ.inv.refs(G.body(g, h)), t), Set.add(seen, h)))(Unit{})
+
+# Whether a def the body refers to (other than the def) reaches the def.
+def KQ.inv.back(+g: G, +name: String, body: Core.Expr) -> Bool:
+  +s = KQ.inv.reach(Fuel.max(), g, FV.expr(body, [name], Nil{}), Set.new())
+  Bool.or(Dps.has(s, name), Dps.has(s, "%out of fuel"))
+
+def KQ.inv.all(ps: List<&2, String>, b: Bool) -> List<&2, Bool>:
+  match ps:
+    case Nil{}:
+      Nil{}
+    case p <> t:
+      b <> KQ.inv.all(t, b)
+
+def KQ.inv.kill(fl: List<&2, Bool>, ps: List<&2, String>, +xs: List<&2, String>) -> List<&2, Bool>:
+  match fl ps:
+    case b <> ft p <> pt:
+      Bool.and(b, Bool.not(Str.has(xs, p))) <> KQ.inv.kill(ft, pt, xs)
+    case f2 p2:
+      Nil{}
+
+def KQ.inv.isvar(a: Core.Expr, +p: String) -> Bool:
+  match a:
+    case Core.EVar{x}:
+      Str.eq(x, p)
+    case other:
+      False{}
+
+# A call of the def: each flag holds while its argument is the parameter.
+def KQ.inv.same(fl: List<&2, Bool>, ps: List<&2, String>, args: List<&2, Core.Expr>) -> List<&2, Bool>:
+  match fl ps args:
+    case b <> ft p <> pt a <> at:
+      Bool.and(b, KQ.inv.isvar(a, p)) <> KQ.inv.same(ft, pt, at)
+    case f2 p2 a2:
+      Nil{}
+
+def KQ.inv.call(fn: Core.Expr, +f: String, ps: List<&2, String>, args: List<&2, Core.Expr>, +fl: List<&2, Bool>) -> List<&2, Bool>:
+  match fn:
+    case Core.EVar{x}:
+      Bool.pick(Unit -> List<&2, Bool>, Str.eq(x, f), u => KQ.inv.same(fl, ps, args), u => fl)(Unit{})
+    case other:
+      fl
+
+# A call's head, with the def's own name hidden (a use as a value is not).
+def KQ.inv.head(fn: Core.Expr, +f: String) -> Core.Expr:
+  match fn:
+    case Core.EVar{+x}:
+      Bool.pick(Core.Expr, Str.eq(x, f), Core.EVar{""}, Core.EVar{x})
+    case other:
+      other
+
+# skip: as in FV.go.
+def KQ.inv.go(e: Core.Expr, +f: String, +ps: List<&2, String>, fl: List<&2, Bool>, skip: Bool) -> List<&2, Bool>:
+  match e:
+    case Core.EVar{x}:
+      Bool.pick(Unit -> List<&2, Bool>, Str.eq(x, f), u => KQ.inv.all(ps, False{}), u => fl)(Unit{})
+    case Core.ECall{+fn, args}:
+      match args:
+        case Nil{}:
+          match skip:
+            case True{}:
+              fl
+            case False{}:
+              KQ.inv.go(KQ.inv.head(fn, f), f, ps, KQ.inv.call(fn, f, ps, Nil{}, fl), False{})
+        case +a <> +t:
+          match skip:
+            case True{}:
+              KQ.inv.go(Core.ECall{fn, t}, f, ps, KQ.inv.go(a, f, ps, fl, False{}), True{})
+            case False{}:
+              KQ.inv.go(Core.ECall{fn, t}, f, ps, KQ.inv.go(a, f, ps, KQ.inv.go(KQ.inv.head(fn, f), f, ps,
+                KQ.inv.call(fn, f, ps, a <> t, fl), False{}), False{}), True{})
+    case Core.ECtor{n, args}:
+      match args:
+        case Nil{}:
+          fl
+        case a <> t:
+          KQ.inv.go(Core.ECtor{n, t}, f, ps, KQ.inv.go(a, f, ps, fl, False{}), False{})
+    case Core.ELam{p, b}:
+      KQ.inv.go(b, f, ps, KQ.inv.kill(fl, ps, Pat.vars(p, Nil{})), False{})
+    case Core.ELet{p, v, b}:
+      KQ.inv.go(b, f, ps, KQ.inv.go(v, f, ps, KQ.inv.kill(fl, ps, Pat.vars(p, Nil{})), False{}), False{})
+    case Core.EMatch{scrs, cases}:
+      match scrs:
+        case a <> t:
+          KQ.inv.go(Core.EMatch{t, cases}, f, ps, KQ.inv.go(a, f, ps, fl, False{}), False{})
+        case Nil{}:
+          match cases:
+            case Nil{}:
+              fl
+            case c <> t:
+              KQ.inv.go(Core.EMatch{Nil{}, t}, f, ps, KQ.inv.go(c, f, ps, fl, False{}), False{})
+    case Core.ECase{pats, b}:
+      KQ.inv.go(b, f, ps, KQ.inv.kill(fl, ps, Pats.vars(pats, Nil{})), False{})
+    case Core.ESucc{k, x}:
+      KQ.inv.go(x, f, ps, fl, False{})
+    case Core.EOp{op, a, b}:
+      KQ.inv.go(b, f, ps, KQ.inv.go(a, f, ps, fl, False{}), False{})
+    case Core.EAnn{x, t}:
+      KQ.inv.go(x, f, ps, fl, False{})
+    case other:
+      fl
+
+# One flag a parameter: True when it is invariant (see above).
+def KQ.inv(+g: G, +name: String, +ps: List<&2, String>, +body: Core.Expr) -> List<&2, Bool>:
+  Bool.pick(Unit -> List<&2, Bool>, KQ.inv.back(g, name, body), u => KQ.inv.all(ps, False{}),
+    u => KQ.inv.go(body, name, ps, KQ.inv.all(ps, True{}), False{}))(Unit{})
+
+# KQ.sig with the invariant parameters in their KIV<i>.
+def KQ.isig(ps: List<&2, Core.Param>, mask: List<&2, Bool>, inv: List<&2, Bool>, +k: U32, +i: U32) -> Env():
+  match ps mask inv:
+    case Core.Param{x, m, t} <> pt True{} <> mt True{} <> it:
+      Bind{x, "KIV" ++ U32.show(i)} <> KQ.isig(pt, mt, it, k, U32.inc(i))
+    case Core.Param{x, m, t} <> pt True{} <> mt False{} <> it:
+      Bind{x, KX.v(k) ++ "_" ++ U32.show(i)} <> KQ.isig(pt, mt, it, k, U32.inc(i))
+    case Core.Param{x, m, t} <> pt False{} <> mt b <> it:
+      Bind{x, "0"} <> KQ.isig(pt, mt, it, k, i)
+    case pl ml il:
+      Nil{}
+
+# The KIV<i> locals, set from the arguments KQ_name was called with.
+def KQ.idecl(mask: List<&2, Bool>, inv: List<&2, Bool>, +i: U32) -> String:
+  match mask inv:
+    case True{} <> mt True{} <> it:
+      "KW KIV" ++ U32.show(i) ++ " = p" ++ U32.show(i) ++ ";\n" ++ KQ.idecl(mt, it, U32.inc(i))
+    case True{} <> mt False{} <> it:
+      KQ.idecl(mt, it, U32.inc(i))
+    case False{} <> mt b <> it:
+      KQ.idecl(mt, it, i)
+    case ml il:
+      ""
 
 def K.docs.of(e: Env()) -> List<&2, Doc>:
   match e:
@@ -20057,6 +20225,8 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
             case True{}:
               +n = U32.to_nat(K.kept(mask))
               +bound = K.params(ps, mask)
+              +ab = KQ.anf(g, bound, R.ops(body, "Nat"))
+              +inv = KQ.inv(g, name, bound, ab)
               do KM<Unit>:
                 +zfast : String <- KZ.emit(g, name, KZ.pick(g, name, ps, mask, body))
                 +rfast : String <- KR.emit(g, name, ps, mask, body)
@@ -20068,13 +20238,13 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
                 K.memo.put("%kqroot", name)
                 K.memo.put("%kqe " ++ name ++ " " ++ name, U32.show(l))
                 K.start(l)
-                K.putS(KQ.entry(k, n, 0) ++ "\n" ++ KF.pshares(ps, KQ.sig(ps, mask, k, 0), body))
+                K.putS(KQ.entry(k, n, 0) ++ "\n" ++ KF.pshares(ps, KQ.isig(ps, mask, inv, k, 0), body))
                 KQ.tree.entry(g, G.body(g, name))
-                KQ.go(fu, KQSStmt{g, KQ.sig(ps, mask, k, 0), KSelf{name, l, mask}, KQ.anf(g, bound, R.ops(body, "Nat"))})
+                KQ.go(fu, KQSStmt{g, KQ.isig(ps, mask, inv, k, 0), KSelf{name, l, mask}, ab})
                 K.start(0)
                 blocks : Doc <- K.cap.take(saved)
                 K.flat.add(Bool.pick(Doc, String.is_empty(rfast), Doc.list([DStr{"\nKINLINE KW KQ_" ++ Gen.mangle(name) ++ "(KTHR KCtx *c" ++ KQ.params(n, 0) ++
-                  ", KTHR bool *ok) {\n" ++ zfast ++ rfast ++ "KQ_STACK; K_TREE_STACK;\nKW sp = 0, pc = " ++ U32.show(l) ++ ", RV = 0, st = c->kqlim;\n" ++ KQ.init(n, 0) ++
+                  ", KTHR bool *ok) {\n" ++ zfast ++ rfast ++ "KQ_STACK; K_TREE_STACK;\nKW sp = 0, pc = " ++ U32.show(l) ++ ", RV = 0, st = c->kqlim;\n" ++ KQ.init(n, 0) ++ KQ.idecl(mask, inv, 0) ++
                   KQ.init.rest(Nat.sub(12n, n), U32.from_nat(n)) ++
                   "for (;;) {\nif (st-- == 0 || c->err != 0) { *ok = false; return 0; }\nswitch (pc) {\n"}, blocks,
                   DStr{"default:\n*ok = false;\nreturn 0;\n}\n}\n}\n"}]), DStr{"\nKINLINE KW KQ_" ++ Gen.mangle(name) ++ "(KTHR KCtx*c" ++ KQ.params(n,0) ++ ",KTHR bool*ok){\n" ++ rfast ++ "*ok=false;return 0;\n}\n"}))
@@ -20111,8 +20281,8 @@ def KQ.go(n: Nat, k: KQSel) -> KQSel.ty(k):
             K.putS("sp -= " ++ U32.show(w) ++ "; " ++ KQ.load(live, j, 0) ++ "KW " ++ KX.v(j) ++ " = " ++ Bool.pick(String, reg,
               "k_region(c, KQ_ST(sp + " ++ U32.show(m) ++ "), KQ_ST(sp + " ++ U32.show(U32.inc(m)) ++ "), RV)", "RV") ++ ";\n" ++
               KF.share(x, KX.v(j), body))
-            KQ.go(fu, KQSStmt{g, Bool.pick(Env(), Str.eq(x, "_"), KQ.reenv(live, j, 0), Bind{x, KX.v(j)} <> KQ.reenv(live, j, 0)), self,
-              body})
+            KQ.go(fu, KQSStmt{g, List.append(&2, Bind, Bool.pick(Env(), Str.eq(x, "_"), KQ.reenv(live, j, 0), Bind{x, KX.v(j)} <> KQ.reenv(live, j, 0)),
+              KQ.kiv(env)), self, body})
             K.restore(saved)
         # x = f(args) at statement level, f the def itself or another seq def:
         # save, call, resume.
