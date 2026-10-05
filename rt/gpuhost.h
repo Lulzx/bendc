@@ -265,13 +265,20 @@ static GId g_desc(GId lib, const char *name) {
 }
 
 // The pipeline of d, from archive ar when it is not NULL (else err says why).
+// Compiling a fresh one flakes under load (CI has seen "Compilation failed"
+// for minutes), so it is tried five times, over 7.5 s, before the program
+// falls back to the CPU.
 static GId g_pipe(GId d, GId ar, GId *err) {
   if (ar) {
     GId arr = G_SEND(GId (*)(GId, GSel, GId))(g_class("NSArray"), g_sel("arrayWithObject:"), ar);
     G_SEND(void (*)(GId, GSel, GId))(d, g_sel("setBinaryArchives:"), arr);
   }
-  GId pso = G_SEND(GId (*)(GId, GSel, GId, unsigned long, void *, GId *))(g_dev,
-    g_sel("newComputePipelineStateWithDescriptor:options:reflection:error:"), d, ar ? 4ul : 0ul, NULL, err);
+  GId pso = NULL;
+  for (int i = 0; i < (ar ? 1 : 5) && !pso; i++) {
+    if (i) { struct timespec ts = {0, 500000000l << (i - 1)}; nanosleep(&ts, NULL); }
+    pso = G_SEND(GId (*)(GId, GSel, GId, unsigned long, void *, GId *))(g_dev,
+      g_sel("newComputePipelineStateWithDescriptor:options:reflection:error:"), d, ar ? 4ul : 0ul, NULL, err);
+  }
   if (!pso && !ar) gpu_note("no pipeline: %s", g_err_text(*err));
   return pso;
 }
