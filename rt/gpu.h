@@ -23,7 +23,7 @@ typedef ulong KW;
 typedef uint KU;
 typedef int KI;
 #define KDEV device
-#define KCOH device coherent(device)
+#define KCOH device
 #define KTHR thread
 #define KCONST constant
 #define KCP constant
@@ -1242,7 +1242,7 @@ KINLINE bool k_active(KW pc) { return pc != PC_IDLE && pc != PC_KQ; }
 // the host then runs the calls with bend_kq, all at once, and dispatches this
 // again. (A long call run here, inside this big kernel, runs 3-5x slower.)
 #ifdef __METAL_VERSION__
-kernel void bend_kernel(device coherent(device) KW *H [[buffer(0)]], device KAU *A [[buffer(1)]],
+kernel void bend_kernel(KDEV KW *H [[buffer(0)]], device KAU *A [[buffer(1)]],
   constant KParams &PP [[buffer(2)]], device KW *G [[buffer(3)]], uint lane [[thread_position_in_grid]]) {
   constant KParams *P = &PP;
 #else
@@ -1341,7 +1341,7 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
 
 // The waiting calls, a lane each: a small kernel, which runs them fast.
 #ifdef __METAL_VERSION__
-kernel void bend_kq(device coherent(device) KW *H [[buffer(0)]], device KAU *A [[buffer(1)]],
+kernel void bend_kq(KDEV KW *H [[buffer(0)]], device KAU *A [[buffer(1)]],
   constant KParams &PP [[buffer(2)]], device KW *G [[buffer(3)]], uint lane [[thread_position_in_grid]]) {
   constant KParams *P = &PP;
 #else
