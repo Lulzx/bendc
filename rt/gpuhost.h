@@ -37,7 +37,10 @@ typedef struct {
 static pthread_mutex_t gpu_lock = PTHREAD_MUTEX_INITIALIZER;
 static KW gpu_kq_cpu;    // (see gpu_kq_host)
 static KW gpu_kq_order;  // BEND_GPU_KQSORT: sort the waiting calls (see gpu_kq_sort)
+static KW gpu_kqinline;  // BEND_GPU_KQINLINE: lanes run their waiting calls in place
+static KW gpu_chain;     // BEND_GPU_CHAIN: rounds per command buffer (see g_dispatch_chain)
 static double gpu_kq_fuse;  // BEND_GPU_FUSE_US: (see gpu_run)
+static double gpu_chain_us; // BEND_GPU_CHAIN_US: (see gpu_run)
 static double g_last_dt;    // the device's time in the last command buffer
 static int gpu_mode = -1;
 static int gpu_log;         // BEND_GPU_LOG: 1 for a line a call, 2 for more
@@ -51,6 +54,7 @@ static KW gpu_pin_min;      // the arena bytes a result's call used, for it to s
 static KAU *gpu_A;         // the control words
 static size_t gpu_An;
 static KW gpu_qcap = (KW)1 << 16;
+static KW gpu_qcapmax = (KW)1 << 20;  // the most a queue grows to (see gpu_call)
 static KW gpu_lanes, gpu_budget, gpu_fork, gpu_kqep;
 static KW gpu_qused;       // queue slots the last call used
 static int gpu_used;       // the arena holds a call's lane states
@@ -397,6 +401,59 @@ static int g_dispatch(const KParams *P, GId pso, GId pso2) {
   return st == 4;
 }
 
+// g_dispatch's main dispatch and the bend_kq after it, `chain` times over in
+// one command buffer: the device runs the rounds back to back, and the host
+// waits once instead of twice a round (see BEND_GPU_CHAIN in gpu_run). Each
+// bend_kq gets a fresh epoch, and uses the sorted map the host kept for the
+// calls waiting now (it keeps it for the chain while it maps every lane: see
+// gpu_run). That map goes stale for the pairs after the first and then covers
+// the lanes that were waiting before the chain, not those that have parked
+// since: those run in the bend_kq the host dispatches after it. The calls are
+// not run on the CPU. KA_GROW and KA_ERR are read after the buffer ends:
+// a chained round whose kq ran out of arena leaves its lanes waiting for the
+// host to grow, and the rounds after it run on (the lanes it left are
+// skipped).
+static int g_dispatch_chain(const KParams *P, GId pso, GId pso2, KW chain, KW *ep) {
+  void *pool = g_pool_push();
+  double w0 = gpu_log ? gpu_now() : 0;
+  GId cb = g_msg(g_queue, "commandBuffer");
+  void (*set)(GId, GSel, GId, unsigned long, unsigned long) = G_SEND(void (*)(GId, GSel, GId, unsigned long,
+    unsigned long));
+  GSize grid = {(unsigned long)P->nlanes, 1, 1}, tg = {g_tpg, 1, 1};
+  KParams Pr = *P;
+  for (KW r = 0; r < chain; r++) {
+    for (GId p = pso; p; p = p == pso ? pso2 : NULL) {
+      if (p != pso) {
+        *ep = *ep % 0xffffff + 1;
+        Pr.kqep = *ep;
+      }
+      GId enc = g_msg(cb, "computeCommandEncoder");
+      G_SEND(void (*)(GId, GSel, GId))(enc, g_sel("setComputePipelineState:"), p);
+      set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufH, 0, 0);
+      set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufA, 0, 1);
+      G_SEND(void (*)(GId, GSel, const void *, unsigned long, unsigned long))(enc, g_sel("setBytes:length:atIndex:"), &Pr,
+        sizeof(KParams), 2);
+      set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufG, 0, 3);
+      G_SEND(void (*)(GId, GSel, GSize, GSize))(enc, g_sel("dispatchThreads:threadsPerThreadgroup:"), grid, tg);
+      g_msg(enc, "endEncoding");
+    }
+  }
+  g_msg(cb, "commit");
+  g_msg(cb, "waitUntilCompleted");
+  unsigned long st = G_SEND(unsigned long (*)(GId, GSel))(cb, g_sel("status"));
+  double (*tm)(GId, GSel) = G_SEND(double (*)(GId, GSel));
+  double dt = tm(cb, g_sel("GPUEndTime")) - tm(cb, g_sel("GPUStartTime"));
+  g_last_dt = dt / (double)chain;
+  if (gpu_log) {
+    gpu_secs[0] += dt;
+    if (gpu_log >= 2)
+      fprintf(stderr, "bend gpu: chain %llu main+kq %.4fs (%.4fs)\n", (unsigned long long)chain, dt, gpu_now() - w0);
+  }
+  if (st != 4) gpu_note("a dispatch failed: %s", g_err_text(g_msg(cb, "error")));
+  g_pool_pop(pool);
+  return st == 4;
+}
+
 // A buffer over the CPU heap in use, for the device to read.
 static int g_heap(void) {
   KW len = (KW)gc_top << GC_BLK_SHIFT;
@@ -407,7 +464,36 @@ static int g_heap(void) {
   g_bufG_len = len;
   return g_bufG != NULL;
 }
+
+// A control words mapping that grew (gpu_a_resize): the device's buffer over
+// it is made again, since it was made over the old one.
+static int gpu_a_rebind(void) {
+  if (!g_bufA) return 1;
+  g_msg(g_bufA, "release");
+  g_bufA = NULL;
+  if (g_dev) g_bufA = g_nocopy(gpu_A, gpu_An);
+  return g_bufA != NULL;
+}
 #endif
+
+#if !BEND_METAL
+static int gpu_a_rebind(void) { return 1; }
+#endif
+
+// The control words take KA_SEQ fixed ones and four a queue slot: a queue
+// that grew in gpu_call (see BEND_GPU_QCAP2) grows them with it, in a new
+// mapping the device then gets (gpu_a_rebind). Only the pages the queue, the
+// lane states and the flags take are ever resident.
+static int gpu_a_resize(KW qcap) {
+  size_t n = ((KA_SEQ + qcap) * sizeof(KAU) + 0xffff) & ~(size_t)0xffff;
+  if (n <= gpu_An) return 1;
+  void *a = mmap(NULL, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+  if (a == MAP_FAILED) return 0;
+  if (gpu_A) munmap(gpu_A, gpu_An);
+  gpu_A = a;
+  gpu_An = n;
+  return gpu_a_rebind();
+}
 
 // The arena and the run
 // ---------------------
@@ -432,6 +518,14 @@ static int gpu_setup(const GpuProg *prog) {
   gpu_Hn = gpu_Hmax < h0 ? gpu_Hmax : h0;
   if (bend_gpu_mb > 64) gpu_Hn = ((size_t)bend_gpu_mb << 20) < gpu_Hmax ? (size_t)bend_gpu_mb << 20 : gpu_Hmax;
   gpu_H = mmap(NULL, gpu_Hmax, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
+  // The queue's capacity, 2^qb slots. A call that leaves more tasks pending
+  // than that (tree-matmul: 8192 lanes fork near the 13-deep fork limit while
+  // they wait in bend_kq, ~105k tasks) fails with KE_QUEUE, and gpu_call runs
+  // it again with a bigger queue; a small one keeps the ring pages other
+  // calls touch (a capacity's worth, wrapped) small.
+  long qb = gpu_env("BEND_GPU_QCAP2", 16);
+  if (qb > 0) gpu_qcap = (KW)1 << qb;
+  if (gpu_qcap > gpu_qcapmax) gpu_qcapmax = gpu_qcap;
   gpu_An = ((KA_SEQ + gpu_qcap) * sizeof(KAU) + 0xffff) & ~(size_t)0xffff;
   gpu_A = mmap(NULL, gpu_An, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
   if (gpu_H == MAP_FAILED || gpu_A == MAP_FAILED) return GPU_OFF;
@@ -441,6 +535,9 @@ static int gpu_setup(const GpuProg *prog) {
   // (the simulator runs every call on the device: it tests that code)
   gpu_kq_cpu = (KW)gpu_env("BEND_GPU_KQCPU", sim ? 0 : 4);
   gpu_kq_order = (KW)gpu_env("BEND_GPU_KQSORT", 1);
+  gpu_kqinline = (KW)gpu_env("BEND_GPU_KQINLINE", 0);
+  gpu_chain = (KW)gpu_env("BEND_GPU_CHAIN", 1);
+  gpu_chain_us = (double)gpu_env("BEND_GPU_CHAIN_US", 4000);
   gpu_kq_fuse = (double)gpu_env("BEND_GPU_FUSE_US", 1000) * 1e-6;
   gpu_budget = (KW)gpu_env("BEND_GPU_STEPS", sim ? 37 : 16384);
   KW f = 0;
@@ -724,7 +821,7 @@ static void gpu_kq_sort(KW *H, KParams *P, KW waiting) {
   free(base);
 }
 
-static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out, int retried) {
+static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
   KParams P;
   memset(&P, 0, sizeof P);
   KW *H = gpu_H;
@@ -757,6 +854,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   P.budget = gpu_budget;
   P.nlanes = gpu_lanes;
   P.fork_limit = gpu_fork;
+  P.kqinline = gpu_kqinline;
   // Control words, the queue and the lane states start zero: fresh pages
   // are, so only what a call used is cleared (pages never touched cost no
   // memory).
@@ -797,6 +895,21 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   // (see gpu_kq_sort and gpu_kq_host), which help long calls: a long one
   // gets the next bend_kq its own dispatch again, as the first one has.
   int fuse = 0;
+  // BEND_GPU_CHAIN rounds per command buffer, when the calls waiting would
+  // not run on the CPU anyway (more than gpu_kq_cpu of them) and a round runs
+  // under gpu_chain_us (BEND_GPU_CHAIN_US): the rounds run back to back on the
+  // device with one host round trip between them instead of one a dispatch
+  // (see g_dispatch_chain). A round with few waiting calls, or a long one,
+  // where the round trip is small next to the work, stays single, so
+  // gpu_kq_host and the sort keep doing their work.
+  //
+  // Off by default: a chain's bend_kqs run neither on the CPU nor over a fresh
+  // sort of the calls waiting then, which pays off where rounds are short and
+  // many (tree-matmul: 1.53s against 1.76s with eight; tree-bitonic 1.78
+  // against 1.87) but costs more than the round trips it saves where a round
+  // holds long calls (symreg 0.40s against 0.30s, lexer 9.0 against 8.4: the
+  // gates above do not separate those reliably on a loaded machine).
+  KW chain_n = 1;
   for (;;) {
     // Keep completed frames and tasks instead of replaying a main dispatch
     // that fills the arena. Leave headroom for its next allocation burst.
@@ -811,6 +924,7 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     // The lanes running (not idle, not waiting for bend_kq): idle lanes stay
     // in the dispatch while one does.
     KW active = 0, waiting = 0;
+    int chained = 0;
     for (KW l = 0; l < gpu_lanes; l++) {
       KW pc = H[P.lane0 + l];
       active += pc != PC_IDLE && pc != PC_KQ;
@@ -820,6 +934,26 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     if (gpu_mode == GPU_SIM) {
       for (KW l = 0; l < gpu_lanes; l++) prog->sim(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
     }
+#if BEND_METAL
+    else if (gpu_chain > 1) {
+      fuse = 0;
+      gpu_A[KA_GROW] = 0;
+      // The chain's bend_kqs run the sorted map the host built for the calls
+      // waiting now, when it maps every lane: then it is a walk of all the
+      // lanes, and stays one pair after pair (a later pair's map is stale:
+      // the lanes waiting then are the ones that waited before, in the order
+      // they were sorted in). A map of a few lanes would leave the calls that
+      // parked since to the bend_kq after the chain, a host round trip each.
+      if (P.kqmap && H[P.kqmap] != gpu_lanes) P.kqmap = 0;
+      if (!P.fresh && chain_n > 1) {
+        chained = 1;
+        if (!g_heap() || !g_dispatch_chain(&P, g_pso, g_pso_kq, chain_n, &gpu_kqep)) return 0;
+        rounds += chain_n - 1;
+      } else if (!g_heap() || !g_dispatch(&P, g_pso, NULL)) {
+        return 0;
+      }
+    }
+#endif
 #if BEND_METAL
     else {
       P.kqmap = 0;
@@ -841,12 +975,30 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     if (tail > gpu_qused) gpu_qused = tail < P.qcap ? tail : P.qcap;
     if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) break;
     if (__atomic_load_n(&gpu_A[KA_DONE], __ATOMIC_SEQ_CST) != 0) break;
-    for (KW l = 0; l < gpu_lanes; l++) waiting += H[P.lane0 + l] == PC_KQ;
+    KW act2 = 0;
+    for (KW l = 0; l < gpu_lanes; l++) {
+      KW pc = H[P.lane0 + l];
+      waiting += pc == PC_KQ;
+      act2 += pc != PC_IDLE && pc != PC_KQ;
+    }
+    // Chain the rounds after this one while the calls waiting are more than
+    // the CPU would run (see chain_n above); a chained round runs its own
+    // calls, so only a single round's count says what the next ones will be.
+    // Chains run on while they run quick (g_last_dt is the average round of
+    // one); a slow round, where the round trip a chain saves is small next to
+    // it, goes back to single rounds, and a mass park later chains again. The
+    // first chain is two rounds: long enough for a pair of rounds to time,
+    // short enough that a row whose bend_kqs are long pays little for it.
+    if (gpu_chain > 1) {
+      int quick = g_last_dt * 1e6 <= gpu_chain_us;
+      if (!chained) chain_n = waiting > gpu_kq_cpu && quick ? 2 : 1;
+      else chain_n = quick ? gpu_chain : 1;
+    }
     if (gpu_log == 3) {
-      KW act = 0, idle = 0;
-      for (KW l = 0; l < gpu_lanes; l++) { KW pc = H[P.lane0 + l]; act += pc != PC_IDLE && pc != PC_KQ; idle += pc == PC_IDLE; }
+      KW idle = 0;
+      for (KW l = 0; l < gpu_lanes; l++) idle += H[P.lane0 + l] == PC_IDLE;
       fprintf(stderr, "bend gpu: round: active %llu -> %llu, idle %llu, waiting %llu, queued %u\n", (unsigned long long)active,
-        (unsigned long long)act, (unsigned long long)idle, (unsigned long long)waiting, (unsigned)(gpu_A[KA_QTAIL] - gpu_A[KA_QHEAD]));
+        (unsigned long long)act2, (unsigned long long)idle, (unsigned long long)waiting, (unsigned)(gpu_A[KA_QTAIL] - gpu_A[KA_QHEAD]));
     }
     // (a fused bend_kq ran every call but those that ran out of arena)
     if (fused && gpu_A[KA_GROW] == 0) fused = 0;
@@ -922,9 +1074,9 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   }
   if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) {
     if (gpu_A[KA_ERR] == KE_HEAP && gpu_Hn < gpu_Hmax) return 2;
-    // A full task queue (a slow or busy GPU can outrun its pops) is transient:
-    // replay the call once before giving up on the device.
-    if (gpu_A[KA_ERR] == KE_QUEUE && !retried) return 3;
+    // A lane filled the queue: the caller runs the call again in a bigger
+    // one (its capacity is the run's layout: it cannot grow in place).
+    if (gpu_A[KA_ERR] == KE_QUEUE && gpu_qcap < gpu_qcapmax) return 3;
     if (gpu_log) fprintf(stderr, "bend gpu: a lane failed (error %u), running on the CPU\n", gpu_A[KA_ERR]);
     return 0;
   }
@@ -970,11 +1122,24 @@ static int gpu_call(const GpuProg *prog, KW entry, V *args, int n, int pin, V *o
   double t0 = gpu_now();
   if (gpu_mode < 0) gpu_mode = gpu_setup(prog);
   double t1 = gpu_now();
-  int r = gpu_mode != GPU_OFF ? gpu_run(prog, entry, args, n, pin, out, 0) : 0;
-  for (;;) {
-    if (r == 2) r = gpu_grow(4) ? gpu_run(prog, entry, args, n, pin, out, 0) : 0;
-    else if (r == 3) r = gpu_run(prog, entry, args, n, pin, out, 1);
-    else break;
+  int r = gpu_mode != GPU_OFF ? gpu_run(prog, entry, args, n, pin, out) : 0;
+  while (r == 2 || r == 3) {
+    // 2: the call filled the arena (grow it and run again). 3: it filled the
+    // queue (a bigger queue moves the lane states, so it is a new run, not a
+    // grow; see gpu_setup). What the failed run did is discarded either way.
+    if (r == 3) {
+      KW nq = gpu_qcap * 4;
+      if (nq > gpu_qcapmax) nq = gpu_qcapmax;
+      if (gpu_log)
+        fprintf(stderr, "bend gpu: the queue filled; %llu slots, and the call runs again\n", (unsigned long long)nq);
+      gpu_qcap = nq;
+      if (!gpu_a_resize(gpu_qcap)) r = 0;
+      else r = gpu_run(prog, entry, args, n, pin, out);
+    } else if (!gpu_grow(4)) {
+      r = 0;
+    } else {
+      r = gpu_run(prog, entry, args, n, pin, out);
+    }
   }
   if (gpu_log == 2) fprintf(stderr, "bend gpu: call %.3fs (setup %.3fs, copy out %.3fs)\n", gpu_now() - t0, t1 - t0, gpu_tout);
   pthread_mutex_unlock(&gpu_lock);
