@@ -723,7 +723,7 @@ static void gpu_kq_sort(KW *H, KParams *P, KW waiting) {
   free(base);
 }
 
-static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out) {
+static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *out, int retried) {
   KParams P;
   memset(&P, 0, sizeof P);
   KW *H = gpu_H;
@@ -919,6 +919,9 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   }
   if (__atomic_load_n(&gpu_A[KA_ERR], __ATOMIC_SEQ_CST) != 0) {
     if (gpu_A[KA_ERR] == KE_HEAP && gpu_Hn < gpu_Hmax) return 2;
+    // A full task queue (a slow or busy GPU can outrun its pops) is transient:
+    // replay the call once before giving up on the device.
+    if (gpu_A[KA_ERR] == KE_QUEUE && !retried) return 3;
     if (gpu_log) fprintf(stderr, "bend gpu: a lane failed (error %u), running on the CPU\n", gpu_A[KA_ERR]);
     return 0;
   }
@@ -964,8 +967,12 @@ static int gpu_call(const GpuProg *prog, KW entry, V *args, int n, int pin, V *o
   double t0 = gpu_now();
   if (gpu_mode < 0) gpu_mode = gpu_setup(prog);
   double t1 = gpu_now();
-  int r = gpu_mode != GPU_OFF ? gpu_run(prog, entry, args, n, pin, out) : 0;
-  while (r == 2) r = gpu_grow(4) ? gpu_run(prog, entry, args, n, pin, out) : 0;
+  int r = gpu_mode != GPU_OFF ? gpu_run(prog, entry, args, n, pin, out, 0) : 0;
+  for (;;) {
+    if (r == 2) r = gpu_grow(4) ? gpu_run(prog, entry, args, n, pin, out, 0) : 0;
+    else if (r == 3) r = gpu_run(prog, entry, args, n, pin, out, 1);
+    else break;
+  }
   if (gpu_log == 2) fprintf(stderr, "bend gpu: call %.3fs (setup %.3fs, copy out %.3fs)\n", gpu_now() - t0, t1 - t0, gpu_tout);
   pthread_mutex_unlock(&gpu_lock);
   // (counted, the device's run consumed the arguments, as the CPU's would)
