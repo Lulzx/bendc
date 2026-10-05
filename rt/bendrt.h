@@ -388,7 +388,8 @@ static double gc_minor_k = 2.0, gc_factor = 0.5;
 static size_t gc_slack = (size_t)8 << 20;
 // gc_refill takes a block for reuse when nobj / gc_claim_frac of its slots
 // are free (at least one). A smaller fraction finds more holes, which holds a
-// big heap's growth down but hands out slots out of order (0: any free slot).
+// big heap's growth down but hands out slots out of order (0: any free slot;
+// the default a counted program runs with: see gc_init).
 static unsigned gc_claim_frac = 8;
 static unsigned gc_grow = 1, gc_grow_max = 32, gc_kept_run;
 static int gc_big;  // gc_grow went to gc_grow_max for what lives on
@@ -579,7 +580,14 @@ static void gc_init(void) {
   if (getenv("BEND_GC_MINOR")) gc_minor_k = atof(getenv("BEND_GC_MINOR"));
   if (getenv("BEND_GC_FACTOR")) gc_factor = atof(getenv("BEND_GC_FACTOR"));
   if (getenv("BEND_GC_SLACK_MB")) gc_slack = (size_t)atol(getenv("BEND_GC_SLACK_MB")) << 20;
+  // A counted program frees eagerly, so a class's blocks fill and drain in
+  // bursts: taking a block to reuse when a single slot of it is free (rather
+  // than an eighth) is what holds its peak down (tree-matmul, 8 threads:
+  // 9.8 MB to 9.2 MB, against the official runtime's 9.3 MB, for a tenth of
+  // a 30% time margin). The collector's in-order reuse pays for it (bitonic
+  // 21.5s vs 7.8s), so an eighth stays its rule.
   if (getenv("BEND_GC_CLAIM")) gc_claim_frac = (unsigned)atoi(getenv("BEND_GC_CLAIM"));
+  else if (bend_rc_req) gc_claim_frac = 0;
   const char *m = getenv("BEND_GC_MIN_MB");
   // (a heap size set this way stays: BEND_GC_GROW=n lets it grow n times)
   if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20, gc_grow_max = 1;

@@ -372,7 +372,8 @@ extern double gc_minor_k;
 extern size_t gc_slack;
 // gc_refill takes a block for reuse when nobj / gc_claim_frac of its slots
 // are free (at least one). A smaller fraction finds more holes, which holds a
-// big heap's growth down but hands out slots out of order (0: any free slot).
+// big heap's growth down but hands out slots out of order (0: any free slot;
+// the default a counted program runs with: see gc_init).
 extern unsigned gc_claim_frac;
 extern unsigned gc_grow;
 extern int gc_big;
