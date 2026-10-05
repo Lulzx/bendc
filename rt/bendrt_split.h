@@ -316,10 +316,10 @@ typedef struct Thr {
   uint32_t nspare;
   uint64_t plast; // when a parallel let past its site's cutoff last forked (par_small)
   int pdepth;     // par_depth, where thr_get reaches it (see par_depth)
-  // Counted, the nodes of up to 16 words it freed in the block its cache
-  // of their class allocates from (pool 0): a list through their second
-  // words, which allocation takes first (see rc_free_at).
-  V *lifo[GC_RQCLS];
+  // The nodes of up to 16 words it freed in the block its cache of their
+  // pool and class allocates from: a list through their second words,
+  // which allocation takes first (see rc_free_at, bend_free_slot).
+  V *lifo[GC_NPOOL][GC_RQCLS];
 } Thr;
 
 void gc_park(Thr *t);
@@ -583,8 +583,10 @@ static inline void gc_handed(GcCache *k, int atomic, unsigned c, size_t n) {
   }
 }
 
-// The thread's list of freed nodes of class c (Thr.lifo) goes back to the
-// block's bitmap, free, when its cache lets go of the block.
+// The thread's list of freed nodes of a pool and class (Thr.lifo) goes
+// back to the block's bitmap, free, when its cache lets go of the block
+// (under the collector the block is then the thread's candidate, as a
+// match's free makes it: see bend_free_slot).
 static inline void rc_free_slot(uintptr_t bi, uint32_t i, unsigned c);
 void gc_lifo_flush(int atomic, unsigned c);
 
@@ -623,9 +625,15 @@ static inline V *gc_alloc_x(size_t w, int atomic, int hole) {
   V *p;
   // (The slot's allocation bit is set: see GcCache, and Thr.lifo, whose
   // slots are in the cache's block.)
-  if (atomic == 0 && c < GC_RQCLS && t->lifo[c]) {
-    p = t->lifo[c];
-    t->lifo[c] = (V *)p[1];
+  if ((atomic == 0 || atomic == 2) && c < GC_RQCLS && t->lifo[atomic][c]) {
+    p = t->lifo[atomic][c];
+#ifndef __TINYC__
+    // (an empty asm hides where p came from: without it clang -O2 did not
+    // finish compiling tests/autopar's C, a list of bare nodes popped in a
+    // loop)
+    __asm__("" : "+r"(p));
+#endif
+    t->lifo[atomic][c] = (V *)p[1];
     if (hole) { p[0] = BEND_HOLE; BEND_BARRIER(); }
   } else if (k->bump < k->end) {
     p = k->bump;
@@ -810,6 +818,21 @@ __attribute__((always_inline)) static inline void bend_free_slot(V v, unsigned w
 #endif
   (void)line;
   BEND_POISON_AT(v, sw);
+#ifndef BEND_DEBUG_POISON
+  // A node in the block the thread allocates its pool and class from goes
+  // on the thread's list (Thr.lifo), as a counted program's does (see
+  // rc_free_at): no bitmap word written (no atomic with threads), and the
+  // next allocation of the class takes the slot, in the same block.
+  if (!packed) {
+    Thr *t = thr_self;
+    unsigned pl = w >= 256 ? 2 : 0;
+    if (LIKELY(t != NULL) && (uintptr_t)t->cache[pl][sw - 2].blk == ((uintptr_t)v & ~(GC_BLK - 1))) {
+      ((V *)v)[1] = (V)t->lifo[pl][sw - 2];
+      t->lifo[pl][sw - 2] = (V *)v;
+      return;
+    }
+  }
+#endif
   // A freed slot is young when it is handed out again: the thread that
   // hands it out clears its mark (gc_next_bits). Cleared here, after the
   // allocation bit, it could be the mark of the object another thread made
@@ -1058,8 +1081,8 @@ void rc_poison(V v, unsigned w);
 // when that one is taken (gc_refill), or at the last collection's end
 // (gc_dirty_caches).
 static inline void rc_lifo_push(Thr *t, V v, unsigned c) {
-  ((V *)v)[1] = (V)t->lifo[c];
-  t->lifo[c] = (V *)v;
+  ((V *)v)[1] = (V)t->lifo[0][c];
+  t->lifo[0][c] = (V *)v;
 }
 
 // Frees object v (valid, of w words when w is not 0), whose fields were
@@ -1953,7 +1976,7 @@ V mk_str(const char *s, size_t n);
 // since a stale pointer may have marked a slot before a constant was built
 // in it (see GcCache).
 extern GcCache kc_cache[GC_NPOOL][GC_NCLS];
-extern V *kc_lifo[GC_RQCLS];
+extern V *kc_lifo[GC_NPOOL][GC_RQCLS];
 extern pthread_mutex_t kc_lock;
 extern Thr *kc_owner;
 extern int kc_depth;

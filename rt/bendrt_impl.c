@@ -321,17 +321,23 @@ V *gc_bump_word(GcCache *k, uint32_t jw, size_t sw) {
 }
 #define GC_SINCE_BATCH ((size_t)64 << 10)
 void gc_lifo_flush(int atomic, unsigned c) {
-  if (atomic != 0 || c >= GC_RQCLS) return;
+  if ((atomic != 0 && atomic != 2) || c >= GC_RQCLS) return;
   Thr *t = thr_self;
-  V *p = t->lifo[c];
-  t->lifo[c] = NULL;
+  V *p = t->lifo[atomic][c];
+  t->lifo[atomic][c] = NULL;
+  if (!p) return;
+  uintptr_t bi0 = ((uintptr_t)p - gc_hot.base) >> GC_BLK_SHIFT;
   while (p) {
     V *n = (V *)p[1];
     uintptr_t off = (uintptr_t)p - gc_hot.base, bi = off >> GC_BLK_SHIFT;
     uint64_t o = (off & (GC_BLK - 1)) - GC_HDR;
-    rc_free_slot(bi, (uint32_t)(o / (gc_cls_w[c] * sizeof(V))), c);
+    uint32_t i = (uint32_t)(o / (gc_cls_w[c] * sizeof(V)));
+    if (gc_hot.rc) rc_free_slot(bi, i, c);
+    else if (gc_hot.mt) __atomic_fetch_and(&gc_abits[bi * 64 + (i >> 6)], ~(1ull << (i & 63)), __ATOMIC_RELEASE);
+    else gc_abits[bi * 64 + (i >> 6)] &= ~(1ull << (i & 63));
     p = n;
   }
+  if (!gc_hot.rc) ((uint8_t *)t->candb + ((uintptr_t)gc_base >> GC_BLK_SHIFT))[bi0] = (uint8_t)((atomic == 2 ? 16 : 0) + c + 1);
 }
 #define GC_SHR_TOP 128
 GcBlk *gc_shr[GC_NPOOL][GC_NCLS];
@@ -461,10 +467,10 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
     pthread_mutex_unlock(&gc_lock);
   }
   k->blk = b;
-  // Counted, a node class's block is dirty for the next collection: the
-  // thread's list (Thr.lifo) hands out slots of objects freed in it, whose
-  // marks stay (see rc_lifo_push).
-  if (gc_hot.rc && atomic == 0 && c < GC_RQCLS) __atomic_store_n(&gc_dirty[gc_bi(b)], 1, __ATOMIC_RELAXED);
+  // A node class's block is dirty for the next collection: the thread's
+  // list (Thr.lifo) hands out slots of objects freed in it, whose marks
+  // stay (see rc_lifo_push).
+  if ((atomic == 0 || atomic == 2) && c < GC_RQCLS) __atomic_store_n(&gc_dirty[gc_bi(b)], 1, __ATOMIC_RELAXED);
   k->abits = GC_ALLOC(b);
   // (A slot's allocation bit is set when the slot goes to the cache: see
   // GcCache for a stale pointer that marks it before it is handed out.)
@@ -760,8 +766,9 @@ size_t rc_live(void) {
       }
   // (and the freed nodes on the threads' lists, Thr.lifo)
   for (int i = 0; i < gc_nthr; i++)
-    for (int c = 0; c < GC_RQCLS; c++)
-      for (V *p = gc_thrs[i]->lifo[c]; p; p = (V *)p[1]) n--;
+    for (int a = 0; a < GC_NPOOL; a++)
+      for (int c = 0; c < GC_RQCLS; c++)
+        for (V *p = gc_thrs[i]->lifo[a][c]; p; p = (V *)p[1]) n--;
   return n;
 }
 void gc_root_add_locked(V *p, size_t n) {
@@ -1396,7 +1403,7 @@ V mk_str(const char *s, size_t n) {
 #define STRC(c, lit) (__atomic_load_n(&(c), __ATOMIC_ACQUIRE) ? (c) : str_cache(&(c), lit, sizeof(lit) - 1))
 #define mk_str_heap mk_str
 GcCache kc_cache[GC_NPOOL][GC_NCLS];
-V *kc_lifo[GC_RQCLS];
+V *kc_lifo[GC_NPOOL][GC_RQCLS];
 pthread_mutex_t kc_lock = PTHREAD_MUTEX_INITIALIZER;
 Thr *kc_owner;
 int kc_depth;
@@ -1407,11 +1414,12 @@ void kc_swap(Thr *t) {
       t->cache[a][c] = kc_cache[a][c];
       kc_cache[a][c] = k;
     }
-  for (int c = 0; c < GC_RQCLS; c++) {
-    V *l = t->lifo[c];
-    t->lifo[c] = kc_lifo[c];
-    kc_lifo[c] = l;
-  }
+  for (int a = 0; a < GC_NPOOL; a++)
+    for (int c = 0; c < GC_RQCLS; c++) {
+      V *l = t->lifo[a][c];
+      t->lifo[a][c] = kc_lifo[a][c];
+      kc_lifo[a][c] = l;
+    }
 }
 void konst_in(void) {
   Thr *t = thr_self;
