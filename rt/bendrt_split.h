@@ -367,6 +367,10 @@ extern size_t gc_limit;
 extern size_t gc_limit_min;
 extern double gc_minor_k;
 extern size_t gc_slack;
+// gc_refill takes a block for reuse when nobj / gc_claim_frac of its slots
+// are free (at least one). A smaller fraction finds more holes, which holds a
+// big heap's growth down but hands out slots out of order (0: any free slot).
+extern unsigned gc_claim_frac;
 extern unsigned gc_grow;
 extern int gc_big;
 extern double gc_t_end;
@@ -736,8 +740,9 @@ __attribute__((noinline)) void bend_deep(V v, unsigned w);
 
 // A match opened node v, of w words, after reading its fields: 1 when it is
 // shared (its fields are then shared too), else 0 and its slot is freed, and
-// its block a reuse candidate for its class (gc_refill takes it when a 5th of
-// it is free). Nodes of up to 16 words are in small blocks whose slots are
+// its block a reuse candidate for its class (gc_refill takes it when the
+// free fraction gc_claim_frac asks for, an eighth of it at the default).
+// Nodes of up to 16 words are in small blocks whose slots are
 // exactly their size; larger ones are never freed.
 // The tag word is read with acquire, with threads or not (on arm64 a load
 // as cheap as a plain one, where a test of gc_hot.mt was three instructions

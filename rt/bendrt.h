@@ -383,6 +383,10 @@ static size_t gc_limit = (size_t)8 << 20;
 static size_t gc_limit_min = (size_t)8 << 20;
 static double gc_minor_k = 2.0, gc_factor = 0.5;
 static size_t gc_slack = (size_t)8 << 20;
+// gc_refill takes a block for reuse when nobj / gc_claim_frac of its slots
+// are free (at least one). A smaller fraction finds more holes, which holds a
+// big heap's growth down but hands out slots out of order (0: any free slot).
+static unsigned gc_claim_frac = 8;
 static unsigned gc_grow = 1, gc_grow_max = 32, gc_kept_run;
 static int gc_big;  // gc_grow went to gc_grow_max for what lives on
 static double gc_t_end, gc_t_run, gc_t_stop;  // seconds (see gc_now)
@@ -565,6 +569,7 @@ static void gc_init(void) {
   if (getenv("BEND_GC_MINOR")) gc_minor_k = atof(getenv("BEND_GC_MINOR"));
   if (getenv("BEND_GC_FACTOR")) gc_factor = atof(getenv("BEND_GC_FACTOR"));
   if (getenv("BEND_GC_SLACK_MB")) gc_slack = (size_t)atol(getenv("BEND_GC_SLACK_MB")) << 20;
+  if (getenv("BEND_GC_CLAIM")) gc_claim_frac = (unsigned)atoi(getenv("BEND_GC_CLAIM"));
   const char *m = getenv("BEND_GC_MIN_MB");
   // (a heap size set this way stays: BEND_GC_GROW=n lets it grow n times)
   if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20, gc_grow_max = 1;
@@ -861,7 +866,8 @@ __attribute__((noinline)) static V *gc_refill(GcCache *k, int atomic, unsigned c
         if (!__atomic_compare_exchange_n(&q->owned, &z, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) continue;
         uint32_t used = 0;
         for (int j = 0; j < GC_BW; j++) used += (uint32_t)__builtin_popcountll(GC_ALLOC(q)[j]);
-        if (q->nobj - used < (q->nobj / 5 ? q->nobj / 5 : 1)) { __atomic_fetch_sub(&q->owned, 1, __ATOMIC_RELEASE); continue; }
+        uint32_t need = gc_claim_frac ? q->nobj / gc_claim_frac : 1;
+        if (q->nobj - used < (need ? need : 1)) { __atomic_fetch_sub(&q->owned, 1, __ATOMIC_RELEASE); continue; }
         b = q;
         k->reuse = 1;
         t->rcur[c] = (uint32_t)bi + 1;
@@ -1124,8 +1130,9 @@ __attribute__((noinline)) static void bend_deep(V v, unsigned w) {
 
 // A match opened node v, of w words, after reading its fields: 1 when it is
 // shared (its fields are then shared too), else 0 and its slot is freed, and
-// its block a reuse candidate for its class (gc_refill takes it when a 5th of
-// it is free). Nodes of up to 16 words are in small blocks whose slots are
+// its block a reuse candidate for its class (gc_refill takes it when the
+// free fraction gc_claim_frac asks for, an eighth of it at the default).
+// Nodes of up to 16 words are in small blocks whose slots are
 // exactly their size; larger ones are never freed.
 // The tag word is read with acquire, with threads or not (on arm64 a load
 // as cheap as a plain one, where a test of gc_hot.mt was three instructions

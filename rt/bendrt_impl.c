@@ -136,6 +136,7 @@ size_t gc_limit = (size_t)8 << 20;
 size_t gc_limit_min = (size_t)8 << 20;
 double gc_minor_k = 2.0, gc_factor = 0.5;
 size_t gc_slack = (size_t)8 << 20;
+unsigned gc_claim_frac = 8;
 unsigned gc_grow = 1, gc_grow_max = 32, gc_kept_run;
 int gc_big;  // gc_grow went to gc_grow_max for what lives on
 double gc_t_end, gc_t_run, gc_t_stop;  // seconds (see gc_now)
@@ -242,6 +243,7 @@ void gc_init(void) {
   if (getenv("BEND_GC_MINOR")) gc_minor_k = atof(getenv("BEND_GC_MINOR"));
   if (getenv("BEND_GC_FACTOR")) gc_factor = atof(getenv("BEND_GC_FACTOR"));
   if (getenv("BEND_GC_SLACK_MB")) gc_slack = (size_t)atol(getenv("BEND_GC_SLACK_MB")) << 20;
+  if (getenv("BEND_GC_CLAIM")) gc_claim_frac = (unsigned)atoi(getenv("BEND_GC_CLAIM"));
   const char *m = getenv("BEND_GC_MIN_MB");
   // (a heap size set this way stays: BEND_GC_GROW=n lets it grow n times)
   if (m && atol(m) > 0) gc_limit = gc_limit_min = (size_t)atol(m) << 20, gc_grow_max = 1;
@@ -446,7 +448,8 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
         if (!__atomic_compare_exchange_n(&q->owned, &z, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) continue;
         uint32_t used = 0;
         for (int j = 0; j < GC_BW; j++) used += (uint32_t)__builtin_popcountll(GC_ALLOC(q)[j]);
-        if (q->nobj - used < (q->nobj / 5 ? q->nobj / 5 : 1)) { __atomic_fetch_sub(&q->owned, 1, __ATOMIC_RELEASE); continue; }
+        uint32_t need = gc_claim_frac ? q->nobj / gc_claim_frac : 1;
+        if (q->nobj - used < (need ? need : 1)) { __atomic_fetch_sub(&q->owned, 1, __ATOMIC_RELEASE); continue; }
         b = q;
         k->reuse = 1;
         t->rcur[c] = (uint32_t)bi + 1;
