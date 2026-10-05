@@ -17992,6 +17992,28 @@ def KX.tail.set(+k: U32, +n: Nat, +i: U32) -> String:
 
 # The flat compiler (KX_ functions), one def (fuel: its calls, which reach
 # other defs): KXSel picks the step.
+# A Bool match on a scrutinee with a True and a False case, no bindings.
+type KBS is Data:
+  KBS{scr: Core.Expr, t: Core.Expr, f: Core.Expr}
+
+def KX.bsel(+ss: List<&2, Core.Expr>, cs: List<&2, Core.Expr>) -> Maybe<&2, KBS>:
+  match ss cs:
+    case v <> Nil{} Core.ECase{+p0, +a} <> Core.ECase{+p1, +b} <> Nil{}:
+      Bool.pick(Maybe<&2, KBS>, Bool.and(CH.bp(p0, "False"), CH.bp(p1, "True")), Some{KBS{v, b, a}},
+        Bool.pick(Maybe<&2, KBS>, Bool.and(CH.bp(p0, "True"), CH.bp(p1, "False")), Some{KBS{v, a, b}}, None{}))
+    case xs cases:
+      None{}
+
+def KX.btrue.of(c: Maybe<&2, CInfo>) -> U32:
+  match c:
+    case Some{CInfo{tag, ar, kind, single}}:
+      tag
+    case None{}:
+      1
+
+def KX.btrue(+g: G) -> U32:
+  KX.btrue.of(G.ctor(g, "True"))
+
 type KXSel is Type:
   KXSDefGo{g: G, name: String, mask: List<&2, Bool>, d: Decl}
   KXSDef{g: G, name: String, info: DInfo}
@@ -18006,6 +18028,7 @@ type KXSel is Type:
   KXSVarGlobal{g: G, name: String, info: DInfo}
   KXSVarFound{g: G, name: String, m: Maybe<&2, String>}
   KXSBlock{g: G, env: Env(), e: Core.Expr}
+  KXSBsel{g: G, env: Env(), e: Core.Expr, b: Maybe<&2, KBS>}
   KXSExpr{g: G, env: Env(), e: Core.Expr}
   KXSScrs{g: G, env: Env(), xs: List<&2, Core.Expr>}
   KXSCases{g: G, env: Env(), self: KSelf, tgt: KTgt, cs: List<&2, String>, cases: List<&2, Core.Expr>}
@@ -18056,6 +18079,8 @@ def KXSel.ty(k: KXSel) -> Type:
     case KXSVarFound{g, name, m}:
       KM(Doc)
     case KXSBlock{g, env, e}:
+      KM(Doc)
+    case KXSBsel{g, env, e, b}:
       KM(Doc)
     case KXSExpr{g, env, e}:
       KM(Doc)
@@ -18127,6 +18152,8 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
         case KXSVarFound{g, name, m}:
           K.out(Doc, DNil{})
         case KXSBlock{g, env, e}:
+          K.out(Doc, DNil{})
+        case KXSBsel{g, env, e, b}:
           K.out(Doc, DNil{})
         case KXSExpr{g, env, e}:
           K.out(Doc, DNil{})
@@ -18251,6 +18278,21 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
               KM.pure(Doc, DStr{c})
             case None{}:
               KM.if(Doc, Str.eq(name, "_"), KM.pure(Doc, DStr{"0"}), KX.go(fu, KXSVarGlobal{g, name, G.def(g, name)}))
+        # A match on a Bool whose arms are expressions is a conditional
+        # expression: the arms' own types decide the result's (a block's
+        # KW temporary made every U32 select a 64-bit one: kmeans' 8
+        # distances and 7 minimums, 3-7x slower per point).
+        case KXSBsel{+g, +env, e, b}:
+          match b:
+            case Some{KBS{+v, +t, +f}}:
+              do KM<Doc>:
+                sd : Doc <- KX.go(fu, KXSExpr{g, env, v})
+                td : Doc <- KX.go(fu, KXSExpr{g, env, t})
+                fd : Doc <- KX.go(fu, KXSExpr{g, env, f})
+                return Doc.list([DStr{"(("}, sd, DStr{") == KIMM(" ++ U32.show(KX.btrue(g)) ++ ") ? "}, td, DStr{" : "}, fd,
+                  DStr{")"}])
+            case None{}:
+              KX.go(fu, KXSBlock{g, env, e})
         case KXSBlock{+g, +env, e}:
           do KM<Doc>:
             +k : U32 <- K.fresh()
@@ -18274,8 +18316,8 @@ def KX.go(n: Nat, k: KXSel) -> KXSel.ty(k):
               KX.go(fu, KXSCtor{g, env, name, G.ctor(g, name), args})
             case Core.ELet{p, v, body}:
               KX.go(fu, KXSBlock{g, env, Core.ELet{p, v, body}})
-            case Core.EMatch{scrs, cases}:
-              KX.go(fu, KXSBlock{g, env, Core.EMatch{scrs, cases}})
+            case Core.EMatch{+scrs, +cases}:
+              KX.go(fu, KXSBsel{g, env, Core.EMatch{scrs, cases}, KX.bsel(scrs, cases)})
             case Core.ESucc{k, x}:
               do KM<Doc>:
                 d : Doc <- KX.go(fu, KXSExpr{g, env, x})
