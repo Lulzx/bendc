@@ -441,6 +441,9 @@ extern int gc_mt;
 // counting").
 extern int bend_rc_req;
 extern int bend_rc_trace_req;
+// A program with headerless (kind-8) constructors and reference counting: a
+// bare node's count lives in its gc_bflags byte (see "Bare nodes").
+extern int bend_hless_req;
 // What bend_take and bend_share read, together (one address to load).
 typedef struct GcHot {
   uintptr_t base, span;  // the heap: gc_base, and gc_top in bytes
@@ -463,6 +466,9 @@ typedef struct GcHot {
   // Some bare node may be shared (a block got BK_SH, or the device's arena
   // was set): until then a take of a bare node tests no block's byte.
   int bsh;
+  // A counted program with kind-8 constructors (bend_hless_req): a bare
+  // node's count is its gc_bflags byte (see "Reference counting").
+  int rcb;
 } GcHot;
 extern GcHot gc_hot;
 extern GcRange *gc_roots;
@@ -836,6 +842,9 @@ __attribute__((always_inline)) static inline void bend_free_slot(V v, unsigned w
   return;
 #endif
   (void)line;
+  // (a counted program's bare node: its count byte goes with the slot)
+  if (UNLIKELY(w >= 256) && gc_hot.rcb)
+    __atomic_store_n((uint8_t *)(h->bflags + ((uintptr_t)v >> 4)), 0, __ATOMIC_RELAXED);
   BEND_POISON_AT(v, sw);
 #ifndef BEND_DEBUG_POISON
   // A node in the block the thread allocates its pool and class from goes
@@ -991,6 +1000,50 @@ static inline void bend_open(V t, V *o, unsigned k, int take) {
 // The count and the immortal bit: 0 for an object with one reference.
 #define RC_REFS(w0) (((w0) >> 48) & 0x7fff)
 
+// A counted bare node (bend_hless_req) has no tag word, so its count of
+// references past its first is its gc_bflags byte (which under the collector
+// holds its shared flags, bits 0 and 1): bits 2 to 6 (bit 62 of a word
+// count's is RC_STICKY there), bit 7: the count reached its top and the node
+// is never freed. Bit 0 is RC_TS (only a marked node's count changes
+// atomically), bit 1 bend_deep_bare's mark (never set under rc). A free
+// slot's byte is 0 (rc_free_bare, bend_free_slot, gc_sweep).
+#define BARE_ONE ((uint8_t)1 << 2)
+#define BARE_CNT ((uint8_t)0x7c)
+#define BARE_TOP (BARE_CNT >> 2)
+#define BARE_SAT ((uint8_t)1 << 7)
+#define BARE_TS ((uint8_t)1)
+static inline uint8_t *rc_bare_flags(V v) { return (uint8_t *)(gc_hot.bflags + ((uintptr_t)v >> 4)); }
+// v is a bare node: a counted program with kind-8 constructors, and v in a
+// bare block (BK_BARE: pool 2 of the heap; a value in the device's arena is
+// in none, and numbers are below the heap).
+static inline int rc_bare(V v) {
+  return gc_hot.rcb && (gc_hot.bk[(uintptr_t)v >> GC_BLK_SHIFT] & BK_BARE);
+}
+// n more references to bare node v (rc_dup_obj's count, one byte).
+static inline void rc_dup_bare(V v, V n) {
+  uint8_t *f = rc_bare_flags(v);
+  uint8_t fl = __atomic_load_n(f, __ATOMIC_RELAXED);
+  if (fl & BARE_SAT) return;
+  if (n > BARE_TOP - ((fl & BARE_CNT) >> 2)) {
+    __atomic_fetch_or(f, BARE_SAT, __ATOMIC_RELAXED);
+    return;
+  }
+  if (fl & BARE_TS) __atomic_fetch_add(f, (uint8_t)(n << 2), __ATOMIC_RELAXED);
+  else *f = (uint8_t)(fl + (uint8_t)(n << 2));
+}
+// Gives up a reference to bare node v: 1 when it was the last.
+static inline int rc_release_bare(V v) {
+  uint8_t *f = rc_bare_flags(v);
+  uint8_t fl = __atomic_load_n(f, __ATOMIC_RELAXED);
+  if ((fl & BARE_CNT) == 0) {
+    if (fl & BARE_TS) atomic_thread_fence(memory_order_acquire);
+    return 1;
+  }
+  if (fl & BARE_SAT) return 0;
+  if (!(fl & BARE_TS)) { *f = (uint8_t)(fl - BARE_ONE); return 0; }
+  return ((__atomic_fetch_sub(f, BARE_ONE, __ATOMIC_ACQ_REL) & BARE_CNT) >> 2) == 0;
+}
+
 // off (from the heap's base) is the start of an allocated object.
 static inline int rc_valid(uintptr_t off) {
   uintptr_t bi = off >> GC_BLK_SHIFT;
@@ -1017,6 +1070,10 @@ static inline int rc_obj(V v) {
 }
 
 static inline void rc_dup_obj(V v, V n) {
+  if (UNLIKELY(gc_hot.rcb) && rc_bare(v)) {
+    rc_dup_bare(v, n);
+    return;
+  }
   V *p = (V *)v;
   V w0 = __atomic_load_n(p, __ATOMIC_RELAXED);
   if (w0 & RC_STICKY) return;
@@ -1034,6 +1091,11 @@ void rc_publish(V v);
 // reach is marked already; the mark here is for a holder that is not one.)
 static inline void rc_dup_in(V x, V ts) {
   if (!rc_obj(x)) return;
+  if (UNLIKELY(gc_hot.rcb) && rc_bare(x)) {
+    if (ts && !(__atomic_load_n(rc_bare_flags(x), __ATOMIC_RELAXED) & (BARE_TS | BARE_SAT))) rc_publish(x);
+    rc_dup_bare(x, 1);
+    return;
+  }
   if (ts && !(__atomic_load_n((V *)x, __ATOMIC_RELAXED) & (RC_TS | RC_STICKY))) rc_publish(x);
   rc_dup_obj(x, 1);
 }
@@ -1057,6 +1119,7 @@ static inline V rc_dupv(V v) { rc_dup(v); return v; }
 // Gives up a reference to object v: 1 when it was the last (v must then be
 // freed).
 static inline int rc_release(V v) {
+  if (UNLIKELY(gc_hot.rcb) && rc_bare(v)) return rc_release_bare(v);
   V *p = (V *)v;
   V w0 = __atomic_load_n(p, __ATOMIC_RELAXED);
   if (RC_REFS(w0) == 0) {
@@ -1141,6 +1204,32 @@ static inline void rc_free_at(V v, unsigned w) {
   else rc_free_slot(bi, (uint32_t)((o * gc_meta[bi].recip) >> 32), gc_meta[bi].cls);
 }
 
+// Frees the slot of a counted bare node of n fields, as rc_free_at for a
+// node with a tag word, its gc_bflags byte cleared: the next node built in
+// the slot, whose count then starts at zero, is one reference.
+static inline void rc_free_bare(V v, unsigned n) {
+  unsigned sw = n < 2 ? 2 : n;
+  uint8_t *f = rc_bare_flags(v);
+#ifdef BEND_DEBUG_FREE
+  (void)f;
+  rc_poison(v, sw);
+  return;
+#endif
+  __atomic_store_n(f, 0, __ATOMIC_RELAXED);
+  uintptr_t off = (uintptr_t)v - gc_hot.base;
+  uintptr_t bi = off >> GC_BLK_SHIFT;
+  // (as rc_free_at: the block the thread allocates the class from keeps the
+  // slot, marked, on its list)
+  Thr *t = thr_self;
+  if (LIKELY(t != NULL) && (uintptr_t)t->cache[2][sw - 2].blk == ((uintptr_t)v & ~(GC_BLK - 1))) {
+    ((V *)v)[1] = (V)t->lifo[2][sw - 2];
+    t->lifo[2][sw - 2] = (V *)v;
+    return;
+  }
+  uint64_t o = (off & (GC_BLK - 1)) - GC_HDR;
+  rc_free_slot(bi, (uint32_t)(o / (sw * sizeof(V))), sw - 2);
+}
+
 void rc_push(Thr *t, V v);
 
 // Frees v, whose last reference went, and drops its fields: every word but
@@ -1150,6 +1239,13 @@ void rc_push(Thr *t, V v);
 // Large objects stream their fields. A pending pair (index,parent|2)
 // resumes one parent after its child dies; aligned object pointers have bit1
 // clear. The parent stays allocated/rooted until all its fields are dropped.
+// Frees a node v, w its block's words, whose fields were all released: a
+// bare node has no tag word to step over and its count byte is cleared.
+static inline void rc_free_node(V v, int bare, size_t w) {
+  if (bare) rc_free_bare(v, (unsigned)w);
+  else rc_free_at(v, 0);
+}
+
 __attribute__((noinline)) void rc_free_obj(V v);
 
 // Drops a reference to v.
@@ -1160,6 +1256,23 @@ static inline void rc_drop(V v) {
 // Drops n references to v (a case that uses v fewer times than another).
 static inline void rc_dropn(V v, V n) {
   if (!rc_obj(v)) return;
+  if (UNLIKELY(gc_hot.rcb) && rc_bare(v)) {
+    uint8_t *f = rc_bare_flags(v);
+    uint8_t fl = __atomic_load_n(f, __ATOMIC_RELAXED);
+    // (all but the last at once: v outlives them)
+    if (n > 1 && !(fl & BARE_SAT)) {
+      if (((fl & BARE_CNT) >> 2) >= n - 1) {
+        if (fl & BARE_TS) __atomic_fetch_sub(f, (uint8_t)((n - 1) << 2), __ATOMIC_RELEASE);
+        else *f = (uint8_t)(fl - (uint8_t)((n - 1) << 2));
+      } else {
+        // (n past the count: none of it can be given up)
+        __atomic_fetch_or(f, BARE_SAT, __ATOMIC_RELAXED);
+        return;
+      }
+    }
+    if (rc_release_bare(v)) rc_free_obj(v);
+    return;
+  }
   V *p = (V *)v;
   // (all but the last at once: v outlives them)
   V w0 = __atomic_load_n(p, __ATOMIC_RELAXED);
@@ -1174,20 +1287,54 @@ static inline void rc_dropn(V v, V n) {
 // loses one (freed, fields and all, when that was the last).
 __attribute__((noinline)) void rc_take_shared(V v, unsigned w);
 
+// A shared bare node of n fields opened (rc_take of one): its fields get a
+// reference each, then it loses one.
+__attribute__((noinline)) void rc_take_shared_bare(V v, unsigned n);
+
 static inline int rc_unique(V v) {
+  if (UNLIKELY(gc_hot.rcb) && rc_bare(v)) {
+    uint8_t fl = __atomic_load_n(rc_bare_flags(v), __ATOMIC_RELAXED);
+    if ((fl & BARE_CNT) || (fl & BARE_SAT)) return 0;
+    if (fl & BARE_TS) atomic_thread_fence(memory_order_acquire);
+    return 1;
+  }
   V w0 = __atomic_load_n((V *)v, __ATOMIC_RELAXED);
   if (RC_REFS(w0)) return 0;
   if (w0 & RC_TS) atomic_thread_fence(memory_order_acquire);
   return 1;
 }
 
+// A match opened bare node v of n fields (a take's w is 256 + n).
+static inline void rc_take_bare(V v, unsigned n) {
+  if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) return;
+  if (LIKELY(rc_unique(v))) rc_free_bare(v, n);
+  else rc_take_shared_bare(v, n);
+}
+
 // A match opened node v, of w words, after reading its fields: its fields
 // are the pattern's now.
 static inline void rc_take(V v, unsigned w) {
   if (bend_rp_size(v,w)) w -= RP_SIZE;
+  // (w >= 256 is a bare node's size, but a node with more than 255 fields
+  // has a size that large too: the block's pool tells them apart)
+  if (w >= 256 && rc_bare(v)) { rc_take_bare(v, w - 256); return; }
   if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) return;
   if (LIKELY(rc_unique(v))) rc_free_at(v, w);
   else rc_take_shared(v, w);
+}
+
+// A match opened bare node v of n fields (a reuse take's w is 256 + n).
+static inline V rc_take_ru_bare(V v, unsigned n) {
+  if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) return 0;
+  if (LIKELY(rc_unique(v))) {
+#ifdef BEND_DEBUG_FREE
+    rc_free_bare(v, n);
+    return 0;
+#endif
+    return v;
+  }
+  rc_take_shared_bare(v, n);
+  return 0;
 }
 
 // As rc_take, but a node with one reference is not freed: its slot is
@@ -1195,6 +1342,7 @@ static inline void rc_take(V v, unsigned w) {
 // (reuse, see RU); 0 when the node was shared.
 static inline V rc_take_ru(V v, unsigned w) {
   if (bend_rp_size(v,w)) w -= RP_SIZE;
+  if (w >= 256 && rc_bare(v)) return rc_take_ru_bare(v, w - 256);
   if (UNLIKELY((uintptr_t)v - gc_hot.base >= gc_hot.span)) return 0;
   if (LIKELY(rc_unique(v))) {
 #ifdef BEND_DEBUG_FREE
@@ -1572,7 +1720,8 @@ static inline V CRH2(V u, V t, V a, V b) { return CR2(u, t, a, b); }
 static inline V CRH3(V u, V t, V a, V b, V c) { return CR3(u, t, a, b, c); }
 static inline V CRH4(V u, V t, V a, V b, V c, V d) { return CR4(u, t, a, b, c, d); }
 static inline V CRHN(V u, V t, int n, const V *xs) { return CRN(u, t, n, xs); }
-#define RUF(u, w) do { if (u) rc_free_at(u, w); } while (0)
+// (a bare token's w is 256 + its fields: see rc_take_ru)
+#define RUF(u, w) do { if (u) { if ((w) >= 256 && rc_bare((V)(u))) rc_free_bare((u), (w) - 256); else rc_free_at(u, w); } } while (0)
 
 // Reuse under the collector (matches free, not counted): bend_take_ru is
 // bend_take, but a node that was not shared keeps its slot, answered as the

@@ -172,6 +172,7 @@ uint8_t *gc_bflags;
 int gc_mt;
 int bend_rc_req;
 int bend_rc_trace_req;
+int bend_hless_req;
 GcHot gc_hot;
 GcRange *gc_roots;
 size_t gc_nroots, gc_caproots;
@@ -234,7 +235,8 @@ void gc_init(void) {
   gc_bk = gc_reserve((size_t)1 << (48 - GC_BLK_SHIFT), NULL);
   gc_hot = (GcHot){(uintptr_t)gc_base, 0,
     (uintptr_t)gc_abits - ((uintptr_t)gc_base >> GC_BLK_SHIFT) * GC_BW * sizeof(uint64_t), 0, 0, bend_rc_req, 0,
-    (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT), gc_bk, (uintptr_t)gc_bflags - ((uintptr_t)gc_base >> 4)};
+    (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT), gc_bk, (uintptr_t)gc_bflags - ((uintptr_t)gc_base >> 4),
+    0, bend_rc_req && bend_hless_req};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
     gc_cls_of[w] = (uint8_t)c;
@@ -303,7 +305,7 @@ GcBlk *gc_new_small(int atomic, unsigned c) {
   }
   // New flag pages are already zero. Preserve old block sharing history
   // until stale flags have been cleared, including changes of pool.
-  if (__atomic_load_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], __ATOMIC_RELAXED) & BK_SH) {
+  if (__atomic_load_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], __ATOMIC_RELAXED) & (BK_SH | BK_BARE)) {
     memset(gc_bflags + at * (GC_BLK / (2 * sizeof(V))), 0, GC_BLK / (2 * sizeof(V)));
   }
   __atomic_store_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], atomic == 2 ? BK_BARE : atomic == 3 ? BK_RP : 0, __ATOMIC_RELAXED);
@@ -516,7 +518,7 @@ __attribute__((noinline)) V *gc_alloc_large(size_t w, int atomic) {
   *GC_META(b) = (GcMeta){0, 1, 0, 0};
   for (size_t j = 0; j < n; j++) {
     uintptr_t bi = ((uintptr_t)b >> GC_BLK_SHIFT) + j;
-    if (gc_bk[bi] & BK_SH) memset(gc_bflags + (at + j) * (GC_BLK / (2 * sizeof(V))), 0, GC_BLK / (2 * sizeof(V)));
+    if (gc_bk[bi] & (BK_SH | BK_BARE)) memset(gc_bflags + (at + j) * (GC_BLK / (2 * sizeof(V))), 0, GC_BLK / (2 * sizeof(V)));
     gc_bk[bi] = 0;
   }
   b->words = (uint32_t)w;
@@ -630,6 +632,11 @@ __attribute__((noinline)) int bend_deep_bare(V v, unsigned n, uint8_t *f) {
 #define RC_TS ((V)1 << 63)
 #define RC_ADDR (RC_ONE - 1)
 #define RC_REFS(w0) (((w0) >> 48) & 0x7fff)
+#define BARE_ONE ((uint8_t)1 << 2)
+#define BARE_CNT ((uint8_t)0x7c)
+#define BARE_TOP (BARE_CNT >> 2)
+#define BARE_SAT ((uint8_t)1 << 7)
+#define BARE_TS ((uint8_t)1)
 #define rc_bmark() 0
 #define RC_TMP(...) ((V)(V[]){__VA_ARGS__})
 #define RC_TB(b, i, ...) ((i) ^= 1, (V)memcpy((b)[i], (V[]){__VA_ARGS__}, sizeof((V[]){__VA_ARGS__})))
@@ -688,30 +695,33 @@ again:;
     }
     uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
     size_t w = gc_kind[bi] == 1 ? gc_meta[bi].words : gc_blk(bi)->words;
+    // (a bare node's fields are all its words: no tag word to step over)
+    int bare = gc_blk(bi)->pool == 2;
+    if (bare) start = 0;
     V *p = (V *)v;
-    if (gc_blk(bi)->pool != 3 && ARR_W0_NW(p[0])) w = 1;
+    if (!bare && gc_blk(bi)->pool != 3 && ARR_W0_NW(p[0])) w = 1;
     if (w>=64) {
       for (size_t j=start;j<w;j++) {
         V x=p[j];p[j]=0;BEND_BARRIER();
         if (rc_obj(x) && rc_release(x)) {
-          if (j+1==w) rc_free_at(v,0);
+          if (j+1==w) rc_free_node(v,bare,w);
           else {rc_push(t,j+1);rc_push(t,v|2);}
           v=x;goto again;
         }
       }
     } else {
       V next=0;
-      for(size_t j=1;j<w;j++) {
+      for(size_t j=start;j<w;j++) {
         V x=p[j];
         if(rc_obj(x)&&rc_release(x)) {
           if(next)rc_push(t,x);else next=x;
         }
       }
-      rc_free_at(v,0);
+      rc_free_node(v,bare,w);
       if(next){v=next;continue;}
       goto pop;
     }
-    rc_free_at(v,0);
+    rc_free_node(v,bare,w);
 pop:;
     if(t->rcn==base)return;
     v=t->rcs[t->rcn-1];BEND_BARRIER();t->rcn--;
@@ -722,6 +732,12 @@ __attribute__((noinline)) void rc_take_shared(V v, unsigned w) {
   V ts = __atomic_load_n(p, __ATOMIC_RELAXED) & RC_TS;
   for (unsigned j = 1; j < w; j++) rc_dup_in(p[j], ts);
   if (rc_release(v)) rc_free_obj(v);
+}
+__attribute__((noinline)) void rc_take_shared_bare(V v, unsigned n) {
+  V *p = (V *)v;
+  V ts = __atomic_load_n(rc_bare_flags(v), __ATOMIC_RELAXED) & BARE_TS;
+  for (unsigned j = 0; j < n; j++) rc_dup_in(p[j], ts);
+  if (rc_release_bare(v)) rc_free_obj(v);
 }
 __attribute__((noinline)) void rc_take_shared_d(V v, unsigned w, V keep) {
   V *p = (V *)v;
@@ -734,7 +750,20 @@ __attribute__((noinline)) void rc_take_shared_d(V v, unsigned w, V keep) {
 #define IS_RP(v,t) (!((v)&1) && (uint16_t)((V *)(v))[0] == (t))
 #define FLP(v,i) ((i)==0 ? (V)(uint32_t)(((V *)(v))[0] >> 16) : ((V *)(v))[(i)])
 void rc_immortal(V v) {
-  while (rc_obj(v) && !(*(V *)v & RC_STICKY)) {
+  for (;;) {
+    if (!rc_obj(v)) return;
+    if (UNLIKELY(gc_hot.rcb) && rc_bare(v)) {
+      uint8_t *f = rc_bare_flags(v);
+      if (__atomic_load_n(f, __ATOMIC_RELAXED) & BARE_SAT) return;
+      __atomic_fetch_or(f, BARE_SAT, __ATOMIC_RELAXED);
+      uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
+      size_t w = gc_meta[bi].words;  // (a bare node's fields are all its words)
+      V *p = (V *)v;
+      for (size_t j = 0; j + 1 < w; j++) rc_immortal(p[j]);
+      v = p[w - 1];
+      continue;
+    }
+    if (*(V *)v & RC_STICKY) return;
     V *p = (V *)v;
     p[0] |= RC_STICKY;
     uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
@@ -749,7 +778,23 @@ __attribute__((noinline)) void rc_publish(V v) {
   size_t base = t->rcn;
   for (;;) {
     V w0;
-    if (rc_obj(v) && !((w0 = *(V *)v) & (RC_TS | RC_STICKY))) {
+    if (rc_obj(v) && UNLIKELY(gc_hot.rcb) && rc_bare(v)) {
+      uint8_t *f = rc_bare_flags(v);
+      if (!(__atomic_load_n(f, __ATOMIC_RELAXED) & (BARE_TS | BARE_SAT))) {
+        // (its block has shared nodes, as a bare share marks it: the
+        // collector then clears a freed node's byte, see gc_sweep)
+        uint8_t *k = &gc_hot.bk[(uintptr_t)v >> GC_BLK_SHIFT];
+        if (!(__atomic_load_n(k, __ATOMIC_RELAXED) & BK_SH)) {
+          __atomic_store_n(k, BK_BARE | BK_SH, __ATOMIC_RELAXED);
+          __atomic_store_n(&gc_hot.bsh, 1, __ATOMIC_RELAXED);
+        }
+        __atomic_fetch_or(f, BARE_TS, __ATOMIC_RELAXED);
+        uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
+        V *p = (V *)v;
+        for (size_t j = 0; j < gc_meta[bi].words; j++)
+          if (p[j] >= ((V)1 << 32)) rc_push(t, p[j]);
+      }
+    } else if (rc_obj(v) && !((w0 = *(V *)v) & (RC_TS | RC_STICKY))) {
       V *p = (V *)v;
       p[0] = w0 | RC_TS;
       uintptr_t bi = ((uintptr_t)v - gc_hot.base) >> GC_BLK_SHIFT;
@@ -1006,11 +1051,14 @@ void gc_sweep(void) {
       // A bare node's shared flags (gc_bflags) are clear in a free slot:
       // a match frees only nodes not shared, and a new block's are cleared
       // (gc_new_small); a shared one the sweep frees has its flags cleared
-      // here, so an allocation need not test them.
+      // here, so an allocation need not test them. A counted program's are
+      // the nodes' counts (bend_hless_req), so every block of the pool's
+      // dead slots are cleared.
       int bsh = b->pool == 2 && (gc_bk[(uintptr_t)b >> GC_BLK_SHIFT] & BK_SH);
+      int bclr = bsh || (b->pool == 2 && gc_hot.rcb);
       for (int j = 0; j < words; j++) {
         was += (size_t)__builtin_popcountll(GC_ALLOC(b)[j]);
-        for (uint64_t d = bsh ? GC_ALLOC(b)[j] & ~GC_MARK(b)[j] : 0; d; d &= d - 1) {
+        for (uint64_t d = bclr ? GC_ALLOC(b)[j] & ~GC_MARK(b)[j] : 0; d; d &= d - 1) {
           uintptr_t o = (uintptr_t)(gc_objs(b) + (size_t)(j * 64 + (unsigned)__builtin_ctzll(d)) * b->words);
           *(uint8_t *)(gc_hot.bflags + (o >> 4)) = 0;
         }
@@ -1287,7 +1335,7 @@ void thr_register(uintptr_t top) {
   __atomic_store_n(&gc_nthr, n1, __ATOMIC_RELEASE);
   pthread_mutex_unlock(&gc_lock);
 }
-#define RUF(u, w) do { if (u) rc_free_at(u, w); } while (0)
+#define RUF(u, w) do { if (u) { if ((w) >= 256 && rc_bare((V)(u))) rc_free_bare((u), (w) - 256); else rc_free_at(u, w); } } while (0)
 #define RUG(tok, w) ((tok) ? bend_ru_dirty(tok) : halloc(w))
 #define RUFG(u, w) do { if (u) bend_free_slot((u), (w), 0); } while (0)
 #define RUGB(tok, n) ((tok) ? bend_ru_dirty(tok) : halloc_b(n))

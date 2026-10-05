@@ -25950,8 +25950,27 @@ def Gen.program.fin(+g: G, gg: Unit -> G, cids: String, r: String & St) -> COut:
     Gen.dedup(Gen.effs.tagged(effs, "%clo\t"), Nil{}))},
     DStr{"\n" ++ entry}])), errs}
 
+# Whether a constructor is headerless (kind 8).
+def G.hless.kind(m: Maybe<&2, CInfo>) -> Bool:
+  match m:
+    case None{}:
+      False{}
+    case Some{CInfo{tag, ar, +kind, single}}:
+      U32.is_eq(kind, 8)
+
+# Whether any of the constructors is: a counted program tells the runtime to
+# keep bare nodes' counts in gc_bflags (see "Bare nodes").
+def G.hless.any(ks: List<&2, String>, +g: G) -> Bool:
+  match ks:
+    case Nil{}:
+      False{}
+    case +k <> t:
+      Bool.or(G.hless.kind(G.ctor(g, k)), G.hless.any(t, g))
+
 def Gen.rc.main(+g: G) -> String:
-  Bool.pick(String, Gen.rc(g), " bend_rc_req = 1; bend_rc_trace_req = BEND_RC_HYBRID_DEFAULT;", "")
+  G{ctors, defs, bodies, dps} = g
+  +hless = Bool.pick(String, G.hless.any(Map.keys(&2, CInfo, ctors), g), " bend_hless_req = 1;", "")
+  Bool.pick(String, Gen.rc(g), " bend_rc_req = 1;" ++ hless ++ " bend_rc_trace_req = BEND_RC_HYBRID_DEFAULT;", "")
 
 def Gen.entry.ty(+g: G, +ret: Core.Expr, io: Bool) -> Gen(String):
   match io:
@@ -26298,11 +26317,17 @@ def G.hless.decls(ds: List<&2, Decl>, +m: Map<&2, CInfo>, +shared: List<&2, Stri
     case d <> t:
       G.hless.decls(t, m, shared)
 
-def G.hless(on: Bool, g: G, +ds: List<&2, Decl>) -> G:
+# The shared inputs a counted program keeps bare: the count byte a take reads
+# is the side metadata headers were kept for (see G.hless.shared), so the
+# exclusion is the collector's.
+def G.hless.shared.c(+rc: Bool, +ds: List<&2, Decl>) -> List<&2, String>:
+  Bool.pick(List<&2, String>, rc, Nil{}, G.hless.shared(ds))
+
+def G.hless(on: Bool, +rc: Bool, g: G, +ds: List<&2, Decl>) -> G:
   match on:
     case True{}:
       G{ctors, defs, bodies, dps} = g
-      G{G.hless.decls(ds, ctors, List.append(&2, String, G.hless.shared(ds), G.hless.foreign(ds))), defs, bodies, dps}
+      G{G.hless.decls(ds, ctors, List.append(&2, String, G.hless.shared.c(rc, ds), G.hless.foreign(ds))), defs, bodies, dps}
     case False{}:
       g
 
@@ -26419,7 +26444,7 @@ def Gen.program.g(+ds0: List<&2, Decl>, free: Bool, par: Bool, +opt: String, +un
   +beforepar = Lo.program(opt, Arrw.decls(Pick.decls(ds0)))
   +lowered = Unb.program(unb, Unb.program(unb, Nest.program(unb, Unb.sum.program(unb, Par.auto(par, beforepar)))))
   +ds = RO.program(rc, lowered)
-  +g = Unb.sret(unb, ds, Dps.build(G.hless(Bool.and(Opt.on(opt, 104), Bool.not(rc)),
+  +g = Unb.sret(unb, ds, Dps.build(G.hless(Opt.on(opt, 104), rc,
     RP.program(rc, G.li(Opt.on(opt, 119), G.new(ds), ds), ds), ds), ds, free, rc))
   KQ.host.book(KX.flow.build(g, ds), beforepar)
 
@@ -26438,7 +26463,7 @@ def Gen.program(+ds0: List<&2, Decl>, +free: Bool, +par: Bool, +opt: String, +un
   +beforepar = Lo.program(opt, Arrw.decls(Pick.decls(ds0)))
   +lowered = Unb.program(unb, Unb.program(unb, Nest.program(unb, Unb.sum.program(unb, Par.auto(par, beforepar)))))
   +ds = RO.program(rc, lowered)
-  +g = Unb.sret(unb, ds, Dps.build(G.hless(Bool.and(Opt.on(opt, 104), Bool.not(rc)),
+  +g = Unb.sret(unb, ds, Dps.build(G.hless(Opt.on(opt, 104), rc,
     RP.program(rc, G.li(Opt.on(opt, 119), G.new(ds), ds), ds), ds), ds, free, rc))
   +hostg = KQ.host.book(KX.flow.build(g, ds), beforepar)
   Gen.program.fin(hostg, u => Gen.program.g(ds0, free, par, Gen.gpu.opt(opt), unb, rc), Gen.cids(hostg, ds, 0),
