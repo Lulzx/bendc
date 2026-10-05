@@ -245,6 +245,7 @@ typedef struct GcBlk {
   uint8_t owned;     // the caches holding it (or 1 being made, or gc_shr's 1): not swept, not claimed
   uint8_t cls;
   uint8_t pool;      // its caches' (Thr.cache): 0 nodes and closures, 1 atomic, 2 bare nodes
+  uint32_t born;     // gc_epoch when it was made (small): no marks while it is unchanged
   struct GcBlk *next;
 } GcBlk;
 
@@ -381,6 +382,8 @@ extern int gc_minor;
 extern int gc_rooting;
 extern int gc_all_major;
 extern size_t gc_count;
+// Collections begun, counted while the threads are stopped (see GcBlk.born).
+extern uint32_t gc_epoch;
 extern int gc_stats;
 extern Thr *gc_thrs[GC_MAXTHR];
 extern int gc_nthr;
@@ -546,10 +549,10 @@ static inline uint64_t gc_next_bits(GcCache *k) {
       // (When other threads run, gc_window clears the marks of the slots
       // this thread wins: in a shared block, another may take one of these
       // first and a collection mark its object old before this clears it.
-      // Before the first collection no mark is set, and the marks' pages
+      // A block made since the last collection has no marks: their pages
       // are left untouched.)
       uint64_t *m = &GC_MARK(b)[k->j];
-      if (!gc_hot.mt && gc_major_live && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
+      if (!gc_hot.mt && b->born != gc_epoch && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
       return f;
     }
   }
@@ -567,7 +570,7 @@ static inline uint64_t gc_window(GcCache *k, uint32_t jw, uint64_t f) {
   if (UNLIKELY(gc_hot.mt)) {
     f &= ~__atomic_fetch_or(&k->abits[jw], f, __ATOMIC_RELAXED);
     uint64_t *m = &GC_MARK(k->blk)[jw];
-    if (gc_major_live && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
+    if (k->blk->born != gc_epoch && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
   } else k->abits[jw] |= f;
   BEND_BARRIER();
   return f;

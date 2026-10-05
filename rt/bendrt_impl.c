@@ -149,6 +149,7 @@ int gc_minor;       // this collection keeps the marks of old objects
 int gc_rooting;     // marking from roots (not from objects)
 int gc_all_major;   // BEND_GC_MAJOR: every collection is a major one
 size_t gc_count;
+uint32_t gc_epoch;
 int gc_stats;
 Thr *gc_thrs[GC_MAXTHR];
 int gc_nthr;
@@ -310,6 +311,7 @@ GcBlk *gc_new_small(int atomic, unsigned c) {
   b->atomic = atomic == 1;
   b->cls = (uint8_t)c;
   b->owned = 1;
+  b->born = gc_epoch;
   __atomic_store_n(&gc_kind[at], 1, __ATOMIC_RELEASE);
   return b;
 }
@@ -1112,6 +1114,7 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   // A major collection forgets every mark; a minor one keeps the old
   // objects' (the heap is written only while an object is built, and the
   // exceptions are reached from roots).
+  gc_epoch++;
   gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack * (gc_big ? gc_grow_max : 1);
   if (!gc_minor) {
     for (uintptr_t bi = 0; bi < gc_top; bi++) {

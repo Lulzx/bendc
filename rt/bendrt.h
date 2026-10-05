@@ -258,6 +258,7 @@ typedef struct GcBlk {
   uint8_t owned;     // the caches holding it (or 1 being made, or gc_shr's 1): not swept, not claimed
   uint8_t cls;
   uint8_t pool;      // its caches' (Thr.cache): 0 nodes and closures, 1 atomic, 2 bare nodes
+  uint32_t born;     // gc_epoch when it was made (small): no marks while it is unchanged
   struct GcBlk *next;
 } GcBlk;
 
@@ -395,6 +396,8 @@ static int gc_minor;       // this collection keeps the marks of old objects
 static int gc_rooting;     // marking from roots (not from objects)
 static int gc_all_major;   // BEND_GC_MAJOR: every collection is a major one
 static size_t gc_count;
+// Collections begun, counted while the threads are stopped (see GcBlk.born).
+static uint32_t gc_epoch;
 static int gc_stats;
 static Thr *gc_thrs[GC_MAXTHR];
 static int gc_nthr;
@@ -645,6 +648,7 @@ static GcBlk *gc_new_small(int atomic, unsigned c) {
   b->atomic = atomic == 1;
   b->cls = (uint8_t)c;
   b->owned = 1;
+  b->born = gc_epoch;
   __atomic_store_n(&gc_kind[at], 1, __ATOMIC_RELEASE);
   return b;
 }
@@ -665,10 +669,10 @@ static inline uint64_t gc_next_bits(GcCache *k) {
       // (When other threads run, gc_window clears the marks of the slots
       // this thread wins: in a shared block, another may take one of these
       // first and a collection mark its object old before this clears it.
-      // Before the first collection no mark is set, and the marks' pages
+      // A block made since the last collection has no marks: their pages
       // are left untouched.)
       uint64_t *m = &GC_MARK(b)[k->j];
-      if (!gc_hot.mt && gc_major_live && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
+      if (!gc_hot.mt && b->born != gc_epoch && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
       return f;
     }
   }
@@ -686,7 +690,7 @@ static inline uint64_t gc_window(GcCache *k, uint32_t jw, uint64_t f) {
   if (UNLIKELY(gc_hot.mt)) {
     f &= ~__atomic_fetch_or(&k->abits[jw], f, __ATOMIC_RELAXED);
     uint64_t *m = &GC_MARK(k->blk)[jw];
-    if (gc_major_live && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
+    if (k->blk->born != gc_epoch && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
   } else k->abits[jw] |= f;
   BEND_BARRIER();
   return f;
@@ -2281,6 +2285,7 @@ __attribute__((noinline)) static void gc_collect_locked(void) {
   // A major collection forgets every mark; a minor one keeps the old
   // objects' (the heap is written only while an object is built, and the
   // exceptions are reached from roots).
+  gc_epoch++;
   gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack * (gc_big ? gc_grow_max : 1);
   if (!gc_minor) {
     for (uintptr_t bi = 0; bi < gc_top; bi++) {
