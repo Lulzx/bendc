@@ -38,8 +38,11 @@ static V scan_main(void) {
         (unsigned long long)v,item.depth,(unsigned long long)item.path);
       scan_failed=1;break;
     }
+    // A bare node's size word: K_BARE, a size of 2 (left and right), and the
+    // flags K_FREE packs beside the size (K_SHR, and the KQ epoch in bits
+    // 32..55; neither says the node is anything but bare).
     KW h=arena?((KW *)v)[-1]:0,a=((V *)v)[0],b=((V *)v)[1];
-    if ((arena && h!=(K_BARE|2)) || sp+2>64 || item.depth>=32) {
+    if ((arena && ((h&0xffffffffu)!=2 || !(h&K_BARE))) || sp+2>64 || item.depth>=32) {
       fprintf(stderr,"pin scan: invalid node offset=%llx header=%016llx left=%016llx right=%016llx depth=%u path=%llx\n",
         (unsigned long long)offset,(unsigned long long)h,(unsigned long long)a,(unsigned long long)b,
         item.depth,(unsigned long long)item.path);
