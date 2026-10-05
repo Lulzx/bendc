@@ -470,11 +470,13 @@ static int gpu_setup(const GpuProg *prog) {
   if (bend_gpu_mb > 64) gpu_Hn = ((size_t)bend_gpu_mb << 20) < gpu_Hmax ? (size_t)bend_gpu_mb << 20 : gpu_Hmax;
   gpu_H = mmap(NULL, gpu_Hmax, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON | MAP_NORESERVE, -1, 0);
   // The queue's capacity, 2^qb slots. A call that leaves more tasks pending
-  // than that (tree-matmul: 8192 lanes fork near the 13-deep fork limit while
-  // they wait in bend_kq, ~105k tasks) fails with KE_QUEUE, and gpu_call runs
-  // it again with a bigger queue; a small one keeps the ring pages other
-  // calls touch (a capacity's worth, wrapped) small.
-  long qb = gpu_env("BEND_GPU_QCAP2", 16);
+  // than that fails with KE_QUEUE, and gpu_call runs it again with a bigger
+  // queue; a small one keeps the ring pages other calls touch (a capacity's
+  // worth, wrapped) small. tree-matmul (--gpu on) leaves ~100k tasks pending
+  // when 8192 lanes wait in bend_kq at the 13-deep fork limit: 2^16 fills and
+  // the whole call replays once (0.19s of a 1.58s run), 2^17 covers it
+  // (1.43s, RSS no worse), and 2^18 adds nothing (1.41s).
+  long qb = gpu_env("BEND_GPU_QCAP2", 17);
   if (qb > 0) gpu_qcap = (KW)1 << qb;
   if (gpu_qcap > gpu_qcapmax) gpu_qcapmax = gpu_qcap;
   gpu_An = ((KA_SEQ + gpu_qcap) * sizeof(KAU) + 0xffff) & ~(size_t)0xffff;
