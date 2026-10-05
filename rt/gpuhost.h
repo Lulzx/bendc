@@ -832,7 +832,9 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     }
 #endif
     int fused = fuse;
-    if (fused) fuse = g_last_dt < gpu_kq_fuse;
+    // (a fused dispatch's dt covers the main pipe too, so it cannot say what
+    // the call itself cost: keep the last measure, taken by the bend_kq
+    // dispatch below, which the calls that outgrew the arena still get)
     rounds++;
     P.fresh = 0;
     KW tail = gpu_A[KA_QTAIL];
