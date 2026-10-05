@@ -115,7 +115,6 @@ typedef struct {
   KW kqep;        // the epoch of this bend_kq dispatch (K_FREE, see k_take)
   KW fresh;       // the call's first dispatch: lanes empty their free lists
   KW kqflag;      // 256 words: a K_KQLIM call at that label (mod 256) gave up (K_FREE)
-  KW kqinline;    // lanes run their waiting calls in place (see the kernel)
 } KParams;
 
 #define PC_IDLE 0
@@ -1237,10 +1236,6 @@ KINLINE void k_save(KTHR KCtx *c) {
 
 KINLINE bool k_active(KW pc) { return pc != PC_IDLE && pc != PC_KQ; }
 
-// One lane's waiting KQ_ call (defined after the kernel, which calls it in
-// place when P->kqinline).
-KNOINLINE void k_kq_lane(KTHR KCtx *c);
-
 // The kernel: each lane runs blocks, taking tasks from the queue when it has
 // none. A lane that reaches a gathered call (PC_KQ) leaves the dispatch, and
 // so does an idle one once no lane is running (A[KA_ACTIVE] counts them):
@@ -1280,17 +1275,7 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
 #endif
   KW budget = P->budget;
   for (KW step = 0; step < budget; step++) {
-    if (c->pc == PC_KQ) {
-      // Waiting calls run here in place (P->kqinline): the lane had left the
-      // dispatch, and the host's bend_kq round with it. A call that ran out
-      // of arena (KA_GROW) or failed (KA_ERR) leaves the dispatch, as before:
-      // the host grows or falls back, and runs what still waits with bend_kq.
-      if (!P->kqinline) break;
-      k_kq_lane(c);
-      if (K_LOAD(&A[KA_ERR]) != 0 || K_LOAD(&A[KA_GROW]) != 0) break;
-      if (k_active(c->pc)) K_ADD(&A[KA_ACTIVE], 1u);
-      continue;
-    }
+    if (c->pc == PC_KQ) break;
     if (c->pc == PC_IDLE) {
       // (the first idle lane of the SIMD group reads the counters for the
       // group: 8192 lanes polling them slowed the forks 3x)
@@ -1354,11 +1339,22 @@ static void bend_kernel(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
   k_save(c);
 }
 
-// One lane's waiting KQ_ call, run on its loaded context (bend_kq loads and
-// saves around this; the kernel's own loop calls it in place, see
-// P->kqinline). The lane's pc, rv and error come out as bend_kq leaves them.
-KNOINLINE void k_kq_lane(KTHR KCtx *c) {
-  KCP KParams *P = c->P;
+// The waiting calls, a lane each: a small kernel, which runs them fast.
+#ifdef __METAL_VERSION__
+kernel void bend_kq(KDEV KW *H [[buffer(0)]], device KAU *A [[buffer(1)]],
+  constant KParams &PP [[buffer(2)]], device KW *G [[buffer(3)]], uint lane [[thread_position_in_grid]]) {
+  constant KParams *P = &PP;
+#else
+static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
+#endif
+  if (P->kqmap) {
+    if (lane >= H[P->kqmap]) return;
+    lane = (KU)H[P->kqmap + 1 + lane];
+  }
+  if (lane >= P->nlanes || H[P->lane0 + lane] != PC_KQ) return;
+  KCtx cx;
+  KTHR KCtx *c = &cx;
+  k_load(c, H, A, P, G, lane);
   bool ok = true;
   KW h0 = c->hp, e0 = c->he, b0 = c->blocks;
   c->kqlim = (c->kqfb & K_KQLIM) ? K_KQSTEPS : ~(KW)0;
@@ -1378,17 +1374,19 @@ KNOINLINE void k_kq_lane(KTHR KCtx *c) {
     // the frames too (lexer's 41-deep gen: 15s on the device, the arena full
     // in the end), so the CPU runs the call.
     KU z = 0;
-    K_CAS(&c->A[KA_ERR], z, (KU)KE_DEEP);
+    K_CAS(&A[KA_ERR], z, (KU)KE_DEEP);
+    k_save(c);
     return;
   }
   if ((c->err == KE_HEAP || !ok) && c->kdirty) {
     // It freed what it would read again: the device call fails (a full
     // arena runs it again from the start, in a bigger one).
     KU z = 0;
-    K_CAS(&c->A[KA_ERR], z, c->err == KE_HEAP ? (KU)KE_HEAP : (KU)KE_FREE);
+    K_CAS(&A[KA_ERR], z, c->err == KE_HEAP ? (KU)KE_HEAP : (KU)KE_FREE);
+    k_save(c);
     return;
   }
-  if (!ok && (c->kqfb & K_KQLIM)) c->H[P->kqflag + (c->kq & 255)] = 1;
+  if (!ok && (c->kqfb & K_KQLIM)) H[P->kqflag + (c->kq & 255)] = 1;
   if (c->err == KE_HEAP || !ok) {
     // Only its own objects are on the free lists past their old heads:
     // take them off, the span they are in goes back. The older objects it
@@ -1420,7 +1418,8 @@ KNOINLINE void k_kq_lane(KTHR KCtx *c) {
   // again (what it allocated is garbage: its result reached none of it).
   if (c->err == KE_HEAP) {
     k_rewind(c, h0, e0, b0);
-    K_STORE(&c->A[KA_GROW], 1u);
+    K_STORE(&A[KA_GROW], 1u);
+    k_save(c);
     return;
   }
   // A call that gave up (ok false) runs again through the frames.
@@ -1433,35 +1432,7 @@ KNOINLINE void k_kq_lane(KTHR KCtx *c) {
   c->pc = ok ? c->kqret : (c->kqfb & ~K_KQLIM);
   if (c->err != 0) {
     KU z = 0;
-    K_CAS(&c->A[KA_ERR], z, c->err);
+    K_CAS(&A[KA_ERR], z, c->err);
   }
-}
-
-// The waiting calls, a lane each: a small kernel, which runs them fast.
-#ifdef __METAL_VERSION__
-kernel void bend_kq(KDEV KW *H [[buffer(0)]], device KAU *A [[buffer(1)]],
-  constant KParams &PP [[buffer(2)]], device KW *G [[buffer(3)]], uint lane [[thread_position_in_grid]]) {
-  constant KParams *P = &PP;
-#else
-static void bend_kq(KW *H, KAU *A, const KParams *P, KW *G, uint32_t lane) {
-#endif
-  // A call of an earlier dispatch in this command buffer ran out of arena
-  // (see g_dispatch_chain): its lane waits for the host to grow it, and the
-  // kqs chained after it run nothing. (The host clears KA_GROW before every
-  // kq it wants run.)
-  if (K_LOAD(&A[KA_GROW]) != 0) return;
-  if (P->kqmap) {
-    if (lane >= H[P->kqmap]) return;
-    lane = (KU)H[P->kqmap + 1 + lane];
-  }
-  if (lane >= P->nlanes || H[P->lane0 + lane] != PC_KQ) return;
-  KCtx cx;
-  KTHR KCtx *c = &cx;
-  k_load(c, H, A, P, G, lane);
-  k_kq_lane(c);
-  // It had been counted out when it parked; it runs again (in chained
-  // dispatches, where the host does not recount between rounds, this keeps
-  // KA_ACTIVE honest for the idle lanes that poll it).
-  if (k_active(c->pc)) K_ADD(&A[KA_ACTIVE], 1u);
   k_save(c);
 }

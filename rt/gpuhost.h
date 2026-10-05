@@ -37,10 +37,7 @@ typedef struct {
 static pthread_mutex_t gpu_lock = PTHREAD_MUTEX_INITIALIZER;
 static KW gpu_kq_cpu;    // (see gpu_kq_host)
 static KW gpu_kq_order;  // BEND_GPU_KQSORT: sort the waiting calls (see gpu_kq_sort)
-static KW gpu_kqinline;  // BEND_GPU_KQINLINE: lanes run their waiting calls in place
-static KW gpu_chain;     // BEND_GPU_CHAIN: rounds per command buffer (see g_dispatch_chain)
 static double gpu_kq_fuse;  // BEND_GPU_FUSE_US: (see gpu_run)
-static double gpu_chain_us; // BEND_GPU_CHAIN_US: (see gpu_run)
 static double g_last_dt;    // the device's time in the last command buffer
 static int gpu_mode = -1;
 static int gpu_log;         // BEND_GPU_LOG: 1 for a line a call, 2 for more
@@ -401,59 +398,6 @@ static int g_dispatch(const KParams *P, GId pso, GId pso2) {
   return st == 4;
 }
 
-// g_dispatch's main dispatch and the bend_kq after it, `chain` times over in
-// one command buffer: the device runs the rounds back to back, and the host
-// waits once instead of twice a round (see BEND_GPU_CHAIN in gpu_run). Each
-// bend_kq gets a fresh epoch, and uses the sorted map the host kept for the
-// calls waiting now (it keeps it for the chain while it maps every lane: see
-// gpu_run). That map goes stale for the pairs after the first and then covers
-// the lanes that were waiting before the chain, not those that have parked
-// since: those run in the bend_kq the host dispatches after it. The calls are
-// not run on the CPU. KA_GROW and KA_ERR are read after the buffer ends:
-// a chained round whose kq ran out of arena leaves its lanes waiting for the
-// host to grow, and the rounds after it run on (the lanes it left are
-// skipped).
-static int g_dispatch_chain(const KParams *P, GId pso, GId pso2, KW chain, KW *ep) {
-  void *pool = g_pool_push();
-  double w0 = gpu_log ? gpu_now() : 0;
-  GId cb = g_msg(g_queue, "commandBuffer");
-  void (*set)(GId, GSel, GId, unsigned long, unsigned long) = G_SEND(void (*)(GId, GSel, GId, unsigned long,
-    unsigned long));
-  GSize grid = {(unsigned long)P->nlanes, 1, 1}, tg = {g_tpg, 1, 1};
-  KParams Pr = *P;
-  for (KW r = 0; r < chain; r++) {
-    for (GId p = pso; p; p = p == pso ? pso2 : NULL) {
-      if (p != pso) {
-        *ep = *ep % 0xffffff + 1;
-        Pr.kqep = *ep;
-      }
-      GId enc = g_msg(cb, "computeCommandEncoder");
-      G_SEND(void (*)(GId, GSel, GId))(enc, g_sel("setComputePipelineState:"), p);
-      set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufH, 0, 0);
-      set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufA, 0, 1);
-      G_SEND(void (*)(GId, GSel, const void *, unsigned long, unsigned long))(enc, g_sel("setBytes:length:atIndex:"), &Pr,
-        sizeof(KParams), 2);
-      set(enc, g_sel("setBuffer:offset:atIndex:"), g_bufG, 0, 3);
-      G_SEND(void (*)(GId, GSel, GSize, GSize))(enc, g_sel("dispatchThreads:threadsPerThreadgroup:"), grid, tg);
-      g_msg(enc, "endEncoding");
-    }
-  }
-  g_msg(cb, "commit");
-  g_msg(cb, "waitUntilCompleted");
-  unsigned long st = G_SEND(unsigned long (*)(GId, GSel))(cb, g_sel("status"));
-  double (*tm)(GId, GSel) = G_SEND(double (*)(GId, GSel));
-  double dt = tm(cb, g_sel("GPUEndTime")) - tm(cb, g_sel("GPUStartTime"));
-  g_last_dt = dt / (double)chain;
-  if (gpu_log) {
-    gpu_secs[0] += dt;
-    if (gpu_log >= 2)
-      fprintf(stderr, "bend gpu: chain %llu main+kq %.4fs (%.4fs)\n", (unsigned long long)chain, dt, gpu_now() - w0);
-  }
-  if (st != 4) gpu_note("a dispatch failed: %s", g_err_text(g_msg(cb, "error")));
-  g_pool_pop(pool);
-  return st == 4;
-}
-
 // A buffer over the CPU heap in use, for the device to read.
 static int g_heap(void) {
   KW len = (KW)gc_top << GC_BLK_SHIFT;
@@ -535,9 +479,6 @@ static int gpu_setup(const GpuProg *prog) {
   // (the simulator runs every call on the device: it tests that code)
   gpu_kq_cpu = (KW)gpu_env("BEND_GPU_KQCPU", sim ? 0 : 4);
   gpu_kq_order = (KW)gpu_env("BEND_GPU_KQSORT", 1);
-  gpu_kqinline = (KW)gpu_env("BEND_GPU_KQINLINE", 0);
-  gpu_chain = (KW)gpu_env("BEND_GPU_CHAIN", 1);
-  gpu_chain_us = (double)gpu_env("BEND_GPU_CHAIN_US", 4000);
   gpu_kq_fuse = (double)gpu_env("BEND_GPU_FUSE_US", 1000) * 1e-6;
   gpu_budget = (KW)gpu_env("BEND_GPU_STEPS", sim ? 37 : 16384);
   KW f = 0;
@@ -854,7 +795,6 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   P.budget = gpu_budget;
   P.nlanes = gpu_lanes;
   P.fork_limit = gpu_fork;
-  P.kqinline = gpu_kqinline;
   // Control words, the queue and the lane states start zero: fresh pages
   // are, so only what a call used is cleared (pages never touched cost no
   // memory).
@@ -895,21 +835,6 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
   // (see gpu_kq_sort and gpu_kq_host), which help long calls: a long one
   // gets the next bend_kq its own dispatch again, as the first one has.
   int fuse = 0;
-  // BEND_GPU_CHAIN rounds per command buffer, when the calls waiting would
-  // not run on the CPU anyway (more than gpu_kq_cpu of them) and a round runs
-  // under gpu_chain_us (BEND_GPU_CHAIN_US): the rounds run back to back on the
-  // device with one host round trip between them instead of one a dispatch
-  // (see g_dispatch_chain). A round with few waiting calls, or a long one,
-  // where the round trip is small next to the work, stays single, so
-  // gpu_kq_host and the sort keep doing their work.
-  //
-  // Off by default: a chain's bend_kqs run neither on the CPU nor over a fresh
-  // sort of the calls waiting then, which pays off where rounds are short and
-  // many (tree-matmul: 1.53s against 1.76s with eight; tree-bitonic 1.78
-  // against 1.87) but costs more than the round trips it saves where a round
-  // holds long calls (symreg 0.40s against 0.30s, lexer 9.0 against 8.4: the
-  // gates above do not separate those reliably on a loaded machine).
-  KW chain_n = 1;
   for (;;) {
     // Keep completed frames and tasks instead of replaying a main dispatch
     // that fills the arena. Leave headroom for its next allocation burst.
@@ -924,7 +849,6 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     // The lanes running (not idle, not waiting for bend_kq): idle lanes stay
     // in the dispatch while one does.
     KW active = 0, waiting = 0;
-    int chained = 0;
     for (KW l = 0; l < gpu_lanes; l++) {
       KW pc = H[P.lane0 + l];
       active += pc != PC_IDLE && pc != PC_KQ;
@@ -934,26 +858,6 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
     if (gpu_mode == GPU_SIM) {
       for (KW l = 0; l < gpu_lanes; l++) prog->sim(H, gpu_A, &P, (KW *)gc_base, (uint32_t)l);
     }
-#if BEND_METAL
-    else if (gpu_chain > 1) {
-      fuse = 0;
-      gpu_A[KA_GROW] = 0;
-      // The chain's bend_kqs run the sorted map the host built for the calls
-      // waiting now, when it maps every lane: then it is a walk of all the
-      // lanes, and stays one pair after pair (a later pair's map is stale:
-      // the lanes waiting then are the ones that waited before, in the order
-      // they were sorted in). A map of a few lanes would leave the calls that
-      // parked since to the bend_kq after the chain, a host round trip each.
-      if (P.kqmap && H[P.kqmap] != gpu_lanes) P.kqmap = 0;
-      if (!P.fresh && chain_n > 1) {
-        chained = 1;
-        if (!g_heap() || !g_dispatch_chain(&P, g_pso, g_pso_kq, chain_n, &gpu_kqep)) return 0;
-        rounds += chain_n - 1;
-      } else if (!g_heap() || !g_dispatch(&P, g_pso, NULL)) {
-        return 0;
-      }
-    }
-#endif
 #if BEND_METAL
     else {
       P.kqmap = 0;
@@ -980,19 +884,6 @@ static int gpu_run(const GpuProg *prog, KW entry, V *args, int n, int pin, V *ou
       KW pc = H[P.lane0 + l];
       waiting += pc == PC_KQ;
       act2 += pc != PC_IDLE && pc != PC_KQ;
-    }
-    // Chain the rounds after this one while the calls waiting are more than
-    // the CPU would run (see chain_n above); a chained round runs its own
-    // calls, so only a single round's count says what the next ones will be.
-    // Chains run on while they run quick (g_last_dt is the average round of
-    // one); a slow round, where the round trip a chain saves is small next to
-    // it, goes back to single rounds, and a mass park later chains again. The
-    // first chain is two rounds: long enough for a pair of rounds to time,
-    // short enough that a row whose bend_kqs are long pays little for it.
-    if (gpu_chain > 1) {
-      int quick = g_last_dt * 1e6 <= gpu_chain_us;
-      if (!chained) chain_n = waiting > gpu_kq_cpu && quick ? 2 : 1;
-      else chain_n = quick ? gpu_chain : 1;
     }
     if (gpu_log == 3) {
       KW idle = 0;
