@@ -435,7 +435,7 @@ static int gpu_setup(const GpuProg *prog) {
   gpu_An = ((KA_SEQ + gpu_qcap) * sizeof(KAU) + 0xffff) & ~(size_t)0xffff;
   gpu_A = mmap(NULL, gpu_An, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
   if (gpu_H == MAP_FAILED || gpu_A == MAP_FAILED) return GPU_OFF;
-  bend_arena_set((uintptr_t)gpu_H, gpu_Hmax);
+  bend_arena_set((uintptr_t)gpu_H, gpu_Hn);
   gpu_pin_min = (KW)gpu_env("BEND_GPU_PIN_MB", 32) << 20;
   gpu_lanes = (KW)gpu_env("BEND_GPU_LANES", sim ? 64 : 8192);
   // (the simulator runs every call on the device: it tests that code)
@@ -580,6 +580,7 @@ static int gpu_grow(size_t f) {
   }
 #endif
   gpu_Hn = n;
+  bend_arena_set((uintptr_t)gpu_H, gpu_Hn);
   if (gpu_log) fprintf(stderr, "bend gpu: arena grows to %llu MB\n", (unsigned long long)(n >> 20));
   return 1;
 }
