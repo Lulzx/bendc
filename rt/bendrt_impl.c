@@ -109,6 +109,7 @@ __attribute__((noreturn)) void bend_fail(const char *msg) {
 #define GC_HDR 64
 #define GC_SMALL 1024
 #define GC_NCLS 43
+#define GC_BW 16
 #define GC_MAXTHR 256
 #define GC_SIG SIGUSR2
 #define GC_RQCLS 15
@@ -219,8 +220,8 @@ void gc_init(void) {
   gc_runs = gc_reserve(GC_MAXBLK / 2 * sizeof(GcRun) + 64, NULL);
   gc_cap = ((size_t)1 << 33) / sizeof(GcItem);
   gc_stk = gc_reserve(gc_cap * sizeof(GcItem), NULL);
-  gc_abits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
-  gc_mbits = gc_reserve(GC_MAXBLK * 64 * sizeof(uint64_t), NULL);
+  gc_abits = gc_reserve(GC_MAXBLK * GC_BW * sizeof(uint64_t), NULL);
+  gc_mbits = gc_reserve(GC_MAXBLK * GC_BW * sizeof(uint64_t), NULL);
   gc_meta = gc_reserve(GC_MAXBLK * sizeof(GcMeta), NULL);
   gc_cand = gc_reserve(GC_NCLS * GC_CANDW * sizeof(uint64_t), NULL);
   gc_bflags = gc_reserve((GC_MAXBLK << GC_BLK_SHIFT) / (2 * sizeof(V)), NULL);
@@ -228,7 +229,7 @@ void gc_init(void) {
   // the device's arena index never touched)
   gc_bk = gc_reserve((size_t)1 << (48 - GC_BLK_SHIFT), NULL);
   gc_hot = (GcHot){(uintptr_t)gc_base, 0,
-    (uintptr_t)gc_abits - ((uintptr_t)gc_base >> GC_BLK_SHIFT) * 64 * sizeof(uint64_t), 0, 0, bend_rc_req, 0,
+    (uintptr_t)gc_abits - ((uintptr_t)gc_base >> GC_BLK_SHIFT) * GC_BW * sizeof(uint64_t), 0, 0, bend_rc_req, 0,
     (uintptr_t)gc_dirty - ((uintptr_t)gc_base >> GC_BLK_SHIFT), gc_bk, (uintptr_t)gc_bflags - ((uintptr_t)gc_base >> 4)};
   for (size_t w = 0, c = 0; w <= GC_SMALL; w++) {
     while (gc_cls_w[c] < w) c++;
@@ -249,8 +250,8 @@ void gc_init(void) {
   if (bend_rc_req && !bend_rc_trace_req && !getenv("BEND_RC_TRACE")) gc_limit = gc_limit_min = (size_t)-1;
   if (bend_rc_req && (bend_rc_trace_req || getenv("BEND_RC_TRACE"))) gc_all_major = 1;
 }
-#define GC_ALLOC(b) (gc_abits + gc_bi(b) * 64)
-#define GC_MARK(b) (gc_mbits + gc_bi(b) * 64)
+#define GC_ALLOC(b) (gc_abits + gc_bi(b) * GC_BW)
+#define GC_MARK(b) (gc_mbits + gc_bi(b) * GC_BW)
 #define GC_META(b) (&gc_meta[gc_bi(b)])
 uintptr_t gc_take_blocks(size_t n) {
   for (size_t i = 0; i < gc_nruns; i++) {
@@ -274,8 +275,8 @@ int gc_auto_trace(void) {
   for (uintptr_t bi=0; bi<gc_top; bi++) {
     if (gc_kind[bi]==1) {
       size_t count=0;
-      for (unsigned j=0;j<64;j++)
-        count+=(size_t)__builtin_popcountll(__atomic_load_n(&gc_abits[bi*64+j],__ATOMIC_RELAXED));
+      for (unsigned j=0;j<GC_BW;j++)
+        count+=(size_t)__builtin_popcountll(__atomic_load_n(&gc_abits[bi*GC_BW+j],__ATOMIC_RELAXED));
       used+=count*(size_t)gc_meta[bi].words*sizeof(V);
     } else if (gc_kind[bi]==2) {
       used+=(size_t)gc_blk(bi)->nblk*GC_BLK;
@@ -286,11 +287,15 @@ int gc_auto_trace(void) {
   return 0;
 }
 GcBlk *gc_new_small(int atomic, unsigned c) {
-  uintptr_t at = gc_take_blocks(1);
+  uintptr_t top = gc_top, at = gc_take_blocks(1);
   GcBlk *b = gc_blk(at);
   memset(b, 0, sizeof(GcBlk));
-  memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
-  memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
+  // (a block past the old top has never been used: its bits are still zero,
+  // and their pages, untouched, need not be written yet)
+  if (at < top) {
+    memset(GC_ALLOC(b), 0, GC_BW * sizeof(uint64_t));
+    memset(GC_MARK(b), 0, GC_BW * sizeof(uint64_t));
+  }
   // New flag pages are already zero. Preserve old block sharing history
   // until stale flags have been cleared, including changes of pool.
   if (__atomic_load_n(&gc_bk[(uintptr_t)b >> GC_BLK_SHIFT], __ATOMIC_RELAXED) & BK_SH) {
@@ -333,8 +338,8 @@ void gc_lifo_flush(int atomic, unsigned c) {
     uint64_t o = (off & (GC_BLK - 1)) - GC_HDR;
     uint32_t i = (uint32_t)(o / (gc_cls_w[c] * sizeof(V)));
     if (gc_hot.rc) rc_free_slot(bi, i, c);
-    else if (gc_hot.mt) __atomic_fetch_and(&gc_abits[bi * 64 + (i >> 6)], ~(1ull << (i & 63)), __ATOMIC_RELEASE);
-    else gc_abits[bi * 64 + (i >> 6)] &= ~(1ull << (i & 63));
+    else if (gc_hot.mt) __atomic_fetch_and(&gc_abits[bi * GC_BW + (i >> 6)], ~(1ull << (i & 63)), __ATOMIC_RELEASE);
+    else gc_abits[bi * GC_BW + (i >> 6)] &= ~(1ull << (i & 63));
     p = n;
   }
   if (!gc_hot.rc) ((uint8_t *)t->candb + ((uintptr_t)gc_base >> GC_BLK_SHIFT))[bi0] = (uint8_t)((atomic == 2 ? 16 : 0) + c + 1);
@@ -345,7 +350,7 @@ GcBlk *gc_shr_take(int atomic, unsigned c) {
   GcBlk *b = gc_shr[atomic][c];
   if (b) {
     uint32_t used = 0;
-    for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(__atomic_load_n(&GC_ALLOC(b)[j], __ATOMIC_RELAXED));
+    for (int j = 0; j < GC_BW; j++) used += (uint32_t)__builtin_popcountll(__atomic_load_n(&GC_ALLOC(b)[j], __ATOMIC_RELAXED));
     if (b->nobj - used < (b->nobj / 5 ? b->nobj / 5 : 1)) {
       __atomic_fetch_sub(&b->owned, 1, __ATOMIC_RELEASE);
       b = NULL;
@@ -377,7 +382,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   if (gc_hot.rc && k->blk) {
     GcBlk *q = k->blk;
     uint32_t used = 0;
-    for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(__atomic_load_n(&GC_ALLOC(q)[j], __ATOMIC_RELAXED));
+    for (int j = 0; j < GC_BW; j++) used += (uint32_t)__builtin_popcountll(__atomic_load_n(&GC_ALLOC(q)[j], __ATOMIC_RELAXED));
     // A large small-class block can have fewer than five slots. Require
     // a real free slot rather than recursively recycling an exhausted one.
     if (q->nobj - used >= (q->nobj / 5 ? q->nobj / 5 : 1)) {
@@ -406,7 +411,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
     t->claiming = 1;
     atomic_signal_fence(memory_order_seq_cst);
     int shared = gc_hot.rc;  // (counting: rc_free_slot sets gc_cand's bits)
-    uint64_t *cand = shared ? gc_cand + (size_t)c * GC_CANDW : NULL;
+    uint64_t *cand = shared ? gc_cand + c : NULL;
     // (under the collector, the thread's candidate bytes, 8 blocks a word:
     // f gets bit 8k + 7 for each byte k that is c + 1)
     uint64_t *cb = (uint64_t *)(t->candb + ((uintptr_t)gc_base >> GC_BLK_SHIFT));
@@ -419,7 +424,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
       uintptr_t w = ((at >> sh) + n) % (nw ? nw : 1);
       uint64_t f;
       if (shared) {
-        f = cand[w];
+        f = cand[w * GC_NCLS];
         if (n == 0) f &= ~0ull << (at & 63);
       } else {
         uint64_t x = cb[w] ^ pat;
@@ -429,7 +434,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
       while (f && b == NULL) {
         uintptr_t bi = shared ? (w << 6) + (uintptr_t)__builtin_ctzll(f) : (w << 3) + ((uintptr_t)__builtin_ctzll(f) >> 3);
         f &= f - 1;
-        if (shared) __atomic_fetch_and(&cand[w], ~(1ull << (bi & 63)), __ATOMIC_RELAXED);
+        if (shared) __atomic_fetch_and(&cand[w * GC_NCLS], ~(1ull << (bi & 63)), __ATOMIC_RELAXED);
         else if (((uint8_t *)cb)[bi] != (pat & 0xff)) continue;  // (the test's false positives)
         else ((uint8_t *)cb)[bi] = 0;
         if (bi >= gc_top || __atomic_load_n(&gc_kind[bi], __ATOMIC_ACQUIRE) != 1) continue;
@@ -438,7 +443,7 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
         uint8_t z = 0;
         if (!__atomic_compare_exchange_n(&q->owned, &z, 1, 0, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) continue;
         uint32_t used = 0;
-        for (int j = 0; j < 64; j++) used += (uint32_t)__builtin_popcountll(GC_ALLOC(q)[j]);
+        for (int j = 0; j < GC_BW; j++) used += (uint32_t)__builtin_popcountll(GC_ALLOC(q)[j]);
         if (q->nobj - used < (q->nobj / 5 ? q->nobj / 5 : 1)) { __atomic_fetch_sub(&q->owned, 1, __ATOMIC_RELEASE); continue; }
         b = q;
         k->reuse = 1;
@@ -470,7 +475,8 @@ __attribute__((noinline)) V *gc_refill(GcCache *k, int atomic, unsigned c) {
   // A node class's block is dirty for the next collection: the thread's
   // list (Thr.lifo) hands out slots of objects freed in it, whose marks
   // stay (see rc_lifo_push).
-  if ((atomic == 0 || atomic == 2) && c < GC_RQCLS) __atomic_store_n(&gc_dirty[gc_bi(b)], 1, __ATOMIC_RELAXED);
+  // (Before the first collection there is nothing old to rescan.)
+  if ((atomic == 0 || atomic == 2) && c < GC_RQCLS && gc_major_live) __atomic_store_n(&gc_dirty[gc_bi(b)], 1, __ATOMIC_RELAXED);
   k->abits = GC_ALLOC(b);
   // (A slot's allocation bit is set when the slot goes to the cache: see
   // GcCache for a stale pointer that marks it before it is handed out.)
@@ -498,8 +504,8 @@ __attribute__((noinline)) V *gc_alloc_large(size_t w, int atomic) {
   uintptr_t at = gc_take_blocks(n);
   GcBlk *b = gc_blk(at);
   memset(b, 0, sizeof(GcBlk));
-  memset(GC_ALLOC(b), 0, 64 * sizeof(uint64_t));
-  memset(GC_MARK(b), 0, 64 * sizeof(uint64_t));
+  memset(GC_ALLOC(b), 0, GC_BW * sizeof(uint64_t));
+  memset(GC_MARK(b), 0, GC_BW * sizeof(uint64_t));
   *GC_META(b) = (GcMeta){0, 1, 0, 0};
   for (size_t j = 0; j < n; j++) {
     uintptr_t bi = ((uintptr_t)b >> GC_BLK_SHIFT) + j;
@@ -755,7 +761,7 @@ size_t rc_live(void) {
   size_t n = 0;
   for (uintptr_t bi = 0; bi < gc_top; bi++)
     if (gc_kind[bi] == 1 || gc_kind[bi] == 2)
-      for (int j = 0; j < 64; j++) n += (size_t)__builtin_popcountll(gc_abits[bi * 64 + j]);
+      for (int j = 0; j < GC_BW; j++) n += (size_t)__builtin_popcountll(gc_abits[bi * GC_BW + j]);
   // (less the slots the caches hold, not handed out: see GcCache)
   for (int i = 0; i < gc_nthr; i++)
     for (int a = 0; a < GC_NPOOL; a++)
@@ -1109,7 +1115,7 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   gc_minor = !gc_all_major && gc_major_live > 0 && gc_live_bytes < (size_t)(gc_minor_k * (double)gc_major_live) + gc_slack * (gc_big ? gc_grow_max : 1);
   if (!gc_minor) {
     for (uintptr_t bi = 0; bi < gc_top; bi++) {
-      if (gc_kind[bi] == 1 || gc_kind[bi] == 2) memset(gc_mbits + bi * 64, 0, 64 * sizeof(uint64_t));
+      if (gc_kind[bi] == 1 || gc_kind[bi] == 2) memset(gc_mbits + bi * GC_BW, 0, GC_BW * sizeof(uint64_t));
     }
   }
   gc_rooting = 1;
@@ -1141,9 +1147,11 @@ __attribute__((noinline)) void gc_collect_locked(void) {
   if (gc_stats) clock_gettime(CLOCK_MONOTONIC, &ts);
   gc_sweep();
   gc_dirty_caches();
+  // (set before the threads resume: past the first collection, a refill
+  // marks its block dirty, and gc_next_bits clears the marks it hands out)
+  if (!gc_minor) gc_major_live = gc_live_bytes ? gc_live_bytes : 1;
   atomic_store(&gc_stopping, 0);
   while (atomic_load(&gc_inside) > 0) sched_yield();
-  if (!gc_minor) gc_major_live = gc_live_bytes ? gc_live_bytes : 1;
   {
     if (gc_minor) {
       size_t kept = gc_live_bytes > live0 ? gc_live_bytes - live0 : 0;
@@ -2487,7 +2495,7 @@ int bend_start(int argc, char **argv, V (*m)(void), int value) {
       if (gc_kind[bi] != 1) continue;
       GcBlk *b = gc_blk(bi);
       size_t u = 0;
-      for (int j = 0; j < 64; j++) u += (size_t)__builtin_popcountll(gc_abits[bi * 64 + j]);
+      for (int j = 0; j < GC_BW; j++) u += (size_t)__builtin_popcountll(gc_abits[bi * GC_BW + j]);
       nb[b->pool][b->cls]++;
       nf[b->pool][b->cls] += b->nobj - u;
     }

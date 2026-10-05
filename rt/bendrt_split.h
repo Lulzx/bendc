@@ -230,6 +230,9 @@ __attribute__((noreturn)) void bend_fail(const char *msg);
 #define GC_HDR 64
 #define GC_SMALL 1024
 #define GC_NCLS 43
+// A block's allocation (and mark) bitmap, in words: a bit for each slot of
+// the smallest class (2 words). (A 16 KB block holds at most 1020 slots.)
+#define GC_BW 16
 #define GC_MAXTHR 256
 #define GC_SIG SIGUSR2
 
@@ -247,7 +250,7 @@ typedef struct GcBlk {
 
 // What matches and the collector read most, by block index, in dense tables
 // (a block's own header is a page away from most of its objects): a block's
-// allocation and mark bits (gc_abits, gc_mbits: 64 words a block), and:
+// allocation and mark bits (gc_abits, gc_mbits: GC_BW words a block), and:
 typedef struct GcMeta {
   uint32_t recip;    // 2^32 / slot bytes, rounded up: a slot's index by multiplying
                      // (exact for any byte of a block: the rounding adds less than
@@ -256,6 +259,7 @@ typedef struct GcMeta {
   uint16_t words;    // slot size in words (small blocks; 0 for a large object)
 } GcMeta;
 _Static_assert(sizeof(GcBlk) <= GC_HDR, "GC_HDR holds a block header");
+_Static_assert((GC_BLK - GC_HDR) / (2 * sizeof(uint64_t)) <= GC_BW * 64, "GC_BW words hold a bit for each slot of a block");
 
 // A thread's allocation cache for one size class: a fresh block is handed out
 // by bumping; a partly free one by the free bits of its bitmap, a word at a
@@ -402,7 +406,9 @@ extern size_t gc_capprev;
 // (the block's class + 1), one store on a free, where a bit per block and
 // class was a load, an or and a store at a computed word (8 instructions
 // of the free's 31). Counted programs share these bits instead, a bit per
-// block and class (GC_CANDW words a class), set by rc_free_slot.
+// block and class (GC_CANDW words a class, the classes' words for the
+// same 64 blocks side by side: a small heap's are one page), set by
+// rc_free_slot.
 #define GC_CANDW (GC_MAXBLK / 64)
 extern uint64_t *gc_cand;
 // Bare nodes (see "Bare nodes"): gc_bk, a byte per 64 KB of the address
@@ -428,8 +434,8 @@ extern int bend_rc_trace_req;
 // What bend_take and bend_share read, together (one address to load).
 typedef struct GcHot {
   uintptr_t base, span;  // the heap: gc_base, and gc_top in bytes
-  // gc_abits less the heap's first block's 64 words: a node's words are at
-  // abits + (node >> GC_BLK_SHIFT) * 64 (the heap is aligned to a block, so
+  // gc_abits less the heap's first block's GC_BW words: a node's words are
+  // at abits + (node >> GC_BLK_SHIFT) * GC_BW (the heap is aligned to a block, so
   // the node's offset in its block is its low 16 bits: no base to subtract)
   uintptr_t abits;
   // The first thread's candidate bytes (Thr.candb): a free is one byte
@@ -506,8 +512,8 @@ void gc_init(void);
 
 static inline GcBlk *gc_blk(uintptr_t i) { return (GcBlk *)(gc_base + (i << GC_BLK_SHIFT)); }
 static inline uintptr_t gc_bi(const GcBlk *b) { return ((uintptr_t)b - (uintptr_t)gc_base) >> GC_BLK_SHIFT; }
-#define GC_ALLOC(b) (gc_abits + gc_bi(b) * 64)
-#define GC_MARK(b) (gc_mbits + gc_bi(b) * 64)
+#define GC_ALLOC(b) (gc_abits + gc_bi(b) * GC_BW)
+#define GC_MARK(b) (gc_mbits + gc_bi(b) * GC_BW)
 #define GC_META(b) (&gc_meta[gc_bi(b)])
 static inline V *gc_objs(GcBlk *b) { return (V *)((char *)b + GC_HDR); }
 
@@ -539,9 +545,11 @@ static inline uint64_t gc_next_bits(GcCache *k) {
     if (f) {
       // (When other threads run, gc_window clears the marks of the slots
       // this thread wins: in a shared block, another may take one of these
-      // first and a collection mark its object old before this clears it.)
+      // first and a collection mark its object old before this clears it.
+      // Before the first collection no mark is set, and the marks' pages
+      // are left untouched.)
       uint64_t *m = &GC_MARK(b)[k->j];
-      if (!gc_hot.mt && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
+      if (!gc_hot.mt && gc_major_live && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
       return f;
     }
   }
@@ -559,7 +567,7 @@ static inline uint64_t gc_window(GcCache *k, uint32_t jw, uint64_t f) {
   if (UNLIKELY(gc_hot.mt)) {
     f &= ~__atomic_fetch_or(&k->abits[jw], f, __ATOMIC_RELAXED);
     uint64_t *m = &GC_MARK(k->blk)[jw];
-    if (__atomic_load_n(m, __ATOMIC_RELAXED) & f) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
+    if (gc_major_live && (__atomic_load_n(m, __ATOMIC_RELAXED) & f)) __atomic_fetch_and(m, ~f, __ATOMIC_RELAXED);
   } else k->abits[jw] |= f;
   BEND_BARRIER();
   return f;
@@ -798,7 +806,7 @@ __attribute__((always_inline)) static inline void bend_free_slot(V v, unsigned w
   uintptr_t bi = (uintptr_t)v >> GC_BLK_SHIFT;  // (less the base's: see GcHot)
   uint32_t i = (uint32_t)((((uintptr_t)v & (GC_BLK - 1)) - GC_HDR) / (sw * sizeof(V)));
   uint64_t bit = 1ull << (i & 63);
-  uint64_t *aw = (uint64_t *)(h->abits + (bi * 64 + (i >> 6)) * sizeof(uint64_t));
+  uint64_t *aw = (uint64_t *)(h->abits + (bi * GC_BW + (i >> 6)) * sizeof(uint64_t));
 #ifdef BEND_DEBUG_FREE
   // Debugging: the node is poisoned with the line that freed it and the
   // free's number, and kept. BEND_DEBUG_FREE_AT=n aborts at free number n.
@@ -986,7 +994,7 @@ static inline int rc_valid(uintptr_t off) {
   } else if (kd != 2 || o != GC_HDR) {
     return 0;
   }
-  return (int)((gc_abits[bi * 64 + (i >> 6)] >> (i & 63)) & 1);
+  return (int)((gc_abits[bi * GC_BW + (i >> 6)] >> (i & 63)) & 1);
 }
 
 // v is a reference: the start of an object in the heap (numbers,
@@ -1054,8 +1062,8 @@ static inline int rc_release(V v) {
 // Frees a small slot (block bi, slot i, of class c) or a large object.
 static inline void rc_free_slot(uintptr_t bi, uint32_t i, unsigned c) {
   uint64_t bit = 1ull << (i & 63);
-  uint64_t *aw = &gc_abits[bi * 64 + (i >> 6)];
-  uint64_t *cw = &gc_cand[(size_t)c * GC_CANDW + (bi >> 6)];
+  uint64_t *aw = &gc_abits[bi * GC_BW + (i >> 6)];
+  uint64_t *cw = &gc_cand[(bi >> 6) * GC_NCLS + c];
   uint64_t cb = 1ull << (bi & 63);
   if (gc_hot.mt) {
     __atomic_fetch_and(aw, ~bit, __ATOMIC_RELEASE);
