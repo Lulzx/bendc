@@ -19219,7 +19219,7 @@ def KQ.inv.back(+g: G, +name: String, body: Core.Expr) -> Bool:
   +s = KQ.inv.reach(Fuel.max(), g, FV.expr(body, [name], Nil{}), Set.new())
   Bool.or(Dps.has(s, name), Dps.has(s, "%out of fuel"))
 
-def KQ.inv.all(ps: List<&2, String>, b: Bool) -> List<&2, Bool>:
+def KQ.inv.all(ps: List<&2, String>, +b: Bool) -> List<&2, Bool>:
   match ps:
     case Nil{}:
       Nil{}
@@ -19255,19 +19255,20 @@ def KQ.inv.call(fn: Core.Expr, +f: String, ps: List<&2, String>, args: List<&2, 
     case other:
       fl
 
-# A call's head, with the def's own name hidden (a use as a value is not).
-def KQ.inv.head(fn: Core.Expr, +f: String) -> Core.Expr:
+# Whether a call's head is a name: KQ.inv.go then reads it with skip set,
+# hiding the def's own name there (a use as a value is not hidden).
+def KQ.inv.isv(fn: Core.Expr) -> Bool:
   match fn:
-    case Core.EVar{+x}:
-      Bool.pick(Core.Expr, Str.eq(x, f), Core.EVar{""}, Core.EVar{x})
+    case Core.EVar{x}:
+      True{}
     case other:
-      other
+      False{}
 
-# skip: as in FV.go.
+# skip: as in FV.go; on a name, that it is a call's head.
 def KQ.inv.go(e: Core.Expr, +f: String, +ps: List<&2, String>, fl: List<&2, Bool>, skip: Bool) -> List<&2, Bool>:
   match e:
     case Core.EVar{x}:
-      Bool.pick(Unit -> List<&2, Bool>, Str.eq(x, f), u => KQ.inv.all(ps, False{}), u => fl)(Unit{})
+      Bool.pick(Unit -> List<&2, Bool>, Bool.and(Str.eq(x, f), Bool.not(skip)), u => KQ.inv.all(ps, False{}), u => fl)(Unit{})
     case Core.ECall{+fn, args}:
       match args:
         case Nil{}:
@@ -19275,14 +19276,14 @@ def KQ.inv.go(e: Core.Expr, +f: String, +ps: List<&2, String>, fl: List<&2, Bool
             case True{}:
               fl
             case False{}:
-              KQ.inv.go(KQ.inv.head(fn, f), f, ps, KQ.inv.call(fn, f, ps, Nil{}, fl), False{})
+              KQ.inv.go(fn, f, ps, KQ.inv.call(fn, f, ps, Nil{}, fl), KQ.inv.isv(fn))
         case +a <> +t:
           match skip:
             case True{}:
               KQ.inv.go(Core.ECall{fn, t}, f, ps, KQ.inv.go(a, f, ps, fl, False{}), True{})
             case False{}:
-              KQ.inv.go(Core.ECall{fn, t}, f, ps, KQ.inv.go(a, f, ps, KQ.inv.go(KQ.inv.head(fn, f), f, ps,
-                KQ.inv.call(fn, f, ps, a <> t, fl), False{}), False{}), True{})
+              KQ.inv.go(Core.ECall{fn, t}, f, ps, KQ.inv.go(a, f, ps, KQ.inv.go(fn, f, ps,
+                KQ.inv.call(fn, f, ps, a <> t, fl), KQ.inv.isv(fn)), False{}), True{})
     case Core.ECtor{n, args}:
       match args:
         case Nil{}:
