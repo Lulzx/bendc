@@ -9,6 +9,8 @@
 #define _GNU_SOURCE
 #endif
 #define _DARWIN_UNLIMITED_SELECT  // select past FD_SETSIZE (io_wait)
+#if defined(__APPLE__) && !defined(__TINYC__)
+#endif
 #ifdef __TINYC__
 #undef __atomic_store_n
 #define __atomic_store_n(ptr, val, order) __atomic_store((ptr), &(__typeof__(*(ptr))){val}, (order))
@@ -1690,6 +1692,7 @@ PTask *par_steal(int *pend) {
 _Atomic int par_searching;
 void *par_worker(void *arg) {
   (void)arg;
+  par_qos();
   thr_register((uintptr_t)__builtin_frame_address(0) + 16);
   int budget = PAR_SPIN, searching = 0;
   for (int spins = 0;;) {
@@ -1745,6 +1748,7 @@ void par_hook(void) {
   }
 }
 void par_start(void) {
+  par_qos();
   pthread_mutex_lock(&par_mu);
   if (!atomic_load(&par_started)) {
     {

@@ -33,6 +33,9 @@
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
+#if defined(__APPLE__) && !defined(__TINYC__)
+#include <pthread/qos.h>
+#endif
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
@@ -3692,8 +3695,20 @@ static inline void cpu_relax(void) {
 #define PAR_SPIN 128
 static _Atomic int par_searching;
 
+// macOS puts default-quality-of-service threads first in line for preemption
+// and migration, which costs the pool ~10% of its cycles and time when
+// anything else runs on the machine: 31.0G vs 33.4G cycles for tree-bitonic
+// at 8 threads.  BEND_QOS=0 keeps the default class.
+static inline void par_qos(void) {
+#if defined(__APPLE__) && !defined(__TINYC__)
+  const char *q = getenv("BEND_QOS");
+  if (!q || q[0] != '0') pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
+}
+
 static void *par_worker(void *arg) {
   (void)arg;
+  par_qos();
   thr_register((uintptr_t)__builtin_frame_address(0) + 16);
   int budget = PAR_SPIN, searching = 0;
   for (int spins = 0;;) {
@@ -3754,6 +3769,7 @@ static void par_hook(void) {
 }
 
 static void par_start(void) {
+  par_qos();
   pthread_mutex_lock(&par_mu);
   if (!atomic_load(&par_started)) {
     {
