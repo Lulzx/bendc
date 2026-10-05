@@ -1170,7 +1170,10 @@ __attribute__((noinline)) void gc_collect_locked(void) {
     // threads); a collection that frees an 8th of what was handed out since
     // the one before brings it back.
     if (gc_freed_bytes * 32 < gc_since) {
-      if (++gc_futile_run >= 2 && gc_grow < gc_futile_max) {
+      // The first collection is always a major one: it finding everything
+      // alive says the program is still only building what it keeps, and it
+      // grows the heap at once rather than mark the same objects again.
+      if ((++gc_futile_run >= 2 || gc_count == 0) && gc_grow < gc_futile_max) {
         if (!gc_grow_futile) gc_grow_futile = gc_grow;
         gc_grow = gc_futile_max;
       }
