@@ -111,7 +111,8 @@ fi
 # !-calls on the device: the simulator everywhere, Metal on a Mac with a GPU.
 # A run passes when its output matches and no !-call fell back to the CPU
 # but the ones tests/NAME.fallbacks counts. A GPU
-# that cannot load the cached kernels (CI's virtual one) compiles them.
+# that cannot load the cached kernels (CI's virtual one) compiles them, and one
+# slow enough to fill the task queue re-runs the call; both lines are allowed.
 gpu_modes=sim
 [ "$(uname)" = Darwin ] && gpu_modes="sim metal"
 for src in $(grep -l '[a-z0-9_]!(' tests/*.bend); do
@@ -124,7 +125,7 @@ for src in $(grep -l '[a-z0-9_]!(' tests/*.bend); do
     want=$(cat "tests/$name.fallbacks" 2>/dev/null || echo 0)
     got=$(grep -c "running on the CPU" "$out.$mode.log")
     if cmp -s "$out.$mode.txt" "tests/$name.out" && [ "$got" -eq "$want" ] &&
-       ! grep -Ev '^bend gpu: (done|arena grows to [0-9]+ MB$)|does not load.*: compiling' "$out.$mode.log" | grep -qv "running on the CPU"; then
+       ! grep -Ev '^bend gpu: (done|arena grows to [0-9]+ MB$)|does not load.*: compiling|the queue filled; [0-9]+ slots, and the call runs again$' "$out.$mode.log" | grep -qv "running on the CPU"; then
       echo "ok   $mode/$name"; pass=$((pass+1))
     else
       echo "FAIL $mode/$name"; diff "$out.$mode.txt" "tests/$name.out" | head -10 | sed 's/^/  /'
